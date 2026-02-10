@@ -2,7 +2,42 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { useAppStore, PostData } from '../../store';
 import { showToast } from '../Toast';
+import { WysiwygEditor } from '../WysiwygEditor';
+import { Lightbox, useMarkdownImages } from '../Lightbox';
+import { PostLinks } from '../PostLinks';
 import './Editor.css';
+
+// Simple markdown to HTML converter for preview
+const markdownToHtml = (markdown: string): string => {
+  return markdown
+    // Escape HTML
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Headers
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    // Bold
+    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+    // Images
+    .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img alt="$1" src="$2" style="max-width: 100%;" />')
+    // Links
+    .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank">$1</a>')
+    // Code blocks
+    .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+    // Inline code
+    .replace(/`(.*?)`/gim, '<code>$1</code>')
+    // Blockquotes
+    .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>')
+    // Horizontal rules
+    .replace(/^---$/gim, '<hr />')
+    // Line breaks
+    .replace(/\n/g, '<br />');
+};
+
+type EditorMode = 'markdown' | 'wysiwyg' | 'preview';
 
 interface PostEditorProps {
   post: PostData;
@@ -15,8 +50,13 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const [tags, setTags] = useState(post.tags.join(', '));
   const [categories, setCategories] = useState(post.categories.join(', '));
   const [isDirty, setIsDirty] = useState(false);
-  const [editorMode, setEditorMode] = useState<'markdown' | 'preview'>('markdown');
+  const [editorMode, setEditorMode] = useState<EditorMode>('wysiwyg');
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const editorRef = useRef<unknown>(null);
+
+  // Extract images from content for lightbox
+  const images = useMarkdownImages(content);
 
   // Reset when post changes
   useEffect(() => {
@@ -200,27 +240,59 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               />
             </div>
           </div>
+          
+          <PostLinks 
+            postId={post.id}
+            onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
+          />
         </div>
         
         <div className="editor-body">
           <div className="editor-toolbar">
-            <label>Content (Markdown)</label>
+            <label>Content</label>
             <div className="editor-mode-toggle">
+              <button 
+                className={editorMode === 'wysiwyg' ? 'active' : ''} 
+                onClick={() => setEditorMode('wysiwyg')}
+                title="Visual editor"
+              >
+                Visual
+              </button>
               <button 
                 className={editorMode === 'markdown' ? 'active' : ''} 
                 onClick={() => setEditorMode('markdown')}
+                title="Markdown source"
               >
                 Markdown
               </button>
               <button 
                 className={editorMode === 'preview' ? 'active' : ''} 
                 onClick={() => setEditorMode('preview')}
+                title="Read-only preview"
               >
                 Preview
               </button>
             </div>
+            {images.length > 0 && (
+              <button 
+                className="gallery-button"
+                onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
+                title={`View ${images.length} image(s)`}
+              >
+                📷 {images.length}
+              </button>
+            )}
           </div>
-          {editorMode === 'markdown' ? (
+          
+          {editorMode === 'wysiwyg' && (
+            <WysiwygEditor
+              content={content}
+              onChange={setContent}
+              placeholder="Start writing..."
+            />
+          )}
+          
+          {editorMode === 'markdown' && (
             <MonacoEditor
               height="100%"
               defaultLanguage="markdown"
@@ -244,13 +316,25 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
                 cursorBlinking: 'smooth',
               }}
             />
-          ) : (
+          )}
+          
+          {editorMode === 'preview' && (
             <div className="editor-preview markdown-body">
-              {/* Simple markdown preview - could be enhanced with a proper renderer */}
-              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{content}</pre>
+              <div
+                className="preview-content"
+                dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
+              />
             </div>
           )}
         </div>
+        
+        {/* Lightbox for viewing images in content */}
+        <Lightbox
+          images={images}
+          initialIndex={lightboxIndex}
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+        />
       </div>
 
       <div className="editor-footer">

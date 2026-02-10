@@ -14,6 +14,28 @@ const formatFileSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 };
 
+// Get post type icon based on categories
+const getPostTypeIcon = (categories: string[]): { icon: string; type: string } => {
+  const lowerCategories = categories.map(c => c.toLowerCase());
+  if (lowerCategories.includes('picture') || lowerCategories.includes('photo') || lowerCategories.includes('image')) {
+    return { icon: '🖼️', type: 'picture' };
+  }
+  if (lowerCategories.includes('aside') || lowerCategories.includes('note') || lowerCategories.includes('quick')) {
+    return { icon: '📝', type: 'aside' };
+  }
+  if (lowerCategories.includes('link') || lowerCategories.includes('bookmark')) {
+    return { icon: '🔗', type: 'link' };
+  }
+  if (lowerCategories.includes('video')) {
+    return { icon: '🎬', type: 'video' };
+  }
+  if (lowerCategories.includes('quote')) {
+    return { icon: '💬', type: 'quote' };
+  }
+  // Default to article
+  return { icon: '📄', type: 'article' };
+};
+
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface CalendarViewProps {
@@ -399,16 +421,22 @@ const PostsList: React.FC = () => {
             Drafts ({groupedPosts.draft.length})
           </div>
           <div className="sidebar-list">
-            {groupedPosts.draft.map(post => (
-              <div
-                key={post.id}
-                className={`sidebar-item ${selectedPostId === post.id ? 'selected' : ''}`}
-                onClick={() => setSelectedPost(post.id)}
-              >
-                <div className="sidebar-item-title">{post.title}</div>
-                <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
-              </div>
-            ))}
+            {groupedPosts.draft.map(post => {
+              const postType = getPostTypeIcon(post.categories);
+              return (
+                <div
+                  key={post.id}
+                  className={`sidebar-item post-type-${postType.type} ${selectedPostId === post.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedPost(post.id)}
+                >
+                  <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
+                  <div className="sidebar-item-content">
+                    <div className="sidebar-item-title">{post.title}</div>
+                    <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -420,16 +448,22 @@ const PostsList: React.FC = () => {
             Published ({groupedPosts.published.length})
           </div>
           <div className="sidebar-list">
-            {groupedPosts.published.map(post => (
-              <div
-                key={post.id}
-                className={`sidebar-item ${selectedPostId === post.id ? 'selected' : ''}`}
-                onClick={() => setSelectedPost(post.id)}
-              >
-                <div className="sidebar-item-title">{post.title}</div>
-                <div className="sidebar-item-meta">{formatDate(post.publishedAt || post.updatedAt)}</div>
-              </div>
-            ))}
+            {groupedPosts.published.map(post => {
+              const postType = getPostTypeIcon(post.categories);
+              return (
+                <div
+                  key={post.id}
+                  className={`sidebar-item post-type-${postType.type} ${selectedPostId === post.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedPost(post.id)}
+                >
+                  <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
+                  <div className="sidebar-item-content">
+                    <div className="sidebar-item-title">{post.title}</div>
+                    <div className="sidebar-item-meta">{formatDate(post.publishedAt || post.updatedAt)}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -441,16 +475,22 @@ const PostsList: React.FC = () => {
             Archived ({groupedPosts.archived.length})
           </div>
           <div className="sidebar-list">
-            {groupedPosts.archived.map(post => (
-              <div
-                key={post.id}
-                className={`sidebar-item ${selectedPostId === post.id ? 'selected' : ''}`}
-                onClick={() => setSelectedPost(post.id)}
-              >
-                <div className="sidebar-item-title">{post.title}</div>
-                <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
-              </div>
-            ))}
+            {groupedPosts.archived.map(post => {
+              const postType = getPostTypeIcon(post.categories);
+              return (
+                <div
+                  key={post.id}
+                  className={`sidebar-item post-type-${postType.type} ${selectedPostId === post.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedPost(post.id)}
+                >
+                  <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
+                  <div className="sidebar-item-content">
+                    <div className="sidebar-item-title">{post.title}</div>
+                    <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

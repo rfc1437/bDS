@@ -190,12 +190,22 @@ export class DatabaseConnection {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS post_links (
+        id TEXT PRIMARY KEY,
+        source_post_id TEXT NOT NULL,
+        target_post_id TEXT NOT NULL,
+        link_text TEXT,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);
       CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
       CREATE INDEX IF NOT EXISTS idx_posts_sync_status ON posts(sync_status);
       CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at);
       CREATE INDEX IF NOT EXISTS idx_media_sync_status ON media(sync_status);
       CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
+      CREATE INDEX IF NOT EXISTS idx_post_links_source ON post_links(source_post_id);
+      CREATE INDEX IF NOT EXISTS idx_post_links_target ON post_links(target_post_id);
     `);
 
     // Check if project_id column exists in posts table, add if missing (migration)

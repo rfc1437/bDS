@@ -1,0 +1,253 @@
+/* Lightbox Overlay */
+.lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lightbox-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Image Container */
+.lightbox-image-container {
+  max-width: 90%;
+  max-height: 80%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-image-container.zoomed {
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  cursor: zoom-out;
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  cursor: zoom-in;
+  animation: scaleIn 0.2s ease-out;
+}
+
+.lightbox-image-container.zoomed .lightbox-image {
+  max-width: none;
+  max-height: none;
+  cursor: zoom-out;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Close Button */
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  z-index: 10;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Navigation Arrows */
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  z-index: 10;
+}
+
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.lightbox-prev {
+  left: 16px;
+}
+
+.lightbox-next {
+  right: 16px;
+}
+
+/* Footer */
+.lightbox-footer {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  color: white;
+  max-width: 80%;
+}
+
+.lightbox-caption {
+  font-size: 14px;
+  margin: 0 0 8px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.lightbox-counter {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Thumbnails */
+.lightbox-thumbnails {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+}
+
+.lightbox-thumbnail {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s, opacity 0.2s;
+  opacity: 0.6;
+}
+
+.lightbox-thumbnail:hover {
+  opacity: 0.9;
+}
+
+.lightbox-thumbnail.active {
+  border-color: white;
+  opacity: 1;
+}
+
+.lightbox-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Image Gallery Grid */
+.image-gallery {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-gallery.gallery-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.image-gallery.gallery-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.image-gallery.gallery-4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.gallery-item {
+  aspect-ratio: 1;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.gallery-item:hover {
+  transform: scale(1.02);
+}
+
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Single Image */
+.single-image {
+  cursor: pointer;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.single-image img {
+  max-width: 100%;
+  border-radius: 6px;
+  transition: box-shadow 0.2s;
+}
+
+.single-image:hover img {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.image-caption {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  text-align: center;
+  margin-top: 8px;
+}

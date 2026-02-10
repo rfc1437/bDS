@@ -1,0 +1,107 @@
+.post-links {
+  margin-top: 12px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background-color: var(--vscode-sideBar-background);
+  overflow: hidden;
+}
+
+.post-links-loading {
+  padding: 8px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.post-links-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.post-links-toggle:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.post-links-icon {
+  font-size: 14px;
+}
+
+.post-links-count {
+  flex: 1;
+  text-align: left;
+  color: var(--vscode-descriptionForeground);
+}
+
+.post-links-chevron {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  transition: transform 0.15s;
+}
+
+.post-links-content {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding: 8px 0;
+}
+
+.post-links-section {
+  padding: 4px 0;
+}
+
+.post-links-section:not(:last-child) {
+  border-bottom: 1px solid var(--vscode-panel-border);
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+}
+
+.post-links-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px 0;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.post-links-arrow {
+  font-size: 12px;
+}
+
+.post-links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.post-link-item {
+  display: block;
+  width: 100%;
+  padding: 4px 12px 4px 24px;
+  background: none;
+  border: none;
+  color: var(--vscode-textLink-foreground);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.post-link-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}

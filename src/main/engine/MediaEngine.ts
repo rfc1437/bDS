@@ -7,6 +7,15 @@ import { eq } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { media, Media, NewMedia } from '../database/schema';
+
+// Thumbnail sizes
+const THUMBNAIL_SIZES = {
+  small: { width: 150, height: 150 },
+  medium: { width: 400, height: 400 },
+  large: { width: 800, height: 800 },
+} as const;
+
+type ThumbnailSize = keyof typeof THUMBNAIL_SIZES;
 import { taskManager, Task } from './TaskManager';
 
 export interface MediaData {
@@ -86,6 +95,105 @@ export class MediaEngine extends EventEmitter {
 
   private calculateChecksum(buffer: Buffer): string {
     return crypto.createHash('md5').update(buffer).digest('hex');
+  }
+
+  /**
+   * Get the thumbnails directory for the current project
+   */
+  private getThumbnailsDir(): string {
+    const userDataPath = app.getPath('userData');
+    return path.join(userDataPath, 'projects', this.currentProjectId, 'thumbnails');
+  }
+
+  /**
+   * Generate thumbnails for an image file
+   */
+  async generateThumbnails(mediaId: string, sourcePath: string): Promise<Record<ThumbnailSize, string>> {
+    const thumbnailsDir = this.getThumbnailsDir();
+    await fs.mkdir(thumbnailsDir, { recursive: true });
+
+    const thumbnails: Record<ThumbnailSize, string> = {} as Record<ThumbnailSize, string>;
+
+    try {
+      // Dynamic import of sharp (it's a native module)
+      const sharp = (await import('sharp')).default;
+
+      for (const [size, dimensions] of Object.entries(THUMBNAIL_SIZES) as [ThumbnailSize, { width: number; height: number }][]) {
+        const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+
+        await sharp(sourcePath)
+          .resize(dimensions.width, dimensions.height, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .webp({ quality: 80 })
+          .toFile(thumbnailPath);
+
+        thumbnails[size] = thumbnailPath;
+      }
+
+      this.emit('thumbnailsGenerated', { mediaId, thumbnails });
+    } catch (error) {
+      console.error('Failed to generate thumbnails:', error);
+      // Return empty thumbnails on error - non-critical failure
+    }
+
+    return thumbnails;
+  }
+
+  /**
+   * Get existing thumbnail paths for a media item
+   */
+  async getThumbnailPaths(mediaId: string): Promise<Record<ThumbnailSize, string | null>> {
+    const thumbnailsDir = this.getThumbnailsDir();
+    const result: Record<ThumbnailSize, string | null> = {
+      small: null,
+      medium: null,
+      large: null,
+    };
+
+    for (const size of Object.keys(THUMBNAIL_SIZES) as ThumbnailSize[]) {
+      const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+      try {
+        await fs.access(thumbnailPath);
+        result[size] = thumbnailPath;
+      } catch {
+        // Thumbnail doesn't exist
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Get thumbnail as base64 data URL for renderer
+   */
+  async getThumbnailDataUrl(mediaId: string, size: ThumbnailSize = 'small'): Promise<string | null> {
+    const thumbnailsDir = this.getThumbnailsDir();
+    const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+
+    try {
+      const data = await fs.readFile(thumbnailPath);
+      return `data:image/webp;base64,${data.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Delete thumbnails for a media item
+   */
+  private async deleteThumbnails(mediaId: string): Promise<void> {
+    const thumbnailsDir = this.getThumbnailsDir();
+
+    for (const size of Object.keys(THUMBNAIL_SIZES) as ThumbnailSize[]) {
+      const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+      try {
+        await fs.unlink(thumbnailPath);
+      } catch {
+        // Thumbnail doesn't exist, ignore
+      }
+    }
   }
 
   private async writeSidecarFile(mediaData: MediaData, mediaPath: string): Promise<string> {
@@ -239,14 +347,30 @@ export class MediaEngine extends EventEmitter {
     // Copy file to media directory
     await fs.copyFile(sourcePath, destPath);
 
+    const mimeType = metadata?.mimeType || this.getMimeType(originalName);
+    let width = metadata?.width;
+    let height = metadata?.height;
+
+    // Get image dimensions using sharp if it's an image
+    if (mimeType.startsWith('image/') && !mimeType.includes('svg')) {
+      try {
+        const sharp = (await import('sharp')).default;
+        const imageMetadata = await sharp(destPath).metadata();
+        width = imageMetadata.width;
+        height = imageMetadata.height;
+      } catch (error) {
+        console.error('Failed to get image dimensions:', error);
+      }
+    }
+
     const mediaData: MediaData = {
       id,
       filename,
       originalName,
-      mimeType: metadata?.mimeType || this.getMimeType(originalName),
+      mimeType,
       size: sourceBuffer.length,
-      width: metadata?.width,
-      height: metadata?.height,
+      width,
+      height,
       alt: metadata?.alt,
       caption: metadata?.caption,
       createdAt: now,
@@ -256,6 +380,13 @@ export class MediaEngine extends EventEmitter {
 
     const sidecarPath = await this.writeSidecarFile(mediaData, destPath);
     const checksum = this.calculateChecksum(sourceBuffer);
+
+    // Generate thumbnails for images (async, non-blocking)
+    if (mimeType.startsWith('image/') && !mimeType.includes('svg')) {
+      this.generateThumbnails(id, destPath).catch(err => {
+        console.error('Failed to generate thumbnails:', err);
+      });
+    }
 
     const dbMedia: NewMedia = {
       id: mediaData.id,
@@ -338,6 +469,9 @@ export class MediaEngine extends EventEmitter {
     } catch {
       // File might not exist
     }
+
+    // Delete thumbnails
+    await this.deleteThumbnails(id);
 
     await db.delete(media).where(eq(media.id, id));
 

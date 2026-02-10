@@ -1,0 +1,230 @@
+.task-popup-wrapper {
+  position: relative;
+}
+
+.task-popup-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--vscode-statusBar-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.task-popup-trigger:hover {
+  background-color: var(--vscode-statusBarItem-hoverBackground);
+}
+
+.task-popup-trigger.active {
+  background-color: var(--vscode-statusBarItem-activeBackground);
+}
+
+.task-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  width: 360px;
+  max-height: 400px;
+  background-color: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: slideUp 0.15s ease-out;
+  z-index: 100;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.task-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.task-popup-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.task-popup-header .text-button {
+  background: none;
+  border: none;
+  color: var(--vscode-textLink-foreground);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.task-popup-header .text-button:hover {
+  text-decoration: underline;
+}
+
+.task-section {
+  padding: 8px 0;
+}
+
+.task-section:not(:last-child) {
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.task-section-title {
+  padding: 4px 16px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  gap: 12px;
+}
+
+.task-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.task-item-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-item-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-item-message {
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-item-error {
+  font-size: 11px;
+  color: var(--vscode-notificationsErrorIcon-foreground);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-progress-bar {
+  height: 4px;
+  background-color: var(--vscode-progressBar-background);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.task-progress-fill {
+  height: 100%;
+  background-color: var(--vscode-button-background);
+  border-radius: 2px;
+  transition: width 0.3s ease-out;
+}
+
+.task-cancel {
+  background: none;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s;
+}
+
+.task-item:hover .task-cancel {
+  opacity: 1;
+}
+
+.task-cancel:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-notificationsErrorIcon-foreground);
+}
+
+.task-time {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  flex-shrink: 0;
+}
+
+.task-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.task-icon.success {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.task-icon.error {
+  color: var(--vscode-notificationsErrorIcon-foreground);
+}
+
+.task-icon.pending {
+  color: var(--vscode-descriptionForeground);
+}
+
+.task-icon.cancelled {
+  color: var(--vscode-descriptionForeground);
+}
+
+.task-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--vscode-panel-border);
+  border-top-color: var(--vscode-button-background);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.task-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}

@@ -7,7 +7,7 @@ import matter from 'gray-matter';
 import { eq, and, desc, gte, lte, like } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
-import { posts, Post, NewPost } from '../database/schema';
+import { posts, Post, NewPost, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
 
 export interface PostData {
@@ -287,6 +287,11 @@ export class PostEngine extends EventEmitter {
         sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
         args: [updated.id, updated.title, updated.content, updated.excerpt || '', updated.tags.join(' '), updated.categories.join(' ')],
       });
+    }
+
+    // Update post links if content changed
+    if (data.content) {
+      await this.updatePostLinks(id, updated.content);
     }
 
     this.emit('postUpdated', updated);
@@ -634,6 +639,140 @@ export class PostEngine extends EventEmitter {
     };
     
     await taskManager.runTask(task);
+  }
+
+  /**
+   * Extract internal post links from content (links to other posts in the blog)
+   */
+  extractInternalLinks(content: string): { slug: string; text: string }[] {
+    const links: { slug: string; text: string }[] = [];
+    
+    // Match markdown links: [text](/posts/slug) or [text](/year/month/slug)
+    const markdownLinkRegex = /\[([^\]]+)\]\(\/(?:posts\/)?(?:\d{4}\/\d{2}\/)?([a-z0-9-]+)(?:\.html?)?\)/gi;
+    let match;
+    while ((match = markdownLinkRegex.exec(content)) !== null) {
+      links.push({ text: match[1], slug: match[2] });
+    }
+    
+    // Match HTML links: <a href="/posts/slug">text</a>
+    const htmlLinkRegex = /<a[^>]+href=["']\/(?:posts\/)?(?:\d{4}\/\d{2}\/)?([a-z0-9-]+)(?:\.html?)?["'][^>]*>([^<]+)<\/a>/gi;
+    while ((match = htmlLinkRegex.exec(content)) !== null) {
+      links.push({ text: match[2], slug: match[1] });
+    }
+    
+    return links;
+  }
+
+  /**
+   * Update post links in the database based on content analysis
+   */
+  async updatePostLinks(postId: string, content: string): Promise<void> {
+    const db = getDatabase().getLocal();
+    const extractedLinks = this.extractInternalLinks(content);
+    
+    // Delete existing links from this post
+    await db.delete(postLinks).where(eq(postLinks.sourcePostId, postId));
+    
+    if (extractedLinks.length === 0) return;
+    
+    // Get all posts to resolve slugs to IDs
+    const allPosts = await db.select({ id: posts.id, slug: posts.slug })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId));
+    
+    const slugToId = new Map(allPosts.map(p => [p.slug, p.id]));
+    
+    // Insert new links
+    for (const link of extractedLinks) {
+      const targetId = slugToId.get(link.slug);
+      if (targetId && targetId !== postId) {
+        await db.insert(postLinks).values({
+          id: uuidv4(),
+          sourcePostId: postId,
+          targetPostId: targetId,
+          linkText: link.text,
+          createdAt: new Date(),
+        });
+      }
+    }
+  }
+
+  /**
+   * Get posts that link TO the specified post ("linked by")
+   */
+  async getLinkedBy(postId: string): Promise<{ id: string; title: string; slug: string }[]> {
+    const db = getDatabase().getLocal();
+    
+    const links = await db
+      .select({
+        sourcePostId: postLinks.sourcePostId,
+        linkText: postLinks.linkText,
+      })
+      .from(postLinks)
+      .where(eq(postLinks.targetPostId, postId));
+    
+    if (links.length === 0) return [];
+    
+    const sourceIds = links.map(l => l.sourcePostId);
+    const sourcePosts = await db
+      .select({ id: posts.id, title: posts.title, slug: posts.slug })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId));
+    
+    return sourcePosts.filter(p => sourceIds.includes(p.id));
+  }
+
+  /**
+   * Get posts that the specified post links TO ("links to")
+   */
+  async getLinksTo(postId: string): Promise<{ id: string; title: string; slug: string }[]> {
+    const db = getDatabase().getLocal();
+    
+    const links = await db
+      .select({
+        targetPostId: postLinks.targetPostId,
+        linkText: postLinks.linkText,
+      })
+      .from(postLinks)
+      .where(eq(postLinks.sourcePostId, postId));
+    
+    if (links.length === 0) return [];
+    
+    const targetIds = links.map(l => l.targetPostId);
+    const targetPosts = await db
+      .select({ id: posts.id, title: posts.title, slug: posts.slug })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId));
+    
+    return targetPosts.filter(p => targetIds.includes(p.id));
+  }
+
+  /**
+   * Rebuild all post links from content analysis
+   */
+  async rebuildAllPostLinks(): Promise<void> {
+    const db = getDatabase().getLocal();
+    
+    // Clear all existing links
+    await db.delete(postLinks);
+    
+    // Get all posts
+    const allPosts = await db
+      .select({ id: posts.id, filePath: posts.filePath })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId));
+    
+    for (const post of allPosts) {
+      try {
+        const fileContent = await fs.readFile(post.filePath, 'utf-8');
+        const { content } = matter(fileContent);
+        await this.updatePostLinks(post.id, content);
+      } catch (error) {
+        console.error(`Failed to update links for post ${post.id}:`, error);
+      }
+    }
+    
+    this.emit('postLinksRebuilt');
   }
 }
 

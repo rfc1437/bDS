@@ -67,7 +67,10 @@
 }
 
 .sidebar-item {
-  padding: 6px 12px 6px 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 12px 6px 12px;
   cursor: pointer;
   border-left: 2px solid transparent;
 }
@@ -79,6 +82,39 @@
 .sidebar-item.selected {
   background-color: var(--vscode-list-activeSelectionBackground);
   border-left-color: var(--vscode-focusBorder);
+}
+
+.post-type-icon {
+  font-size: 14px;
+  line-height: 1.4;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.sidebar-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Post type specific styling */
+.sidebar-item.post-type-picture {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.05) 0%, transparent 100%);
+}
+
+.sidebar-item.post-type-aside {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.05) 0%, transparent 100%);
+}
+
+.sidebar-item.post-type-quote {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.05) 0%, transparent 100%);
+}
+
+.sidebar-item.post-type-link {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, transparent 100%);
+}
+
+.sidebar-item.post-type-video {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, transparent 100%);
 }
 
 .sidebar-item-title {

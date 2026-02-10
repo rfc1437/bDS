@@ -84,6 +84,21 @@ This is a short-form article that does not need a full-article-page, because it 
 a short comment that is shown after the link. This is meant for link collections and should be rendered
 in a compact form in the overview pages. More on rendering in the publishing pipelin description.
 
+### category "page"
+
+This is a post that behaves mostly like an article, but is ignored in overview pages, because it is just
+meant to be linked to menues. So menu editing needs to be able to reference posts of category page
+and overview templates need to ignore posts of category page. Other than that, they are just like article,
+so have long form text, short form summary and title. Pages can be assigned different header images that
+override the project image.
+
+### Project definition
+
+A project is not just the collection of posts, media and publish settings, it is also a base project
+container with title, author and other elements like that. So there needs to be project related settings
+that allow to give the project a title, set up a main author that can be referenced in metadat and for
+example set up header images that can be used when publishing.
+
 ## Migrating
 
 Prepare a proper mass-data importer that can read wordpress backup files, so the user can bring in old
@@ -141,6 +156,12 @@ system and also create blog posts with AI support.
 All SDK tools must also be made available as MCP server that is hosted inside the application, so that I
 can hook the app into a normal AI coding agent.
 
+Also the AI should be available to create summaries just with a button click in the post editor area, so
+that the summary is filled in based on AI summarization to help speed up the blogging process. Also the
+AI can be used to generate a good slurl that is not just generically from the title and even the title
+can be AI-generated from the text. That way the user can focus on writing the core text and if all matches,
+just accept AI summary and title and post it.
+
 ## Publishing
 
 Publishing should target static HTML/CSS/JavaScript situations. There must be a asnyc exporter, that will render
@@ -168,7 +189,9 @@ maybe even with easy importing from a central bootstrap site or something like t
 Check the site https://hugo.rfc1437.de/ for its structure, this is the structure of blog I want to be
 capable of building with this tooling. So we need templates for overview pages and ways to manage menues
 that reference overview pages and structure the menu according to site structure. Also support calendar views
-to allow users to go to specific months and years of the blog.
+to allow users to go to specific months and years of the blog. Build up a sensible set of templates that
+come with a new project, so that the user can start right away without a lot of hassle. Base the templates
+on the structure of above website, but keep out website title and images, of course.
 
 Categories and tags must be able to define a template selection for post templates, so that different types
 can be represented differently. this is especially important for the standard categories "article", "picture"

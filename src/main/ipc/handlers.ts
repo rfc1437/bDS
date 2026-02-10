@@ -1,10 +1,12 @@
 import { ipcMain, dialog, shell } from 'electron';
+import { eq } from 'drizzle-orm';
 import { getPostEngine, PostData, PostFilter } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
+import { media } from '../database/schema';
 
 export function registerIpcHandlers(): void {
   // ============ Project Handlers ============
@@ -126,6 +128,21 @@ export function registerIpcHandlers(): void {
     return engine.getPostsByYearMonth();
   });
 
+  ipcMain.handle('posts:getLinksTo', async (_, id: string) => {
+    const engine = getPostEngine();
+    return engine.getLinksTo(id);
+  });
+
+  ipcMain.handle('posts:getLinkedBy', async (_, id: string) => {
+    const engine = getPostEngine();
+    return engine.getLinkedBy(id);
+  });
+
+  ipcMain.handle('posts:rebuildLinks', async () => {
+    const engine = getPostEngine();
+    return engine.rebuildAllPostLinks();
+  });
+
   // ============ Media Handlers ============
 
   ipcMain.handle('media:import', async (_, sourcePath: string, metadata?: Partial<MediaData>) => {
@@ -185,6 +202,24 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('media:rebuildFromFiles', async () => {
     const engine = getMediaEngine();
     return engine.rebuildDatabaseFromFiles();
+  });
+
+  ipcMain.handle('media:getThumbnail', async (_, id: string, size?: 'small' | 'medium' | 'large') => {
+    const engine = getMediaEngine();
+    return engine.getThumbnailDataUrl(id, size || 'small');
+  });
+
+  ipcMain.handle('media:regenerateThumbnails', async (_, id: string) => {
+    const engine = getMediaEngine();
+    const mediaItem = await engine.getMedia(id);
+    if (mediaItem && mediaItem.mimeType.startsWith('image/')) {
+      const db = getDatabase().getLocal();
+      const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
+      if (dbMedia) {
+        return engine.generateThumbnails(id, dbMedia.filePath);
+      }
+    }
+    return null;
   });
 
   // ============ Sync Handlers ============

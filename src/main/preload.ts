@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTags: () => ipcRenderer.invoke('posts:getTags'),
     getCategories: () => ipcRenderer.invoke('posts:getCategories'),
     getByYearMonth: () => ipcRenderer.invoke('posts:getByYearMonth'),
+    getLinksTo: (id: string) => ipcRenderer.invoke('posts:getLinksTo', id),
+    getLinkedBy: (id: string) => ipcRenderer.invoke('posts:getLinkedBy', id),
+    rebuildLinks: () => ipcRenderer.invoke('posts:rebuildLinks'),
   },
 
   // Media
@@ -41,6 +44,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     get: (id: string) => ipcRenderer.invoke('media:get', id),
     getAll: () => ipcRenderer.invoke('media:getAll'),
     rebuildFromFiles: () => ipcRenderer.invoke('media:rebuildFromFiles'),
+    getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => ipcRenderer.invoke('media:getThumbnail', id, size),
+    regenerateThumbnails: (id: string) => ipcRenderer.invoke('media:regenerateThumbnails', id),
   },
 
   // Sync
@@ -107,6 +112,9 @@ export interface ElectronAPI {
     getTags: () => Promise<string[]>;
     getCategories: () => Promise<string[]>;
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
+    getLinksTo: (id: string) => Promise<{ id: string; title: string; slug: string }[]>;
+    getLinkedBy: (id: string) => Promise<{ id: string; title: string; slug: string }[]>;
+    rebuildLinks: () => Promise<void>;
   };
   media: {
     import: (sourcePath: string, metadata?: unknown) => Promise<unknown>;

@@ -72,6 +72,15 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Post links - tracks internal links between posts
+export const postLinks = sqliteTable('post_links', {
+  id: text('id').primaryKey(),
+  sourcePostId: text('source_post_id').notNull(), // Post containing the link
+  targetPostId: text('target_post_id').notNull(), // Post being linked to
+  linkText: text('link_text'), // The text of the link
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -83,3 +92,5 @@ export type SyncLogEntry = typeof syncLog.$inferSelect;
 export type NewSyncLogEntry = typeof syncLog.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
+export type PostLink = typeof postLinks.$inferSelect;
+export type NewPostLink = typeof postLinks.$inferInsert;

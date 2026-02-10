@@ -1,4 +1,8 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+// Storage key for persisted state
+const STORAGE_KEY = 'bds-app-state';
 
 // Types
 export interface ProjectData {
@@ -113,84 +117,99 @@ interface AppState {
   setError: (error: string | null) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  // Initial Project State
-  projects: [],
-  activeProject: null,
-  
-  // Initial UI State
-  activeView: 'posts',
-  sidebarVisible: true,
-  panelVisible: false,
-  selectedPostId: null,
-  selectedMediaId: null,
-  
-  // Initial Data
-  posts: [],
-  media: [],
-  tasks: [],
-  
-  // Initial Sync State
-  syncStatus: 'idle',
-  syncConfigured: false,
-  pendingChanges: { posts: 0, media: 0 },
-  
-  // Initial Loading State
-  isLoading: false,
-  error: null,
-  
-  // Project Actions
-  setProjects: (projects) => set({ projects }),
-  setActiveProject: (activeProject) => set({ activeProject }),
-  addProject: (project) => set((state) => ({ projects: [...state.projects, project] })),
-  updateProject: (id, updatedProject) => set((state) => ({
-    projects: state.projects.map((p) => (p.id === id ? { ...p, ...updatedProject } : p)),
-  })),
-  removeProject: (id) => set((state) => ({
-    projects: state.projects.filter((p) => p.id !== id),
-  })),
-  
-  // UI Actions
-  setActiveView: (view) => set({ activeView: view }),
-  toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
-  togglePanel: () => set((state) => ({ panelVisible: !state.panelVisible })),
-  setSelectedPost: (id) => set({ selectedPostId: id }),
-  setSelectedMedia: (id) => set({ selectedMediaId: id }),
-  
-  // Post Actions
-  setPosts: (posts) => set({ posts }),
-  addPost: (post) => set((state) => ({ posts: [...state.posts, post] })),
-  updatePost: (id, updatedPost) => set((state) => ({
-    posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedPost } : p)),
-  })),
-  removePost: (id) => set((state) => ({
-    posts: state.posts.filter((p) => p.id !== id),
-    selectedPostId: state.selectedPostId === id ? null : state.selectedPostId,
-  })),
-  
-  // Media Actions
-  setMedia: (media) => set({ media }),
-  addMedia: (media) => set((state) => ({ media: [...state.media, media] })),
-  updateMedia: (id, updatedMedia) => set((state) => ({
-    media: state.media.map((m) => (m.id === id ? { ...m, ...updatedMedia } : m)),
-  })),
-  removeMedia: (id) => set((state) => ({
-    media: state.media.filter((m) => m.id !== id),
-    selectedMediaId: state.selectedMediaId === id ? null : state.selectedMediaId,
-  })),
-  
-  // Task Actions
-  setTasks: (tasks) => set({ tasks }),
-  updateTask: (taskId, task) => set((state) => ({
-    tasks: state.tasks.map((t) => (t.taskId === taskId ? { ...t, ...task } : t)),
-  })),
-  
-  // Sync Actions
-  setSyncStatus: (syncStatus) => set({ syncStatus }),
-  setSyncConfigured: (syncConfigured) => set({ syncConfigured }),
-  setPendingChanges: (pendingChanges) => set({ pendingChanges }),
-  
-  // Loading Actions
-  setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error }),
-}));
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      // Initial Project State
+      projects: [],
+      activeProject: null,
+      
+      // Initial UI State
+      activeView: 'posts',
+      sidebarVisible: true,
+      panelVisible: false,
+      selectedPostId: null,
+      selectedMediaId: null,
+      
+      // Initial Data
+      posts: [],
+      media: [],
+      tasks: [],
+      
+      // Initial Sync State
+      syncStatus: 'idle',
+      syncConfigured: false,
+      pendingChanges: { posts: 0, media: 0 },
+      
+      // Initial Loading State
+      isLoading: false,
+      error: null,
+      
+      // Project Actions
+      setProjects: (projects) => set({ projects }),
+      setActiveProject: (activeProject) => set({ activeProject }),
+      addProject: (project) => set((state) => ({ projects: [...state.projects, project] })),
+      updateProject: (id, updatedProject) => set((state) => ({
+        projects: state.projects.map((p) => (p.id === id ? { ...p, ...updatedProject } : p)),
+      })),
+      removeProject: (id) => set((state) => ({
+        projects: state.projects.filter((p) => p.id !== id),
+      })),
+      
+      // UI Actions
+      setActiveView: (view) => set({ activeView: view }),
+      toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
+      togglePanel: () => set((state) => ({ panelVisible: !state.panelVisible })),
+      setSelectedPost: (id) => set({ selectedPostId: id }),
+      setSelectedMedia: (id) => set({ selectedMediaId: id }),
+      
+      // Post Actions
+      setPosts: (posts) => set({ posts }),
+      addPost: (post) => set((state) => ({ posts: [...state.posts, post] })),
+      updatePost: (id, updatedPost) => set((state) => ({
+        posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedPost } : p)),
+      })),
+      removePost: (id) => set((state) => ({
+        posts: state.posts.filter((p) => p.id !== id),
+        selectedPostId: state.selectedPostId === id ? null : state.selectedPostId,
+      })),
+      
+      // Media Actions
+      setMedia: (media) => set({ media }),
+      addMedia: (media) => set((state) => ({ media: [...state.media, media] })),
+      updateMedia: (id, updatedMedia) => set((state) => ({
+        media: state.media.map((m) => (m.id === id ? { ...m, ...updatedMedia } : m)),
+      })),
+      removeMedia: (id) => set((state) => ({
+        media: state.media.filter((m) => m.id !== id),
+        selectedMediaId: state.selectedMediaId === id ? null : state.selectedMediaId,
+      })),
+      
+      // Task Actions
+      setTasks: (tasks) => set({ tasks }),
+      updateTask: (taskId, task) => set((state) => ({
+        tasks: state.tasks.map((t) => (t.taskId === taskId ? { ...t, ...task } : t)),
+      })),
+      
+      // Sync Actions
+      setSyncStatus: (syncStatus) => set({ syncStatus }),
+      setSyncConfigured: (syncConfigured) => set({ syncConfigured }),
+      setPendingChanges: (pendingChanges) => set({ pendingChanges }),
+      
+      // Loading Actions
+      setLoading: (isLoading) => set({ isLoading }),
+      setError: (error) => set({ error }),
+    }),
+    {
+      name: STORAGE_KEY,
+      // Only persist UI state, not data (which is loaded from backend)
+      partialize: (state) => ({
+        activeView: state.activeView,
+        sidebarVisible: state.sidebarVisible,
+        panelVisible: state.panelVisible,
+        selectedPostId: state.selectedPostId,
+        selectedMediaId: state.selectedMediaId,
+      }),
+    }
+  )
+);
