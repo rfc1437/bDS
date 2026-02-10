@@ -528,6 +528,7 @@ export class MediaEngine extends EventEmitter {
   }
 
   async rebuildDatabaseFromFiles(): Promise<void> {
+    const mediaBaseDir = this.getMediaBaseDir();
     const task: Task<void> = {
       id: uuidv4(),
       name: 'Rebuild database from media files',
@@ -536,23 +537,39 @@ export class MediaEngine extends EventEmitter {
         
         onProgress(0, 'Scanning media directory...');
         
-        const mediaDir = this.getMediaDir();
-        let files: string[] = [];
+        // Recursively find all .meta files in the media directory tree
+        const metaFiles: string[] = [];
+        const scanDir = async (dir: string) => {
+          try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                await scanDir(fullPath);
+              } else if (entry.name.endsWith('.meta')) {
+                metaFiles.push(fullPath);
+              }
+            }
+          } catch {
+            // Directory might not exist
+          }
+        };
+
         try {
-          files = await fs.readdir(mediaDir);
+          await fs.mkdir(mediaBaseDir, { recursive: true });
         } catch {
-          await fs.mkdir(mediaDir, { recursive: true });
+          // Already exists
         }
-        const metaFiles = files.filter(f => f.endsWith('.meta'));
+        await scanDir(mediaBaseDir);
         
         onProgress(10, `Found ${metaFiles.length} media sidecar files`);
         
         for (let i = 0; i < metaFiles.length; i++) {
-          const metaFile = metaFiles[i];
-          const sidecarPath = path.join(mediaDir, metaFile);
+          const sidecarPath = metaFiles[i];
           const mediaFilePath = sidecarPath.replace('.meta', '');
+          const metaFileName = path.basename(sidecarPath);
           
-          onProgress(10 + (80 * (i / metaFiles.length)), `Processing ${metaFile}...`);
+          onProgress(10 + (80 * (i / metaFiles.length)), `Processing ${metaFileName}...`);
           
           const metadata = await this.readSidecarFile(sidecarPath);
           
