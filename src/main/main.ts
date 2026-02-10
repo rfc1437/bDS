@@ -1,0 +1,335 @@
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
+import { getDatabase } from './database';
+import { registerIpcHandlers } from './ipc';
+
+let mainWindow: BrowserWindow | null = null;
+
+// Check if dev server is likely running (only in development)
+const isDev = process.env.NODE_ENV === 'development';
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 800,
+    minHeight: 600,
+    title: 'Blogging Desktop Server',
+    backgroundColor: '#1e1e1e', // VS Code dark background
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+    icon: path.join(__dirname, '../../assets/icon.png'),
+  });
+
+  // Set up the application menu
+  const menu = createApplicationMenu();
+  Menu.setApplicationMenu(menu);
+
+  // Load the app - use built files unless explicitly in dev mode
+  const rendererPath = path.join(__dirname, '../renderer/index.html');
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else if (fs.existsSync(rendererPath)) {
+    mainWindow.loadFile(rendererPath);
+  } else {
+    // Fallback to dev server if built files don't exist
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  }
+
+  // Forward events to renderer
+  ipcMain.on('forward-to-renderer', (_event, eventName: string, ...args: unknown[]) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(eventName, ...args);
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+function createApplicationMenu(): Menu {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Post',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            mainWindow?.webContents.send('menu:newPost');
+          },
+        },
+        {
+          label: 'Import Media...',
+          accelerator: 'CmdOrCtrl+I',
+          click: () => {
+            mainWindow?.webContents.send('menu:importMedia');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => {
+            mainWindow?.webContents.send('menu:save');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Open Data Folder',
+          click: async () => {
+            const { shell } = require('electron');
+            const paths = getDatabase().getDataPaths();
+            shell.openPath(path.dirname(paths.database));
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Exit',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Alt+F4',
+          click: () => {
+            app.quit();
+          },
+        },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'CmdOrCtrl+F',
+          click: () => {
+            mainWindow?.webContents.send('menu:find');
+          },
+        },
+        {
+          label: 'Replace',
+          accelerator: 'CmdOrCtrl+H',
+          click: () => {
+            mainWindow?.webContents.send('menu:replace');
+          },
+        },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Posts',
+          accelerator: 'CmdOrCtrl+1',
+          click: () => {
+            mainWindow?.webContents.send('menu:viewPosts');
+          },
+        },
+        {
+          label: 'Media',
+          accelerator: 'CmdOrCtrl+2',
+          click: () => {
+            mainWindow?.webContents.send('menu:viewMedia');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => {
+            mainWindow?.webContents.send('menu:toggleSidebar');
+          },
+        },
+        {
+          label: 'Toggle Panel',
+          accelerator: 'CmdOrCtrl+J',
+          click: () => {
+            mainWindow?.webContents.send('menu:togglePanel');
+          },
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Blog',
+      submenu: [
+        {
+          label: 'Publish Selected',
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: () => {
+            mainWindow?.webContents.send('menu:publishSelected');
+          },
+        },
+        {
+          label: 'Unpublish Selected',
+          click: () => {
+            mainWindow?.webContents.send('menu:unpublishSelected');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Preview Post',
+          accelerator: 'CmdOrCtrl+Shift+V',
+          click: () => {
+            mainWindow?.webContents.send('menu:previewPost');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Rebuild Database from Files',
+          click: () => {
+            mainWindow?.webContents.send('menu:rebuildDatabase');
+          },
+        },
+      ],
+    },
+    {
+      label: 'Sync',
+      submenu: [
+        {
+          label: 'Sync Now',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => {
+            mainWindow?.webContents.send('menu:syncNow');
+          },
+        },
+        {
+          label: 'Push Changes',
+          click: () => {
+            mainWindow?.webContents.send('menu:pushChanges');
+          },
+        },
+        {
+          label: 'Pull Changes',
+          click: () => {
+            mainWindow?.webContents.send('menu:pullChanges');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Configure Sync...',
+          click: () => {
+            mainWindow?.webContents.send('menu:configureSync');
+          },
+        },
+        {
+          label: 'View Sync Log',
+          click: () => {
+            mainWindow?.webContents.send('menu:viewSyncLog');
+          },
+        },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About Blogging Desktop Server',
+          click: () => {
+            mainWindow?.webContents.send('menu:about');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'View on GitHub',
+          click: async () => {
+            const { shell } = require('electron');
+            await shell.openExternal('https://github.com/bds/blogging-desktop-server');
+          },
+        },
+        {
+          label: 'Report Issue',
+          click: async () => {
+            const { shell } = require('electron');
+            await shell.openExternal('https://github.com/bds/blogging-desktop-server/issues');
+          },
+        },
+      ],
+    },
+  ];
+
+  // macOS specific menu adjustments
+  if (process.platform === 'darwin') {
+    template.unshift({
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    });
+  }
+
+  return Menu.buildFromTemplate(template);
+}
+
+async function initialize(): Promise<void> {
+  // Initialize database
+  const db = getDatabase();
+  await db.initializeLocal();
+
+  // Register IPC handlers
+  registerIpcHandlers();
+}
+
+// App lifecycle
+app.whenReady().then(async () => {
+  await initialize();
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('before-quit', async () => {
+  const db = getDatabase();
+  await db.close();
+});
+
+// Handle any uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+});

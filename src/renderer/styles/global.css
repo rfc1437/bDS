@@ -1,0 +1,286 @@
+/* VS Code-inspired CSS Variables and Global Styles */
+
+:root {
+  /* Background colors */
+  --vscode-editor-background: #1e1e1e;
+  --vscode-sideBar-background: #252526;
+  --vscode-activityBar-background: #333333;
+  --vscode-panel-background: #1e1e1e;
+  --vscode-titleBar-activeBackground: #3c3c3c;
+  --vscode-statusBar-background: #007acc;
+  --vscode-tab-activeBackground: #1e1e1e;
+  --vscode-tab-inactiveBackground: #2d2d2d;
+  --vscode-list-hoverBackground: #2a2d2e;
+  --vscode-list-activeSelectionBackground: #094771;
+  --vscode-list-inactiveSelectionBackground: #37373d;
+  --vscode-input-background: #3c3c3c;
+  --vscode-dropdown-background: #3c3c3c;
+  --vscode-button-background: #0e639c;
+  --vscode-button-hoverBackground: #1177bb;
+  --vscode-button-secondaryBackground: #3a3d41;
+  
+  /* Foreground colors */
+  --vscode-editor-foreground: #d4d4d4;
+  --vscode-sideBar-foreground: #cccccc;
+  --vscode-activityBar-foreground: #ffffff;
+  --vscode-statusBar-foreground: #ffffff;
+  --vscode-tab-activeForeground: #ffffff;
+  --vscode-tab-inactiveForeground: #969696;
+  --vscode-input-foreground: #cccccc;
+  --vscode-input-placeholderForeground: #a6a6a6;
+  --vscode-descriptionForeground: #858585;
+  --vscode-button-foreground: #ffffff;
+  
+  /* Border colors */
+  --vscode-panel-border: #80808059;
+  --vscode-sideBar-border: #80808059;
+  --vscode-tab-border: #252526;
+  --vscode-input-border: #3c3c3c;
+  --vscode-focusBorder: #007fd4;
+  
+  /* Status colors */
+  --vscode-notificationsInfoIcon-foreground: #75beff;
+  --vscode-notificationsWarningIcon-foreground: #cca700;
+  --vscode-notificationsErrorIcon-foreground: #f48771;
+  --vscode-testing-iconPassed: #73c991;
+  --vscode-testing-iconFailed: #f14c4c;
+  
+  /* Badge colors */
+  --vscode-badge-background: #4d4d4d;
+  --vscode-badge-foreground: #ffffff;
+  --vscode-activityBarBadge-background: #007acc;
+  --vscode-activityBarBadge-foreground: #ffffff;
+  
+  /* Scrollbar */
+  --vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
+  --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+  --vscode-scrollbarSlider-activeBackground: rgba(191, 191, 191, 0.4);
+  
+  /* Font settings */
+  --vscode-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --vscode-editor-font-family: 'Consolas', 'Courier New', monospace;
+  --vscode-font-size: 13px;
+  --vscode-editor-font-size: 14px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-editor-foreground);
+  background-color: var(--vscode-editor-background);
+  overflow: hidden;
+  user-select: none;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* Input styles */
+input, textarea, select {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-input-foreground);
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  padding: 4px 8px;
+  outline: none;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+/* Button styles */
+button {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-button-foreground);
+  background-color: var(--vscode-button-background);
+  border: none;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+button:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+button.secondary {
+  background-color: var(--vscode-button-secondaryBackground);
+}
+
+button.secondary:hover {
+  background-color: #4a4d51;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Icon button */
+.icon-button {
+  background: transparent;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+}
+
+.icon-button:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border-radius: 9px;
+}
+
+.badge.primary {
+  background-color: var(--vscode-activityBarBadge-background);
+}
+
+/* Status indicators */
+.status-draft {
+  color: var(--vscode-notificationsWarningIcon-foreground);
+}
+
+.status-published {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.status-archived {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Text styles */
+.text-muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.text-small {
+  font-size: 11px;
+}
+
+/* Utility classes */
+.flex {
+  display: flex;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-3 {
+  gap: 12px;
+}
+
+.p-1 {
+  padding: 4px;
+}
+
+.p-2 {
+  padding: 8px;
+}
+
+.p-3 {
+  padding: 12px;
+}
+
+.px-2 {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.py-1 {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

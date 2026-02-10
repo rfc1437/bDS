@@ -1,0 +1,91 @@
+.status-bar {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--vscode-statusBar-background);
+  color: var(--vscode-statusBar-foreground);
+  font-size: 12px;
+  padding: 0 8px;
+  user-select: none;
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 100%;
+}
+
+.status-bar-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.status-bar-item.warning {
+  background-color: var(--vscode-notificationsWarningIcon-foreground);
+}
+
+.sync-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--vscode-testing-iconPassed);
+}
+
+.sync-indicator.syncing {
+  animation: pulse 1s infinite;
+  background-color: var(--vscode-notificationsInfoIcon-foreground);
+}
+
+.sync-indicator.error {
+  background-color: var(--vscode-notificationsErrorIcon-foreground);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.task-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-dot.status-draft {
+  background-color: var(--vscode-notificationsWarningIcon-foreground);
+}
+
+.status-dot.status-published {
+  background-color: var(--vscode-testing-iconPassed);
+}
+
+.status-dot.status-archived {
+  background-color: var(--vscode-descriptionForeground);
+}
+
+.status-bar-item.brand {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}

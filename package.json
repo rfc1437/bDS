@@ -1,0 +1,73 @@
+{
+  "name": "blogging-desktop-server",
+  "productName": "Blogging Desktop Server",
+  "version": "1.0.0",
+  "description": "A desktop blogging application with offline-first capabilities and cloud sync",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "node ./node_modules/typescript/bin/tsc -p tsconfig.main.json --watch",
+    "dev:renderer": "node ./node_modules/vite/bin/vite.js",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "node ./node_modules/typescript/bin/tsc -p tsconfig.main.json",
+    "build:renderer": "node ./node_modules/vite/bin/vite.js build",
+    "start": "node ./node_modules/electron/cli.js .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node ./node_modules/tsx/dist/cli.mjs src/main/database/migrate.ts",
+    "db:studio": "node ./node_modules/drizzle-kit/bin.cjs studio"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/uuid": "^9.0.7",
+    "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "concurrently": "^8.2.2",
+    "drizzle-kit": "^0.20.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "memfs": "^4.6.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.4.0",
+    "drizzle-orm": "^0.29.0",
+    "electron-store": "^8.1.0",
+    "gray-matter": "^4.0.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "uuid": "^9.0.1",
+    "zustand": "^4.4.7"
+  },
+  "build": {
+    "appId": "com.bds.blogging-desktop-server",
+    "productName": "Blogging Desktop Server",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

@@ -1,0 +1,114 @@
+# blogging Desktop Server
+
+Back in the day I had a tool named Python Desktop Server that was a self-contained blogging engine with
+an integrated webserver and database that allowed management of blog posts in an easy local way and a
+sync to a cloud system for syncing data and also rendering the full blog.
+
+## Vision
+
+create a electron app in this folder that uses typescript for all the logic code and sqlite and a proper database framework around it for local storage of data and turso/libsql to sync against a cloud location for having offline work capabilities with syncing. The UI should be aligned with the UI patterns used by vscode. The name of the application is "blogging Desktop Server" and the shortname is bDS. Start with default layout for edit and view menues and things like that. I don't want the app to use raw SQL, I want some proper layer between those and proper wiring where all actual functional code  is kept in engine classes and the UI realy just does  presentation and reacts to state changes properly, so that long-running processes can properly integrate as async tasks.
+
+Blog post metadata should be managed in the SQLite database in the user local folder, so it persists application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a markdown file with a properties segment in the top of the file with YAML like property definitions, so all metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the user local path, in that case storing the image file sand for each image file a properties sidecar file that uses the same header structure as for posts.
+
+The application must be able to support multiple projects (ie web sites), so there must be a way to create
+new projects and select current project. The UI is only showing all data of the current selected project and
+all tools are only working against the selected project. I can imagine that projects will be separate
+databases and folders for post and media.
+
+I want  proper full-text search for posts based on the integrated sqlite database using fts5, so that I can quickly find posts. So build proper text search index update into the core model right away, so that regardless how posts come into the system, they are always properly indexed.
+
+Additionally bring in a good markdown library, because all posts will be formatted in markdown for easy portability to future systems. Media files can be attached to posts and can be referenced with standard markdown notation with a post-relative path, so it is easy for the user to include images. The  post editor should support both a wysiwyg editor and raw markdown editor, so the user does not have to know markdown, but everything is handled by the editor, but for complex parts, markdown is available for power users.
+
+Integrate toasts as notification mechanism that will be used whenever anything has to communicate success/failure to the user.
+
+Integrated images in posts should be shown with a lightbox effect als galleries when there are multiple photos, or just as single images with lightbox when there is only one. The wysiwyg editor should support this at least on a basic level.
+
+## Organizing
+
+Blog posts should be organized in the app in the main post view where the sidebar lists posts and the main
+tab area can have multiple posts (new or selected from the sidebar) open, just like vscode manages text files.
+The sidebar for posts must also include a calendar view at the top that allows to go to specific dates or
+date ranges (by selecting a whole month of a year for example) and then accordingly filter down the post
+list in the sidebar.
+
+Also there must be a way to filter posts by tags and category to look at subsets of posts efficiently.
+
+And there must be a way to use markdown links of a specific short-form to reference other posts, so that
+I can link to other places, if needed, and those references should also be part of the information about
+posts. So each post should give a "links to" part in the UI (right sidebar or lower area of left sidebar
+like with vscode?) and a "linked to by" part where incoming links are shown.
+
+## Migrating
+
+Prepare a proper mass-data importer that can read wordpress backup files, so the user can bring in old wordpress blogs easily. That importer should run asynchronously and properly communicate progress to the user while it is running in the background. The import has to rebuild all metadata properly, so check if we have all the metadata in our model set up in a similar way as Wordpress handles it, so that we have a seamless integration. Posts in Wordpress backups are html, but should be interpreted and transformed into proper markdown in the import.
+
+Additionally we need a way to traverse a full HTML website and deduct post structure from that website
+and rebuild posts in the database based on such a web traversal. To be able to do that, use copilot SDK
+to integrate copilot directly, so that HTML pages can be directly inspected and turned into actual blog
+posts in proper structure and proper markdown, despite the source being HTML.
+
+For this AI support during import to work, the blog application needs to provide post management and media
+management functionality as proper SDK tools to the copilot instance, so that it will be able to work
+on those posts.
+
+The AI importing agent must discover the language of a post and put that in an attribute. Posts must have
+the database structure of translations, so that a post that is discovered as being german can be automatically
+translated to english and vice-versa. After import, all posts are available in two languages.
+
+Import runs get an ID that has a generated name based on a sequence of two random words (like session plans
+of claude code) based on random adjective and animal name and a date. This identifier is then used as a tag
+(ravenous-wombat-2026-02-20 for example), so posts and media from one import can be recognized easily.
+There must be a mass-delete for such tags, so that the tag and all content related to that tag is deleted
+again, so that imports can be reverted and redone in case of problems.
+
+Imports must be able to recognize duplicates of posts to some degree, so that we don't create additional
+posts from new import runs if the original posts are already there. In the case of recognized duplicates,
+the original post will just be linked to the same tag of the new import, so that the user can see it was
+referenced by multiple imports.
+
+Import runs can be shown in the main panel, so that the user can see what came with what import and can
+manage posts and media from imports that way. Migration is the main interesting part of this tool, because
+migrating blogs is hard work and needs to be properly supported.
+
+## Organizing II
+
+Since we have an AI assistant planned for the migration phase, we also want an AI chat feature as another
+view in the app, so we can activate it and use the AI assistant to query blog posts and media files in the
+system and also create blog posts with AI support.
+
+All SDK tools must also be made available as MCP server that is hosted inside the application, so that I
+can hook the app into a normal AI coding agent.
+
+## Publishing
+
+Publishing should target static HTML/CSS/JavaScript situations. There must be a asnyc exporter, that will render
+all affected pages based on the structure of the export and auto-update affected files when the posts or media
+that are used in the page were changed. This requires a cross-reference table that links posts and media entries
+with actual HTML files that are referencing them. This needs to be based on how templates use posts in the
+export pipeline.
+
+The main driver is a proper blog structure with templates. For this I want proper templates I can manage and
+edit in the application itself. Template editing should provide proper syntax highlighting, so something like
+monaco is important. Choose a good solid template engine for node-js based tools that is especialy targeted
+to easy template creation.
+
+For the styling I want the system to be based on bootstrap templates, so that the look can be easily swapped
+to the wish of the user. There should be a selection of light and dark themes bundled with the application,
+so that starting is simple. New bootstrap css templates must be easily integrateable into the application,
+maybe even with easy importing from a central bootstrap site or something like that.
+
+Check the site https://hugo.rfc1437.de/ for its structure, this is the structure of blog I want to be
+capable of building with this tooling. So we need templates for overview pages and ways to manage menues
+that reference overview pages and structure the menu according to site structure. Also support calendar views
+to allow users to go to specific months and years of the blog.
+
+Categories and tags must be able to define a template selection for post templates, so that different types
+can be represented differently.
+
+There must be way to open a browser tab in the application that then uses the applicaiton itself and does
+dynamic rendering of the content, using the same templates and everything else, so that the user can do
+a propoer preview before deciding to update the remote static web storage. The browser tab will of course use
+the correct styling of the website.
+
+Publishing of files can be configured to be done via FTP or SSH, connection data must be configureable in
+preferences for the website.

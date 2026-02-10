@@ -1,0 +1,203 @@
+.sidebar {
+  width: 280px;
+  height: 100%;
+  background-color: var(--vscode-sideBar-background);
+  border-right: 1px solid var(--vscode-sideBar-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-section {
+  margin-bottom: 4px;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.sidebar-action {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  color: var(--vscode-sideBar-foreground);
+  cursor: pointer;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.sidebar-action:hover {
+  opacity: 1;
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.sidebar-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.section-icon {
+  font-size: 8px;
+}
+
+.sidebar-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-item {
+  padding: 6px 12px 6px 24px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.sidebar-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.sidebar-item.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  border-left-color: var(--vscode-focusBorder);
+}
+
+.sidebar-item-title {
+  font-size: 13px;
+  color: var(--vscode-sideBar-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-item-meta {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  margin-top: 2px;
+}
+
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+}
+
+.sidebar-empty p {
+  margin-bottom: 16px;
+}
+
+/* Media Grid */
+.media-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  padding: 4px;
+}
+
+.media-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.media-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.media-item.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.media-thumbnail {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--vscode-input-background);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.media-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.media-item-name {
+  font-size: 12px;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.media-item-size {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Settings Panel */
+.settings-panel {
+  padding: 0 12px 12px;
+}
+
+.settings-group {
+  margin-bottom: 24px;
+}
+
+.settings-group h3 {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.settings-field {
+  margin-bottom: 12px;
+}
+
+.settings-field label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.settings-field input {
+  width: 100%;
+  padding: 6px 8px;
+}
+
+.settings-group button {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.settings-status {
+  font-size: 12px;
+  margin-top: 8px;
+}

@@ -1,0 +1,82 @@
+.activity-bar {
+  width: 48px;
+  height: 100%;
+  background-color: var(--vscode-activityBar-background);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid var(--vscode-panel-border);
+}
+
+.activity-bar-top,
+.activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.activity-bar-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--vscode-activityBar-foreground);
+  opacity: 0.6;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  border-radius: 0;
+}
+
+.activity-bar-item:hover {
+  opacity: 1;
+  background: transparent;
+}
+
+.activity-bar-item.active {
+  opacity: 1;
+}
+
+.activity-bar-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--vscode-activityBar-foreground);
+}
+
+.activity-bar-item.syncing svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.activity-bar-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background-color: var(--vscode-activityBarBadge-background);
+  color: var(--vscode-activityBarBadge-foreground);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
