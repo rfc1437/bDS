@@ -1,10 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import './SettingsView.css';
 
-// Settings categories matching VS Code style
-type SettingsCategory = 'editor' | 'content' | 'sync' | 'publishing' | 'data';
+// Export category IDs for sidebar navigation
+export type SettingsCategory = 'editor' | 'content' | 'sync' | 'publishing' | 'data';
+
+// Scroll to a settings section by category ID
+export const scrollToSettingsSection = (category: SettingsCategory) => {
+  const element = document.getElementById(`settings-section-${category}`);
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+// Settings categories
 
 interface Credentials {
   // Turso Cloud Sync
@@ -48,15 +58,6 @@ const SearchIcon = () => (
 // Default post categories based on VISION.md
 const DEFAULT_POST_CATEGORIES = ['article', 'picture', 'aside', 'page'];
 
-// Category definitions
-const categories: { id: SettingsCategory; label: string; icon: string }[] = [
-  { id: 'editor', label: 'Editor', icon: '📝' },
-  { id: 'content', label: 'Content', icon: '📋' },
-  { id: 'sync', label: 'Sync', icon: '🔄' },
-  { id: 'publishing', label: 'Publishing', icon: '🚀' },
-  { id: 'data', label: 'Data Management', icon: '🗄️' },
-];
-
 // Individual setting row component (VS Code style)
 const SettingRow: React.FC<{
   id: string;
@@ -75,35 +76,54 @@ const SettingRow: React.FC<{
   </div>
 );
 
-// Section header component
+// Section header component with optional ID for scrolling
 const SettingSection: React.FC<{
+  id?: string;
   title: string;
   description?: string;
   children: React.ReactNode;
-}> = ({ title, description, children }) => (
-  <div className="setting-section">
-    <div className="setting-section-header">
-      <h3>{title}</h3>
-      {description && <p className="setting-section-description">{description}</p>}
+  hidden?: boolean;
+}> = ({ id, title, description, children, hidden }) => {
+  if (hidden) return null;
+  return (
+    <div className="setting-section" id={id}>
+      <div className="setting-section-header">
+        <h3>{title}</h3>
+        {description && <p className="setting-section-description">{description}</p>}
+      </div>
+      <div className="setting-section-content">
+        {children}
+      </div>
     </div>
-    <div className="setting-section-content">
-      {children}
-    </div>
-  </div>
-);
+  );
+};
 
 export const SettingsView: React.FC = () => {
   const { preferredEditorMode, setPreferredEditorMode, syncConfigured } = useAppStore();
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('editor');
   const [searchQuery, setSearchQuery] = useState('');
   const [credentials, setCredentials] = useState<Credentials>(defaultCredentials);
   const [showSecrets, setShowSecrets] = useState(false);
   const [dropboxConfigured, setDropboxConfigured] = useState(false);
   const [dropboxLastSync, setDropboxLastSync] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
   const [newCategoryInput, setNewCategoryInput] = useState('');
+
+  // Check if a setting matches the search query
+  const matchesSearch = useCallback((text: string) => {
+    if (!searchQuery) return true;
+    return text.toLowerCase().includes(searchQuery.toLowerCase());
+  }, [searchQuery]);
+
+  // Check if a section has any matching settings
+  const sectionHasMatches = useCallback((sectionKeywords: string[]) => {
+    if (!searchQuery) return true;
+    return sectionKeywords.some(keyword => 
+      keyword.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [searchQuery]);
 
   // Load saved credentials and categories
   useEffect(() => {
@@ -261,34 +281,36 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  // Filter categories if searching
-  const filteredCategories = searchQuery
-    ? categories.filter(c => c.label.toLowerCase().includes(searchQuery.toLowerCase()))
-    : categories;
+  // Keywords for each section for search filtering
+  const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
+  const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
+  const syncKeywords = ['sync', 'turso', 'libsql', 'cloud', 'database', 'dropbox', 'file', 'backup', 'token', 'remote'];
+  const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
+  const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
 
   const renderEditorSettings = () => (
-    <>
-      <SettingSection
-        title="Editor"
-        description="Configure the blog post editor behavior and appearance."
+    <SettingSection
+      id="settings-section-editor"
+      title="Editor"
+      description="Configure the blog post editor behavior and appearance."
+      hidden={!sectionHasMatches(editorKeywords)}
+    >
+      <SettingRow
+        id="editor-mode"
+        label="Default Editor Mode"
+        description="Choose the default mode when opening posts. You can switch modes at any time using the editor toolbar."
       >
-        <SettingRow
+        <select
           id="editor-mode"
-          label="Default Editor Mode"
-          description="Choose the default mode when opening posts. You can switch modes at any time using the editor toolbar."
+          value={preferredEditorMode}
+          onChange={(e) => setPreferredEditorMode(e.target.value as 'wysiwyg' | 'markdown' | 'preview')}
         >
-          <select
-            id="editor-mode"
-            value={preferredEditorMode}
-            onChange={(e) => setPreferredEditorMode(e.target.value as 'wysiwyg' | 'markdown' | 'preview')}
-          >
-            <option value="wysiwyg">WYSIWYG (Visual Editor)</option>
-            <option value="markdown">Markdown (Source)</option>
-            <option value="preview">Preview (Read-only)</option>
-          </select>
-        </SettingRow>
-      </SettingSection>
-    </>
+          <option value="wysiwyg">WYSIWYG (Visual Editor)</option>
+          <option value="markdown">Markdown (Source)</option>
+          <option value="preview">Preview (Read-only)</option>
+        </select>
+      </SettingRow>
+    </SettingSection>
   );
 
   // Handlers for post categories management
@@ -323,11 +345,12 @@ export const SettingsView: React.FC = () => {
   };
 
   const renderContentSettings = () => (
-    <>
-      <SettingSection
-        title="Post Categories"
-        description="Manage the available categories for blog posts. Each post can have one category that determines its display template."
-      >
+    <SettingSection
+      id="settings-section-content"
+      title="Post Categories"
+      description="Manage the available categories for blog posts. Each post can have one category that determines its display template."
+      hidden={!sectionHasMatches(contentKeywords)}
+    >
         <div className="categories-list">
           {postCategories.map((cat) => (
             <div key={cat} className="category-item">
@@ -366,15 +389,16 @@ export const SettingsView: React.FC = () => {
             Reset to Defaults
           </button>
         </div>
-      </SettingSection>
-    </>
+    </SettingSection>
   );
 
   const renderSyncSettings = () => (
     <>
       <SettingSection
+        id="settings-section-sync"
         title="Cloud Sync — Turso/LibSQL"
         description="Sync post and media metadata to a Turso cloud database for backup and multi-device access."
+        hidden={!sectionHasMatches(syncKeywords)}
       >
         <SettingRow
           id="turso-url"
@@ -436,6 +460,7 @@ export const SettingsView: React.FC = () => {
       <SettingSection
         title="File Sync — Dropbox"
         description="Synchronize your blog files (posts and media) to Dropbox for backup and cross-device access."
+        hidden={!sectionHasMatches(syncKeywords)}
       >
         <SettingRow
           id="dropbox-token"
@@ -523,8 +548,10 @@ export const SettingsView: React.FC = () => {
   const renderPublishingSettings = () => (
     <>
       <SettingSection
+        id="settings-section-publishing"
         title="FTP Publishing"
         description="Configure FTP credentials for publishing your blog to a web server."
+        hidden={!sectionHasMatches(publishingKeywords)}
       >
         <SettingRow
           id="ftp-host"
@@ -577,6 +604,7 @@ export const SettingsView: React.FC = () => {
       <SettingSection
         title="SSH Publishing"
         description="Configure SSH credentials for secure deployment to your server."
+        hidden={!sectionHasMatches(publishingKeywords)}
       >
         <SettingRow
           id="ssh-host"
@@ -631,8 +659,10 @@ export const SettingsView: React.FC = () => {
   const renderDataSettings = () => (
     <>
       <SettingSection
+        id="settings-section-data"
         title="Database Maintenance"
         description="Rebuild the local database index from source files. Useful if post or media files were edited externally."
+        hidden={!sectionHasMatches(dataKeywords)}
       >
         <SettingRow
           id="rebuild-posts"
@@ -715,6 +745,7 @@ export const SettingsView: React.FC = () => {
       <SettingSection
         title="File System"
         description="Access project data files and directories."
+        hidden={!sectionHasMatches(dataKeywords)}
       >
         <SettingRow
           id="open-data"
@@ -737,35 +768,13 @@ export const SettingsView: React.FC = () => {
     </>
   );
 
-  const renderContent = () => {
-    if (searchQuery) {
-      // Show all matching settings when searching
-      return (
-        <>
-          {renderEditorSettings()}
-          {renderContentSettings()}
-          {renderSyncSettings()}
-          {renderPublishingSettings()}
-          {renderDataSettings()}
-        </>
-      );
-    }
-
-    switch (activeCategory) {
-      case 'editor':
-        return renderEditorSettings();
-      case 'content':
-        return renderContentSettings();
-      case 'sync':
-        return renderSyncSettings();
-      case 'publishing':
-        return renderPublishingSettings();
-      case 'data':
-        return renderDataSettings();
-      default:
-        return renderEditorSettings();
-    }
-  };
+  // Check if any results match the search
+  const hasAnyMatches = !searchQuery || 
+    sectionHasMatches(editorKeywords) ||
+    sectionHasMatches(contentKeywords) ||
+    sectionHasMatches(syncKeywords) ||
+    sectionHasMatches(publishingKeywords) ||
+    sectionHasMatches(dataKeywords);
 
   return (
     <div className="settings-view">
@@ -791,28 +800,22 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      <div className="settings-body">
-        {/* Category navigation sidebar */}
-        <nav className="settings-nav">
-          {filteredCategories.map((cat) => (
-            <button
-              key={cat.id}
-              className={`settings-nav-item ${activeCategory === cat.id && !searchQuery ? 'active' : ''}`}
-              onClick={() => {
-                setActiveCategory(cat.id);
-                setSearchQuery('');
-              }}
-            >
-              <span className="settings-nav-icon">{cat.icon}</span>
-              <span className="settings-nav-label">{cat.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Settings content */}
-        <div className="settings-content">
-          {renderContent()}
-        </div>
+      {/* Settings content - all sections in scrollable list */}
+      <div className="settings-content" ref={contentRef}>
+        {hasAnyMatches ? (
+          <>
+            {renderEditorSettings()}
+            {renderContentSettings()}
+            {renderSyncSettings()}
+            {renderPublishingSettings()}
+            {renderDataSettings()}
+          </>
+        ) : (
+          <div className="settings-no-results">
+            <p>No settings found matching "{searchQuery}"</p>
+            <button onClick={() => setSearchQuery('')}>Clear search</button>
+          </div>
+        )}
       </div>
     </div>
   );

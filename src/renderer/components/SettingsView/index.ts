@@ -1,1 +1,2 @@
-export { SettingsView } from './SettingsView';
+export { SettingsView, scrollToSettingsSection } from './SettingsView';
+export type { SettingsCategory } from './SettingsView';

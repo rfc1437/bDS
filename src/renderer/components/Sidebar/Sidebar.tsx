@@ -578,8 +578,16 @@ const MediaList: React.FC = () => {
   );
 };
 
+import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
+
 const SettingsNav: React.FC = () => {
   const { syncConfigured } = useAppStore();
+  const [activeSection, setActiveSection] = useState<SettingsCategory | null>(null);
+
+  const handleNavClick = (category: SettingsCategory) => {
+    setActiveSection(category);
+    scrollToSettingsSection(category);
+  };
 
   return (
     <div className="sidebar-content settings-panel">
@@ -590,26 +598,43 @@ const SettingsNav: React.FC = () => {
       </div>
 
       <div className="settings-nav-list">
-        <div className="settings-nav-entry">
+        <button 
+          className={`settings-nav-entry ${activeSection === 'editor' ? 'active' : ''}`}
+          onClick={() => handleNavClick('editor')}
+        >
           <span className="settings-nav-entry-icon">📝</span>
           <span>Editor</span>
-        </div>
-        <div className="settings-nav-entry">
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'content' ? 'active' : ''}`}
+          onClick={() => handleNavClick('content')}
+        >
+          <span className="settings-nav-entry-icon">📋</span>
+          <span>Content</span>
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'sync' ? 'active' : ''}`}
+          onClick={() => handleNavClick('sync')}
+        >
           <span className="settings-nav-entry-icon">🔄</span>
           <span>Sync</span>
           {syncConfigured && <span className="settings-nav-badge">✓</span>}
-        </div>
-        <div className="settings-nav-entry">
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'publishing' ? 'active' : ''}`}
+          onClick={() => handleNavClick('publishing')}
+        >
           <span className="settings-nav-entry-icon">🚀</span>
           <span>Publishing</span>
-        </div>
-        <div className="settings-nav-entry">
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'data' ? 'active' : ''}`}
+          onClick={() => handleNavClick('data')}
+        >
           <span className="settings-nav-entry-icon">🗄️</span>
           <span>Data</span>
-        </div>
+        </button>
       </div>
-
-      <p className="settings-hint">Configure settings in the main editor area.</p>
     </div>
   );
 };

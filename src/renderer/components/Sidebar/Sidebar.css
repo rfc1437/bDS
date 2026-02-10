@@ -216,6 +216,21 @@
   font-size: 12px;
   color: var(--vscode-sideBar-foreground);
   border-radius: 3px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background-color 0.1s;
+}
+
+.settings-nav-entry:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.settings-nav-entry.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
 }
 
 .settings-nav-entry-icon {
