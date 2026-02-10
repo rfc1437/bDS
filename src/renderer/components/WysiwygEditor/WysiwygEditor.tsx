@@ -211,9 +211,23 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
         </BubbleMenu>
       )}
 
-      {/* Floating menu appears on empty lines */}
+      {/* Floating menu appears on empty lines, but only when editor has content */}
       {editor && (
-        <FloatingMenu className="floating-menu" editor={editor}>
+        <FloatingMenu 
+          className="floating-menu" 
+          editor={editor}
+          shouldShow={({ editor }) => {
+            // Only show floating menu if editor has real content (not just empty paragraph)
+            const text = editor.state.doc.textContent;
+            if (!text || text.trim().length === 0) {
+              return false;
+            }
+            // Also check if we're on an empty line (default behavior)
+            const { $from } = editor.state.selection;
+            const isEmptyLine = $from.parent.content.size === 0;
+            return isEmptyLine;
+          }}
+        >
           <button
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             className={editor.isActive('heading', { level: 1 }) ? 'is-active' : ''}
