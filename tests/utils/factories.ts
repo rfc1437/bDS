@@ -274,6 +274,95 @@ export function createMockFileSystem() {
 }
 
 // ============================================
+// Dropbox Mock Factory
+// ============================================
+
+import type { DropboxSyncConfig, DropboxConflict } from '../../src/main/engine/DropboxSyncEngine';
+
+let dropboxConflictIdCounter = 1;
+
+export function createMockDropboxConfig(overrides?: Partial<DropboxSyncConfig>): DropboxSyncConfig {
+  return {
+    accessToken: 'mock-dropbox-access-token',
+    refreshToken: 'mock-dropbox-refresh-token',
+    appKey: 'mock-app-key',
+    appSecret: 'mock-app-secret',
+    syncEnabled: true,
+    syncInterval: 60,
+    localPostsDir: '/mock/userData/projects/default/posts',
+    localMediaDir: '/mock/userData/projects/default/media',
+    remoteBasePath: '/bds',
+    ...overrides,
+  };
+}
+
+export function createMockDropboxClient() {
+  return {
+    filesUpload: vi.fn().mockResolvedValue({
+      result: {
+        name: 'test.md',
+        path_lower: '/bds/posts/2026/01/test.md',
+        content_hash: 'mockhash123',
+        server_modified: '2026-01-15T10:00:00Z',
+        size: 100,
+      },
+    }),
+    filesDownload: vi.fn().mockResolvedValue({
+      result: {
+        name: 'test.md',
+        path_lower: '/bds/posts/2026/01/test.md',
+        fileBinary: Buffer.from('downloaded content'),
+        content_hash: 'mockhash123',
+        server_modified: '2026-01-15T10:00:00Z',
+        size: 18,
+      },
+    }),
+    filesDeleteV2: vi.fn().mockResolvedValue({
+      result: { metadata: { '.tag': 'file', name: 'test.md' } },
+    }),
+    filesListFolder: vi.fn().mockResolvedValue({
+      result: { entries: [], cursor: 'mock-cursor', has_more: false },
+    }),
+    filesListFolderContinue: vi.fn().mockResolvedValue({
+      result: { entries: [], cursor: 'mock-cursor-next', has_more: false },
+    }),
+    filesListFolderGetLatestCursor: vi.fn().mockResolvedValue({
+      result: { cursor: 'mock-latest-cursor' },
+    }),
+    filesListFolderLongpoll: vi.fn().mockResolvedValue({
+      result: { changes: false, backoff: 0 },
+    }),
+    filesGetMetadata: vi.fn().mockResolvedValue({
+      result: {
+        '.tag': 'file',
+        name: 'test.md',
+        path_lower: '/bds/posts/2026/01/test.md',
+        content_hash: 'mockhash123',
+        server_modified: '2026-01-15T10:00:00Z',
+        size: 100,
+      },
+    }),
+    setRefreshToken: vi.fn(),
+    getRefreshToken: vi.fn().mockReturnValue('mock-refresh-token'),
+    getAccessToken: vi.fn().mockReturnValue('mock-access-token'),
+  };
+}
+
+export function createMockDropboxConflict(overrides?: Partial<DropboxConflict>): DropboxConflict {
+  const id = `conflict-${dropboxConflictIdCounter++}`;
+  return {
+    id,
+    localPath: '/mock/userData/projects/default/posts/2026/01/test.md',
+    remotePath: '/bds/posts/2026/01/test.md',
+    localModified: new Date('2026-01-20T15:00:00Z'),
+    remoteModified: new Date('2026-01-20T14:00:00Z'),
+    localHash: 'localhash123',
+    remoteHash: 'remotehash456',
+    ...overrides,
+  };
+}
+
+// ============================================
 // Reset Utilities
 // ============================================
 
@@ -281,6 +370,7 @@ export function resetMockCounters(): void {
   postIdCounter = 1;
   mediaIdCounter = 1;
   taskIdCounter = 1;
+  dropboxConflictIdCounter = 1;
 }
 
 // ============================================

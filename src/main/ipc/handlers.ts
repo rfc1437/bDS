@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getPostEngine, PostData, PostFilter } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
+import { getDropboxSyncEngine, DropboxSyncConfig, ConflictResolution } from '../engine/DropboxSyncEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
@@ -289,6 +290,68 @@ export function registerIpcHandlers(): void {
     return engine.stopAutoSync();
   });
 
+  // ============ Dropbox Sync Handlers ============
+
+  ipcMain.handle('dropbox:configure', async (_, config: DropboxSyncConfig) => {
+    const engine = getDropboxSyncEngine();
+    return engine.configure(config);
+  });
+
+  ipcMain.handle('dropbox:isConfigured', async () => {
+    const engine = getDropboxSyncEngine();
+    return engine.isConfigured();
+  });
+
+  ipcMain.handle('dropbox:getStatus', async () => {
+    const engine = getDropboxSyncEngine();
+    return engine.getStatus();
+  });
+
+  ipcMain.handle('dropbox:syncAll', async () => {
+    const engine = getDropboxSyncEngine();
+    return engine.syncAll();
+  });
+
+  ipcMain.handle('dropbox:startWatching', async () => {
+    const engine = getDropboxSyncEngine();
+    engine.startWatching();
+  });
+
+  ipcMain.handle('dropbox:stopWatching', async () => {
+    const engine = getDropboxSyncEngine();
+    engine.stopWatching();
+  });
+
+  ipcMain.handle('dropbox:startPolling', async () => {
+    const engine = getDropboxSyncEngine();
+    engine.startPolling();
+  });
+
+  ipcMain.handle('dropbox:stopPolling', async () => {
+    const engine = getDropboxSyncEngine();
+    engine.stopPolling();
+  });
+
+  ipcMain.handle('dropbox:getConflicts', async () => {
+    const engine = getDropboxSyncEngine();
+    return engine.getPendingConflicts();
+  });
+
+  ipcMain.handle('dropbox:resolveConflict', async (_, conflictId: string, resolution: ConflictResolution) => {
+    const engine = getDropboxSyncEngine();
+    const conflicts = engine.getPendingConflicts();
+    const conflict = conflicts.find(c => c.id === conflictId);
+    if (!conflict) {
+      throw new Error(`Conflict ${conflictId} not found`);
+    }
+    return engine.resolveConflict(conflict, resolution);
+  });
+
+  ipcMain.handle('dropbox:getLastSyncTime', async () => {
+    const engine = getDropboxSyncEngine();
+    return engine.getLastSyncTime();
+  });
+
   // ============ Task Handlers ============
 
   ipcMain.handle('tasks:getAll', async () => {
@@ -354,6 +417,20 @@ export function registerIpcHandlers(): void {
   syncEngine.on('syncStarted', forwardEvent('sync:started'));
   syncEngine.on('syncCompleted', forwardEvent('sync:completed'));
   syncEngine.on('syncFailed', forwardEvent('sync:failed'));
+
+  const dropboxEngine = getDropboxSyncEngine();
+  dropboxEngine.on('configured', forwardEvent('dropbox:configured'));
+  dropboxEngine.on('syncStarted', forwardEvent('dropbox:syncStarted'));
+  dropboxEngine.on('syncCompleted', forwardEvent('dropbox:syncCompleted'));
+  dropboxEngine.on('syncFailed', forwardEvent('dropbox:syncFailed'));
+  dropboxEngine.on('fileUploaded', forwardEvent('dropbox:fileUploaded'));
+  dropboxEngine.on('fileDownloaded', forwardEvent('dropbox:fileDownloaded'));
+  dropboxEngine.on('fileDeleted', forwardEvent('dropbox:fileDeleted'));
+  dropboxEngine.on('conflictDetected', forwardEvent('dropbox:conflictDetected'));
+  dropboxEngine.on('conflictResolved', forwardEvent('dropbox:conflictResolved'));
+  dropboxEngine.on('watchStarted', forwardEvent('dropbox:watchStarted'));
+  dropboxEngine.on('watchStopped', forwardEvent('dropbox:watchStopped'));
+  dropboxEngine.on('authError', forwardEvent('dropbox:authError'));
 
   taskManager.on('taskCreated', forwardEvent('task:created'));
   taskManager.on('taskStarted', forwardEvent('task:started'));

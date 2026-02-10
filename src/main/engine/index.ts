@@ -3,3 +3,16 @@ export { PostEngine, getPostEngine, type PostData, type PostFilter, type SearchR
 export { MediaEngine, getMediaEngine, type MediaData } from './MediaEngine';
 export { SyncEngine, getSyncEngine, type SyncConfig, type SyncResult, type SyncDirection, type SyncStatus } from './SyncEngine';
 export { ProjectEngine, getProjectEngine, type ProjectData } from './ProjectEngine';
+export {
+  DropboxSyncEngine,
+  getDropboxSyncEngine,
+  type DropboxSyncConfig,
+  type DropboxSyncStatus,
+  type DropboxConflict,
+  type DropboxRemoteChange,
+  type DropboxChangesResult,
+  type FileSyncResult,
+  type FileUploadResult,
+  type FileDownloadResult,
+  type ConflictResolution,
+} from './DropboxSyncEngine';

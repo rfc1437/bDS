@@ -6,6 +6,7 @@ import { syncLog, posts, media, NewSyncLogEntry } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
 import { getPostEngine } from './PostEngine';
 import { getMediaEngine } from './MediaEngine';
+import { getDropboxSyncEngine } from './DropboxSyncEngine';
 
 export type SyncDirection = 'push' | 'pull' | 'bidirectional';
 export type SyncStatus = 'idle' | 'syncing' | 'error';
@@ -23,6 +24,13 @@ export interface SyncResult {
   pulled: number;
   conflicts: number;
   errors: string[];
+  dropboxResult?: {
+    uploaded: number;
+    downloaded: number;
+    deleted: number;
+    conflicts: number;
+    errors: string[];
+  };
 }
 
 export class SyncEngine extends EventEmitter {
@@ -310,6 +318,41 @@ export class SyncEngine extends EventEmitter {
       this.syncIntervalId = null;
     }
     this.emit('autoSyncStopped');
+  }
+
+  /**
+   * Full sync: metadata via Turso + files via Dropbox.
+   * Coordinates both sync engines for a complete bidirectional sync.
+   */
+  async fullSync(direction: SyncDirection = 'bidirectional'): Promise<SyncResult> {
+    // Run metadata sync (Turso)
+    const metadataResult = await this.sync(direction);
+
+    // Run file sync (Dropbox) if configured
+    const dropboxEngine = getDropboxSyncEngine();
+    if (dropboxEngine.isConfigured()) {
+      try {
+        const fileResult = await dropboxEngine.syncAll();
+        metadataResult.dropboxResult = {
+          uploaded: fileResult.uploaded,
+          downloaded: fileResult.downloaded,
+          deleted: fileResult.deleted,
+          conflicts: fileResult.conflicts,
+          errors: fileResult.errors,
+        };
+
+        if (!fileResult.success) {
+          metadataResult.errors.push(
+            ...fileResult.errors.map(e => `Dropbox: ${e}`)
+          );
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown Dropbox error';
+        metadataResult.errors.push(`Dropbox sync failed: ${msg}`);
+      }
+    }
+
+    return metadataResult;
   }
 }
 
