@@ -92,20 +92,22 @@ export class PostEngine extends EventEmitter {
   }
 
   private async writePostFile(post: PostData): Promise<string> {
-    const metadata: PostMetadata = {
+    const metadata: Record<string, unknown> = {
       id: post.id,
       projectId: post.projectId,
       title: post.title,
       slug: post.slug,
-      excerpt: post.excerpt,
       status: post.status,
-      author: post.author,
       createdAt: post.createdAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
-      publishedAt: post.publishedAt?.toISOString(),
       tags: post.tags,
       categories: post.categories,
     };
+
+    // Only add optional fields if they have values (gray-matter can't serialize undefined)
+    if (post.excerpt) metadata.excerpt = post.excerpt;
+    if (post.author) metadata.author = post.author;
+    if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
 
     const postsDir = this.getPostsDir();
     await fs.mkdir(postsDir, { recursive: true });

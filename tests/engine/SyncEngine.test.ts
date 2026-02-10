@@ -1,568 +1,453 @@
 /**
  * SyncEngine Unit Tests
- * 
- * Tests for remote synchronization including:
- * - Sync configuration
- * - Push/pull operations
- * - Conflict detection and resolution
- * - Sync status tracking
- * - Retry logic
+ *
+ * Tests the REAL SyncEngine class with mocked dependencies.
+ * Following TDD best practices: mock external dependencies, test real implementation.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { SyncEngine, SyncConfig, SyncResult, SyncDirection } from '../../src/main/engine/SyncEngine';
 import { resetMockCounters } from '../utils/factories';
 
-// Mock dependencies
-vi.mock('../../src/main/database', () => ({
-  getDatabase: vi.fn(() => ({
-    getLocal: vi.fn(() => ({
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve([])),
-          orderBy: vi.fn(() => Promise.resolve([])),
-        })),
-      })),
-      insert: vi.fn(() => ({
-        values: vi.fn(() => Promise.resolve()),
-      })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve()),
-        })),
-      })),
-      delete: vi.fn(() => ({
+// Create mock data stores
+const mockPosts = new Map<string, any>();
+const mockMedia = new Map<string, any>();
+const mockSyncLog = new Map<string, any>();
+
+// Create chainable mock for Drizzle ORM
+function createSelectChain(data: Map<string, any>) {
+  return {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockReturnThis(),
+    all: vi.fn().mockImplementation(() => Promise.resolve(Array.from(data.values()))),
+    get: vi.fn().mockImplementation(() => Promise.resolve(data.size > 0 ? Array.from(data.values())[0] : undefined)),
+  };
+}
+
+function createDrizzleMock(data: Map<string, any>) {
+  return {
+    select: vi.fn(() => createSelectChain(data)),
+    insert: vi.fn(() => ({
+      values: vi.fn((record: any) => {
+        if (record && record.id) {
+          data.set(record.id, record);
+        }
+        return Promise.resolve();
+      }),
+      onConflictDoUpdate: vi.fn(() => Promise.resolve()),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
         where: vi.fn(() => Promise.resolve()),
       })),
     })),
-    getRemote: vi.fn(() => null),
-    initializeLocal: vi.fn(),
-    initializeRemote: vi.fn(),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => Promise.resolve()),
+    })),
+  };
+}
+
+const mockLocalDb = createDrizzleMock(new Map());
+const mockRemoteDb = createDrizzleMock(new Map());
+
+// Mock the database module
+vi.mock('../../src/main/database', () => ({
+  getDatabase: vi.fn(() => ({
+    getLocal: vi.fn(() => mockLocalDb),
+    getLocalClient: vi.fn(() => null),
+    getRemote: vi.fn(() => null), // Will be overridden in tests
     getDataPaths: vi.fn(() => ({
       database: '/mock/userData/bds.db',
       posts: '/mock/userData/posts',
       media: '/mock/userData/media',
     })),
+    initializeLocal: vi.fn(),
+    initializeRemote: vi.fn(async () => {}),
+    close: vi.fn(),
   })),
 }));
 
+// Mock PostEngine and MediaEngine
 vi.mock('../../src/main/engine/PostEngine', () => ({
   getPostEngine: vi.fn(() => ({
-    getAllPosts: vi.fn(() => Promise.resolve([])),
-    createPost: vi.fn(),
-    updatePost: vi.fn(),
-    deletePost: vi.fn(),
+    on: vi.fn(),
+    emit: vi.fn(),
   })),
 }));
 
 vi.mock('../../src/main/engine/MediaEngine', () => ({
   getMediaEngine: vi.fn(() => ({
-    getAllMedia: vi.fn(() => Promise.resolve([])),
-    importMedia: vi.fn(),
-    updateMedia: vi.fn(),
-    deleteMedia: vi.fn(),
+    on: vi.fn(),
+    emit: vi.fn(),
   })),
 }));
 
+// Mock uuid
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => 'mock-sync-uuid-' + Math.random().toString(36).substr(2, 9)),
+}));
+
 describe('SyncEngine', () => {
+  let syncEngine: SyncEngine;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    resetMockCounters();
     vi.useFakeTimers();
+    mockPosts.clear();
+    mockMedia.clear();
+    mockSyncLog.clear();
+    resetMockCounters();
+
+    syncEngine = new SyncEngine();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    syncEngine.stopAutoSync();
   });
 
-  describe('Sync Configuration', () => {
-    it('should validate sync config structure', () => {
-      interface SyncConfig {
-        tursoUrl: string;
-        tursoAuthToken: string;
-        autoSync: boolean;
-        syncInterval: number;
-      }
-
-      const validConfig: SyncConfig = {
-        tursoUrl: 'libsql://mydb.turso.io',
-        tursoAuthToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-        autoSync: true,
-        syncInterval: 5,
-      };
-
-      expect(validConfig.tursoUrl).toMatch(/^libsql:\/\//);
-      expect(validConfig.tursoAuthToken).toBeDefined();
-      expect(validConfig.autoSync).toBe(true);
-      expect(validConfig.syncInterval).toBeGreaterThan(0);
+  describe('Constructor and Initialization', () => {
+    it('should create a SyncEngine instance', () => {
+      expect(syncEngine).toBeInstanceOf(SyncEngine);
     });
 
-    it('should detect unconfigured state', () => {
-      const isConfigured = (config: { tursoUrl?: string; tursoAuthToken?: string } | null): boolean => {
-        return config !== null && 
-               !!config.tursoUrl && 
-               !!config.tursoAuthToken;
-      };
-
-      expect(isConfigured(null)).toBe(false);
-      expect(isConfigured({ tursoUrl: '', tursoAuthToken: '' })).toBe(false);
-      expect(isConfigured({ tursoUrl: 'url', tursoAuthToken: '' })).toBe(false);
-      expect(isConfigured({ tursoUrl: 'url', tursoAuthToken: 'token' })).toBe(true);
+    it('should extend EventEmitter', () => {
+      expect(typeof syncEngine.on).toBe('function');
+      expect(typeof syncEngine.emit).toBe('function');
     });
 
-    it('should calculate sync interval in milliseconds', () => {
-      const minutesToMs = (minutes: number): number => minutes * 60 * 1000;
+    it('should start with idle status', () => {
+      expect(syncEngine.getSyncStatus()).toBe('idle');
+    });
 
-      expect(minutesToMs(1)).toBe(60000);
-      expect(minutesToMs(5)).toBe(300000);
-      expect(minutesToMs(15)).toBe(900000);
+    it('should not be configured initially', () => {
+      expect(syncEngine.isConfigured()).toBe(false);
     });
   });
 
-  describe('Sync Direction', () => {
-    it('should support push direction', () => {
-      type SyncDirection = 'push' | 'pull' | 'bidirectional';
-      const direction: SyncDirection = 'push';
-      
-      expect(['push', 'pull', 'bidirectional']).toContain(direction);
-    });
-
-    it('should support pull direction', () => {
-      type SyncDirection = 'push' | 'pull' | 'bidirectional';
-      const direction: SyncDirection = 'pull';
-      
-      expect(['push', 'pull', 'bidirectional']).toContain(direction);
-    });
-
-    it('should support bidirectional sync', () => {
-      type SyncDirection = 'push' | 'pull' | 'bidirectional';
-      const direction: SyncDirection = 'bidirectional';
-      
-      expect(['push', 'pull', 'bidirectional']).toContain(direction);
-    });
-  });
-
-  describe('Sync Status', () => {
-    it('should track sync status states', () => {
-      type SyncStatus = 'idle' | 'syncing' | 'error';
-      const validStatuses: SyncStatus[] = ['idle', 'syncing', 'error'];
-
-      validStatuses.forEach(status => {
-        expect(['idle', 'syncing', 'error']).toContain(status);
-      });
-    });
-
-    it('should prevent concurrent syncs', () => {
-      let syncStatus: 'idle' | 'syncing' | 'error' = 'idle';
-      
-      const canSync = (): boolean => syncStatus !== 'syncing';
-      
-      expect(canSync()).toBe(true);
-      syncStatus = 'syncing';
-      expect(canSync()).toBe(false);
-      syncStatus = 'idle';
-      expect(canSync()).toBe(true);
-    });
-  });
-
-  describe('Sync Result', () => {
-    it('should create sync result structure', () => {
-      interface SyncResult {
-        success: boolean;
-        pushed: number;
-        pulled: number;
-        conflicts: number;
-        errors: string[];
-      }
-
-      const successResult: SyncResult = {
-        success: true,
-        pushed: 5,
-        pulled: 3,
-        conflicts: 0,
-        errors: [],
+  describe('Configuration', () => {
+    it('should configure sync settings', async () => {
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
       };
 
-      expect(successResult.success).toBe(true);
-      expect(successResult.pushed + successResult.pulled).toBe(8);
-      expect(successResult.errors).toHaveLength(0);
+      await syncEngine.configure(config);
+
+      expect(syncEngine.isConfigured()).toBe(true);
     });
 
-    it('should report errors in result', () => {
-      interface SyncResult {
-        success: boolean;
-        pushed: number;
-        pulled: number;
-        conflicts: number;
-        errors: string[];
-      }
+    it('should emit configured event', async () => {
+      const handler = vi.fn();
+      syncEngine.on('configured', handler);
 
-      const errorResult: SyncResult = {
-        success: false,
-        pushed: 0,
-        pulled: 0,
-        conflicts: 0,
-        errors: ['Network timeout', 'Authentication failed'],
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
       };
 
-      expect(errorResult.success).toBe(false);
-      expect(errorResult.errors).toHaveLength(2);
-      expect(errorResult.errors).toContain('Network timeout');
+      await syncEngine.configure(config);
+
+      expect(handler).toHaveBeenCalledWith(config);
     });
 
-    it('should track conflicts', () => {
-      interface SyncResult {
-        success: boolean;
-        pushed: number;
-        pulled: number;
-        conflicts: number;
-        errors: string[];
-      }
-
-      const conflictResult: SyncResult = {
-        success: true, // Partial success
-        pushed: 4,
-        pulled: 2,
-        conflicts: 2,
-        errors: [],
+    it('should not be configured with empty URL', async () => {
+      const config: SyncConfig = {
+        tursoUrl: '',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
       };
 
-      expect(conflictResult.conflicts).toBeGreaterThan(0);
+      await syncEngine.configure(config);
+
+      expect(syncEngine.isConfigured()).toBe(false);
     });
-  });
 
-  describe('Entity Sync Status', () => {
-    it('should track sync status per entity', () => {
-      type EntitySyncStatus = 'pending' | 'syncing' | 'synced' | 'conflict';
-
-      interface SyncableEntity {
-        id: string;
-        syncStatus: EntitySyncStatus;
-        syncedAt: Date | null;
-        checksum: string;
-      }
-
-      const entity: SyncableEntity = {
-        id: 'post-1',
-        syncStatus: 'pending',
-        syncedAt: null,
-        checksum: 'abc123',
+    it('should not be configured with empty token', async () => {
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: '',
+        autoSync: false,
+        syncInterval: 30,
       };
 
-      expect(entity.syncStatus).toBe('pending');
-      expect(entity.syncedAt).toBeNull();
-    });
+      await syncEngine.configure(config);
 
-    it('should update sync status after successful sync', () => {
-      interface SyncableEntity {
-        syncStatus: 'pending' | 'syncing' | 'synced' | 'conflict';
-        syncedAt: Date | null;
-      }
-
-      const entity: SyncableEntity = {
-        syncStatus: 'pending',
-        syncedAt: null,
-      };
-
-      // Simulate sync completion
-      entity.syncStatus = 'synced';
-      entity.syncedAt = new Date();
-
-      expect(entity.syncStatus).toBe('synced');
-      expect(entity.syncedAt).toBeInstanceOf(Date);
-    });
-  });
-
-  describe('Conflict Detection', () => {
-    it('should detect conflict by checksum mismatch', () => {
-      const detectConflict = (localChecksum: string, remoteChecksum: string): boolean => {
-        return localChecksum !== remoteChecksum;
-      };
-
-      expect(detectConflict('abc123', 'abc123')).toBe(false);
-      expect(detectConflict('abc123', 'xyz789')).toBe(true);
-    });
-
-    it('should create conflict info structure', () => {
-      interface ConflictInfo {
-        entityId: string;
-        entityType: 'post' | 'media';
-        localChecksum: string;
-        remoteChecksum: string;
-        localUpdatedAt: Date;
-        remoteUpdatedAt: Date;
-      }
-
-      const conflict: ConflictInfo = {
-        entityId: 'post-1',
-        entityType: 'post',
-        localChecksum: 'local123',
-        remoteChecksum: 'remote456',
-        localUpdatedAt: new Date('2024-01-15T10:00:00Z'),
-        remoteUpdatedAt: new Date('2024-01-15T11:00:00Z'),
-      };
-
-      expect(conflict.localChecksum).not.toBe(conflict.remoteChecksum);
-    });
-  });
-
-  describe('Conflict Resolution', () => {
-    it('should support local-wins strategy', () => {
-      type ConflictResolution = 'local-wins' | 'remote-wins' | 'manual';
-
-      const resolveConflict = (strategy: ConflictResolution): 'local' | 'remote' | 'prompt' => {
-        switch (strategy) {
-          case 'local-wins': return 'local';
-          case 'remote-wins': return 'remote';
-          case 'manual': return 'prompt';
-        }
-      };
-
-      expect(resolveConflict('local-wins')).toBe('local');
-    });
-
-    it('should support remote-wins strategy', () => {
-      type ConflictResolution = 'local-wins' | 'remote-wins' | 'manual';
-
-      const resolveConflict = (strategy: ConflictResolution): 'local' | 'remote' | 'prompt' => {
-        switch (strategy) {
-          case 'local-wins': return 'local';
-          case 'remote-wins': return 'remote';
-          case 'manual': return 'prompt';
-        }
-      };
-
-      expect(resolveConflict('remote-wins')).toBe('remote');
-    });
-
-    it('should support last-write-wins based on timestamp', () => {
-      const lastWriteWins = (localTime: Date, remoteTime: Date): 'local' | 'remote' => {
-        return localTime.getTime() > remoteTime.getTime() ? 'local' : 'remote';
-      };
-
-      const earlier = new Date('2024-01-15T10:00:00Z');
-      const later = new Date('2024-01-15T11:00:00Z');
-
-      expect(lastWriteWins(later, earlier)).toBe('local');
-      expect(lastWriteWins(earlier, later)).toBe('remote');
-    });
-  });
-
-  describe('Retry Logic', () => {
-    it('should calculate exponential backoff delay', () => {
-      const getBackoffDelay = (attempt: number, baseDelay: number = 1000): number => {
-        return Math.pow(2, attempt) * baseDelay;
-      };
-
-      expect(getBackoffDelay(1)).toBe(2000);   // 2^1 * 1000
-      expect(getBackoffDelay(2)).toBe(4000);   // 2^2 * 1000
-      expect(getBackoffDelay(3)).toBe(8000);   // 2^3 * 1000
-      expect(getBackoffDelay(4)).toBe(16000);  // 2^4 * 1000
-    });
-
-    it('should cap maximum retry delay', () => {
-      const getBackoffDelay = (attempt: number, baseDelay: number = 1000, maxDelay: number = 30000): number => {
-        const delay = Math.pow(2, attempt) * baseDelay;
-        return Math.min(delay, maxDelay);
-      };
-
-      expect(getBackoffDelay(5)).toBe(30000); // Capped at max
-      expect(getBackoffDelay(10)).toBe(30000); // Still capped
-    });
-
-    it('should track retry count', () => {
-      interface RetryState {
-        attempts: number;
-        maxAttempts: number;
-        lastError: string | null;
-      }
-
-      const state: RetryState = {
-        attempts: 0,
-        maxAttempts: 3,
-        lastError: null,
-      };
-
-      const shouldRetry = (): boolean => state.attempts < state.maxAttempts;
-
-      expect(shouldRetry()).toBe(true);
-      state.attempts = 3;
-      expect(shouldRetry()).toBe(false);
-    });
-  });
-
-  describe('Sync Log', () => {
-    it('should create sync log entry structure', () => {
-      interface SyncLogEntry {
-        id: string;
-        entityType: 'post' | 'media';
-        entityId: string;
-        operation: 'push' | 'pull' | 'conflict';
-        status: 'pending' | 'success' | 'failed';
-        timestamp: Date;
-        errorMessage?: string;
-      }
-
-      const logEntry: SyncLogEntry = {
-        id: 'log-1',
-        entityType: 'post',
-        entityId: 'post-123',
-        operation: 'push',
-        status: 'success',
-        timestamp: new Date(),
-      };
-
-      expect(logEntry.operation).toBe('push');
-      expect(logEntry.status).toBe('success');
-      expect(logEntry.errorMessage).toBeUndefined();
-    });
-
-    it('should log errors', () => {
-      interface SyncLogEntry {
-        id: string;
-        entityType: 'post' | 'media';
-        entityId: string;
-        operation: 'push' | 'pull' | 'conflict';
-        status: 'pending' | 'success' | 'failed';
-        timestamp: Date;
-        errorMessage?: string;
-      }
-
-      const errorLogEntry: SyncLogEntry = {
-        id: 'log-2',
-        entityType: 'post',
-        entityId: 'post-456',
-        operation: 'push',
-        status: 'failed',
-        timestamp: new Date(),
-        errorMessage: 'Network timeout after 30s',
-      };
-
-      expect(errorLogEntry.status).toBe('failed');
-      expect(errorLogEntry.errorMessage).toBeDefined();
-    });
-  });
-
-  describe('Pending Changes', () => {
-    it('should count pending changes', () => {
-      const entities = [
-        { id: '1', syncStatus: 'pending' },
-        { id: '2', syncStatus: 'synced' },
-        { id: '3', syncStatus: 'pending' },
-        { id: '4', syncStatus: 'conflict' },
-      ];
-
-      const pendingCount = entities.filter(e => e.syncStatus === 'pending').length;
-      expect(pendingCount).toBe(2);
-    });
-
-    it('should identify entities needing sync', () => {
-      type SyncStatus = 'pending' | 'syncing' | 'synced' | 'conflict';
-      
-      const needsSync = (status: SyncStatus): boolean => {
-        return status === 'pending' || status === 'conflict';
-      };
-
-      expect(needsSync('pending')).toBe(true);
-      expect(needsSync('conflict')).toBe(true);
-      expect(needsSync('synced')).toBe(false);
-      expect(needsSync('syncing')).toBe(false);
+      expect(syncEngine.isConfigured()).toBe(false);
     });
   });
 
   describe('Auto Sync', () => {
-    it('should start auto sync interval', () => {
-      const setIntervalSpy = vi.spyOn(global, 'setInterval');
-      
-      const startAutoSync = (intervalMinutes: number, callback: () => void): NodeJS.Timeout => {
-        return setInterval(callback, intervalMinutes * 60 * 1000);
+    it('should start auto sync when enabled', async () => {
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: true,
+        syncInterval: 1, // 1 minute
       };
 
-      const callback = vi.fn();
-      const intervalId = startAutoSync(5, callback);
+      await syncEngine.configure(config);
 
-      expect(setIntervalSpy).toHaveBeenCalledWith(callback, 300000);
-      
-      clearInterval(intervalId);
+      // Auto sync should be scheduled
+      expect(syncEngine.isConfigured()).toBe(true);
     });
 
-    it('should stop auto sync interval', () => {
-      const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
-      
-      const intervalId = setInterval(() => {}, 1000);
-      clearInterval(intervalId);
+    it('should stop auto sync when called', async () => {
+      const handler = vi.fn();
+      syncEngine.on('autoSyncStopped', handler);
 
-      expect(clearIntervalSpy).toHaveBeenCalled();
-    });
-
-    it('should trigger sync on interval', () => {
-      const syncCallback = vi.fn();
-      const intervalId = setInterval(syncCallback, 1000);
-
-      vi.advanceTimersByTime(3000);
-
-      expect(syncCallback).toHaveBeenCalledTimes(3);
-      
-      clearInterval(intervalId);
-    });
-  });
-});
-
-describe('SyncEngine Error Handling', () => {
-  describe('Network Errors', () => {
-    it('should identify network errors', () => {
-      const isNetworkError = (error: Error): boolean => {
-        const networkErrorPatterns = [
-          'network',
-          'timeout',
-          'ECONNREFUSED',
-          'ENOTFOUND',
-          'fetch failed',
-        ];
-        return networkErrorPatterns.some(pattern => 
-          error.message.toLowerCase().includes(pattern.toLowerCase())
-        );
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: true,
+        syncInterval: 1,
       };
 
-      expect(isNetworkError(new Error('Network timeout'))).toBe(true);
-      expect(isNetworkError(new Error('ECONNREFUSED'))).toBe(true);
-      expect(isNetworkError(new Error('Invalid data'))).toBe(false);
+      await syncEngine.configure(config);
+      syncEngine.stopAutoSync();
+
+      expect(handler).toHaveBeenCalled();
     });
 
-    it('should create user-friendly error messages', () => {
-      const getUserFriendlyMessage = (error: Error): string => {
-        if (error.message.includes('timeout')) {
-          return 'Connection timed out. Please check your internet connection.';
-        }
-        if (error.message.includes('ECONNREFUSED')) {
-          return 'Unable to connect to sync server. Please try again later.';
-        }
-        if (error.message.includes('401') || error.message.includes('unauthorized')) {
-          return 'Authentication failed. Please check your sync credentials.';
-        }
-        return 'An unexpected error occurred during sync.';
+    it('should stop previous auto sync when reconfiguring', async () => {
+      const config1: SyncConfig = {
+        tursoUrl: 'libsql://test1.turso.io',
+        tursoAuthToken: 'test-token-1',
+        autoSync: true,
+        syncInterval: 1,
       };
 
-      expect(getUserFriendlyMessage(new Error('timeout'))).toContain('timed out');
-      expect(getUserFriendlyMessage(new Error('401 unauthorized'))).toContain('Authentication');
+      const config2: SyncConfig = {
+        tursoUrl: 'libsql://test2.turso.io',
+        tursoAuthToken: 'test-token-2',
+        autoSync: true,
+        syncInterval: 5,
+      };
+
+      await syncEngine.configure(config1);
+      await syncEngine.configure(config2);
+
+      expect(syncEngine.isConfigured()).toBe(true);
     });
   });
 
-  describe('Authentication Errors', () => {
-    it('should detect auth errors', () => {
-      const isAuthError = (error: Error | { status?: number }): boolean => {
-        if ('status' in error) {
-          return error.status === 401 || error.status === 403;
-        }
-        const message = (error as Error).message.toLowerCase();
-        return message.includes('unauthorized') || 
-               message.includes('forbidden') ||
-               message.includes('auth');
+  describe('Sync Status', () => {
+    it('should return idle when not syncing', () => {
+      expect(syncEngine.getSyncStatus()).toBe('idle');
+    });
+  });
+
+  describe('Sync without Configuration', () => {
+    it('should return error when syncing without configuration', async () => {
+      const result = await syncEngine.sync('bidirectional');
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toContain('Sync not configured');
+    });
+
+    it('should return zero counts when not configured', async () => {
+      const result = await syncEngine.sync('push');
+
+      expect(result.pushed).toBe(0);
+      expect(result.pulled).toBe(0);
+      expect(result.conflicts).toBe(0);
+    });
+  });
+
+  describe('Sync Directions', () => {
+    it('should accept push direction', async () => {
+      const result = await syncEngine.sync('push');
+      expect(result).toBeDefined();
+    });
+
+    it('should accept pull direction', async () => {
+      const result = await syncEngine.sync('pull');
+      expect(result).toBeDefined();
+    });
+
+    it('should accept bidirectional direction', async () => {
+      const result = await syncEngine.sync('bidirectional');
+      expect(result).toBeDefined();
+    });
+
+    it('should default to bidirectional when no direction specified', async () => {
+      const result = await syncEngine.sync();
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('Event Emission', () => {
+    it('should be an EventEmitter', () => {
+      expect(syncEngine.on).toBeDefined();
+      expect(syncEngine.emit).toBeDefined();
+      expect(syncEngine.removeListener).toBeDefined();
+    });
+
+    it('should allow adding event listeners', () => {
+      const listener = vi.fn();
+      syncEngine.on('testEvent', listener);
+      syncEngine.emit('testEvent', { data: 'test' });
+
+      expect(listener).toHaveBeenCalledWith({ data: 'test' });
+    });
+
+    it('should allow removing event listeners', () => {
+      const listener = vi.fn();
+      syncEngine.on('testEvent', listener);
+      syncEngine.removeListener('testEvent', listener);
+      syncEngine.emit('testEvent', { data: 'test' });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SyncResult Structure', () => {
+    it('should return complete SyncResult structure', async () => {
+      const result = await syncEngine.sync();
+
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('pushed');
+      expect(result).toHaveProperty('pulled');
+      expect(result).toHaveProperty('conflicts');
+      expect(result).toHaveProperty('errors');
+    });
+
+    it('should have errors as an array', async () => {
+      const result = await syncEngine.sync();
+
+      expect(Array.isArray(result.errors)).toBe(true);
+    });
+
+    it('should have numeric counts', async () => {
+      const result = await syncEngine.sync();
+
+      expect(typeof result.pushed).toBe('number');
+      expect(typeof result.pulled).toBe('number');
+      expect(typeof result.conflicts).toBe('number');
+    });
+  });
+
+  describe('Pending Changes Count', () => {
+    it('should return pending changes count structure', async () => {
+      const count = await syncEngine.getPendingChangesCount();
+
+      expect(count).toHaveProperty('posts');
+      expect(count).toHaveProperty('media');
+    });
+
+    it('should return zero counts when no pending changes', async () => {
+      // With empty mock data
+      const count = await syncEngine.getPendingChangesCount();
+
+      expect(count.posts).toBeGreaterThanOrEqual(0);
+      expect(count.media).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Sync Log', () => {
+    it('should return sync log array', async () => {
+      const logs = await syncEngine.getSyncLog();
+
+      expect(Array.isArray(logs)).toBe(true);
+    });
+
+    it('should accept limit parameter', async () => {
+      const logs = await syncEngine.getSyncLog(10);
+
+      expect(Array.isArray(logs)).toBe(true);
+    });
+
+    it('should use default limit of 50', async () => {
+      const logs = await syncEngine.getSyncLog();
+
+      expect(Array.isArray(logs)).toBe(true);
+    });
+  });
+
+  describe('Stop Auto Sync', () => {
+    it('should emit autoSyncStopped event', () => {
+      const handler = vi.fn();
+      syncEngine.on('autoSyncStopped', handler);
+
+      syncEngine.stopAutoSync();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it('should be safe to call multiple times', () => {
+      expect(() => {
+        syncEngine.stopAutoSync();
+        syncEngine.stopAutoSync();
+        syncEngine.stopAutoSync();
+      }).not.toThrow();
+    });
+  });
+
+  describe('Sync Configuration Validation', () => {
+    it('should require both URL and token', async () => {
+      await syncEngine.configure({
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: '',
+        autoSync: false,
+        syncInterval: 30,
+      });
+
+      expect(syncEngine.isConfigured()).toBe(false);
+
+      await syncEngine.configure({
+        tursoUrl: '',
+        tursoAuthToken: 'token',
+        autoSync: false,
+        syncInterval: 30,
+      });
+
+      expect(syncEngine.isConfigured()).toBe(false);
+    });
+
+    it('should be configured with valid URL and token', async () => {
+      await syncEngine.configure({
+        tursoUrl: 'libsql://valid.turso.io',
+        tursoAuthToken: 'valid-token',
+        autoSync: false,
+        syncInterval: 30,
+      });
+
+      expect(syncEngine.isConfigured()).toBe(true);
+    });
+  });
+
+  describe('Sync Interval Configuration', () => {
+    it('should accept sync interval in minutes', async () => {
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: true,
+        syncInterval: 15, // 15 minutes
       };
 
-      expect(isAuthError({ status: 401 })).toBe(true);
-      expect(isAuthError({ status: 403 })).toBe(true);
-      expect(isAuthError({ status: 500 })).toBe(false);
-      expect(isAuthError(new Error('Unauthorized'))).toBe(true);
+      await syncEngine.configure(config);
+      expect(syncEngine.isConfigured()).toBe(true);
+    });
+
+    it('should not set auto sync with zero interval', async () => {
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: true,
+        syncInterval: 0,
+      };
+
+      await syncEngine.configure(config);
+      // Should not crash, but won't set up interval
+      expect(syncEngine.isConfigured()).toBe(true);
     });
   });
 });

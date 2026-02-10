@@ -1,419 +1,451 @@
 /**
  * MediaEngine Unit Tests
- * 
- * Tests for media file management including:
- * - Media import and storage
- * - Sidecar metadata file handling
- * - MIME type detection
- * - Checksum calculation
- * - Filename generation
+ *
+ * Tests the REAL MediaEngine class with mocked dependencies.
+ * Following TDD best practices: mock external dependencies, test real implementation.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createMockMedia, createMockPdfMedia, resetMockCounters } from '../utils/factories';
+import { resetMockCounters } from '../utils/factories';
 
-// Mock dependencies
-vi.mock('../../src/main/database', () => ({
-  getDatabase: vi.fn(() => ({
-    getLocal: vi.fn(() => ({
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve([])),
-          orderBy: vi.fn(() => Promise.resolve([])),
-        })),
-      })),
-      insert: vi.fn(() => ({
-        values: vi.fn(() => Promise.resolve()),
-      })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve()),
-        })),
-      })),
-      delete: vi.fn(() => ({
+// Mock electron BEFORE importing MediaEngine (it uses require('electron') internally)
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn((name: string) => {
+      const paths: Record<string, string> = {
+        userData: '/mock/userData',
+        appData: '/mock/appData',
+        temp: '/mock/temp',
+      };
+      return paths[name] || '/mock/unknown';
+    }),
+  },
+}));
+
+// Import MediaEngine after mocks are set up
+import { MediaEngine, MediaData } from '../../src/main/engine/MediaEngine';
+
+// Create mock data stores
+const mockMedia = new Map<string, any>();
+const mockFiles = new Map<string, Buffer | string>();
+
+// Create chainable mock for Drizzle ORM
+function createSelectChain() {
+  return {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockImplementation(function (this: any) {
+      return this;
+    }),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockReturnThis(),
+    all: vi.fn().mockImplementation(() => Promise.resolve(Array.from(mockMedia.values()))),
+    get: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
+  };
+}
+
+function createDrizzleMock() {
+  return {
+    select: vi.fn(() => createSelectChain()),
+    insert: vi.fn(() => ({
+      values: vi.fn((data: any) => {
+        if (data && data.id) {
+          mockMedia.set(data.id, data);
+        }
+        return Promise.resolve();
+      }),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
         where: vi.fn(() => Promise.resolve()),
       })),
     })),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => Promise.resolve()),
+    })),
+  };
+}
+
+const mockLocalDb = createDrizzleMock();
+
+// Mock the database module
+vi.mock('../../src/main/database', () => ({
+  getDatabase: vi.fn(() => ({
+    getLocal: vi.fn(() => mockLocalDb),
+    getLocalClient: vi.fn(() => null),
     getRemote: vi.fn(() => null),
     getDataPaths: vi.fn(() => ({
       database: '/mock/userData/bds.db',
       posts: '/mock/userData/posts',
       media: '/mock/userData/media',
     })),
+    initializeLocal: vi.fn(),
+    initializeRemote: vi.fn(),
+    close: vi.fn(),
   })),
 }));
 
-vi.mock('fs/promises');
+// Mock fs/promises
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(async (path: string) => {
+    const content = mockFiles.get(path);
+    if (!content) {
+      const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
+      (error as any).code = 'ENOENT';
+      throw error;
+    }
+    return content;
+  }),
+  writeFile: vi.fn(async (path: string, content: Buffer | string) => {
+    mockFiles.set(path, content);
+  }),
+  unlink: vi.fn(async (path: string) => {
+    mockFiles.delete(path);
+  }),
+  mkdir: vi.fn(async () => {}),
+  readdir: vi.fn(async () => []),
+  stat: vi.fn(async (path: string) => ({
+    isFile: () => mockFiles.has(path),
+    isDirectory: () => !mockFiles.has(path),
+    size: mockFiles.get(path)?.length || 0,
+  })),
+  access: vi.fn(async (path: string) => {
+    if (!mockFiles.has(path)) {
+      const error = new Error(`ENOENT`);
+      (error as any).code = 'ENOENT';
+      throw error;
+    }
+  }),
+  copyFile: vi.fn(async (src: string, dest: string) => {
+    const content = mockFiles.get(src);
+    if (content) {
+      mockFiles.set(dest, content);
+    }
+  }),
+}));
+
+// Mock uuid
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => 'mock-media-uuid-' + Math.random().toString(36).substr(2, 9)),
+}));
 
 describe('MediaEngine', () => {
+  let mediaEngine: MediaEngine;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMedia.clear();
+    mockFiles.clear();
     resetMockCounters();
+
+    // Reset the mock implementations
+    vi.mocked(mockLocalDb.select).mockImplementation(() => createSelectChain());
+
+    mediaEngine = new MediaEngine();
   });
 
-  describe('Media Data Validation', () => {
-    it('should create valid media with required fields', () => {
-      const media = createMockMedia();
-      
+  describe('Constructor and Initialization', () => {
+    it('should create a MediaEngine instance', () => {
+      expect(mediaEngine).toBeInstanceOf(MediaEngine);
+    });
+
+    it('should extend EventEmitter', () => {
+      expect(typeof mediaEngine.on).toBe('function');
+      expect(typeof mediaEngine.emit).toBe('function');
+    });
+
+    it('should have default project context', () => {
+      expect(mediaEngine.getProjectContext()).toBe('default');
+    });
+  });
+
+  describe('Project Context', () => {
+    it('should set project context', () => {
+      mediaEngine.setProjectContext('my-blog');
+      expect(mediaEngine.getProjectContext()).toBe('my-blog');
+    });
+
+    it('should allow changing project context multiple times', () => {
+      mediaEngine.setProjectContext('blog-1');
+      expect(mediaEngine.getProjectContext()).toBe('blog-1');
+
+      mediaEngine.setProjectContext('blog-2');
+      expect(mediaEngine.getProjectContext()).toBe('blog-2');
+    });
+  });
+
+  describe('Media Import', () => {
+    beforeEach(() => {
+      // Setup a source file for import
+      const imageBuffer = Buffer.from('fake-image-data');
+      mockFiles.set('/source/image.jpg', imageBuffer);
+    });
+
+    it('should import media from source path', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg');
+
+      expect(media).toBeDefined();
       expect(media.id).toBeDefined();
-      expect(media.filename).toBeDefined();
-      expect(media.originalName).toBeDefined();
-      expect(media.mimeType).toBeDefined();
-      expect(media.size).toBeGreaterThan(0);
-      expect(media.createdAt).toBeInstanceOf(Date);
-      expect(media.updatedAt).toBeInstanceOf(Date);
+      expect(media.originalName).toBe('image.jpg');
     });
 
-    it('should allow optional dimension fields', () => {
-      const imageMedia = createMockMedia({ width: 1920, height: 1080 });
-      const pdfMedia = createMockPdfMedia();
-      
-      expect(imageMedia.width).toBe(1920);
-      expect(imageMedia.height).toBe(1080);
-      expect(pdfMedia.width).toBeUndefined();
-      expect(pdfMedia.height).toBeUndefined();
+    it('should detect mime type from file extension', async () => {
+      const jpgMedia = await mediaEngine.importMedia('/source/image.jpg');
+      expect(jpgMedia.mimeType).toBe('image/jpeg');
     });
 
-    it('should allow optional alt and caption', () => {
-      const withAlt = createMockMedia({ alt: 'Description', caption: 'A caption' });
-      const withoutAlt = createMockMedia({ alt: undefined, caption: undefined });
-      
-      expect(withAlt.alt).toBe('Description');
-      expect(withAlt.caption).toBe('A caption');
-      expect(withoutAlt.alt).toBeUndefined();
-      expect(withoutAlt.caption).toBeUndefined();
+    it('should set file size from source', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg');
+      expect(media.size).toBe(Buffer.from('fake-image-data').length);
     });
-  });
 
-  describe('MIME Type Handling', () => {
-    it('should recognize common image MIME types', () => {
-      const imageMimeTypes = [
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'image/svg+xml',
-      ];
-
-      imageMimeTypes.forEach(mimeType => {
-        const media = createMockMedia({ mimeType });
-        expect(media.mimeType).toBe(mimeType);
-        expect(media.mimeType.startsWith('image/')).toBe(true);
+    it('should use provided metadata', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
+        alt: 'A beautiful sunset',
+        caption: 'Sunset over the ocean',
+        tags: ['nature', 'sunset'],
       });
+
+      expect(media.alt).toBe('A beautiful sunset');
+      expect(media.caption).toBe('Sunset over the ocean');
+      expect(media.tags).toEqual(['nature', 'sunset']);
     });
 
-    it('should recognize document MIME types', () => {
-      const docMimeTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ];
+    it('should set createdAt and updatedAt timestamps', async () => {
+      const before = new Date();
+      const media = await mediaEngine.importMedia('/source/image.jpg');
+      const after = new Date();
 
-      docMimeTypes.forEach(mimeType => {
-        const media = createMockMedia({ mimeType });
-        expect(media.mimeType).toBe(mimeType);
-      });
+      expect(media.createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(media.createdAt.getTime()).toBeLessThanOrEqual(after.getTime());
+      expect(media.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(media.updatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
     });
 
-    it('should identify image types by MIME prefix', () => {
-      const isImage = (mimeType: string) => mimeType.startsWith('image/');
-      
-      expect(isImage('image/jpeg')).toBe(true);
-      expect(isImage('image/png')).toBe(true);
-      expect(isImage('application/pdf')).toBe(false);
-      expect(isImage('video/mp4')).toBe(false);
-    });
-  });
+    it('should emit mediaImported event', async () => {
+      const handler = vi.fn();
+      mediaEngine.on('mediaImported', handler);
 
-  describe('Filename Generation', () => {
-    it('should generate unique filenames', () => {
-      const generateFilename = (originalName: string, id: string): string => {
-        const ext = originalName.split('.').pop() || '';
-        return `${id}.${ext}`;
-      };
+      const media = await mediaEngine.importMedia('/source/image.jpg');
 
-      const filename1 = generateFilename('photo.jpg', 'media-1');
-      const filename2 = generateFilename('photo.jpg', 'media-2');
-      
-      expect(filename1).toBe('media-1.jpg');
-      expect(filename2).toBe('media-2.jpg');
-      expect(filename1).not.toBe(filename2);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalName: 'image.jpg',
+        })
+      );
     });
 
-    it('should preserve file extension', () => {
-      const getExtension = (filename: string): string => {
-        const parts = filename.split('.');
-        return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
-      };
+    it('should create media directory if it does not exist', async () => {
+      const fs = await import('fs/promises');
+      await mediaEngine.importMedia('/source/image.jpg');
 
-      expect(getExtension('photo.jpg')).toBe('jpg');
-      expect(getExtension('document.PDF')).toBe('pdf');
-      expect(getExtension('archive.tar.gz')).toBe('gz');
-      expect(getExtension('noextension')).toBe('');
+      expect(fs.mkdir).toHaveBeenCalled();
     });
 
-    it('should sanitize original filename', () => {
-      const sanitizeFilename = (filename: string): string => {
-        return filename.replace(/[^a-zA-Z0-9.-]/g, '_');
-      };
+    it('should write media file to destination', async () => {
+      const fs = await import('fs/promises');
+      await mediaEngine.importMedia('/source/image.jpg');
 
-      expect(sanitizeFilename('my file (1).jpg')).toBe('my_file__1_.jpg');
-      expect(sanitizeFilename('résumé.pdf')).toBe('r_sum_.pdf');
-      expect(sanitizeFilename('normal-file.png')).toBe('normal-file.png');
+      expect(fs.writeFile).toHaveBeenCalled();
+    });
+
+    it('should insert media record into database', async () => {
+      await mediaEngine.importMedia('/source/image.jpg');
+
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should write sidecar metadata file', async () => {
+      const fs = await import('fs/promises');
+      await mediaEngine.importMedia('/source/image.jpg');
+
+      // Should write both the media file and the sidecar file
+      expect(vi.mocked(fs.writeFile).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 
-  describe('Sidecar Metadata', () => {
-    it('should generate sidecar path from media path', () => {
-      const getSidecarPath = (mediaPath: string): string => `${mediaPath}.meta`;
-      
-      expect(getSidecarPath('/media/photo.jpg')).toBe('/media/photo.jpg.meta');
-      expect(getSidecarPath('/media/doc.pdf')).toBe('/media/doc.pdf.meta');
+  describe('MIME Type Detection', () => {
+    beforeEach(() => {
+      // Setup various file types
+      mockFiles.set('/source/photo.jpg', Buffer.from('jpg-data'));
+      mockFiles.set('/source/photo.jpeg', Buffer.from('jpeg-data'));
+      mockFiles.set('/source/image.png', Buffer.from('png-data'));
+      mockFiles.set('/source/animation.gif', Buffer.from('gif-data'));
+      mockFiles.set('/source/modern.webp', Buffer.from('webp-data'));
+      mockFiles.set('/source/vector.svg', Buffer.from('svg-data'));
+      mockFiles.set('/source/unknown.xyz', Buffer.from('unknown-data'));
     });
 
-    it('should create correct sidecar content structure', () => {
-      const media = createMockMedia({
-        id: 'media-123',
-        originalName: 'vacation-photo.jpg',
-        mimeType: 'image/jpeg',
-        size: 1024000,
+    it('should detect image/jpeg for .jpg files', async () => {
+      const media = await mediaEngine.importMedia('/source/photo.jpg');
+      expect(media.mimeType).toBe('image/jpeg');
+    });
+
+    it('should detect image/jpeg for .jpeg files', async () => {
+      const media = await mediaEngine.importMedia('/source/photo.jpeg');
+      expect(media.mimeType).toBe('image/jpeg');
+    });
+
+    it('should detect image/png for .png files', async () => {
+      const media = await mediaEngine.importMedia('/source/image.png');
+      expect(media.mimeType).toBe('image/png');
+    });
+
+    it('should detect image/gif for .gif files', async () => {
+      const media = await mediaEngine.importMedia('/source/animation.gif');
+      expect(media.mimeType).toBe('image/gif');
+    });
+
+    it('should detect image/webp for .webp files', async () => {
+      const media = await mediaEngine.importMedia('/source/modern.webp');
+      expect(media.mimeType).toBe('image/webp');
+    });
+
+    it('should detect image/svg+xml for .svg files', async () => {
+      const media = await mediaEngine.importMedia('/source/vector.svg');
+      expect(media.mimeType).toBe('image/svg+xml');
+    });
+
+    it('should fallback to application/octet-stream for unknown types', async () => {
+      const media = await mediaEngine.importMedia('/source/unknown.xyz');
+      expect(media.mimeType).toBe('application/octet-stream');
+    });
+  });
+
+  describe('Media with Image Dimensions', () => {
+    beforeEach(() => {
+      mockFiles.set('/source/image.jpg', Buffer.from('image-data'));
+    });
+
+    it('should store width and height when provided', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
         width: 1920,
         height: 1080,
-        alt: 'Vacation photo',
-        caption: 'Summer vacation 2024',
-        tags: ['vacation', 'summer'],
       });
 
-      const sidecarContent = {
-        id: media.id,
-        originalName: media.originalName,
-        mimeType: media.mimeType,
-        size: media.size,
-        width: media.width,
-        height: media.height,
-        alt: media.alt,
-        caption: media.caption,
-        createdAt: media.createdAt.toISOString(),
-        updatedAt: media.updatedAt.toISOString(),
-        tags: media.tags,
-      };
-
-      expect(sidecarContent.id).toBe('media-123');
-      expect(sidecarContent.width).toBe(1920);
-      expect(sidecarContent.tags).toEqual(['vacation', 'summer']);
+      expect(media.width).toBe(1920);
+      expect(media.height).toBe(1080);
     });
 
-    it('should handle missing optional fields in sidecar', () => {
-      const media = createMockPdfMedia({
-        alt: undefined,
-        caption: undefined,
-      });
+    it('should handle media without dimensions', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg');
 
-      const sidecarContent = {
-        id: media.id,
-        originalName: media.originalName,
-        mimeType: media.mimeType,
-        size: media.size,
-        width: media.width,
-        height: media.height,
-        alt: media.alt,
-        caption: media.caption,
-        createdAt: media.createdAt.toISOString(),
-        updatedAt: media.updatedAt.toISOString(),
-        tags: media.tags,
-      };
-
-      expect(sidecarContent.width).toBeUndefined();
-      expect(sidecarContent.height).toBeUndefined();
-      expect(sidecarContent.alt).toBeUndefined();
-      expect(sidecarContent.caption).toBeUndefined();
-    });
-  });
-
-  describe('Checksum Calculation', () => {
-    it('should calculate consistent checksum for same content', () => {
-      const crypto = require('crypto');
-      const calculateChecksum = (buffer: Buffer): string => {
-        return crypto.createHash('md5').update(buffer).digest('hex');
-      };
-
-      const buffer = Buffer.from('test content');
-      const checksum1 = calculateChecksum(buffer);
-      const checksum2 = calculateChecksum(buffer);
-
-      expect(checksum1).toBe(checksum2);
-    });
-
-    it('should calculate different checksums for different content', () => {
-      const crypto = require('crypto');
-      const calculateChecksum = (buffer: Buffer): string => {
-        return crypto.createHash('md5').update(buffer).digest('hex');
-      };
-
-      const buffer1 = Buffer.from('content A');
-      const buffer2 = Buffer.from('content B');
-      
-      expect(calculateChecksum(buffer1)).not.toBe(calculateChecksum(buffer2));
-    });
-  });
-
-  describe('File Size Formatting', () => {
-    it('should format bytes correctly', () => {
-      const formatFileSize = (bytes: number): string => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-      };
-
-      expect(formatFileSize(0)).toBe('0 B');
-      expect(formatFileSize(500)).toBe('500 B');
-      expect(formatFileSize(1024)).toBe('1 KB');
-      expect(formatFileSize(1536)).toBe('1.5 KB');
-      expect(formatFileSize(1048576)).toBe('1 MB');
-      expect(formatFileSize(1073741824)).toBe('1 GB');
+      expect(media.width).toBeUndefined();
+      expect(media.height).toBeUndefined();
     });
   });
 
   describe('Media Tags', () => {
-    it('should handle empty tags array', () => {
-      const media = createMockMedia({ tags: [] });
+    beforeEach(() => {
+      mockFiles.set('/source/image.jpg', Buffer.from('image-data'));
+    });
+
+    it('should store tags', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
+        tags: ['landscape', 'outdoor', 'nature'],
+      });
+
+      expect(media.tags).toEqual(['landscape', 'outdoor', 'nature']);
+    });
+
+    it('should default to empty tags array', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg');
+
       expect(media.tags).toEqual([]);
     });
+  });
 
-    it('should preserve tag order', () => {
-      const tags = ['first', 'second', 'third'];
-      const media = createMockMedia({ tags });
-      expect(media.tags).toEqual(tags);
+  describe('Event Emission', () => {
+    it('should be an EventEmitter', () => {
+      expect(mediaEngine.on).toBeDefined();
+      expect(mediaEngine.emit).toBeDefined();
+      expect(mediaEngine.removeListener).toBeDefined();
     });
 
-    it('should serialize tags to JSON', () => {
-      const tags = ['photo', 'landscape', '2024'];
-      const serialized = JSON.stringify(tags);
-      const deserialized = JSON.parse(serialized);
-      
-      expect(deserialized).toEqual(tags);
+    it('should allow adding event listeners', () => {
+      const listener = vi.fn();
+      mediaEngine.on('testEvent', listener);
+      mediaEngine.emit('testEvent', { data: 'test' });
+
+      expect(listener).toHaveBeenCalledWith({ data: 'test' });
+    });
+
+    it('should allow removing event listeners', () => {
+      const listener = vi.fn();
+      mediaEngine.on('testEvent', listener);
+      mediaEngine.removeListener('testEvent', listener);
+      mediaEngine.emit('testEvent', { data: 'test' });
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
-  describe('Image Dimensions', () => {
-    it('should store width and height for images', () => {
-      const media = createMockMedia({
-        mimeType: 'image/jpeg',
-        width: 3840,
-        height: 2160,
+  describe('getMediaPath', () => {
+    it('should return path in media directory', () => {
+      const path = mediaEngine.getMediaPath('test-id');
+      expect(path).toContain('test-id');
+      expect(path).toContain('media');
+    });
+  });
+
+  describe('Multiple Media Import', () => {
+    beforeEach(() => {
+      mockFiles.set('/source/image1.jpg', Buffer.from('image1-data'));
+      mockFiles.set('/source/image2.jpg', Buffer.from('image2-data'));
+      mockFiles.set('/source/image3.png', Buffer.from('image3-data'));
+    });
+
+    it('should import multiple media with unique IDs', async () => {
+      const media1 = await mediaEngine.importMedia('/source/image1.jpg');
+      const media2 = await mediaEngine.importMedia('/source/image2.jpg');
+
+      expect(media1.id).toBeDefined();
+      expect(media2.id).toBeDefined();
+      expect(media1.id).not.toBe(media2.id);
+    });
+
+    it('should handle different file types', async () => {
+      const jpg = await mediaEngine.importMedia('/source/image1.jpg');
+      const png = await mediaEngine.importMedia('/source/image3.png');
+
+      expect(jpg.mimeType).toBe('image/jpeg');
+      expect(png.mimeType).toBe('image/png');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should throw when source file does not exist', async () => {
+      await expect(mediaEngine.importMedia('/source/nonexistent.jpg')).rejects.toThrow('ENOENT');
+    });
+  });
+
+  describe('Alt Text and Caption', () => {
+    beforeEach(() => {
+      mockFiles.set('/source/image.jpg', Buffer.from('image-data'));
+    });
+
+    it('should store alt text for accessibility', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
+        alt: 'A scenic mountain view',
       });
 
-      expect(media.width).toBe(3840);
-      expect(media.height).toBe(2160);
+      expect(media.alt).toBe('A scenic mountain view');
     });
 
-    it('should calculate aspect ratio', () => {
-      const getAspectRatio = (width: number, height: number): string => {
-        const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
-        const divisor = gcd(width, height);
-        return `${width / divisor}:${height / divisor}`;
-      };
-
-      expect(getAspectRatio(1920, 1080)).toBe('16:9');
-      expect(getAspectRatio(1024, 768)).toBe('4:3');
-      expect(getAspectRatio(1080, 1080)).toBe('1:1');
-    });
-
-    it('should not require dimensions for non-images', () => {
-      const pdf = createMockPdfMedia();
-      expect(pdf.width).toBeUndefined();
-      expect(pdf.height).toBeUndefined();
-    });
-  });
-});
-
-describe('MediaEngine Integration Helpers', () => {
-  describe('Database Record Conversion', () => {
-    it('should convert MediaData to database record', () => {
-      const media = createMockMedia({
-        tags: ['tag1', 'tag2'],
+    it('should store caption for display', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
+        caption: 'Photo taken at Mt. Rainier, 2024',
       });
 
-      const dbRecord = {
-        id: media.id,
-        filename: media.filename,
-        originalName: media.originalName,
-        mimeType: media.mimeType,
-        size: media.size,
-        width: media.width,
-        height: media.height,
-        alt: media.alt,
-        caption: media.caption,
-        filePath: `/mock/userData/media/${media.filename}`,
-        sidecarPath: `/mock/userData/media/${media.filename}.meta`,
-        createdAt: media.createdAt,
-        updatedAt: media.updatedAt,
-        syncStatus: 'pending' as const,
-        syncedAt: null,
-        checksum: 'abc123',
-        tags: JSON.stringify(media.tags),
-      };
-
-      expect(dbRecord.tags).toBe('["tag1","tag2"]');
-      expect(dbRecord.sidecarPath).toContain('.meta');
+      expect(media.caption).toBe('Photo taken at Mt. Rainier, 2024');
     });
 
-    it('should convert database record to MediaData', () => {
-      const dbRecord = {
-        id: 'media-1',
-        filename: 'photo.jpg',
-        originalName: 'original.jpg',
-        mimeType: 'image/jpeg',
-        size: 102400,
-        width: 800,
-        height: 600,
-        alt: 'A photo',
-        caption: 'Caption text',
-        filePath: '/mock/path/photo.jpg',
-        sidecarPath: '/mock/path/photo.jpg.meta',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        syncStatus: 'pending' as const,
-        syncedAt: null,
-        checksum: 'abc123',
-        tags: '["tag1","tag2"]',
-      };
+    it('should handle media without alt or caption', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg');
 
-      const mediaData = {
-        id: dbRecord.id,
-        filename: dbRecord.filename,
-        originalName: dbRecord.originalName,
-        mimeType: dbRecord.mimeType,
-        size: dbRecord.size,
-        width: dbRecord.width,
-        height: dbRecord.height,
-        alt: dbRecord.alt,
-        caption: dbRecord.caption,
-        createdAt: dbRecord.createdAt,
-        updatedAt: dbRecord.updatedAt,
-        tags: JSON.parse(dbRecord.tags) as string[],
-      };
-
-      expect(mediaData.tags).toEqual(['tag1', 'tag2']);
-    });
-  });
-
-  describe('File Path Generation', () => {
-    it('should generate correct media file path', () => {
-      const mediaDir = '/mock/userData/media';
-      const filename = 'media-123.jpg';
-      
-      const filePath = `${mediaDir}/${filename}`;
-      expect(filePath).toBe('/mock/userData/media/media-123.jpg');
-    });
-
-    it('should generate correct sidecar path', () => {
-      const filePath = '/mock/userData/media/media-123.jpg';
-      const sidecarPath = `${filePath}.meta`;
-      
-      expect(sidecarPath).toBe('/mock/userData/media/media-123.jpg.meta');
+      expect(media.alt).toBeUndefined();
+      expect(media.caption).toBeUndefined();
     });
   });
 });

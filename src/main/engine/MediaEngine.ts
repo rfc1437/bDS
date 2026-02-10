@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { eq } from 'drizzle-orm';
+import { app } from 'electron';
 import { getDatabase } from '../database';
 import { media, Media, NewMedia } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
@@ -45,8 +46,6 @@ export class MediaEngine extends EventEmitter {
   }
 
   private getMediaDir(): string {
-    const { app } = require('electron');
-    const path = require('path');
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId, 'media');
   }

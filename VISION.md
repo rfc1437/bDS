@@ -80,7 +80,12 @@ in a compact form in the overview pages. More on rendering in the publishing pip
 
 ## Migrating
 
-Prepare a proper mass-data importer that can read wordpress backup files, so the user can bring in old wordpress blogs easily. That importer should run asynchronously and properly communicate progress to the user while it is running in the background. The import has to rebuild all metadata properly, so check if we have all the metadata in our model set up in a similar way as Wordpress handles it, so that we have a seamless integration. Posts in Wordpress backups are html, but should be interpreted and transformed into proper markdown in the import.
+Prepare a proper mass-data importer that can read wordpress backup files, so the user can bring in old
+wordpress blogs easily. That importer should run asynchronously and properly communicate progress to the
+user while it is running in the background. The import has to rebuild all metadata properly, so check if
+we have all the metadata in our model set up in a similar way as Wordpress handles it, so that we have a
+seamless integration. Posts in Wordpress backups are html, but should be interpreted and transformed into
+proper markdown in the import.
 
 Additionally we need another importer to traverse a full website and deduct post structure from that website
 and rebuild posts in the database based on such a web traversal. To be able to do that, use copilot SDK
@@ -95,6 +100,10 @@ on those posts.
 The AI importing agent must discover the language of a post and put that in an attribute. Posts must have
 the database structure of translations, so that a post that is discovered as being german can be automatically
 translated to english and vice-versa. After import, all posts are available in two languages.
+
+Another thing the AI importing agent must do is create summaries of posts to put into a summary attribute
+on posts in the database, so that those can be used in overview pages if needed (usually that is the
+case for article-type posts).
 
 Import runs get an ID that has a generated name based on a sequence of two random words (like session plans
 of claude code) based on random adjective and animal name and a date. This identifier is then used as a tag

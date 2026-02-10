@@ -12,6 +12,26 @@ This document provides context and best practices for GitHub Copilot when workin
 - **@libsql/client** for SQLite (local) and Turso (cloud sync)
 - **Zustand** for React state management
 
+---
+
+## ⚠️ MANDATORY: Test-First Development
+
+**STOP!** Before writing ANY implementation code, you MUST:
+
+1. **Write a failing test first** that describes the expected behavior
+2. **Run the test** to confirm it fails (Red)
+3. **Write minimal code** to make the test pass (Green)
+4. **Refactor** while keeping tests green
+
+> **No code without tests. No exceptions.**
+>
+> Tests must import and exercise the REAL implementation classes, not inline helper functions.
+> Mock only external dependencies (database, filesystem), never the class under test.
+
+See the [TDD Requirements](#test-driven-development-tdd-requirements) section for detailed guidelines.
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns
@@ -414,20 +434,58 @@ src/
 
 ## Test-Driven Development (TDD) Requirements
 
-**This project follows strict TDD practices. All new features MUST have tests written BEFORE implementation.**
+> **⚠️ CRITICAL: This project follows STRICT Test-Driven Development.**
+>
+> Writing implementation code before tests is NOT acceptable.
+> Pull requests without corresponding tests will be rejected.
 
-### TDD Workflow (Red-Green-Refactor)
+**All new features and bug fixes MUST have tests written BEFORE implementation.**
+
+### The Golden Rule: Test Real Implementations
 
 ```typescript
-// 1. RED: Write a failing test first
-describe('PostEngine.createPost', () => {
+// ✅ CORRECT: Import and test the REAL class
+import { PostEngine } from '../../src/main/engine/PostEngine';
+
+describe('PostEngine', () => {
+  let postEngine: PostEngine;
+
+  beforeEach(() => {
+    // Mock only external dependencies, NOT the class under test
+    postEngine = new PostEngine(mockDatabase, mockFileSystem);
+  });
+
   it('should create a post with generated slug from title', async () => {
     const result = await postEngine.createPost({ title: 'Hello World' });
     expect(result.slug).toBe('hello-world');
   });
 });
 
-// 2. GREEN: Write minimal code to pass the test
+// ❌ WRONG: Testing inline helper functions instead of real implementations
+describe('PostEngine', () => {
+  it('should generate slug', () => {
+    // This tests a local function, not the actual PostEngine class!
+    const generateSlug = (title: string) => title.toLowerCase().replace(/ /g, '-');
+    expect(generateSlug('Hello World')).toBe('hello-world');
+  });
+});
+```
+
+### TDD Workflow (Red-Green-Refactor)
+
+```typescript
+// 1. RED: Write a failing test first that uses the REAL implementation
+import { PostEngine } from '../../src/main/engine/PostEngine';
+
+describe('PostEngine.createPost', () => {
+  it('should create a post with generated slug from title', async () => {
+    const postEngine = new PostEngine(mockDb, mockFs);
+    const result = await postEngine.createPost({ title: 'Hello World' });
+    expect(result.slug).toBe('hello-world');
+  });
+});
+
+// 2. GREEN: Write minimal code in PostEngine to pass the test
 // 3. REFACTOR: Improve the code while keeping tests green
 ```
 

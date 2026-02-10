@@ -4,9 +4,9 @@
  */
 
 import { vi } from 'vitest';
-import type { PostData } from '../src/main/engine/PostEngine';
-import type { MediaData } from '../src/main/engine/MediaEngine';
-import type { Task, TaskProgress } from '../src/main/engine/TaskManager';
+import type { PostData } from '../../src/main/engine/PostEngine';
+import type { MediaData } from '../../src/main/engine/MediaEngine';
+import type { Task, TaskProgress } from '../../src/main/engine/TaskManager';
 
 // ============================================
 // Post Mock Factory
@@ -20,6 +20,7 @@ export function createMockPost(overrides?: Partial<PostData>): PostData {
   
   return {
     id,
+    projectId: 'default',
     title: `Test Post ${id}`,
     slug: `test-post-${id}`,
     excerpt: 'This is a test excerpt',

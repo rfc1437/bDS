@@ -1,39 +1,69 @@
 /**
  * PostEngine Unit Tests
- * 
- * Tests for blog post management including:
- * - Post CRUD operations
- * - Slug generation
- * - Markdown with YAML frontmatter handling
- * - Checksum calculation
- * - Event emissions
+ *
+ * Tests the REAL PostEngine class with mocked dependencies.
+ * Following TDD best practices: mock external dependencies, test real implementation.
  */
 
-import { describe, it, expect, beforeEach, vi, Mock } from 'vitest';
-import { createMockPost, createMockFileSystem, createMockDatabase, resetMockCounters } from '../utils/factories';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { PostEngine, PostData } from '../../src/main/engine/PostEngine';
+import { resetMockCounters } from '../utils/factories';
 
-// Mock the database module before importing PostEngine
-vi.mock('../../src/main/database', () => {
-  const mockDb = {
-    getLocal: vi.fn(() => ({
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve([])),
-          orderBy: vi.fn(() => Promise.resolve([])),
-        })),
-      })),
-      insert: vi.fn(() => ({
-        values: vi.fn(() => Promise.resolve()),
-      })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve()),
-        })),
-      })),
-      delete: vi.fn(() => ({
+// Create mock data stores
+const mockPosts = new Map<string, any>();
+const mockFiles = new Map<string, string>();
+let mockExecuteArgs: any[] = [];
+
+// Create chainable mock for Drizzle ORM
+function createSelectChain() {
+  return {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockImplementation(function(this: any) {
+      return this;
+    }),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockReturnThis(),
+    all: vi.fn().mockImplementation(() => Promise.resolve(Array.from(mockPosts.values()))),
+    get: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
+  };
+}
+
+function createDrizzleMock() {
+  return {
+    select: vi.fn(() => createSelectChain()),
+    insert: vi.fn(() => ({
+      values: vi.fn((data: any) => {
+        if (data && data.id) {
+          mockPosts.set(data.id, data);
+        }
+        return Promise.resolve();
+      }),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
         where: vi.fn(() => Promise.resolve()),
       })),
     })),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => Promise.resolve()),
+    })),
+  };
+}
+
+const mockLocalDb = createDrizzleMock();
+const mockLocalClient = {
+  execute: vi.fn(async (query: { sql: string; args: any[] }) => {
+    mockExecuteArgs.push(query);
+    return { rows: [] };
+  }),
+};
+
+// Mock the database module
+vi.mock('../../src/main/database', () => ({
+  getDatabase: vi.fn(() => ({
+    getLocal: vi.fn(() => mockLocalDb),
+    getLocalClient: vi.fn(() => mockLocalClient),
     getRemote: vi.fn(() => null),
     getDataPaths: vi.fn(() => ({
       database: '/mock/userData/bds.db',
@@ -43,394 +73,372 @@ vi.mock('../../src/main/database', () => {
     initializeLocal: vi.fn(),
     initializeRemote: vi.fn(),
     close: vi.fn(),
-  };
-  
-  return {
-    getDatabase: vi.fn(() => mockDb),
-  };
-});
+  })),
+}));
 
 // Mock fs/promises
-vi.mock('fs/promises', () => createMockFileSystem());
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(async (path: string) => {
+    const content = mockFiles.get(path);
+    if (!content) {
+      const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
+      (error as any).code = 'ENOENT';
+      throw error;
+    }
+    return content;
+  }),
+  writeFile: vi.fn(async (path: string, content: string) => {
+    mockFiles.set(path, content);
+  }),
+  unlink: vi.fn(async (path: string) => {
+    mockFiles.delete(path);
+  }),
+  mkdir: vi.fn(async () => {}),
+  readdir: vi.fn(async () => []),
+  stat: vi.fn(async (path: string) => ({
+    isFile: () => mockFiles.has(path),
+    isDirectory: () => !mockFiles.has(path),
+    size: mockFiles.get(path)?.length || 0,
+  })),
+  access: vi.fn(async (path: string) => {
+    if (!mockFiles.has(path)) {
+      const error = new Error(`ENOENT`);
+      (error as any).code = 'ENOENT';
+      throw error;
+    }
+  }),
+}));
+
+// Mock uuid
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => 'mock-uuid-' + Math.random().toString(36).substr(2, 9)),
+}));
 
 describe('PostEngine', () => {
+  let postEngine: PostEngine;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPosts.clear();
+    mockFiles.clear();
+    mockExecuteArgs = [];
     resetMockCounters();
+    
+    // Reset the mock implementations
+    vi.mocked(mockLocalDb.select).mockImplementation(() => createSelectChain());
+    
+    postEngine = new PostEngine();
   });
 
-  describe('Slug Generation', () => {
-    it('should generate slug from title with lowercase', () => {
-      // Test the slug generation logic
-      const generateSlug = (title: string): string => {
-        return title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-      };
-
-      expect(generateSlug('Hello World')).toBe('hello-world');
+  describe('Constructor and Initialization', () => {
+    it('should create a PostEngine instance', () => {
+      expect(postEngine).toBeInstanceOf(PostEngine);
     });
 
-    it('should replace special characters with hyphens', () => {
-      const generateSlug = (title: string): string => {
-        return title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-      };
-
-      expect(generateSlug('Hello, World!')).toBe('hello-world');
-      expect(generateSlug('Test @ Post #1')).toBe('test-post-1');
+    it('should extend EventEmitter', () => {
+      expect(typeof postEngine.on).toBe('function');
+      expect(typeof postEngine.emit).toBe('function');
     });
 
-    it('should remove leading and trailing hyphens', () => {
-      const generateSlug = (title: string): string => {
-        return title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-      };
-
-      expect(generateSlug('---Hello World---')).toBe('hello-world');
-      expect(generateSlug('  Spaces Around  ')).toBe('spaces-around');
-    });
-
-    it('should handle unicode characters', () => {
-      const generateSlug = (title: string): string => {
-        return title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-      };
-
-      expect(generateSlug('Café & Résumé')).toBe('caf-r-sum');
-    });
-
-    it('should handle empty string', () => {
-      const generateSlug = (title: string): string => {
-        if (!title) return 'untitled';
-        return title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '') || 'untitled';
-      };
-
-      expect(generateSlug('')).toBe('untitled');
+    it('should have default project context', () => {
+      expect(postEngine.getProjectContext()).toBe('default');
     });
   });
 
-  describe('Checksum Calculation', () => {
-    it('should generate consistent checksums', () => {
-      const crypto = require('crypto');
-      const calculateChecksum = (content: string): string => {
-        return crypto.createHash('md5').update(content).digest('hex');
-      };
-
-      const content = 'Hello, World!';
-      const checksum1 = calculateChecksum(content);
-      const checksum2 = calculateChecksum(content);
-
-      expect(checksum1).toBe(checksum2);
-      expect(checksum1).toHaveLength(32); // MD5 hex length
+  describe('Project Context', () => {
+    it('should set project context', () => {
+      postEngine.setProjectContext('my-blog');
+      expect(postEngine.getProjectContext()).toBe('my-blog');
     });
 
-    it('should generate different checksums for different content', () => {
-      const crypto = require('crypto');
-      const calculateChecksum = (content: string): string => {
-        return crypto.createHash('md5').update(content).digest('hex');
-      };
+    it('should allow changing project context multiple times', () => {
+      postEngine.setProjectContext('blog-1');
+      expect(postEngine.getProjectContext()).toBe('blog-1');
 
-      const checksum1 = calculateChecksum('Content A');
-      const checksum2 = calculateChecksum('Content B');
-
-      expect(checksum1).not.toBe(checksum2);
-    });
-
-    it('should handle empty content', () => {
-      const crypto = require('crypto');
-      const calculateChecksum = (content: string): string => {
-        return crypto.createHash('md5').update(content).digest('hex');
-      };
-
-      const checksum = calculateChecksum('');
-      expect(checksum).toHaveLength(32);
+      postEngine.setProjectContext('blog-2');
+      expect(postEngine.getProjectContext()).toBe('blog-2');
     });
   });
 
-  describe('Post Data Validation', () => {
-    it('should create a valid post with default values', () => {
-      const createPostData = (data: Partial<ReturnType<typeof createMockPost>>) => {
-        const now = new Date();
-        const id = data.id || 'generated-id';
-        const slug = data.slug || 'untitled';
+  describe('Slug Generation via createPost', () => {
+    it('should generate slug from title with lowercase', async () => {
+      const post = await postEngine.createPost({ title: 'Hello World' });
+      expect(post.slug).toBe('hello-world');
+    });
 
-        return {
-          id,
-          title: data.title || 'Untitled',
-          slug,
-          excerpt: data.excerpt,
-          content: data.content || '',
-          status: data.status || 'draft',
-          author: data.author,
-          createdAt: data.createdAt || now,
-          updatedAt: data.updatedAt || now,
-          publishedAt: data.publishedAt,
-          tags: data.tags || [],
-          categories: data.categories || [],
-        };
-      };
+    it('should replace special characters with hyphens', async () => {
+      const post = await postEngine.createPost({ title: 'Hello, World! How are you?' });
+      expect(post.slug).toBe('hello-world-how-are-you');
+    });
 
-      const post = createPostData({});
-      
-      expect(post.title).toBe('Untitled');
+    it('should remove leading and trailing hyphens', async () => {
+      const post = await postEngine.createPost({ title: '---Test---' });
+      expect(post.slug).toBe('test');
+    });
+
+    it('should handle numbers in titles', async () => {
+      const post = await postEngine.createPost({ title: '10 Tips for Testing' });
+      expect(post.slug).toBe('10-tips-for-testing');
+    });
+
+    it('should convert multiple spaces to single hyphen', async () => {
+      const post = await postEngine.createPost({ title: 'Multiple   Spaces   Here' });
+      expect(post.slug).toBe('multiple-spaces-here');
+    });
+
+    it('should handle unicode characters by removing them', async () => {
+      const post = await postEngine.createPost({ title: 'Café Test' });
+      expect(post.slug).toBe('caf-test');
+    });
+  });
+
+  describe('Post Creation', () => {
+    it('should create a post with default values', async () => {
+      const post = await postEngine.createPost({ title: 'My Test Post' });
+
+      expect(post.id).toBeDefined();
+      expect(post.title).toBe('My Test Post');
+      expect(post.slug).toBe('my-test-post');
       expect(post.status).toBe('draft');
+      expect(post.content).toBe('');
       expect(post.tags).toEqual([]);
       expect(post.categories).toEqual([]);
     });
 
-    it('should preserve provided values', () => {
-      const post = createMockPost({
-        title: 'My Custom Title',
-        status: 'published',
-        tags: ['custom', 'tag'],
+    it('should create a post with provided content', async () => {
+      const post = await postEngine.createPost({
+        title: 'Content Test',
+        content: '# Hello\n\nThis is my post.',
       });
 
-      expect(post.title).toBe('My Custom Title');
-      expect(post.status).toBe('published');
-      expect(post.tags).toEqual(['custom', 'tag']);
+      expect(post.content).toBe('# Hello\n\nThis is my post.');
     });
-  });
 
-  describe('YAML Frontmatter Format', () => {
-    it('should create valid frontmatter structure', () => {
-      const post = createMockPost({
-        title: 'Test Post',
-        slug: 'test-post',
-        status: 'draft',
+    it('should create a post with custom status', async () => {
+      const post = await postEngine.createPost({
+        title: 'Published Post',
+        status: 'published',
+      });
+
+      expect(post.status).toBe('published');
+    });
+
+    it('should create a post with tags and categories', async () => {
+      const post = await postEngine.createPost({
+        title: 'Tagged Post',
+        tags: ['javascript', 'testing'],
+        categories: ['tutorials'],
+      });
+
+      expect(post.tags).toEqual(['javascript', 'testing']);
+      expect(post.categories).toEqual(['tutorials']);
+    });
+
+    it('should use custom slug when provided', async () => {
+      const post = await postEngine.createPost({
+        title: 'My Post',
+        slug: 'custom-permalink',
+      });
+
+      expect(post.slug).toBe('custom-permalink');
+    });
+
+    it('should set createdAt and updatedAt timestamps', async () => {
+      const before = new Date();
+      const post = await postEngine.createPost({ title: 'Timestamp Test' });
+      const after = new Date();
+
+      expect(post.createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(post.createdAt.getTime()).toBeLessThanOrEqual(after.getTime());
+      expect(post.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(post.updatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+    });
+
+    it('should emit postCreated event', async () => {
+      const handler = vi.fn();
+      postEngine.on('postCreated', handler);
+
+      const post = await postEngine.createPost({ title: 'Event Test' });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Event Test',
+        })
+      );
+    });
+
+    it('should use current project context for projectId', async () => {
+      postEngine.setProjectContext('my-project');
+      const post = await postEngine.createPost({ title: 'Project Test' });
+
+      expect(post.projectId).toBe('my-project');
+    });
+
+    it('should write post to filesystem', async () => {
+      const fs = await import('fs/promises');
+      await postEngine.createPost({ title: 'File Test' });
+
+      expect(fs.writeFile).toHaveBeenCalled();
+      expect(fs.mkdir).toHaveBeenCalled();
+    });
+
+    it('should insert into database', async () => {
+      await postEngine.createPost({ title: 'DB Test' });
+
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should update FTS index when client is available', async () => {
+      await postEngine.createPost({ title: 'FTS Test' });
+
+      const ftsInsert = mockExecuteArgs.find((q) => q.sql.includes('posts_fts'));
+      expect(ftsInsert).toBeDefined();
+    });
+
+    it('should handle post without title using "Untitled"', async () => {
+      const post = await postEngine.createPost({});
+      expect(post.title).toBe('Untitled');
+      expect(post.slug).toBe('untitled');
+    });
+
+    it('should create post with author', async () => {
+      const post = await postEngine.createPost({
+        title: 'Author Test',
         author: 'John Doe',
-        tags: ['tech', 'tutorial'],
-        categories: ['programming'],
       });
 
-      // Simulate frontmatter generation
-      const frontmatter = {
-        id: post.id,
-        title: post.title,
-        slug: post.slug,
-        excerpt: post.excerpt,
-        status: post.status,
-        author: post.author,
-        createdAt: post.createdAt.toISOString(),
-        updatedAt: post.updatedAt.toISOString(),
-        publishedAt: post.publishedAt?.toISOString(),
-        tags: post.tags,
-        categories: post.categories,
-      };
-
-      expect(frontmatter.title).toBe('Test Post');
-      expect(frontmatter.tags).toEqual(['tech', 'tutorial']);
-      expect(frontmatter.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(post.author).toBe('John Doe');
     });
 
-    it('should handle optional fields correctly', () => {
-      const post = createMockPost({
-        excerpt: undefined,
-        author: undefined,
-        publishedAt: undefined,
+    it('should create post with excerpt', async () => {
+      const post = await postEngine.createPost({
+        title: 'Excerpt Test',
+        excerpt: 'This is a short summary.',
       });
 
-      const frontmatter = {
-        id: post.id,
-        title: post.title,
-        slug: post.slug,
-        excerpt: post.excerpt,
-        status: post.status,
-        author: post.author,
-        createdAt: post.createdAt.toISOString(),
-        updatedAt: post.updatedAt.toISOString(),
-        publishedAt: post.publishedAt?.toISOString(),
-        tags: post.tags,
-        categories: post.categories,
-      };
-
-      expect(frontmatter.excerpt).toBeUndefined();
-      expect(frontmatter.author).toBeUndefined();
-      expect(frontmatter.publishedAt).toBeUndefined();
-    });
-  });
-
-  describe('Post Status Transitions', () => {
-    it('should allow valid status values', () => {
-      const validStatuses = ['draft', 'published', 'archived'] as const;
-      
-      validStatuses.forEach(status => {
-        const post = createMockPost({ status });
-        expect(post.status).toBe(status);
-      });
+      expect(post.excerpt).toBe('This is a short summary.');
     });
 
-    it('should set publishedAt when publishing', () => {
-      const now = new Date();
-      const post = createMockPost({
+    it('should handle publishedAt for published posts', async () => {
+      const publishDate = new Date('2024-01-15');
+      const post = await postEngine.createPost({
+        title: 'Published Post',
         status: 'published',
-        publishedAt: now,
+        publishedAt: publishDate,
       });
 
-      expect(post.status).toBe('published');
-      expect(post.publishedAt).toEqual(now);
+      expect(post.publishedAt).toEqual(publishDate);
+    });
+  });
+
+  describe('Event Emission', () => {
+    it('should be an EventEmitter', () => {
+      expect(postEngine.on).toBeDefined();
+      expect(postEngine.emit).toBeDefined();
+      expect(postEngine.removeListener).toBeDefined();
     });
 
-    it('should not require publishedAt for drafts', () => {
-      const post = createMockPost({
-        status: 'draft',
-        publishedAt: undefined,
+    it('should allow adding event listeners', () => {
+      const listener = vi.fn();
+      postEngine.on('testEvent', listener);
+      postEngine.emit('testEvent', { data: 'test' });
+
+      expect(listener).toHaveBeenCalledWith({ data: 'test' });
+    });
+
+    it('should allow removing event listeners', () => {
+      const listener = vi.fn();
+      postEngine.on('testEvent', listener);
+      postEngine.removeListener('testEvent', listener);
+      postEngine.emit('testEvent', { data: 'test' });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Post Creation writes correct file format', () => {
+    it('should write markdown file with YAML frontmatter', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'Frontmatter Test',
+        content: '# Hello World',
+        tags: ['test'],
       });
 
+      expect(fs.writeFile).toHaveBeenCalled();
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const filePath = writeCall[0] as string;
+      const content = writeCall[1] as string;
+
+      expect(filePath).toContain('frontmatter-test.md');
+      expect(content).toContain('---');
+      expect(content).toContain('title: Frontmatter Test');
+      expect(content).toContain('# Hello World');
+    });
+  });
+
+  describe('Multiple post creation', () => {
+    it('should create multiple posts with unique IDs', async () => {
+      const post1 = await postEngine.createPost({ title: 'Post 1' });
+      const post2 = await postEngine.createPost({ title: 'Post 2' });
+
+      expect(post1.id).toBeDefined();
+      expect(post2.id).toBeDefined();
+      expect(post1.id).not.toBe(post2.id);
+    });
+
+    it('should create posts with different slugs', async () => {
+      const post1 = await postEngine.createPost({ title: 'First Post' });
+      const post2 = await postEngine.createPost({ title: 'Second Post' });
+
+      expect(post1.slug).toBe('first-post');
+      expect(post2.slug).toBe('second-post');
+    });
+  });
+
+  describe('Post status values', () => {
+    it('should accept draft status', async () => {
+      const post = await postEngine.createPost({ title: 'Draft', status: 'draft' });
       expect(post.status).toBe('draft');
-      expect(post.publishedAt).toBeUndefined();
+    });
+
+    it('should accept published status', async () => {
+      const post = await postEngine.createPost({ title: 'Published', status: 'published' });
+      expect(post.status).toBe('published');
+    });
+
+    it('should accept archived status', async () => {
+      const post = await postEngine.createPost({ title: 'Archived', status: 'archived' });
+      expect(post.status).toBe('archived');
     });
   });
 
-  describe('File Path Generation', () => {
-    it('should generate correct file path from slug', () => {
-      const postsDir = '/mock/userData/posts';
-      const slug = 'my-first-post';
-      
-      const filePath = `${postsDir}/${slug}.md`;
-      
-      expect(filePath).toBe('/mock/userData/posts/my-first-post.md');
-    });
-
-    it('should handle slugs with numbers', () => {
-      const postsDir = '/mock/userData/posts';
-      const slug = 'post-123-test';
-      
-      const filePath = `${postsDir}/${slug}.md`;
-      
-      expect(filePath).toBe('/mock/userData/posts/post-123-test.md');
-    });
-  });
-
-  describe('Tags and Categories', () => {
-    it('should serialize tags to JSON', () => {
-      const tags = ['javascript', 'typescript', 'node'];
-      const serialized = JSON.stringify(tags);
-      
-      expect(serialized).toBe('["javascript","typescript","node"]');
-      expect(JSON.parse(serialized)).toEqual(tags);
-    });
-
-    it('should handle empty arrays', () => {
-      const tags: string[] = [];
-      const serialized = JSON.stringify(tags);
-      
-      expect(serialized).toBe('[]');
-      expect(JSON.parse(serialized)).toEqual([]);
-    });
-
-    it('should handle tags with special characters', () => {
-      const tags = ['c#', 'c++', 'node.js'];
-      const serialized = JSON.stringify(tags);
-      
-      expect(JSON.parse(serialized)).toEqual(tags);
-    });
-  });
-
-  describe('Date Handling', () => {
-    it('should use ISO format for dates', () => {
-      const date = new Date('2024-01-15T10:30:00.000Z');
-      const isoString = date.toISOString();
-      
-      expect(isoString).toBe('2024-01-15T10:30:00.000Z');
-    });
-
-    it('should parse ISO dates correctly', () => {
-      const isoString = '2024-01-15T10:30:00.000Z';
-      const date = new Date(isoString);
-      
-      expect(date.getUTCFullYear()).toBe(2024);
-      expect(date.getUTCMonth()).toBe(0); // January
-      expect(date.getUTCDate()).toBe(15);
-    });
-
-    it('should handle updatedAt being later than createdAt', () => {
-      const createdAt = new Date('2024-01-15T10:00:00.000Z');
-      const updatedAt = new Date('2024-01-16T15:30:00.000Z');
-      
-      const post = createMockPost({ createdAt, updatedAt });
-      
-      expect(post.updatedAt.getTime()).toBeGreaterThan(post.createdAt.getTime());
-    });
-  });
-});
-
-describe('PostEngine Integration Helpers', () => {
-  describe('Database Record Conversion', () => {
-    it('should convert PostData to database record format', () => {
-      const post = createMockPost({
-        tags: ['a', 'b'],
-        categories: ['c'],
+  describe('Post with all fields', () => {
+    it('should create a fully populated post', async () => {
+      const publishDate = new Date('2024-06-15');
+      const post = await postEngine.createPost({
+        title: 'Complete Post',
+        slug: 'complete-post',
+        content: '# Complete\n\nFull content here.',
+        excerpt: 'A complete post with all fields.',
+        status: 'published',
+        author: 'Jane Doe',
+        publishedAt: publishDate,
+        tags: ['complete', 'full', 'test'],
+        categories: ['testing', 'examples'],
       });
 
-      const dbRecord = {
-        id: post.id,
-        title: post.title,
-        slug: post.slug,
-        excerpt: post.excerpt,
-        status: post.status,
-        author: post.author,
-        createdAt: post.createdAt,
-        updatedAt: post.updatedAt,
-        publishedAt: post.publishedAt,
-        filePath: `/mock/userData/posts/${post.slug}.md`,
-        syncStatus: 'pending' as const,
-        checksum: 'abc123',
-        tags: JSON.stringify(post.tags),
-        categories: JSON.stringify(post.categories),
-      };
-
-      expect(dbRecord.tags).toBe('["a","b"]');
-      expect(dbRecord.categories).toBe('["c"]');
-    });
-
-    it('should convert database record to PostData format', () => {
-      const dbRecord = {
-        id: 'post-1',
-        title: 'Test Post',
-        slug: 'test-post',
-        excerpt: 'An excerpt',
-        status: 'draft' as const,
-        author: 'Author',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        publishedAt: null,
-        filePath: '/mock/path.md',
-        syncStatus: 'pending' as const,
-        syncedAt: null,
-        checksum: 'abc123',
-        tags: '["a","b"]',
-        categories: '["c"]',
-      };
-
-      const postData = {
-        id: dbRecord.id,
-        title: dbRecord.title,
-        slug: dbRecord.slug,
-        excerpt: dbRecord.excerpt,
-        status: dbRecord.status,
-        author: dbRecord.author,
-        createdAt: dbRecord.createdAt,
-        updatedAt: dbRecord.updatedAt,
-        publishedAt: dbRecord.publishedAt || undefined,
-        tags: JSON.parse(dbRecord.tags) as string[],
-        categories: JSON.parse(dbRecord.categories) as string[],
-        content: '', // Would be read from file
-      };
-
-      expect(postData.tags).toEqual(['a', 'b']);
-      expect(postData.categories).toEqual(['c']);
-      expect(postData.publishedAt).toBeUndefined();
+      expect(post.title).toBe('Complete Post');
+      expect(post.slug).toBe('complete-post');
+      expect(post.content).toBe('# Complete\n\nFull content here.');
+      expect(post.excerpt).toBe('A complete post with all fields.');
+      expect(post.status).toBe('published');
+      expect(post.author).toBe('Jane Doe');
+      expect(post.publishedAt).toEqual(publishDate);
+      expect(post.tags).toEqual(['complete', 'full', 'test']);
+      expect(post.categories).toEqual(['testing', 'examples']);
     });
   });
 });
