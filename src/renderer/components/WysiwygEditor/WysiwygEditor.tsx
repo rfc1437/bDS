@@ -6,80 +6,13 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline';
-import TurndownService from 'turndown';
+import { Markdown } from 'tiptap-markdown';
 import './WysiwygEditor.css';
-
-// Convert HTML to Markdown
-const turndownService = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced',
-  bulletListMarker: '-',
-});
-
-// Add custom rules for turndown
-turndownService.addRule('strikethrough', {
-  filter: ['del', 's', 'strike'],
-  replacement: (content) => `~~${content}~~`,
-});
 
 interface WysiwygEditorProps {
   content: string;
   onChange: (markdown: string) => void;
   placeholder?: string;
-}
-
-// Simple markdown to HTML converter for TipTap
-function markdownToHtml(markdown: string): string {
-  // Simple markdown parser - for production use a proper library
-  let html = markdown
-    // Headers
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.+?)__/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/_(.+?)_/g, '<em>$1</em>')
-    // Strikethrough
-    .replace(/~~(.+?)~~/g, '<del>$1</del>')
-    // Code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="$1">$2</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    // Images
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />')
-    // Blockquotes
-    .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
-    // Unordered lists
-    .replace(/^\s*[-*+] (.+)$/gim, '<li>$1</li>')
-    // Ordered lists
-    .replace(/^\d+\. (.+)$/gim, '<li>$1</li>')
-    // Horizontal rule
-    .replace(/^(?:---+|___+|\*\*\*+)$/gim, '<hr>')
-    // Paragraphs (double newlines)
-    .replace(/\n\n/g, '</p><p>')
-    // Single line breaks
-    .replace(/\n/g, '<br>');
-
-  // Wrap in paragraphs if not starting with a block element
-  if (!html.startsWith('<')) {
-    html = '<p>' + html + '</p>';
-  }
-
-  // Fix consecutive blockquotes
-  html = html.replace(/<\/blockquote>\s*<blockquote>/g, '<br>');
-
-  // Wrap list items in ul/ol
-  html = html.replace(/(<li>.*<\/li>)+/g, (match) => {
-    // Check if it's ordered (starts with number) or unordered
-    return '<ul>' + match + '</ul>';
-  });
-
-  return html;
 }
 
 export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
@@ -113,12 +46,17 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
       Placeholder.configure({
         placeholder,
       }),
+      Markdown.configure({
+        html: false,
+        bulletListMarker: '-',
+        transformPastedText: true,
+        transformCopiedText: true,
+      }),
     ],
-    content: markdownToHtml(content),
+    content,
     onUpdate: ({ editor }) => {
       isInternalChange.current = true;
-      const html = editor.getHTML();
-      const markdown = turndownService.turndown(html);
+      const markdown = editor.storage.markdown.getMarkdown();
       onChange(markdown);
     },
     editable: true,
@@ -129,8 +67,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
     if (editor && content !== lastExternalContent.current) {
       // This is an external change (e.g., switching posts)
       if (!isInternalChange.current) {
-        const newHtml = markdownToHtml(content);
-        editor.commands.setContent(newHtml);
+        editor.commands.setContent(content);
       }
       lastExternalContent.current = content;
       isInternalChange.current = false;
