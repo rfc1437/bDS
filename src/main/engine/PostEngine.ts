@@ -245,23 +245,22 @@ export class PostEngine extends EventEmitter {
       categories: data.categories || [],
     };
 
-    // Write to filesystem first
-    const filePath = await this.writePostFile(post);
     const checksum = this.calculateChecksum(post.content);
 
-    // Then update database
+    // Draft content lives in the database only — no file written
     const dbPost: NewPost = {
       id: post.id,
       projectId: post.projectId,
       title: post.title,
       slug: post.slug,
       excerpt: post.excerpt,
+      content: post.content,
       status: post.status,
       author: post.author,
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
       publishedAt: post.publishedAt,
-      filePath,
+      filePath: '',
       syncStatus: 'pending',
       checksum,
       tags: JSON.stringify(post.tags),
@@ -291,38 +290,41 @@ export class PostEngine extends EventEmitter {
       return null;
     }
 
+    // If post is currently published and content/metadata is changing,
+    // automatically transition to draft status (content moves from file to DB)
+    const isContentOrMetadataChange = data.content !== undefined ||
+                                       data.title !== undefined ||
+                                       data.tags !== undefined ||
+                                       data.categories !== undefined ||
+                                       data.excerpt !== undefined;
+
+    let newStatus = data.status || existing.status;
+    if (existing.status === 'published' && isContentOrMetadataChange && !data.status) {
+      newStatus = 'draft';
+    }
+
     const updated: PostData = {
       ...existing,
       ...data,
       id, // Ensure ID doesn't change
       projectId: existing.projectId, // Ensure projectId doesn't change
+      status: newStatus as 'draft' | 'published' | 'archived',
       updatedAt: new Date(),
     };
 
-    // Handle slug change - need to rename file
-    const postsDir = this.getPostsDir();
-    if (data.slug && data.slug !== existing.slug) {
-      const oldPath = path.join(postsDir, `${existing.slug}.md`);
-      try {
-        await fs.unlink(oldPath);
-      } catch {
-        // Old file might not exist
-      }
-    }
-
-    const filePath = await this.writePostFile(updated);
     const checksum = this.calculateChecksum(updated.content);
 
+    // All updates go to DB only — no file writes
     await db.update(posts)
       .set({
         title: updated.title,
         slug: updated.slug,
         excerpt: updated.excerpt,
+        content: updated.content,
         status: updated.status,
         author: updated.author,
         updatedAt: updated.updatedAt,
         publishedAt: updated.publishedAt,
-        filePath,
         syncStatus: 'pending',
         checksum,
         tags: JSON.stringify(updated.tags),
@@ -357,12 +359,18 @@ export class PostEngine extends EventEmitter {
       return false;
     }
 
-    // Delete file
-    try {
-      await fs.unlink(existing.filePath);
-    } catch {
-      // File might not exist
+    // Only delete file if the post was published (has a file on disk)
+    if (existing.filePath) {
+      try {
+        await fs.unlink(existing.filePath);
+      } catch {
+        // File might not exist
+      }
     }
+
+    // Delete post links
+    await db.delete(postLinks).where(eq(postLinks.sourcePostId, id));
+    await db.delete(postLinks).where(eq(postLinks.targetPostId, id));
 
     // Delete from database
     await db.delete(posts).where(eq(posts.id, id));
@@ -376,6 +384,27 @@ export class PostEngine extends EventEmitter {
     return true;
   }
 
+  /**
+   * Build a PostData object from a DB row, using the given body content.
+   */
+  private dbRowToPostData(dbPost: Post, body: string): PostData {
+    return {
+      id: dbPost.id,
+      projectId: dbPost.projectId,
+      title: dbPost.title,
+      slug: dbPost.slug,
+      excerpt: dbPost.excerpt || undefined,
+      content: body,
+      status: dbPost.status as 'draft' | 'published' | 'archived',
+      author: dbPost.author || undefined,
+      createdAt: dbPost.createdAt,
+      updatedAt: dbPost.updatedAt,
+      publishedAt: dbPost.publishedAt || undefined,
+      tags: JSON.parse(dbPost.tags || '[]'),
+      categories: JSON.parse(dbPost.categories || '[]'),
+    };
+  }
+
   async getPost(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
     const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
@@ -384,29 +413,21 @@ export class PostEngine extends EventEmitter {
       return null;
     }
 
-    // Read content from file
-    const postData = await this.readPostFile(dbPost.filePath);
-    
-    if (!postData) {
-      // File doesn't exist, reconstruct from database
-      return {
-        id: dbPost.id,
-        projectId: dbPost.projectId,
-        title: dbPost.title,
-        slug: dbPost.slug,
-        excerpt: dbPost.excerpt || undefined,
-        content: '',
-        status: dbPost.status as 'draft' | 'published' | 'archived',
-        author: dbPost.author || undefined,
-        createdAt: dbPost.createdAt,
-        updatedAt: dbPost.updatedAt,
-        publishedAt: dbPost.publishedAt || undefined,
-        tags: JSON.parse(dbPost.tags || '[]'),
-        categories: JSON.parse(dbPost.categories || '[]'),
-      };
+    // Draft content lives in the DB
+    if (dbPost.content) {
+      return this.dbRowToPostData(dbPost, dbPost.content);
     }
 
-    return postData;
+    // Published content lives in the filesystem
+    if (dbPost.filePath) {
+      const fileData = await this.readPostFile(dbPost.filePath);
+      if (fileData) {
+        return this.dbRowToPostData(dbPost, fileData.content);
+      }
+    }
+
+    // Fallback: no content available
+    return this.dbRowToPostData(dbPost, '');
   }
 
   async getAllPosts(): Promise<PostData[]> {
@@ -590,68 +611,205 @@ export class PostEngine extends EventEmitter {
 
   async publishPost(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
+    const client = getDatabase().getLocalClient();
     const existing = await this.getPost(id);
     
     if (!existing) {
       return null;
     }
 
-    // First update the post with published status
-    const result = await this.updatePost(id, {
-      status: 'published',
-      publishedAt: new Date(),
-    });
+    const now = new Date();
+    const publishedAt = existing.publishedAt || now;
 
-    if (result) {
-      // Save the published snapshot for discard functionality
-      await db.update(posts)
-        .set({
-          publishedTitle: result.title,
-          publishedContent: result.content,
-          publishedExcerpt: result.excerpt,
-          publishedTags: JSON.stringify(result.tags),
-          publishedCategories: JSON.stringify(result.categories),
-        })
-        .where(eq(posts.id, id));
+    const published: PostData = {
+      ...existing,
+      status: 'published',
+      publishedAt,
+      updatedAt: now,
+    };
+
+    // Write content + metadata to the filesystem
+    const newFilePath = await this.writePostFile(published);
+
+    // If there was a previous file with a different path (slug changed), remove it
+    const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
+    if (dbPost && dbPost.filePath && dbPost.filePath !== newFilePath && dbPost.filePath !== '') {
+      try {
+        await fs.unlink(dbPost.filePath);
+      } catch {
+        // Old file might not exist
+      }
     }
 
-    return result;
+    const checksum = this.calculateChecksum(published.content);
+
+    // Update DB: clear draft content (it lives in the file now), set filePath
+    await db.update(posts)
+      .set({
+        title: published.title,
+        slug: published.slug,
+        excerpt: published.excerpt,
+        content: null,
+        status: 'published',
+        author: published.author,
+        updatedAt: published.updatedAt,
+        publishedAt: published.publishedAt,
+        filePath: newFilePath,
+        syncStatus: 'pending',
+        checksum,
+        tags: JSON.stringify(published.tags),
+        categories: JSON.stringify(published.categories),
+      })
+      .where(eq(posts.id, id));
+
+    // Update FTS index
+    if (client) {
+      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
+      await client.execute({
+        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [published.id, published.title, published.content, published.excerpt || '', published.tags.join(' '), published.categories.join(' ')],
+      });
+    }
+
+    // Update post links based on published content
+    await this.updatePostLinks(id, published.content);
+
+    this.emit('postUpdated', published);
+    return published;
   }
 
   async discardChanges(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
+    const client = getDatabase().getLocalClient();
     const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
     
-    if (!dbPost || !dbPost.publishedContent) {
-      // No published version to revert to
+    if (!dbPost) {
       return null;
     }
 
-    // Revert to the published snapshot
-    return this.updatePost(id, {
-      title: dbPost.publishedTitle || dbPost.title,
-      content: dbPost.publishedContent,
-      excerpt: dbPost.publishedExcerpt || undefined,
-      tags: JSON.parse(dbPost.publishedTags || '[]'),
-      categories: JSON.parse(dbPost.publishedCategories || '[]'),
-    });
+    // Can only discard if there's a published file to revert to
+    if (!dbPost.filePath) {
+      return null;
+    }
+
+    // Read the published version from the filesystem
+    const publishedData = await this.readPostFile(dbPost.filePath);
+    if (!publishedData) {
+      return null;
+    }
+
+    const now = new Date();
+
+    // Restore DB metadata from the published file, clear draft content
+    await db.update(posts)
+      .set({
+        title: publishedData.title,
+        slug: publishedData.slug,
+        excerpt: publishedData.excerpt,
+        content: null,
+        status: 'published',
+        author: publishedData.author,
+        updatedAt: now,
+        publishedAt: publishedData.publishedAt,
+        tags: JSON.stringify(publishedData.tags),
+        categories: JSON.stringify(publishedData.categories),
+      })
+      .where(eq(posts.id, id));
+
+    const reverted: PostData = {
+      id: dbPost.id,
+      projectId: dbPost.projectId,
+      title: publishedData.title,
+      slug: publishedData.slug,
+      excerpt: publishedData.excerpt,
+      content: publishedData.content,
+      status: 'published',
+      author: publishedData.author,
+      createdAt: dbPost.createdAt,
+      updatedAt: now,
+      publishedAt: publishedData.publishedAt,
+      tags: publishedData.tags || [],
+      categories: publishedData.categories || [],
+    };
+
+    // Update FTS index
+    if (client) {
+      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
+      await client.execute({
+        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [reverted.id, reverted.title, reverted.content, reverted.excerpt || '', reverted.tags.join(' '), reverted.categories.join(' ')],
+      });
+    }
+
+    this.emit('postUpdated', reverted);
+    return reverted;
   }
 
   async hasPublishedVersion(id: string): Promise<boolean> {
     const db = getDatabase().getLocal();
     const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
-    return !!(dbPost && dbPost.publishedContent);
+    return !!(dbPost && dbPost.filePath && dbPost.filePath !== '');
   }
 
   async unpublishPost(id: string): Promise<PostData | null> {
-    return this.updatePost(id, {
+    const db = getDatabase().getLocal();
+    const client = getDatabase().getLocalClient();
+    const existing = await this.getPost(id);
+    
+    if (!existing) {
+      return null;
+    }
+
+    const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
+    if (!dbPost) {
+      return null;
+    }
+
+    // Delete the published file (content moves to DB)
+    if (dbPost.filePath) {
+      try {
+        await fs.unlink(dbPost.filePath);
+      } catch {
+        // File might not exist
+      }
+    }
+
+    const updated: PostData = {
+      ...existing,
       status: 'draft',
-      publishedAt: undefined,
-    });
+      updatedAt: new Date(),
+    };
+
+    const checksum = this.calculateChecksum(updated.content);
+
+    // Store content in DB, clear filePath
+    await db.update(posts)
+      .set({
+        content: updated.content,
+        status: 'draft',
+        filePath: '',
+        updatedAt: updated.updatedAt,
+        publishedAt: null,
+        syncStatus: 'pending',
+        checksum,
+      })
+      .where(eq(posts.id, id));
+
+    // Update FTS index
+    if (client) {
+      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
+      await client.execute({
+        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [updated.id, updated.title, updated.content, updated.excerpt || '', updated.tags.join(' '), updated.categories.join(' ')],
+      });
+    }
+
+    this.emit('postUpdated', updated);
+    return updated;
   }
 
   async rebuildDatabaseFromFiles(): Promise<void> {
-    const postsDir = this.getPostsDir();
+    const postsBaseDir = this.getPostsBaseDir();
     const task: Task<void> = {
       id: uuidv4(),
       name: 'Rebuild database from post files',
@@ -661,22 +819,38 @@ export class PostEngine extends EventEmitter {
         
         onProgress(0, 'Scanning posts directory...');
         
-        let files: string[] = [];
+        // Recursively find all .md files in the posts directory tree
+        const mdFiles: string[] = [];
+        const scanDir = async (dir: string) => {
+          try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                await scanDir(fullPath);
+              } else if (entry.name.endsWith('.md')) {
+                mdFiles.push(fullPath);
+              }
+            }
+          } catch {
+            // Directory might not exist
+          }
+        };
+
         try {
-          files = await fs.readdir(postsDir);
+          await fs.mkdir(postsBaseDir, { recursive: true });
         } catch {
-          // Directory might not exist
-          await fs.mkdir(postsDir, { recursive: true });
+          // Already exists
         }
-        const mdFiles = files.filter(f => f.endsWith('.md'));
+        await scanDir(postsBaseDir);
         
         onProgress(10, `Found ${mdFiles.length} post files`);
         
         for (let i = 0; i < mdFiles.length; i++) {
-          const file = mdFiles[i];
-          const filePath = path.join(postsDir, file);
+          const filePath = mdFiles[i];
+          const fileName = path.basename(filePath);
           
-          onProgress(10 + (80 * (i / mdFiles.length)), `Processing ${file}...`);
+          onProgress(10 + (80 * (i / mdFiles.length)), `Processing ${fileName}...`);
           
           const postData = await this.readPostFile(filePath);
           
@@ -685,21 +859,25 @@ export class PostEngine extends EventEmitter {
             const checksum = this.calculateChecksum(postData.content);
             
             if (existing) {
-              await db.update(posts)
-                .set({
-                  title: postData.title,
-                  slug: postData.slug,
-                  excerpt: postData.excerpt,
-                  status: postData.status,
-                  author: postData.author,
-                  updatedAt: postData.updatedAt,
-                  publishedAt: postData.publishedAt,
-                  filePath,
-                  checksum,
-                  tags: JSON.stringify(postData.tags),
-                  categories: JSON.stringify(postData.categories),
-                })
-                .where(eq(posts.id, postData.id));
+              // Only update if no active draft content in DB (don't overwrite edits)
+              if (!existing.content) {
+                await db.update(posts)
+                  .set({
+                    title: postData.title,
+                    slug: postData.slug,
+                    excerpt: postData.excerpt,
+                    content: null, // Content lives in the file, not DB
+                    status: 'published', // Files on disk = published
+                    author: postData.author,
+                    updatedAt: postData.updatedAt,
+                    publishedAt: postData.publishedAt,
+                    filePath,
+                    checksum,
+                    tags: JSON.stringify(postData.tags),
+                    categories: JSON.stringify(postData.categories),
+                  })
+                  .where(eq(posts.id, postData.id));
+              }
             } else {
               await db.insert(posts).values({
                 id: postData.id,
@@ -707,11 +885,12 @@ export class PostEngine extends EventEmitter {
                 title: postData.title,
                 slug: postData.slug,
                 excerpt: postData.excerpt,
-                status: postData.status,
+                content: null, // Content lives in the file, not DB
+                status: 'published', // Files on disk = published
                 author: postData.author,
                 createdAt: postData.createdAt,
                 updatedAt: postData.updatedAt,
-                publishedAt: postData.publishedAt,
+                publishedAt: postData.publishedAt || postData.updatedAt,
                 filePath,
                 syncStatus: 'pending',
                 checksum,
@@ -720,7 +899,7 @@ export class PostEngine extends EventEmitter {
               });
             }
 
-            // Update FTS index
+            // Update FTS index (use file content for search)
             if (client) {
               await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [postData.id] });
               await client.execute({
@@ -854,17 +1033,28 @@ export class PostEngine extends EventEmitter {
     // Clear all existing links
     await db.delete(postLinks);
     
-    // Get all posts
+    // Get all posts with content source info
     const allPosts = await db
-      .select({ id: posts.id, filePath: posts.filePath })
+      .select({ id: posts.id, filePath: posts.filePath, content: posts.content })
       .from(posts)
       .where(eq(posts.projectId, this.currentProjectId));
     
     for (const post of allPosts) {
       try {
-        const fileContent = await fs.readFile(post.filePath, 'utf-8');
-        const { content } = matter(fileContent);
-        await this.updatePostLinks(post.id, content);
+        let postContent: string;
+
+        // Draft content is in DB, published content is in file
+        if (post.content) {
+          postContent = post.content;
+        } else if (post.filePath) {
+          const fileContent = await fs.readFile(post.filePath, 'utf-8');
+          const { content } = matter(fileContent);
+          postContent = content;
+        } else {
+          continue;
+        }
+
+        await this.updatePostLinks(post.id, postContent);
       } catch (error) {
         console.error(`Failed to update links for post ${post.id}:`, error);
       }

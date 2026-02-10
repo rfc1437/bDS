@@ -12,28 +12,33 @@ export const projects = sqliteTable('projects', {
 });
 
 // Posts table - stores metadata for blog posts
+// Draft content is stored in the `content` column.
+// Published content lives on the filesystem; `filePath` points to the .md file.
+// When a post is published, `content` is cleared (moved to file).
+// When a published post is edited, `content` holds draft changes and status becomes 'draft'.
 export const posts = sqliteTable('posts', {
   projectId: text('project_id').notNull(),
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   slug: text('slug').notNull().unique(),
   excerpt: text('excerpt'),
+  content: text('content'), // Draft body text (null/empty when published — content is in the file)
   status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull().default('draft'),
   author: text('author'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   publishedAt: integer('published_at', { mode: 'timestamp' }),
-  filePath: text('file_path').notNull(),
+  filePath: text('file_path').notNull().default(''), // Empty for never-published drafts
   syncStatus: text('sync_status', { enum: ['pending', 'synced', 'conflict'] }).notNull().default('pending'),
   syncedAt: integer('synced_at', { mode: 'timestamp' }),
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
   categories: text('categories'), // JSON array stored as text
-  // Published snapshot - stores the last published version for discard functionality
+  // Legacy columns (kept for migration compatibility, no longer written)
   publishedTitle: text('published_title'),
   publishedContent: text('published_content'),
-  publishedTags: text('published_tags'), // JSON array stored as text
-  publishedCategories: text('published_categories'), // JSON array stored as text
+  publishedTags: text('published_tags'),
+  publishedCategories: text('published_categories'),
   publishedExcerpt: text('published_excerpt'),
 });
 

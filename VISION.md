@@ -54,7 +54,22 @@ Posts in draft are automatically saved during edit every 20 seconds and a dot in
 information about its state as unsaved. The user can force the save with the standard hotkey for that
 purpose or just wait. Switching to another post will also save a draft automatically.
 
+Important for the handling of posts is that draft content is always kept in the database and only when
+the user uses the publish button the content is moved to the filesystem and the content in the database
+is set to empty again. This is meant to keep draft content in the database, as it is volatile, and only
+published content in filesystem, where it is then later used by the publishing pipeline.
+
+So only posts in state draft have content in the database, but whenever something goes to state published,
+the draft content is set to empty. draft content contains text content as well as metadata content that
+was changed. So even if the user changes tags or the category or the title or whatnot, the actual data
+is first only kept in the database and only on publish moved to the file.
+
+Database rebuild at startup is not overwriting draft content, it is only recreating missing posts.
+
 Published content is only ever updated when the publish action is done by the user.
+
+Deletion warns if some media file or post is dependent on the one you are about to delete, because that
+will break the relation.
 
 ## UI and UX specifics
 

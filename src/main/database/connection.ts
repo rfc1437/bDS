@@ -259,6 +259,14 @@ export class DatabaseConnection {
       await this.localClient.execute("ALTER TABLE posts ADD COLUMN published_excerpt TEXT");
     }
 
+    // Migration: Add content column for draft body text stored in DB
+    const contentCol = await this.localClient.execute(
+      "SELECT name FROM pragma_table_info('posts') WHERE name = 'content'"
+    );
+    if (contentCol.rows.length === 0) {
+      await this.localClient.execute("ALTER TABLE posts ADD COLUMN content TEXT");
+    }
+
     // Create FTS5 virtual table for full-text search
     await this.localClient.execute(`
       CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(

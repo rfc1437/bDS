@@ -30,7 +30,10 @@ const App: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        // Load posts
+        // First, get active project to set the correct context in backend engines
+        await window.electronAPI?.projects.getActive();
+        
+        // Load posts (now with correct project context)
         const posts = await window.electronAPI?.posts.getAll();
         if (posts) {
           setPosts(posts as PostData[]);

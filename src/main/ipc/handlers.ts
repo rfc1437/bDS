@@ -37,8 +37,18 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('projects:getActive', async () => {
-    const engine = getProjectEngine();
-    return engine.getActiveProject();
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+    
+    // Ensure post and media engines have the correct project context
+    if (project) {
+      const postEngine = getPostEngine();
+      const mediaEngine = getMediaEngine();
+      postEngine.setProjectContext(project.id);
+      mediaEngine.setProjectContext(project.id);
+    }
+    
+    return project;
   });
 
   ipcMain.handle('projects:setActive', async (_, id: string) => {

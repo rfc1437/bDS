@@ -102,7 +102,9 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     
     return () => {
       const pending = pendingChangesRef.current;
-      if (pending && pending.postId === prevPostId && pending.isDirty) {
+      // Only auto-save if the post still exists in the store (not deleted/discarded)
+      const postStillExists = useAppStore.getState().posts.some(p => p.id === prevPostId);
+      if (pending && pending.postId === prevPostId && pending.isDirty && postStillExists) {
         // Fire and forget auto-save
         window.electronAPI?.posts.update(pending.postId, {
           title: pending.title,
@@ -245,6 +247,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       } else {
         // Never published - delete the post entirely
         await window.electronAPI?.posts.delete(post.id);
+        // Clear pending ref to prevent auto-save on unmount from resurrecting the post
+        pendingChangesRef.current = null;
         useAppStore.getState().removePost(post.id);
         useAppStore.getState().setSelectedPost(null);
         showToast.success('Draft deleted');
@@ -264,6 +268,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     if (confirm('Are you sure you want to delete this post?')) {
       try {
         await window.electronAPI?.posts.delete(post.id);
+        // Clear pending ref to prevent auto-save on unmount from resurrecting the post
+        pendingChangesRef.current = null;
         useAppStore.getState().removePost(post.id);
         useAppStore.getState().setSelectedPost(null);
         showToast.success('Post deleted');
@@ -341,18 +347,20 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               Unpublish
             </button>
           )}
-          {hasPublishedVersion && (
+          {post.status === 'draft' && (
             <button 
               onClick={handleDiscard} 
-              className="secondary"
-              title="Revert to last published version"
+              className="secondary danger"
+              title={hasPublishedVersion ? "Revert to last published version" : "Delete this draft permanently"}
             >
-              Discard Changes
+              {hasPublishedVersion ? 'Discard Changes' : 'Discard Draft'}
             </button>
           )}
-          <button onClick={handleDelete} className="secondary danger" title="Delete this post permanently">
-            Delete
-          </button>
+          {post.status === 'published' && (
+            <button onClick={handleDelete} className="secondary danger" title="Delete this post permanently">
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
