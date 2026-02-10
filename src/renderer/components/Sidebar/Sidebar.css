@@ -201,6 +201,42 @@
   padding: 0 12px 12px;
 }
 
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 12px;
+}
+
+.settings-nav-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--vscode-sideBar-foreground);
+  border-radius: 3px;
+}
+
+.settings-nav-entry-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.settings-nav-badge {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--vscode-testing-iconPassed, #73c991);
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  padding: 8px 12px;
+  line-height: 1.5;
+}
+
 .settings-group {
   margin-bottom: 24px;
 }

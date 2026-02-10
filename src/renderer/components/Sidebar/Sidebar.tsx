@@ -579,23 +579,8 @@ const MediaList: React.FC = () => {
   );
 };
 
-const SettingsPanel: React.FC = () => {
+const SettingsNav: React.FC = () => {
   const { syncConfigured } = useAppStore();
-  const [tursoUrl, setTursoUrl] = React.useState('');
-  const [tursoToken, setTursoToken] = React.useState('');
-
-  const handleSaveSync = async () => {
-    try {
-      await window.electronAPI?.sync.configure({
-        tursoUrl,
-        tursoAuthToken: tursoToken,
-        autoSync: true,
-        syncInterval: 5,
-      });
-    } catch (error) {
-      console.error('Failed to configure sync:', error);
-    }
-  };
 
   return (
     <div className="sidebar-content settings-panel">
@@ -605,61 +590,27 @@ const SettingsPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="settings-group">
-        <h3>Cloud Sync (Turso/LibSQL)</h3>
-        <div className="settings-field">
-          <label>Turso Database URL</label>
-          <input
-            type="text"
-            placeholder="libsql://your-db.turso.io"
-            value={tursoUrl}
-            onChange={(e) => setTursoUrl(e.target.value)}
-          />
+      <div className="settings-nav-list">
+        <div className="settings-nav-entry">
+          <span className="settings-nav-entry-icon">📝</span>
+          <span>Editor</span>
         </div>
-        <div className="settings-field">
-          <label>Auth Token</label>
-          <input
-            type="password"
-            placeholder="Your auth token"
-            value={tursoToken}
-            onChange={(e) => setTursoToken(e.target.value)}
-          />
+        <div className="settings-nav-entry">
+          <span className="settings-nav-entry-icon">🔄</span>
+          <span>Sync</span>
+          {syncConfigured && <span className="settings-nav-badge">✓</span>}
         </div>
-        <button onClick={handleSaveSync}>
-          {syncConfigured ? 'Update Sync Settings' : 'Enable Sync'}
-        </button>
-        
-        {syncConfigured && (
-          <p className="settings-status status-published">✓ Sync is configured</p>
-        )}
+        <div className="settings-nav-entry">
+          <span className="settings-nav-entry-icon">🚀</span>
+          <span>Publishing</span>
+        </div>
+        <div className="settings-nav-entry">
+          <span className="settings-nav-entry-icon">🗄️</span>
+          <span>Data</span>
+        </div>
       </div>
 
-      <div className="settings-group">
-        <h3>Data Management</h3>
-        <button 
-          className="secondary"
-          onClick={() => window.electronAPI?.posts.rebuildFromFiles()}
-        >
-          Rebuild Posts Database
-        </button>
-        <button 
-          className="secondary"
-          onClick={() => window.electronAPI?.media.rebuildFromFiles()}
-        >
-          Rebuild Media Database
-        </button>
-        <button 
-          className="secondary"
-          onClick={async () => {
-            const paths = await window.electronAPI?.app.getDataPaths();
-            if (paths) {
-              window.electronAPI?.app.openFolder(paths.posts);
-            }
-          }}
-        >
-          Open Data Folder
-        </button>
-      </div>
+      <p className="settings-hint">Configure settings in the main editor area.</p>
     </div>
   );
 };
@@ -675,7 +626,7 @@ export const Sidebar: React.FC = () => {
     <div className="sidebar">
       {activeView === 'posts' && <PostsList />}
       {activeView === 'media' && <MediaList />}
-      {activeView === 'settings' && <SettingsPanel />}
+      {activeView === 'settings' && <SettingsNav />}
     </div>
   );
 };

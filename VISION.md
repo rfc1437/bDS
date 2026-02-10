@@ -8,6 +8,10 @@ sync to a cloud system for syncing data and also rendering the full blog.
 
 create a electron app in this folder that uses typescript for all the logic code and sqlite and a proper database framework around it for local storage of data and turso/libsql to sync against a cloud location for having offline work capabilities with syncing. The UI should be aligned with the UI patterns used by vscode. The name of the application is "blogging Desktop Server" and the shortname is bDS. Start with default layout for edit and view menues and things like that. I don't want the app to use raw SQL, I want some proper layer between those and proper wiring where all actual functional code  is kept in engine classes and the UI realy just does  presentation and reacts to state changes properly, so that long-running processes can properly integrate as async tasks.
 
+The main area of the window must be a tabbled view, where multiple tabs can be open at the same time and are
+retained over program runs. The tabs can be different tabs like media file tabs, post tabs for multiple
+posts and setting tabs or whatever will come later.
+
 We need a good way to handle the syncing of the non-metadata components (posts and media files), because that
 is not part of the database sync. One way could be using something like dropbox in the background, so that
 the posts/ and media/ folders are automatically synced to some area in dropbox and transported that way.

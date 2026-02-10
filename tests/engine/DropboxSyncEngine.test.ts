@@ -861,8 +861,8 @@ describe('DropboxSyncEngine', () => {
       }));
     });
 
-    it('should start watching local directories', () => {
-      engine.startWatching();
+    it('should start watching local directories', async () => {
+      await engine.startWatching();
 
       expect(mockChokidarWatch).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -876,45 +876,45 @@ describe('DropboxSyncEngine', () => {
       );
     });
 
-    it('should set status to watching when watching starts', () => {
-      engine.startWatching();
+    it('should set status to watching when watching starts', async () => {
+      await engine.startWatching();
       expect(engine.getStatus()).toBe('watching');
     });
 
-    it('should stop watching when requested', () => {
-      engine.startWatching();
+    it('should stop watching when requested', async () => {
+      await engine.startWatching();
       engine.stopWatching();
 
       expect(mockWatcher.close).toHaveBeenCalled();
     });
 
-    it('should set status to idle when watching stops', () => {
-      engine.startWatching();
+    it('should set status to idle when watching stops', async () => {
+      await engine.startWatching();
       engine.stopWatching();
       expect(engine.getStatus()).toBe('idle');
     });
 
-    it('should emit watchStarted event', () => {
+    it('should emit watchStarted event', async () => {
       const handler = vi.fn();
       engine.on('watchStarted', handler);
 
-      engine.startWatching();
+      await engine.startWatching();
 
       expect(handler).toHaveBeenCalled();
     });
 
-    it('should emit watchStopped event', () => {
+    it('should emit watchStopped event', async () => {
       const handler = vi.fn();
       engine.on('watchStopped', handler);
 
-      engine.startWatching();
+      await engine.startWatching();
       engine.stopWatching();
 
       expect(handler).toHaveBeenCalled();
     });
 
-    it('should register add, change, and unlink handlers', () => {
-      engine.startWatching();
+    it('should register add, change, and unlink handlers', async () => {
+      await engine.startWatching();
 
       const onCalls = mockWatcher.on.mock.calls.map((call: any[]) => call[0]);
       expect(onCalls).toContain('add');

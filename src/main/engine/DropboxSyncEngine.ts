@@ -4,7 +4,18 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { Dropbox } from 'dropbox';
-import { watch as chokidarWatch, type FSWatcher } from 'chokidar';
+import type { FSWatcher } from 'chokidar';
+
+type ChokidarWatchFn = (paths: string | readonly string[], options?: Record<string, unknown>) => FSWatcher;
+
+let _chokidarWatch: ChokidarWatchFn | null = null;
+async function getChokidarWatch(): Promise<ChokidarWatchFn> {
+  if (!_chokidarWatch) {
+    const chokidar = await import('chokidar');
+    _chokidarWatch = chokidar.watch as unknown as ChokidarWatchFn;
+  }
+  return _chokidarWatch;
+}
 
 // ============================================
 // Types & Interfaces
@@ -83,7 +94,7 @@ export class DropboxSyncEngine extends EventEmitter {
   private status: DropboxSyncStatus = 'idle';
   private config: DropboxSyncConfig | null = null;
   private dropboxClient: Dropbox;
-  private watchFn: typeof chokidarWatch;
+  private watchFn: ChokidarWatchFn | null;
   private watcher: FSWatcher | null = null;
   private pollIntervalId: NodeJS.Timeout | null = null;
   private pendingConflicts: Map<string, DropboxConflict> = new Map();
@@ -98,10 +109,17 @@ export class DropboxSyncEngine extends EventEmitter {
   // Track files we wrote ourselves (to ignore watcher events)
   private recentDownloads: Set<string> = new Set();
 
-  constructor(dropboxClient?: Dropbox, watchFn?: typeof chokidarWatch) {
+  constructor(dropboxClient?: Dropbox, watchFn?: ChokidarWatchFn) {
     super();
     this.dropboxClient = dropboxClient || new Dropbox({});
-    this.watchFn = watchFn || chokidarWatch;
+    this.watchFn = watchFn || null;
+  }
+
+  private async getWatchFn(): Promise<ChokidarWatchFn> {
+    if (!this.watchFn) {
+      this.watchFn = await getChokidarWatch();
+    }
+    return this.watchFn;
   }
 
   // ============================================
@@ -681,7 +699,7 @@ export class DropboxSyncEngine extends EventEmitter {
   // Local File Watching
   // ============================================
 
-  startWatching(): void {
+  async startWatching(): Promise<void> {
     if (!this.config) return;
 
     const watchPaths = [
@@ -689,7 +707,8 @@ export class DropboxSyncEngine extends EventEmitter {
       this.config.localMediaDir,
     ];
 
-    this.watcher = this.watchFn(watchPaths, {
+    const watchFn = await this.getWatchFn();
+    this.watcher = watchFn(watchPaths, {
       ignoreInitial: true,
       persistent: true,
       awaitWriteFinish: {

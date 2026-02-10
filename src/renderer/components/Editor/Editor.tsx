@@ -6,6 +6,7 @@ import { WysiwygEditor } from '../WysiwygEditor';
 import { Lightbox, useMarkdownImages } from '../Lightbox';
 import { PostLinks } from '../PostLinks';
 import { ErrorModal } from '../ErrorModal';
+import { SettingsView } from '../SettingsView';
 import './Editor.css';
 
 // Simple markdown to HTML converter for preview
@@ -757,6 +758,15 @@ export const Editor: React.FC = () => {
   const renderErrorModal = () => (
     <ErrorModal error={errorModal} onClose={hideErrorModal} />
   );
+
+  if (activeView === 'settings') {
+    return (
+      <>
+        <SettingsView />
+        {renderErrorModal()}
+      </>
+    );
+  }
 
   if (activeView === 'posts' && selectedPostId) {
     const post = posts.find(p => p.id === selectedPostId);
