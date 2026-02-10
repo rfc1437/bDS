@@ -1,10 +1,17 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import os from 'os';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
   test: {
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        maxForks: Math.max(1, Math.floor(os.cpus().length / 2)),
+      },
+    },
     globals: true,
     // Use jsdom for React component tests, node for main process tests
     environment: 'jsdom',
