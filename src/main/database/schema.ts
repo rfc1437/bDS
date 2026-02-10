@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // Projects table - stores blog projects/websites
 export const projects = sqliteTable('projects', {
@@ -20,7 +20,7 @@ export const posts = sqliteTable('posts', {
   projectId: text('project_id').notNull(),
   id: text('id').primaryKey(),
   title: text('title').notNull(),
-  slug: text('slug').notNull().unique(),
+  slug: text('slug').notNull(),
   excerpt: text('excerpt'),
   content: text('content'), // Draft body text (null/empty when published — content is in the file)
   status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull().default('draft'),
@@ -40,7 +40,10 @@ export const posts = sqliteTable('posts', {
   publishedTags: text('published_tags'),
   publishedCategories: text('published_categories'),
   publishedExcerpt: text('published_excerpt'),
-});
+}, (table) => ({
+  // Composite unique index: slug must be unique within each project
+  projectSlugIdx: uniqueIndex('posts_project_slug_idx').on(table.projectId, table.slug),
+}));
 
 // Media table - stores metadata for images and other media
 export const media = sqliteTable('media', {

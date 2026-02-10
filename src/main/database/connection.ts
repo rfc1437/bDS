@@ -137,7 +137,7 @@ export class DatabaseConnection {
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL DEFAULT 'default',
         title TEXT NOT NULL,
-        slug TEXT NOT NULL UNIQUE,
+        slug TEXT NOT NULL,
         excerpt TEXT,
         status TEXT NOT NULL DEFAULT 'draft',
         author TEXT,
@@ -211,6 +211,7 @@ export class DatabaseConnection {
       CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
       CREATE INDEX IF NOT EXISTS idx_post_links_source ON post_links(source_post_id);
       CREATE INDEX IF NOT EXISTS idx_post_links_target ON post_links(target_post_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS posts_project_slug_idx ON posts(project_id, slug);
     `);
 
     // Check if project_id column exists in posts table, add if missing (migration)
@@ -265,6 +266,83 @@ export class DatabaseConnection {
     );
     if (contentCol.rows.length === 0) {
       await this.localClient.execute("ALTER TABLE posts ADD COLUMN content TEXT");
+    }
+
+    // Migration: Update slug unique constraint to be project-scoped
+    // SQLite doesn't allow dropping column-level UNIQUE constraints, so we must recreate the table
+    // Check if the posts table has a column-level UNIQUE on slug (from the table definition)
+    const tableInfo = await this.localClient.execute(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='posts'"
+    );
+    const tableSql = tableInfo.rows[0]?.sql as string || '';
+    const hasColumnLevelUnique = tableSql.includes('slug TEXT NOT NULL UNIQUE') || 
+                                  tableSql.includes('slug TEXT UNIQUE') ||
+                                  /slug\s+TEXT[^,]*UNIQUE/i.test(tableSql);
+
+    if (hasColumnLevelUnique) {
+      console.log('Migrating posts table to remove column-level UNIQUE constraint on slug...');
+      
+      // Create new table without the UNIQUE constraint
+      await this.localClient.execute(`
+        CREATE TABLE IF NOT EXISTS posts_new (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL DEFAULT 'default',
+          title TEXT NOT NULL,
+          slug TEXT NOT NULL,
+          excerpt TEXT,
+          content TEXT,
+          status TEXT NOT NULL DEFAULT 'draft',
+          author TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          published_at INTEGER,
+          file_path TEXT NOT NULL DEFAULT '',
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          synced_at INTEGER,
+          checksum TEXT,
+          tags TEXT,
+          categories TEXT,
+          published_title TEXT,
+          published_content TEXT,
+          published_tags TEXT,
+          published_categories TEXT,
+          published_excerpt TEXT
+        )
+      `);
+
+      // Copy data
+      await this.localClient.execute(`
+        INSERT INTO posts_new 
+        SELECT id, project_id, title, slug, excerpt, content, status, author, 
+               created_at, updated_at, published_at, file_path, sync_status,
+               synced_at, checksum, tags, categories, published_title, 
+               published_content, published_tags, published_categories, published_excerpt
+        FROM posts
+      `);
+
+      // Drop old table and rename new one
+      await this.localClient.execute('DROP TABLE posts');
+      await this.localClient.execute('ALTER TABLE posts_new RENAME TO posts');
+
+      // Recreate indexes
+      await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug)');
+      await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)');
+      await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_posts_sync_status ON posts(sync_status)');
+      await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at)');
+      await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_posts_project_id ON posts(project_id)');
+      await this.localClient.execute('CREATE UNIQUE INDEX IF NOT EXISTS posts_project_slug_idx ON posts(project_id, slug)');
+
+      console.log('Posts table migration complete');
+    } else {
+      // Just ensure the composite unique index exists
+      const compositeSlugIndex = await this.localClient.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='posts_project_slug_idx' AND tbl_name='posts'"
+      );
+      if (compositeSlugIndex.rows.length === 0) {
+        await this.localClient.execute(
+          "CREATE UNIQUE INDEX posts_project_slug_idx ON posts(project_id, slug)"
+        );
+      }
     }
 
     // Create FTS5 virtual table for full-text search
