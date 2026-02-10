@@ -114,6 +114,14 @@ a gear icon in the bottom of the iconbar. Also login credentials can be managed 
 of the icon bar directly above the gear icon. This is similar to what vscode does, separating logins and
 settings.
 
+Tags are something that should be mainly focus on reusing but need easy ways to add new tags. This should
+not be a simple text field, but more a feature like tags in gitlab, where you can easily select multiple
+available tags, but also can quickly create new tags. Tags should have a color and there should be a way
+to manage tags in the preferences, too, so that users can create tags upfront to posts.
+
+Categories are a simple selection via dropdown and a preferences panel that allows category management.
+Categories are mainly used to denote different styles of posts and posts are only of one style.
+
 ## Organizing
 
 Blog posts should be organized in the app in the main post view where the sidebar lists posts and the main

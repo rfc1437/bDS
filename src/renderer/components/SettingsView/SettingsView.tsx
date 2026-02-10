@@ -4,7 +4,7 @@ import { showToast } from '../Toast';
 import './SettingsView.css';
 
 // Settings categories matching VS Code style
-type SettingsCategory = 'editor' | 'sync' | 'publishing' | 'data';
+type SettingsCategory = 'editor' | 'content' | 'sync' | 'publishing' | 'data';
 
 interface Credentials {
   // Turso Cloud Sync
@@ -45,9 +45,13 @@ const SearchIcon = () => (
   </svg>
 );
 
+// Default post categories based on VISION.md
+const DEFAULT_POST_CATEGORIES = ['article', 'picture', 'aside', 'page'];
+
 // Category definitions
 const categories: { id: SettingsCategory; label: string; icon: string }[] = [
   { id: 'editor', label: 'Editor', icon: '📝' },
+  { id: 'content', label: 'Content', icon: '📋' },
   { id: 'sync', label: 'Sync', icon: '🔄' },
   { id: 'publishing', label: 'Publishing', icon: '🚀' },
   { id: 'data', label: 'Data Management', icon: '🗄️' },
@@ -96,14 +100,27 @@ export const SettingsView: React.FC = () => {
   const [showSecrets, setShowSecrets] = useState(false);
   const [dropboxConfigured, setDropboxConfigured] = useState(false);
   const [dropboxLastSync, setDropboxLastSync] = useState<string | null>(null);
+  
+  // Post categories management
+  const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
 
-  // Load saved credentials
+  // Load saved credentials and categories
   useEffect(() => {
-    const loadCredentials = async () => {
+    const loadSettings = async () => {
       try {
         const savedCreds = localStorage.getItem('bds-credentials');
         if (savedCreds) {
           setCredentials({ ...defaultCredentials, ...JSON.parse(savedCreds) });
+        }
+
+        // Load saved post categories
+        const savedCategories = localStorage.getItem('bds-categories');
+        if (savedCategories) {
+          const categories = JSON.parse(savedCategories);
+          if (Array.isArray(categories) && categories.length > 0) {
+            setPostCategories(categories);
+          }
         }
 
         // Check Dropbox status
@@ -115,10 +132,10 @@ export const SettingsView: React.FC = () => {
           setDropboxLastSync(lastSync || null);
         }
       } catch (error) {
-        console.error('Failed to load credentials:', error);
+        console.error('Failed to load settings:', error);
       }
     };
-    loadCredentials();
+    loadSettings();
   }, []);
 
   // Save credentials and configure backends
@@ -270,6 +287,85 @@ export const SettingsView: React.FC = () => {
             <option value="preview">Preview (Read-only)</option>
           </select>
         </SettingRow>
+      </SettingSection>
+    </>
+  );
+
+  // Handlers for post categories management
+  const handleAddCategory = () => {
+    const trimmed = newCategoryInput.trim().toLowerCase();
+    if (trimmed && !postCategories.includes(trimmed)) {
+      const updated = [...postCategories, trimmed];
+      setPostCategories(updated);
+      localStorage.setItem('bds-categories', JSON.stringify(updated));
+      setNewCategoryInput('');
+      showToast.success(`Category "${trimmed}" added`);
+    } else if (postCategories.includes(trimmed)) {
+      showToast.error('Category already exists');
+    }
+  };
+
+  const handleRemoveCategory = (categoryToRemove: string) => {
+    if (postCategories.length <= 1) {
+      showToast.error('Must have at least one category');
+      return;
+    }
+    const updated = postCategories.filter(c => c !== categoryToRemove);
+    setPostCategories(updated);
+    localStorage.setItem('bds-categories', JSON.stringify(updated));
+    showToast.success(`Category "${categoryToRemove}" removed`);
+  };
+
+  const handleResetCategories = () => {
+    setPostCategories(DEFAULT_POST_CATEGORIES);
+    localStorage.setItem('bds-categories', JSON.stringify(DEFAULT_POST_CATEGORIES));
+    showToast.success('Categories reset to defaults');
+  };
+
+  const renderContentSettings = () => (
+    <>
+      <SettingSection
+        title="Post Categories"
+        description="Manage the available categories for blog posts. Each post can have one category that determines its display template."
+      >
+        <div className="categories-list">
+          {postCategories.map((cat) => (
+            <div key={cat} className="category-item">
+              <span className="category-name">{cat}</span>
+              <button
+                className="category-remove"
+                onClick={() => handleRemoveCategory(cat)}
+                title={`Remove "${cat}" category`}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="category-add-form">
+          <input
+            type="text"
+            placeholder="New category name..."
+            value={newCategoryInput}
+            onChange={(e) => setNewCategoryInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddCategory();
+              }
+            }}
+          />
+          <button className="primary" onClick={handleAddCategory}>
+            Add Category
+          </button>
+        </div>
+
+        <div className="setting-actions">
+          <button className="secondary" onClick={handleResetCategories}>
+            Reset to Defaults
+          </button>
+        </div>
       </SettingSection>
     </>
   );
@@ -647,6 +743,7 @@ export const SettingsView: React.FC = () => {
       return (
         <>
           {renderEditorSettings()}
+          {renderContentSettings()}
           {renderSyncSettings()}
           {renderPublishingSettings()}
           {renderDataSettings()}
@@ -657,6 +754,8 @@ export const SettingsView: React.FC = () => {
     switch (activeCategory) {
       case 'editor':
         return renderEditorSettings();
+      case 'content':
+        return renderContentSettings();
       case 'sync':
         return renderSyncSettings();
       case 'publishing':

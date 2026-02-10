@@ -57,7 +57,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const [title, setTitle] = useState(post.title);
   const [content, setContent] = useState(post.content);
   const [tags, setTags] = useState(post.tags.join(', '));
-  const [categories, setCategories] = useState(post.categories.join(', '));
+  const [category, setCategory] = useState(post.categories[0] || 'article');
+  const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
@@ -72,6 +73,21 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     window.electronAPI?.posts.hasPublishedVersion(post.id).then(setHasPublishedVersion);
   }, [post.id]);
 
+  // Load available categories from localStorage
+  useEffect(() => {
+    const savedCategories = localStorage.getItem('bds-categories');
+    if (savedCategories) {
+      try {
+        const parsed = JSON.parse(savedCategories);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAvailableCategories(parsed);
+        }
+      } catch {
+        // Keep defaults
+      }
+    }
+  }, []);
+
   // Extract images from content for lightbox
   const images = useMarkdownImages(content);
 
@@ -80,7 +96,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     title: string;
     content: string;
     tags: string;
-    categories: string;
+    category: string;
     postId: string;
     isDirty: boolean;
   } | null>(null);
@@ -91,11 +107,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       title,
       content,
       tags,
-      categories,
+      category,
       postId: post.id,
       isDirty,
     };
-  }, [title, content, tags, categories, post.id, isDirty]);
+  }, [title, content, tags, category, post.id, isDirty]);
 
   // Auto-save when switching away from a post or unmounting
   useEffect(() => {
@@ -111,7 +127,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           title: pending.title,
           content: pending.content,
           tags: pending.tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
-          categories: pending.categories.split(',').map(c => c.trim()).filter(c => c.length > 0),
+          categories: pending.category ? [pending.category] : ['article'],
         }).then((updated) => {
           if (updated) {
             useAppStore.getState().updatePost(pending.postId, updated as Partial<PostData>);
@@ -129,24 +145,25 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     setTitle(post.title);
     setContent(post.content);
     setTags(post.tags.join(', '));
-    setCategories(post.categories.join(', '));
+    setCategory(post.categories[0] || 'article');
     markClean(post.id);
   }, [post.id, post.title, post.content, post.tags, post.categories, markClean]);
 
   // Track changes
   useEffect(() => {
+    const currentCategory = post.categories[0] || 'article';
     const hasChanges = 
       title !== post.title ||
       content !== post.content ||
       tags !== post.tags.join(', ') ||
-      categories !== post.categories.join(', ');
+      category !== currentCategory;
     
     if (hasChanges) {
       markDirty(post.id);
     } else {
       markClean(post.id);
     }
-  }, [title, content, tags, categories, post, markDirty, markClean]);
+  }, [title, content, tags, category, post, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -163,7 +180,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
         title,
         content,
         tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
-        categories: categories.split(',').map(c => c.trim()).filter(c => c.length > 0),
+        categories: category ? [category] : ['article'],
       });
       
       if (updated) {
@@ -182,7 +199,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [post.id, title, content, tags, categories, isDirty, isSaving, updatePost, markClean, showErrorModal]);
+  }, [post.id, title, content, tags, category, isDirty, isSaving, updatePost, markClean, showErrorModal]);
 
   const handlePublish = async () => {
     await handleSave();
@@ -240,7 +257,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           setTitle(reverted.title);
           setContent(reverted.content);
           setTags(reverted.tags.join(', '));
-          setCategories(reverted.categories.join(', '));
+          setCategory(reverted.categories[0] || 'article');
           updatePost(post.id, reverted as Partial<PostData>);
           markClean(post.id);
           showToast.success('Reverted to last published version');
@@ -396,13 +413,15 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               />
             </div>
             <div className="editor-field">
-              <label>Categories (comma-separated)</label>
-              <input
-                type="text"
-                value={categories}
-                onChange={(e) => setCategories(e.target.value)}
-                placeholder="category1, category2"
-              />
+              <label>Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {availableCategories.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
           </div>
           
