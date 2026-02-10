@@ -29,9 +29,9 @@ export class ProjectEngine extends EventEmitter {
       .replace(/^-|-$/g, '');
   }
 
-  private async ensureProjectDirectories(slug: string): Promise<void> {
+  private async ensureProjectDirectories(projectId: string): Promise<void> {
     const userDataPath = app.getPath('userData');
-    const projectDir = path.join(userDataPath, 'projects', slug);
+    const projectDir = path.join(userDataPath, 'projects', projectId);
     const postsDir = path.join(projectDir, 'posts');
     const mediaDir = path.join(projectDir, 'media');
 
@@ -66,8 +66,8 @@ export class ProjectEngine extends EventEmitter {
       isActive: false,
     };
 
-    // Create directories
-    await this.ensureProjectDirectories(finalSlug);
+    // Create directories using project ID (not slug)
+    await this.ensureProjectDirectories(id);
 
     // Insert into database
     const dbProject: NewProject = {
@@ -219,11 +219,11 @@ export class ProjectEngine extends EventEmitter {
     return project;
   }
 
-  getProjectPaths(projectSlug: string): { posts: string; media: string } {
+  getProjectPaths(projectId: string): { posts: string; media: string } {
     const userDataPath = app.getPath('userData');
     return {
-      posts: path.join(userDataPath, 'projects', projectSlug, 'posts'),
-      media: path.join(userDataPath, 'projects', projectSlug, 'media'),
+      posts: path.join(userDataPath, 'projects', projectId, 'posts'),
+      media: path.join(userDataPath, 'projects', projectId, 'media'),
     };
   }
 }

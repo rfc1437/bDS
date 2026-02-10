@@ -254,19 +254,21 @@ describe('ProjectEngine', () => {
 
   describe('getProjectPaths', () => {
     it('should return paths for posts and media directories', () => {
-      const paths = projectEngine.getProjectPaths('my-blog');
+      const projectId = 'test-project-id';
+      const paths = projectEngine.getProjectPaths(projectId);
 
-      expect(paths.posts).toContain('my-blog');
+      expect(paths.posts).toContain(projectId);
       expect(paths.posts).toContain('posts');
-      expect(paths.media).toContain('my-blog');
+      expect(paths.media).toContain(projectId);
       expect(paths.media).toContain('media');
     });
 
-    it('should include project slug in paths', () => {
-      const paths = projectEngine.getProjectPaths('custom-project');
+    it('should include project ID in paths', () => {
+      const projectId = 'custom-project-uuid';
+      const paths = projectEngine.getProjectPaths(projectId);
 
-      expect(paths.posts).toContain('custom-project');
-      expect(paths.media).toContain('custom-project');
+      expect(paths.posts).toContain(projectId);
+      expect(paths.media).toContain(projectId);
     });
   });
 

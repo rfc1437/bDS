@@ -130,7 +130,13 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('posts:rebuildFromFiles', async () => {
+    // Ensure project context is current before rebuilding
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
     const engine = getPostEngine();
+    if (project) {
+      engine.setProjectContext(project.id);
+    }
     return engine.rebuildDatabaseFromFiles();
   });
 
@@ -231,7 +237,13 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('media:rebuildFromFiles', async () => {
+    // Ensure project context is current before rebuilding
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
     const engine = getMediaEngine();
+    if (project) {
+      engine.setProjectContext(project.id);
+    }
     return engine.rebuildDatabaseFromFiles();
   });
 
@@ -373,7 +385,16 @@ export function registerIpcHandlers(): void {
   // ============ App Handlers ============
 
   ipcMain.handle('app:getDataPaths', async () => {
-    return getDatabase().getDataPaths();
+    // Get paths for the active project
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    const projectId = activeProject?.id || 'default';
+    const paths = projectEngine.getProjectPaths(projectId);
+    return {
+      database: getDatabase().getDataPaths().database,
+      posts: paths.posts,
+      media: paths.media,
+    };
   });
 
   ipcMain.handle('app:openFolder', async (_, folderPath: string) => {
