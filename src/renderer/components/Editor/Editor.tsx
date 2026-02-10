@@ -373,7 +373,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Post title"
+              placeholder="Untitled"
             />
           </div>
           <div className="editor-field">
@@ -667,18 +667,17 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 };
 
 const WelcomeScreen: React.FC = () => {
-  const { addPost, setSelectedPost } = useAppStore();
+  const { setSelectedPost } = useAppStore();
 
   const handleNewPost = async () => {
     try {
       const newPost = await window.electronAPI?.posts.create({
-        title: 'Untitled',
+        title: '',
         content: '',
         tags: [],
         categories: [],
       });
       if (newPost) {
-        addPost(newPost as PostData);
         setSelectedPost(newPost.id);
       }
     } catch (error) {

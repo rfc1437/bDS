@@ -16,6 +16,11 @@ We need a good way to handle the syncing of the non-metadata components (posts a
 is not part of the database sync. One way could be using something like dropbox in the background, so that
 the posts/ and media/ folders are automatically synced to some area in dropbox and transported that way.
 
+In addition to dropbox sync, also provide a file sync handler that uses git as the mechanism. That way
+the user can provide a git URL to push to and pull from, where the app does regular fetch to see if stuff
+was there and has mechanisms to handle conflicts. This will work without special requirements for some
+cloud provider for the file data.
+
 Blog post metadata should be managed in the SQLite database in the user local folder, so it persists application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a markdown file with a properties segment in the top of the file with YAML like property definitions, so all metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the user local path, in that case storing the image file sand for each image file a properties sidecar file that uses the same header structure as for posts.
 
 The application must be able to support multiple projects (ie web sites), so there must be a way to create
@@ -198,6 +203,10 @@ check for duplicates and update tags or create new posts based on the process.
 Import runs can be shown in the main panel, so that the user can see what came with what import and can
 manage posts and media from imports that way. Migration is the main interesting part of this tool, because
 migrating blogs is hard work and needs to be properly supported.
+
+Migrating posts puts them into published state directly, not draft state, because that would make the
+database explode. The whole point of migration is to get those posts into a published state as soon as
+possible.
 
 ## Organizing II
 

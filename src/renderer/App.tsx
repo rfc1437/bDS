@@ -170,8 +170,8 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('menu:newPost', async () => {
         const post = await window.electronAPI?.posts.create({
-          title: 'New Post',
-          content: '# New Post\n\nStart writing...',
+          title: '',
+          content: '',
         });
         if (post) {
           setSelectedPost((post as PostData).id);

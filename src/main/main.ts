@@ -44,8 +44,14 @@ function createWindow(): void {
   }
 
   // Forward events to renderer
-  ipcMain.on('forward-to-renderer', (_event, eventName: string, ...args: unknown[]) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
+  // Note: ipcMain.emit() (used by forwardEvent in handlers) is a raw EventEmitter emit,
+  // so the first arg is NOT an IpcMainEvent — it's the event name string directly.
+  ipcMain.on('forward-to-renderer', (eventNameOrEvent: any, ...args: unknown[]) => {
+    // When called via ipcMain.emit(), first arg is the channel string directly
+    const eventName: string = typeof eventNameOrEvent === 'string'
+      ? eventNameOrEvent
+      : args.shift() as string;
+    if (mainWindow && !mainWindow.isDestroyed() && typeof eventName === 'string') {
       mainWindow.webContents.send(eventName, ...args);
     }
   });

@@ -232,7 +232,7 @@ export class PostEngine extends EventEmitter {
     const post: PostData = {
       id,
       projectId: data.projectId || this.currentProjectId,
-      title: data.title || 'Untitled',
+      title: data.title ?? '',
       slug,
       excerpt: data.excerpt,
       content: data.content || '',
@@ -303,11 +303,18 @@ export class PostEngine extends EventEmitter {
       newStatus = 'draft';
     }
 
+    // Auto-update slug when title changes, but only if post was never published
+    let newSlug = data.slug ?? existing.slug;
+    if (data.title !== undefined && data.title !== existing.title && !existing.publishedAt) {
+      newSlug = await this.generateUniqueSlug(data.title || 'untitled', id);
+    }
+
     const updated: PostData = {
       ...existing,
       ...data,
       id, // Ensure ID doesn't change
       projectId: existing.projectId, // Ensure projectId doesn't change
+      slug: newSlug,
       status: newStatus as 'draft' | 'published' | 'archived',
       updatedAt: new Date(),
     };

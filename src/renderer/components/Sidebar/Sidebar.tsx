@@ -324,15 +324,14 @@ const PostsList: React.FC = () => {
   const handleCreatePost = async () => {
     // Create a real post immediately in the database with default empty content
     try {
-      const { addPost, setSelectedPost: selectPost } = useAppStore.getState();
+      const { setSelectedPost: selectPost } = useAppStore.getState();
       const newPost = await window.electronAPI?.posts.create({
-        title: 'Untitled',
+        title: '',
         content: '',
         tags: [],
         categories: [],
       });
       if (newPost) {
-        addPost(newPost as PostData);
         selectPost(newPost.id);
       }
     } catch (error) {
@@ -434,7 +433,7 @@ const PostsList: React.FC = () => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title}</div>
+                    <div className="sidebar-item-title">{post.title || 'Untitled'}</div>
                     <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
                   </div>
                 </div>
@@ -461,7 +460,7 @@ const PostsList: React.FC = () => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title}</div>
+                    <div className="sidebar-item-title">{post.title || 'Untitled'}</div>
                     <div className="sidebar-item-meta">{formatDate(post.publishedAt || post.updatedAt)}</div>
                   </div>
                 </div>
@@ -488,7 +487,7 @@ const PostsList: React.FC = () => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title}</div>
+                    <div className="sidebar-item-title">{post.title || 'Untitled'}</div>
                     <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
                   </div>
                 </div>

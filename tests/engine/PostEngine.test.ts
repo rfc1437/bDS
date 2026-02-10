@@ -317,9 +317,9 @@ describe('PostEngine', () => {
       expect(ftsInsert).toBeDefined();
     });
 
-    it('should handle post without title using "Untitled"', async () => {
+    it('should handle post without title using empty string', async () => {
       const post = await postEngine.createPost({});
-      expect(post.title).toBe('Untitled');
+      expect(post.title).toBe('');
       expect(post.slug).toBe('untitled');
     });
 
@@ -810,6 +810,75 @@ Original content`);
 
       expect(result?.id).toBe(created.id); // ID preserved
       expect(result?.projectId).toBe('original-project'); // projectId preserved
+    });
+
+    it('should auto-update slug when title changes on a never-published draft', async () => {
+      const created = await postEngine.createPost({ title: 'Original Title' });
+      expect(created.slug).toBe('original-title');
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: created.content || '',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+            publishedAt: null,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, { title: 'New Title' });
+
+      expect(result).not.toBeNull();
+      expect(result?.slug).toBe('new-title');
+    });
+
+    it('should NOT auto-update slug when title changes on a previously published post', async () => {
+      const created = await postEngine.createPost({ title: 'Published Post' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: created.content || '',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+            publishedAt: new Date('2025-01-01'),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, { title: 'Changed Title' });
+
+      expect(result).not.toBeNull();
+      expect(result?.slug).toBe('published-post'); // slug preserved
+    });
+
+    it('should allow empty title and use untitled as slug base', async () => {
+      const created = await postEngine.createPost({ title: '' });
+      expect(created.title).toBe('');
+      expect(created.slug).toBe('untitled');
     });
   });
 
