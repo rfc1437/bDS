@@ -186,7 +186,6 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       if (updated) {
         updatePost(post.id, updated as Partial<PostData>);
         markClean(post.id);
-        showToast.success('Post saved');
       }
     } catch (error) {
       console.error('Failed to save post:', error);
