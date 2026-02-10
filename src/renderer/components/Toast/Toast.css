@@ -1,0 +1,14 @@
+.toast-container {
+  z-index: 9999 !important;
+}
+
+/* Custom styling for toast animations */
+:root {
+  --toast-enter-duration: 200ms;
+  --toast-exit-duration: 150ms;
+}
+
+/* Override for VS Code dark theme compatibility */
+[data-sonner-toast] {
+  font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+}

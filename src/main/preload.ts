@@ -3,6 +3,17 @@ import { contextBridge, ipcRenderer } from 'electron';
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Projects
+  projects: {
+    create: (data: { name: string; description?: string; slug?: string }) => ipcRenderer.invoke('projects:create', data),
+    update: (id: string, data: unknown) => ipcRenderer.invoke('projects:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('projects:delete', id),
+    get: (id: string) => ipcRenderer.invoke('projects:get', id),
+    getAll: () => ipcRenderer.invoke('projects:getAll'),
+    getActive: () => ipcRenderer.invoke('projects:getActive'),
+    setActive: (id: string) => ipcRenderer.invoke('projects:setActive', id),
+  },
+
   // Posts
   posts: {
     create: (data: unknown) => ipcRenderer.invoke('posts:create', data),
@@ -14,6 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     publish: (id: string) => ipcRenderer.invoke('posts:publish', id),
     unpublish: (id: string) => ipcRenderer.invoke('posts:unpublish', id),
     rebuildFromFiles: () => ipcRenderer.invoke('posts:rebuildFromFiles'),
+    search: (query: string) => ipcRenderer.invoke('posts:search', query),
+    filter: (filter: unknown) => ipcRenderer.invoke('posts:filter', filter),
+    getTags: () => ipcRenderer.invoke('posts:getTags'),
+    getCategories: () => ipcRenderer.invoke('posts:getCategories'),
+    getByYearMonth: () => ipcRenderer.invoke('posts:getByYearMonth'),
   },
 
   // Media
@@ -67,6 +83,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // Type definitions for the exposed API
 export interface ElectronAPI {
+  projects: {
+    create: (data: { name: string; description?: string; slug?: string }) => Promise<unknown>;
+    update: (id: string, data: unknown) => Promise<unknown>;
+    delete: (id: string) => Promise<boolean>;
+    get: (id: string) => Promise<unknown>;
+    getAll: () => Promise<unknown[]>;
+    getActive: () => Promise<unknown>;
+    setActive: (id: string) => Promise<unknown>;
+  };
   posts: {
     create: (data: unknown) => Promise<unknown>;
     update: (id: string, data: unknown) => Promise<unknown>;
@@ -77,6 +102,11 @@ export interface ElectronAPI {
     publish: (id: string) => Promise<unknown>;
     unpublish: (id: string) => Promise<unknown>;
     rebuildFromFiles: () => Promise<void>;
+    search: (query: string) => Promise<unknown[]>;
+    filter: (filter: unknown) => Promise<unknown[]>;
+    getTags: () => Promise<string[]>;
+    getCategories: () => Promise<string[]>;
+    getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
   };
   media: {
     import: (sourcePath: string, metadata?: unknown) => Promise<unknown>;

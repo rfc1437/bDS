@@ -1,7 +1,19 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
+// Projects table - stores blog projects/websites
+export const projects = sqliteTable('projects', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  description: text('description'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+});
+
 // Posts table - stores metadata for blog posts
 export const posts = sqliteTable('posts', {
+  projectId: text('project_id').notNull(),
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   slug: text('slug').notNull().unique(),
@@ -21,6 +33,7 @@ export const posts = sqliteTable('posts', {
 
 // Media table - stores metadata for images and other media
 export const media = sqliteTable('media', {
+  projectId: text('project_id').notNull(),
   id: text('id').primaryKey(),
   filename: text('filename').notNull(),
   originalName: text('original_name').notNull(),
@@ -60,6 +73,8 @@ export const settings = sqliteTable('settings', {
 });
 
 // Types for TypeScript
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
 export type Media = typeof media.$inferSelect;

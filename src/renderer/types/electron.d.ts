@@ -1,7 +1,18 @@
 // Type definitions for the Electron API exposed via preload
 
+export interface ProjectData {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PostData {
   id: string;
+  projectId: string;
   title: string;
   slug: string;
   excerpt?: string;
@@ -15,8 +26,27 @@ export interface PostData {
   categories: string[];
 }
 
+export interface PostFilter {
+  status?: 'draft' | 'published' | 'archived';
+  tags?: string[];
+  categories?: string[];
+  year?: number;
+  month?: number;
+  from?: string;
+  to?: string;
+}
+
+export interface SearchResult {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt?: string;
+  score: number;
+}
+
 export interface MediaData {
   id: string;
+  projectId: string;
   filename: string;
   originalName: string;
   mimeType: string;
@@ -56,6 +86,15 @@ export interface SyncResult {
 }
 
 export interface ElectronAPI {
+  projects: {
+    create: (data: { name: string; description?: string; slug?: string }) => Promise<ProjectData>;
+    update: (id: string, data: Partial<ProjectData>) => Promise<ProjectData | null>;
+    delete: (id: string) => Promise<boolean>;
+    get: (id: string) => Promise<ProjectData | null>;
+    getAll: () => Promise<ProjectData[]>;
+    getActive: () => Promise<ProjectData | null>;
+    setActive: (id: string) => Promise<ProjectData | null>;
+  };
   posts: {
     create: (data: Partial<PostData>) => Promise<PostData>;
     update: (id: string, data: Partial<PostData>) => Promise<PostData | null>;
@@ -66,6 +105,11 @@ export interface ElectronAPI {
     publish: (id: string) => Promise<PostData | null>;
     unpublish: (id: string) => Promise<PostData | null>;
     rebuildFromFiles: () => Promise<void>;
+    search: (query: string) => Promise<SearchResult[]>;
+    filter: (filter: PostFilter) => Promise<PostData[]>;
+    getTags: () => Promise<string[]>;
+    getCategories: () => Promise<string[]>;
+    getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
   };
   media: {
     import: (sourcePath: string, metadata?: Partial<MediaData>) => Promise<MediaData>;

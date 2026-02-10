@@ -1,11 +1,59 @@
 import { ipcMain, dialog, shell } from 'electron';
-import { getPostEngine, PostData } from '../engine/PostEngine';
+import { getPostEngine, PostData, PostFilter } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
+import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 
 export function registerIpcHandlers(): void {
+  // ============ Project Handlers ============
+
+  ipcMain.handle('projects:create', async (_, data: { name: string; description?: string; slug?: string }) => {
+    const engine = getProjectEngine();
+    return engine.createProject(data);
+  });
+
+  ipcMain.handle('projects:update', async (_, id: string, data: Partial<ProjectData>) => {
+    const engine = getProjectEngine();
+    return engine.updateProject(id, data);
+  });
+
+  ipcMain.handle('projects:delete', async (_, id: string) => {
+    const engine = getProjectEngine();
+    return engine.deleteProject(id);
+  });
+
+  ipcMain.handle('projects:get', async (_, id: string) => {
+    const engine = getProjectEngine();
+    return engine.getProject(id);
+  });
+
+  ipcMain.handle('projects:getAll', async () => {
+    const engine = getProjectEngine();
+    return engine.getAllProjects();
+  });
+
+  ipcMain.handle('projects:getActive', async () => {
+    const engine = getProjectEngine();
+    return engine.getActiveProject();
+  });
+
+  ipcMain.handle('projects:setActive', async (_, id: string) => {
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.setActiveProject(id);
+    
+    // Update post and media engines to use the new project context
+    if (project) {
+      const postEngine = getPostEngine();
+      const mediaEngine = getMediaEngine();
+      postEngine.setProjectContext(project.id);
+      mediaEngine.setProjectContext(project.id);
+    }
+    
+    return project;
+  });
+
   // ============ Post Handlers ============
   
   ipcMain.handle('posts:create', async (_, data: Partial<PostData>) => {
@@ -51,6 +99,31 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('posts:rebuildFromFiles', async () => {
     const engine = getPostEngine();
     return engine.rebuildDatabaseFromFiles();
+  });
+
+  ipcMain.handle('posts:search', async (_, query: string) => {
+    const engine = getPostEngine();
+    return engine.searchPosts(query);
+  });
+
+  ipcMain.handle('posts:filter', async (_, filter: PostFilter) => {
+    const engine = getPostEngine();
+    return engine.getPostsFiltered(filter);
+  });
+
+  ipcMain.handle('posts:getTags', async () => {
+    const engine = getPostEngine();
+    return engine.getAvailableTags();
+  });
+
+  ipcMain.handle('posts:getCategories', async () => {
+    const engine = getPostEngine();
+    return engine.getAvailableCategories();
+  });
+
+  ipcMain.handle('posts:getByYearMonth', async () => {
+    const engine = getPostEngine();
+    return engine.getPostsByYearMonth();
   });
 
   // ============ Media Handlers ============
@@ -189,6 +262,7 @@ export function registerIpcHandlers(): void {
   const postEngine = getPostEngine();
   const mediaEngine = getMediaEngine();
   const syncEngine = getSyncEngine();
+  const projectEngine = getProjectEngine();
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -196,6 +270,11 @@ export function registerIpcHandlers(): void {
       ipcMain.emit('forward-to-renderer', eventName, ...args);
     };
   };
+
+  projectEngine.on('projectCreated', forwardEvent('project:created'));
+  projectEngine.on('projectUpdated', forwardEvent('project:updated'));
+  projectEngine.on('projectDeleted', forwardEvent('project:deleted'));
+  projectEngine.on('activeProjectChanged', forwardEvent('project:activeChanged'));
 
   postEngine.on('postCreated', forwardEvent('post:created'));
   postEngine.on('postUpdated', forwardEvent('post:updated'));

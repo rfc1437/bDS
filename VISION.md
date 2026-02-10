@@ -4,7 +4,7 @@ Back in the day I had a tool named Python Desktop Server that was a self-contain
 an integrated webserver and database that allowed management of blog posts in an easy local way and a
 sync to a cloud system for syncing data and also rendering the full blog.
 
-## Vision
+## Main Vision
 
 create a electron app in this folder that uses typescript for all the logic code and sqlite and a proper database framework around it for local storage of data and turso/libsql to sync against a cloud location for having offline work capabilities with syncing. The UI should be aligned with the UI patterns used by vscode. The name of the application is "blogging Desktop Server" and the shortname is bDS. Start with default layout for edit and view menues and things like that. I don't want the app to use raw SQL, I want some proper layer between those and proper wiring where all actual functional code  is kept in engine classes and the UI realy just does  presentation and reacts to state changes properly, so that long-running processes can properly integrate as async tasks.
 
@@ -23,6 +23,30 @@ Integrate toasts as notification mechanism that will be used whenever anything h
 
 Integrated images in posts should be shown with a lightbox effect als galleries when there are multiple photos, or just as single images with lightbox when there is only one. The wysiwyg editor should support this at least on a basic level.
 
+## UI and UX specifics
+
+The UI and UX should be aligned with modern applications like vscode. I want iconbar and left sidebar and the
+big main area with tabbed views. Open views will be automatically opened again on next start, so the user
+does not have to reselect everything.
+
+All sidebar areas and panels can be resized easily and resizings are persisted so they are the same on next
+application start. UI configuration is persisted on the project level, so when I switch projects, I get the
+same layout and opened tabs as the last time I worked on that project.
+
+There are no lengthy synchronous actions in the UI thread, everything is offloaded to the main thread and
+if it is complex, to async tasks, with proper integration with the UI and notification about state of those
+asynchronous tasks via toasts. There is a central notification framework used by everything, so we are sure
+that the user is informed about ongoing activities at all times.
+
+There is a bottom status bar in the app that for example shows how many async tasks are running at any time,
+so if we run maybe two importer in parallel, the user will be able to see that there are 2 tasks running
+and will be abl to click on that to see a small popup that lists all active async tasks.
+
+All preferences are always local to the selected project and project settings are easily reachable via
+a gear icon in the bottom of the iconbar. Also login credentials can be managed via a user icon in the bottom
+of the icon bar directly above the gear icon. This is similar to what vscode does, separating logins and
+settings.
+
 ## Organizing
 
 Blog posts should be organized in the app in the main post view where the sidebar lists posts and the main
@@ -31,21 +55,38 @@ The sidebar for posts must also include a calendar view at the top that allows t
 date ranges (by selecting a whole month of a year for example) and then accordingly filter down the post
 list in the sidebar.
 
-Also there must be a way to filter posts by tags and category to look at subsets of posts efficiently.
-
 And there must be a way to use markdown links of a specific short-form to reference other posts, so that
 I can link to other places, if needed, and those references should also be part of the information about
 posts. So each post should give a "links to" part in the UI (right sidebar or lower area of left sidebar
 like with vscode?) and a "linked to by" part where incoming links are shown.
 
+### default category "article"
+
+This is for articles that are focused on long text. They will show fully only on the full page, but will
+be summarized in overview pages.
+
+### category "picture"
+
+This is a variant of article with less text-focus but usually a strong focus on attached images. This
+will show the image in a wide format if it is just one, or a gallery view, if it is multiple images
+and will only show thumbnails for overviews. This means we will need a library to manage image sizes
+properly for thumbnails during media storage. those thumbnails must be created automatically.
+
+### category "aside"
+
+This is a short-form article that does not need a full-article-page, because it will just be a link and
+a short comment that is shown after the link. This is meant for link collections and should be rendered
+in a compact form in the overview pages. More on rendering in the publishing pipelin description.
+
 ## Migrating
 
 Prepare a proper mass-data importer that can read wordpress backup files, so the user can bring in old wordpress blogs easily. That importer should run asynchronously and properly communicate progress to the user while it is running in the background. The import has to rebuild all metadata properly, so check if we have all the metadata in our model set up in a similar way as Wordpress handles it, so that we have a seamless integration. Posts in Wordpress backups are html, but should be interpreted and transformed into proper markdown in the import.
 
-Additionally we need a way to traverse a full HTML website and deduct post structure from that website
+Additionally we need another importer to traverse a full website and deduct post structure from that website
 and rebuild posts in the database based on such a web traversal. To be able to do that, use copilot SDK
 to integrate copilot directly, so that HTML pages can be directly inspected and turned into actual blog
-posts in proper structure and proper markdown, despite the source being HTML.
+posts in proper structure and proper markdown, despite the source being HTML. This is a variant of the
+wordpress importer that directly works on already rendered HTML websites.
 
 For this AI support during import to work, the blog application needs to provide post management and media
 management functionality as proper SDK tools to the copilot instance, so that it will be able to work
@@ -87,6 +128,12 @@ that are used in the page were changed. This requires a cross-reference table th
 with actual HTML files that are referencing them. This needs to be based on how templates use posts in the
 export pipeline.
 
+Essentially the publishing pipeline knows what posts changed since last publishing (maybe a version number
+that is pulled from a central place, so that any change will raise that version and any post and media
+that has a higher version number of the last publish run is seen as changed) and will run the relevant templates
+to recreate all linkd pages of the publishing (single post pages for the post but also many overview pages) and
+of course each page is only updated once in the publishing run, collecting all changed posts for that.
+
 The main driver is a proper blog structure with templates. For this I want proper templates I can manage and
 edit in the application itself. Template editing should provide proper syntax highlighting, so something like
 monaco is important. Choose a good solid template engine for node-js based tools that is especialy targeted
@@ -103,7 +150,10 @@ that reference overview pages and structure the menu according to site structure
 to allow users to go to specific months and years of the blog.
 
 Categories and tags must be able to define a template selection for post templates, so that different types
-can be represented differently.
+can be represented differently. this is especially important for the standard categories "article", "picture"
+and "aside", as they should come right away with templates for their article page and their use in overviews.
+Every post can define via category or tag (tag-related templates override category templates but can be
+overridden via article-specific template selections).
 
 There must be way to open a browser tab in the application that then uses the applicaiton itself and does
 dynamic rendering of the content, using the same templates and everything else, so that the user can do

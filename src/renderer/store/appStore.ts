@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 
 // Types
+export interface ProjectData {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PostData {
   id: string;
   title: string;
@@ -43,6 +53,10 @@ export interface TaskProgress {
 
 // App State Store
 interface AppState {
+  // Projects
+  projects: ProjectData[];
+  activeProject: ProjectData | null;
+  
   // UI State
   activeView: 'posts' | 'media' | 'settings';
   sidebarVisible: boolean;
@@ -63,6 +77,13 @@ interface AppState {
   // Loading states
   isLoading: boolean;
   error: string | null;
+  
+  // Project Actions
+  setProjects: (projects: ProjectData[]) => void;
+  setActiveProject: (project: ProjectData | null) => void;
+  addProject: (project: ProjectData) => void;
+  updateProject: (id: string, project: Partial<ProjectData>) => void;
+  removeProject: (id: string) => void;
   
   // Actions
   setActiveView: (view: 'posts' | 'media' | 'settings') => void;
@@ -93,6 +114,10 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
+  // Initial Project State
+  projects: [],
+  activeProject: null,
+  
   // Initial UI State
   activeView: 'posts',
   sidebarVisible: true,
@@ -113,6 +138,17 @@ export const useAppStore = create<AppState>((set) => ({
   // Initial Loading State
   isLoading: false,
   error: null,
+  
+  // Project Actions
+  setProjects: (projects) => set({ projects }),
+  setActiveProject: (activeProject) => set({ activeProject }),
+  addProject: (project) => set((state) => ({ projects: [...state.projects, project] })),
+  updateProject: (id, updatedProject) => set((state) => ({
+    projects: state.projects.map((p) => (p.id === id ? { ...p, ...updatedProject } : p)),
+  })),
+  removeProject: (id) => set((state) => ({
+    projects: state.projects.filter((p) => p.id !== id),
+  })),
   
   // UI Actions
   setActiveView: (view) => set({ activeView: view }),

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityBar, Sidebar, Editor, StatusBar, Panel } from './components';
+import { ActivityBar, Sidebar, Editor, StatusBar, Panel, ToastContainer, showToast } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import './App.css';
 
@@ -115,12 +115,15 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('sync:started', () => {
         setSyncStatus('syncing');
+        showToast.loading('Syncing...');
       }) || (() => {})
     );
 
     unsubscribers.push(
       window.electronAPI?.on('sync:completed', async () => {
         setSyncStatus('idle');
+        showToast.dismiss();
+        showToast.success('Sync completed');
         const pending = await window.electronAPI?.sync.getPendingCount();
         if (pending) {
           setPendingChanges(pending);
@@ -131,6 +134,8 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('sync:failed', () => {
         setSyncStatus('error');
+        showToast.dismiss();
+        showToast.error('Sync failed');
       }) || (() => {})
     );
 
@@ -146,6 +151,7 @@ const App: React.FC = () => {
       window.electronAPI?.on('task:completed', (task: unknown) => {
         const t = task as TaskProgress;
         updateTask(t.taskId, t);
+        showToast.success(`Task completed: ${t.message}`);
       }) || (() => {})
     );
 
@@ -153,6 +159,7 @@ const App: React.FC = () => {
       window.electronAPI?.on('task:failed', (task: unknown) => {
         const t = task as TaskProgress;
         updateTask(t.taskId, t);
+        showToast.error(`Task failed: ${t.error || t.message}`);
       }) || (() => {})
     );
 
@@ -256,6 +263,7 @@ const App: React.FC = () => {
         </div>
       </div>
       <StatusBar />
+      <ToastContainer />
     </div>
   );
 };

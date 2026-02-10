@@ -93,13 +93,49 @@ export class DatabaseConnection {
     return this.remoteDb;
   }
 
+  getLocalClient(): Client | null {
+    return this.localClient;
+  }
+
+  async getActiveProject(): Promise<{ id: string; name: string; slug: string } | null> {
+    if (!this.localClient) return null;
+    const result = await this.localClient.execute('SELECT id, name, slug FROM projects WHERE is_active = 1 LIMIT 1');
+    if (result.rows.length === 0) return null;
+    const row = result.rows[0];
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      slug: row.slug as string,
+    };
+  }
+
+  async setActiveProject(projectId: string): Promise<void> {
+    if (!this.localClient) return;
+    await this.localClient.execute('UPDATE projects SET is_active = 0');
+    await this.localClient.execute({
+      sql: 'UPDATE projects SET is_active = 1 WHERE id = ?',
+      args: [projectId],
+    });
+  }
+
   private async runMigrations(): Promise<void> {
     if (!this.localClient) return;
 
     // Create tables if they don't exist using batch execution
     await this.localClient.executeMultiple(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 0
+      );
+
       CREATE TABLE IF NOT EXISTS posts (
         id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL DEFAULT 'default',
         title TEXT NOT NULL,
         slug TEXT NOT NULL UNIQUE,
         excerpt TEXT,
@@ -118,6 +154,7 @@ export class DatabaseConnection {
 
       CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL DEFAULT 'default',
         filename TEXT NOT NULL,
         original_name TEXT NOT NULL,
         mime_type TEXT NOT NULL,
@@ -155,10 +192,36 @@ export class DatabaseConnection {
 
       CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);
       CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
+      CREATE INDEX IF NOT EXISTS idx_posts_project_id ON posts(project_id);
       CREATE INDEX IF NOT EXISTS idx_posts_sync_status ON posts(sync_status);
+      CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at);
+      CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id);
       CREATE INDEX IF NOT EXISTS idx_media_sync_status ON media(sync_status);
       CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
     `);
+
+    // Create FTS5 virtual table for full-text search
+    await this.localClient.execute(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
+        id UNINDEXED,
+        title,
+        content,
+        excerpt,
+        tags,
+        categories,
+        content_rowid=rowid
+      );
+    `);
+
+    // Create default project if none exists
+    const existingProjects = await this.localClient.execute('SELECT COUNT(*) as count FROM projects');
+    if (existingProjects.rows[0] && (existingProjects.rows[0].count as number) === 0) {
+      const now = Date.now();
+      await this.localClient.execute({
+        sql: 'INSERT INTO projects (id, name, slug, description, created_at, updated_at, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        args: ['default', 'Default Project', 'default', 'Your first blog project', now, now, 1],
+      });
+    }
   }
 
   async close(): Promise<void> {

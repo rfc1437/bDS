@@ -38,11 +38,25 @@ export interface MediaMetadata {
 }
 
 export class MediaEngine extends EventEmitter {
-  private mediaDir: string;
+  private currentProjectId: string = 'default';
 
   constructor() {
     super();
-    this.mediaDir = getDatabase().getDataPaths().media;
+  }
+
+  private getMediaDir(): string {
+    const { app } = require('electron');
+    const path = require('path');
+    const userDataPath = app.getPath('userData');
+    return path.join(userDataPath, 'projects', this.currentProjectId, 'media');
+  }
+
+  setProjectContext(projectId: string): void {
+    this.currentProjectId = projectId;
+  }
+
+  getProjectContext(): string {
+    return this.currentProjectId;
   }
 
   private calculateChecksum(buffer: Buffer): string {
@@ -191,7 +205,9 @@ export class MediaEngine extends EventEmitter {
     const originalName = path.basename(sourcePath);
     const ext = path.extname(originalName);
     const filename = `${id}${ext}`;
-    const destPath = path.join(this.mediaDir, filename);
+    const mediaDir = this.getMediaDir();
+    await fs.mkdir(mediaDir, { recursive: true });
+    const destPath = path.join(mediaDir, filename);
 
     // Copy file to media directory
     await fs.writeFile(destPath, sourceBuffer);
@@ -216,6 +232,7 @@ export class MediaEngine extends EventEmitter {
 
     const dbMedia: NewMedia = {
       id: mediaData.id,
+      projectId: this.currentProjectId,
       filename: mediaData.filename,
       originalName: mediaData.originalName,
       mimeType: mediaData.mimeType,
@@ -346,7 +363,7 @@ export class MediaEngine extends EventEmitter {
   }
 
   getMediaPath(id: string): string {
-    return path.join(this.mediaDir, id);
+    return path.join(this.getMediaDir(), id);
   }
 
   async rebuildDatabaseFromFiles(): Promise<void> {
@@ -358,14 +375,20 @@ export class MediaEngine extends EventEmitter {
         
         onProgress(0, 'Scanning media directory...');
         
-        const files = await fs.readdir(this.mediaDir);
+        const mediaDir = this.getMediaDir();
+        let files: string[] = [];
+        try {
+          files = await fs.readdir(mediaDir);
+        } catch {
+          await fs.mkdir(mediaDir, { recursive: true });
+        }
         const metaFiles = files.filter(f => f.endsWith('.meta'));
         
         onProgress(10, `Found ${metaFiles.length} media sidecar files`);
         
         for (let i = 0; i < metaFiles.length; i++) {
           const metaFile = metaFiles[i];
-          const sidecarPath = path.join(this.mediaDir, metaFile);
+          const sidecarPath = path.join(mediaDir, metaFile);
           const mediaFilePath = sidecarPath.replace('.meta', '');
           
           onProgress(10 + (80 * (i / metaFiles.length)), `Processing ${metaFile}...`);
@@ -399,6 +422,7 @@ export class MediaEngine extends EventEmitter {
               } else {
                 await db.insert(media).values({
                   id: metadata.id,
+                  projectId: this.currentProjectId,
                   filename,
                   originalName: metadata.originalName,
                   mimeType: metadata.mimeType,

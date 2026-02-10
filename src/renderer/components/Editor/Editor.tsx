@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import MonacoEditor from '@monaco-editor/react';
 import { useAppStore, PostData } from '../../store';
+import { showToast } from '../Toast';
 import './Editor.css';
 
 interface PostEditorProps {
@@ -11,13 +13,17 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const [title, setTitle] = useState(post.title);
   const [content, setContent] = useState(post.content);
   const [tags, setTags] = useState(post.tags.join(', '));
+  const [categories, setCategories] = useState(post.categories.join(', '));
   const [isDirty, setIsDirty] = useState(false);
+  const [editorMode, setEditorMode] = useState<'markdown' | 'preview'>('markdown');
+  const editorRef = useRef<unknown>(null);
 
   // Reset when post changes
   useEffect(() => {
     setTitle(post.title);
     setContent(post.content);
     setTags(post.tags.join(', '));
+    setCategories(post.categories.join(', '));
     setIsDirty(false);
   }, [post.id]);
 
@@ -26,9 +32,10 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     const hasChanges = 
       title !== post.title ||
       content !== post.content ||
-      tags !== post.tags.join(', ');
+      tags !== post.tags.join(', ') ||
+      categories !== post.categories.join(', ');
     setIsDirty(hasChanges);
-  }, [title, content, tags, post]);
+  }, [title, content, tags, categories, post]);
 
   const handleSave = useCallback(async () => {
     if (!isDirty) return;
@@ -38,16 +45,19 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
         title,
         content,
         tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
+        categories: categories.split(',').map(c => c.trim()).filter(c => c.length > 0),
       });
       
       if (updated) {
         updatePost(post.id, updated as Partial<PostData>);
         setIsDirty(false);
+        showToast.success('Post saved');
       }
     } catch (error) {
       console.error('Failed to save post:', error);
+      showToast.error('Failed to save post');
     }
-  }, [post.id, title, content, tags, isDirty, updatePost]);
+  }, [post.id, title, content, tags, categories, isDirty, updatePost]);
 
   const handlePublish = async () => {
     await handleSave();
@@ -55,9 +65,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       const updated = await window.electronAPI?.posts.publish(post.id);
       if (updated) {
         updatePost(post.id, updated as Partial<PostData>);
+        showToast.success('Post published');
       }
     } catch (error) {
       console.error('Failed to publish post:', error);
+      showToast.error('Failed to publish post');
     }
   };
 
@@ -66,9 +78,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       const updated = await window.electronAPI?.posts.unpublish(post.id);
       if (updated) {
         updatePost(post.id, updated as Partial<PostData>);
+        showToast.success('Post unpublished');
       }
     } catch (error) {
       console.error('Failed to unpublish post:', error);
+      showToast.error('Failed to unpublish post');
     }
   };
 
@@ -77,10 +91,18 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       try {
         await window.electronAPI?.posts.delete(post.id);
         useAppStore.getState().removePost(post.id);
+        useAppStore.getState().setSelectedPost(null);
+        showToast.success('Post deleted');
       } catch (error) {
         console.error('Failed to delete post:', error);
+        showToast.error('Failed to delete post');
       }
     }
+  };
+
+  // Handle Monaco editor mount
+  const handleEditorDidMount = (editor: unknown) => {
+    editorRef.current = editor;
   };
 
   // Save on Ctrl+S
@@ -158,25 +180,76 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               className="disabled"
             />
           </div>
-          <div className="editor-field">
-            <label>Tags (comma-separated)</label>
-            <input
-              type="text"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="tag1, tag2, tag3"
-            />
+          <div className="editor-field-row">
+            <div className="editor-field">
+              <label>Tags (comma-separated)</label>
+              <input
+                type="text"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="tag1, tag2, tag3"
+              />
+            </div>
+            <div className="editor-field">
+              <label>Categories (comma-separated)</label>
+              <input
+                type="text"
+                value={categories}
+                onChange={(e) => setCategories(e.target.value)}
+                placeholder="category1, category2"
+              />
+            </div>
           </div>
         </div>
         
         <div className="editor-body">
-          <label>Content (Markdown)</label>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Write your post content in Markdown..."
-            spellCheck
-          />
+          <div className="editor-toolbar">
+            <label>Content (Markdown)</label>
+            <div className="editor-mode-toggle">
+              <button 
+                className={editorMode === 'markdown' ? 'active' : ''} 
+                onClick={() => setEditorMode('markdown')}
+              >
+                Markdown
+              </button>
+              <button 
+                className={editorMode === 'preview' ? 'active' : ''} 
+                onClick={() => setEditorMode('preview')}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+          {editorMode === 'markdown' ? (
+            <MonacoEditor
+              height="100%"
+              defaultLanguage="markdown"
+              value={content}
+              onChange={(value) => setContent(value || '')}
+              onMount={handleEditorDidMount}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                wordWrap: 'on',
+                lineNumbers: 'on',
+                fontSize: 14,
+                fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+                padding: { top: 12, bottom: 12 },
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+                renderLineHighlight: 'line',
+                quickSuggestions: false,
+                formatOnPaste: true,
+                cursorStyle: 'line',
+                cursorBlinking: 'smooth',
+              }}
+            />
+          ) : (
+            <div className="editor-preview markdown-body">
+              {/* Simple markdown preview - could be enhanced with a proper renderer */}
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{content}</pre>
+            </div>
+          )}
         </div>
       </div>
 

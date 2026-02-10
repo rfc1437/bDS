@@ -154,6 +154,58 @@
   border-radius: 4px;
 }
 
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.editor-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.editor-mode-toggle button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.editor-mode-toggle button:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.editor-mode-toggle button.active {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.editor-preview {
+  flex: 1;
+  background-color: var(--vscode-input-background);
+  border-radius: 4px;
+  padding: 16px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.editor-field-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.editor-field-row .editor-field {
+  flex: 1;
+}
+
 .editor-footer {
   display: flex;
   align-items: center;

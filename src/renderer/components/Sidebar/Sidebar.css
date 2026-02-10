@@ -201,3 +201,261 @@
   font-size: 12px;
   margin-top: 8px;
 }
+
+/* Search Box */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px 8px;
+  position: relative;
+}
+
+.search-box input {
+  flex: 1;
+  padding: 6px 28px 6px 8px;
+  font-size: 12px;
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  color: var(--vscode-input-foreground);
+  border-radius: 3px;
+}
+
+.search-box input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.search-box button[type="submit"] {
+  position: absolute;
+  right: 40px;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.search-box button[type="submit"]:hover {
+  opacity: 1;
+}
+
+.search-box .clear-search {
+  position: absolute;
+  right: 16px;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.search-box .clear-search:hover {
+  opacity: 1;
+}
+
+/* Sidebar header actions */
+.sidebar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-action.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  opacity: 1;
+}
+
+/* Calendar View */
+.calendar-view {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 8px;
+}
+
+.calendar-header .clear-filter {
+  background: transparent;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  opacity: 0.7;
+}
+
+.calendar-header .clear-filter:hover {
+  opacity: 1;
+}
+
+.calendar-years {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calendar-year-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.calendar-year-header:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.calendar-year-header.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.calendar-year-header .expand-icon {
+  font-size: 8px;
+  color: var(--vscode-descriptionForeground);
+  width: 10px;
+}
+
+.calendar-year-header .year-label {
+  flex: 1;
+}
+
+.calendar-year-header .year-count {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  background-color: var(--vscode-badge-background);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.calendar-months {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 16px;
+  margin-top: 2px;
+}
+
+.calendar-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.calendar-month:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.calendar-month.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.calendar-month .month-count {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.calendar-empty {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  padding: 8px;
+  text-align: center;
+}
+
+/* Filter Panel */
+.filter-panel {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.filter-section {
+  margin-bottom: 12px;
+}
+
+.filter-section:last-child {
+  margin-bottom: 0;
+}
+
+.filter-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 6px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.filter-chip {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.filter-chip:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.filter-chip.active {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+/* Filter Status */
+.filter-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  background-color: var(--vscode-list-hoverBackground);
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.filter-status button {
+  background: transparent;
+  border: none;
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+
+.filter-status button:hover {
+  text-decoration: underline;
+}
