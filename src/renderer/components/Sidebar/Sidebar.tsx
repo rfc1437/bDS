@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore, PostData } from '../../store';
 import { showToast } from '../Toast';
-import { ProjectSelector } from '../ProjectSelector';
 import './Sidebar.css';
 
 const formatDate = (dateString: string) => {
@@ -631,7 +630,6 @@ export const Sidebar: React.FC = () => {
 
   return (
     <div className="sidebar">
-      <ProjectSelector />
       {activeView === 'posts' && <PostsList />}
       {activeView === 'media' && <MediaList />}
       {activeView === 'settings' && <SettingsPanel />}

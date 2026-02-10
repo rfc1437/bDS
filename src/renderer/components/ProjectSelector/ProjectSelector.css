@@ -1,34 +1,28 @@
 .project-selector {
   position: relative;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--vscode-sideBar-border);
   flex-shrink: 0;
-  background-color: var(--vscode-sideBar-background);
-  min-height: 44px;
 }
 
 .project-selector-trigger {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  background-color: #3c3c3c;
-  border: 1px solid #555555;
-  border-radius: 4px;
-  color: #e0e0e0;
+  gap: 6px;
+  padding: 0 8px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  color: var(--vscode-statusBar-foreground);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   text-align: left;
 }
 
 .project-selector-trigger:hover {
-  background-color: var(--vscode-list-hoverBackground);
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .project-selector-trigger:focus {
   outline: none;
-  border-color: var(--vscode-focusBorder);
 }
 
 .project-icon {
@@ -50,13 +44,14 @@
 
 .project-dropdown {
   position: absolute;
-  top: 100%;
-  left: 12px;
-  right: 12px;
+  bottom: 100%;
+  left: 0;
+  min-width: 220px;
+  margin-bottom: 4px;
   background-color: var(--vscode-dropdown-background);
   border: 1px solid var(--vscode-dropdown-border);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   overflow: hidden;
 }

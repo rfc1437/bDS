@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppStore } from '../../store';
+import { ProjectSelector } from '../ProjectSelector';
 import './StatusBar.css';
 
 export const StatusBar: React.FC = () => {
@@ -20,6 +21,9 @@ export const StatusBar: React.FC = () => {
   return (
     <div className="status-bar">
       <div className="status-bar-left">
+        {/* Project Selector */}
+        <ProjectSelector />
+
         {/* Sync Status */}
         <div className={`status-bar-item ${!syncConfigured ? 'warning' : ''}`}>
           <span className={`sync-indicator ${syncStatus}`} />
