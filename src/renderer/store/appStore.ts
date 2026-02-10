@@ -30,6 +30,17 @@ export interface PostData {
   categories: string[];
 }
 
+// Unsaved draft that only exists in memory/local storage until saved
+export interface UnsavedDraft {
+  id: string; // Temporary ID (prefixed with 'draft-')
+  title: string;
+  content: string;
+  tags: string[];
+  categories: string[];
+  createdAt: string;
+  isNew: true; // Always true for unsaved drafts
+}
+
 export interface MediaData {
   id: string;
   filename: string;
@@ -55,6 +66,14 @@ export interface TaskProgress {
   error?: string;
 }
 
+export interface ErrorDetails {
+  message: string;
+  title?: string;
+  stack?: string;
+}
+
+export type EditorMode = 'wysiwyg' | 'markdown' | 'preview';
+
 // App State Store
 interface AppState {
   // Projects
@@ -67,11 +86,20 @@ interface AppState {
   panelVisible: boolean;
   selectedPostId: string | null;
   selectedMediaId: string | null;
+  preferredEditorMode: EditorMode;
   
   // Data
   posts: PostData[];
   media: MediaData[];
   tasks: TaskProgress[];
+  
+  // Unsaved drafts (memory only until saved)
+  unsavedDrafts: UnsavedDraft[];
+  // Track which posts have unsaved changes (by post ID or draft ID)
+  dirtyPosts: Set<string>;
+  
+  // Error modal
+  errorModal: ErrorDetails | null;
   
   // Sync
   syncStatus: 'idle' | 'syncing' | 'error';
@@ -95,11 +123,27 @@ interface AppState {
   togglePanel: () => void;
   setSelectedPost: (id: string | null) => void;
   setSelectedMedia: (id: string | null) => void;
+  setPreferredEditorMode: (mode: EditorMode) => void;
   
   setPosts: (posts: PostData[]) => void;
   addPost: (post: PostData) => void;
   updatePost: (id: string, post: Partial<PostData>) => void;
   removePost: (id: string) => void;
+  
+  // Unsaved draft actions
+  createUnsavedDraft: () => string; // Returns the draft ID
+  updateUnsavedDraft: (id: string, data: Partial<UnsavedDraft>) => void;
+  removeUnsavedDraft: (id: string) => void;
+  getUnsavedDraft: (id: string) => UnsavedDraft | undefined;
+  
+  // Dirty tracking
+  markDirty: (id: string) => void;
+  markClean: (id: string) => void;
+  isDirty: (id: string) => boolean;
+  
+  // Error modal actions
+  showErrorModal: (error: ErrorDetails) => void;
+  hideErrorModal: () => void;
   
   setMedia: (media: MediaData[]) => void;
   addMedia: (media: MediaData) => void;
@@ -119,7 +163,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Initial Project State
       projects: [],
       activeProject: null,
@@ -130,11 +174,19 @@ export const useAppStore = create<AppState>()(
       panelVisible: false,
       selectedPostId: null,
       selectedMediaId: null,
+      preferredEditorMode: 'wysiwyg',
       
       // Initial Data
       posts: [],
       media: [],
       tasks: [],
+      
+      // Unsaved drafts
+      unsavedDrafts: [],
+      dirtyPosts: new Set<string>(),
+      
+      // Error modal
+      errorModal: null,
       
       // Initial Sync State
       syncStatus: 'idle',
@@ -162,6 +214,7 @@ export const useAppStore = create<AppState>()(
       togglePanel: () => set((state) => ({ panelVisible: !state.panelVisible })),
       setSelectedPost: (id) => set({ selectedPostId: id }),
       setSelectedMedia: (id) => set({ selectedMediaId: id }),
+      setPreferredEditorMode: (mode) => set({ preferredEditorMode: mode }),
       
       // Post Actions
       setPosts: (posts) => set({ posts }),
@@ -173,6 +226,61 @@ export const useAppStore = create<AppState>()(
         posts: state.posts.filter((p) => p.id !== id),
         selectedPostId: state.selectedPostId === id ? null : state.selectedPostId,
       })),
+      
+      // Unsaved draft actions
+      createUnsavedDraft: () => {
+        const id = `draft-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const draft: UnsavedDraft = {
+          id,
+          title: '',
+          content: '',
+          tags: [],
+          categories: [],
+          createdAt: new Date().toISOString(),
+          isNew: true,
+        };
+        set((state) => ({
+          unsavedDrafts: [...state.unsavedDrafts, draft],
+          dirtyPosts: new Set([...state.dirtyPosts, id]),
+        }));
+        return id;
+      },
+      
+      updateUnsavedDraft: (id, data) => set((state) => ({
+        unsavedDrafts: state.unsavedDrafts.map((d) => 
+          d.id === id ? { ...d, ...data } : d
+        ),
+        dirtyPosts: new Set([...state.dirtyPosts, id]),
+      })),
+      
+      removeUnsavedDraft: (id) => set((state) => {
+        const newDirtyPosts = new Set(state.dirtyPosts);
+        newDirtyPosts.delete(id);
+        return {
+          unsavedDrafts: state.unsavedDrafts.filter((d) => d.id !== id),
+          dirtyPosts: newDirtyPosts,
+          selectedPostId: state.selectedPostId === id ? null : state.selectedPostId,
+        };
+      }),
+      
+      getUnsavedDraft: (id) => get().unsavedDrafts.find((d) => d.id === id),
+      
+      // Dirty tracking
+      markDirty: (id) => set((state) => ({
+        dirtyPosts: new Set([...state.dirtyPosts, id]),
+      })),
+      
+      markClean: (id) => set((state) => {
+        const newDirtyPosts = new Set(state.dirtyPosts);
+        newDirtyPosts.delete(id);
+        return { dirtyPosts: newDirtyPosts };
+      }),
+      
+      isDirty: (id) => get().dirtyPosts.has(id),
+      
+      // Error modal actions
+      showErrorModal: (error) => set({ errorModal: error }),
+      hideErrorModal: () => set({ errorModal: null }),
       
       // Media Actions
       setMedia: (media) => set({ media }),
@@ -209,7 +317,21 @@ export const useAppStore = create<AppState>()(
         panelVisible: state.panelVisible,
         selectedPostId: state.selectedPostId,
         selectedMediaId: state.selectedMediaId,
+        preferredEditorMode: state.preferredEditorMode,
+        // Persist unsaved drafts for recovery
+        unsavedDrafts: state.unsavedDrafts,
+        // Convert Set to array for storage
+        dirtyPosts: [...state.dirtyPosts],
       }),
+      // Merge function to restore Set from array
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<AppState> & { dirtyPosts?: string[] };
+        return {
+          ...current,
+          ...persistedState,
+          dirtyPosts: new Set(persistedState.dirtyPosts || []),
+        };
+      },
     }
   )
 );

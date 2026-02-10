@@ -206,3 +206,12 @@ the correct styling of the website.
 
 Publishing of files can be configured to be done via FTP or SSH, connection data must be configureable in
 preferences for the website.
+
+## Editing II
+
+I also want an outline-based editor that integrates well with markdown, so that I can edit longer posts and
+pages in an outline, with allowing to fold down sections on same levels to get a better overview of the
+overall story. This is important for bigger stories that require more focus on the overall writing.
+
+The stories still should be stored as markdown, so the outliner should be an alternative editor that can be
+chosen in the same way as the wysiwyg and the raw markdown editor.

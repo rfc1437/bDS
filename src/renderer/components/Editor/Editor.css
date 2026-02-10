@@ -72,6 +72,25 @@
   color: var(--vscode-descriptionForeground);
 }
 
+.status-badge.status-unsaved {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.editor-tab-badge {
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.editor-tab-badge.new {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
 .editor-actions button {
   padding: 4px 10px;
   font-size: 12px;

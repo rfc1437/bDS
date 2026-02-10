@@ -495,3 +495,28 @@
 .filter-status button:hover {
   text-decoration: underline;
 }
+
+/* Unsaved drafts styling */
+.status-unsaved {
+  color: #f59e0b;
+}
+
+.sidebar-item.unsaved {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1) 0%, transparent 100%);
+}
+
+.sidebar-item.unsaved .sidebar-item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unsaved-indicator {
+  color: #f59e0b;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-item.unsaved .sidebar-item-meta {
+  font-style: italic;
+}
