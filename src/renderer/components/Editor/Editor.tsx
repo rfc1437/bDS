@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import MonacoEditor from '@monaco-editor/react';
-import { useAppStore, PostData, UnsavedDraft, EditorMode } from '../../store';
+import { useAppStore, PostData, EditorMode } from '../../store';
 import { showToast } from '../Toast';
 import { WysiwygEditor } from '../WysiwygEditor';
 import { Lightbox, useMarkdownImages } from '../Lightbox';
@@ -38,14 +38,11 @@ const markdownToHtml = (markdown: string): string => {
     .replace(/\n/g, '<br />');
 };
 
-// Check if an ID is for an unsaved draft
-const isUnsavedDraftId = (id: string): boolean => id.startsWith('draft-');
-
-interface SavedPostEditorProps {
+interface PostEditorProps {
   post: PostData;
 }
 
-const SavedPostEditor: React.FC<SavedPostEditorProps> = ({ post }) => {
+const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const { 
     updatePost, 
     markDirty, 
@@ -61,6 +58,7 @@ const SavedPostEditor: React.FC<SavedPostEditorProps> = ({ post }) => {
   const [tags, setTags] = useState(post.tags.join(', '));
   const [categories, setCategories] = useState(post.categories.join(', '));
   const [isSaving, setIsSaving] = useState(false);
+  const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -68,10 +66,62 @@ const SavedPostEditor: React.FC<SavedPostEditorProps> = ({ post }) => {
 
   const isDirty = checkIsDirty(post.id);
 
+  // Check if post has a published version for discard functionality
+  useEffect(() => {
+    window.electronAPI?.posts.hasPublishedVersion(post.id).then(setHasPublishedVersion);
+  }, [post.id]);
+
   // Extract images from content for lightbox
   const images = useMarkdownImages(content);
 
-  // Reset when post changes
+  // Track latest values for auto-save on unmount/switch
+  const pendingChangesRef = useRef<{
+    title: string;
+    content: string;
+    tags: string;
+    categories: string;
+    postId: string;
+    isDirty: boolean;
+  } | null>(null);
+
+  // Update ref when values change
+  useEffect(() => {
+    pendingChangesRef.current = {
+      title,
+      content,
+      tags,
+      categories,
+      postId: post.id,
+      isDirty,
+    };
+  }, [title, content, tags, categories, post.id, isDirty]);
+
+  // Auto-save when switching away from a post or unmounting
+  useEffect(() => {
+    const prevPostId = post.id;
+    
+    return () => {
+      const pending = pendingChangesRef.current;
+      if (pending && pending.postId === prevPostId && pending.isDirty) {
+        // Fire and forget auto-save
+        window.electronAPI?.posts.update(pending.postId, {
+          title: pending.title,
+          content: pending.content,
+          tags: pending.tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
+          categories: pending.categories.split(',').map(c => c.trim()).filter(c => c.length > 0),
+        }).then((updated) => {
+          if (updated) {
+            useAppStore.getState().updatePost(pending.postId, updated as Partial<PostData>);
+            useAppStore.getState().markClean(pending.postId);
+          }
+        }).catch((error) => {
+          console.error('Auto-save failed:', error);
+        });
+      }
+    };
+  }, [post.id]);
+
+  // Reset when post changes (after auto-save cleanup runs)
   useEffect(() => {
     setTitle(post.title);
     setContent(post.content);
@@ -168,6 +218,48 @@ const SavedPostEditor: React.FC<SavedPostEditorProps> = ({ post }) => {
     }
   };
 
+  const handleDiscard = async () => {
+    // If this post has a published version, revert to it
+    // If never published, delete the post entirely
+    const confirmMessage = hasPublishedVersion
+      ? 'Discard all changes since last publish? This cannot be undone.'
+      : 'Delete this draft? This cannot be undone.';
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      if (hasPublishedVersion) {
+        // Revert to published version
+        const reverted = await window.electronAPI?.posts.discard(post.id);
+        if (reverted) {
+          setTitle(reverted.title);
+          setContent(reverted.content);
+          setTags(reverted.tags.join(', '));
+          setCategories(reverted.categories.join(', '));
+          updatePost(post.id, reverted as Partial<PostData>);
+          markClean(post.id);
+          showToast.success('Reverted to last published version');
+        }
+      } else {
+        // Never published - delete the post entirely
+        await window.electronAPI?.posts.delete(post.id);
+        useAppStore.getState().removePost(post.id);
+        useAppStore.getState().setSelectedPost(null);
+        showToast.success('Draft deleted');
+      }
+    } catch (error) {
+      console.error('Failed to discard/delete:', error);
+      const err = error as Error;
+      showErrorModal({
+        title: hasPublishedVersion ? 'Discard Failed' : 'Delete Failed',
+        message: err.message || 'Operation failed',
+        stack: err.stack,
+      });
+    }
+  };
+
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this post?')) {
       try {
@@ -224,24 +316,41 @@ const SavedPostEditor: React.FC<SavedPostEditorProps> = ({ post }) => {
         <div className="editor-tabs">
           <div className={`editor-tab active ${isDirty ? 'dirty' : ''}`}>
             <span className="editor-tab-title">{title || 'Untitled'}</span>
-            {isDirty && <span className="editor-tab-dirty">●</span>}
+            {isDirty && <span className="editor-tab-dirty" title="Unsaved changes (auto-saves on switch)">●</span>}
           </div>
         </div>
         <div className="editor-actions">
           <span className={`status-badge status-${post.status}`}>
             {post.status}
           </span>
+          {isSaving && <span className="auto-save-indicator">Saving...</span>}
           {post.status === 'draft' ? (
-            <button onClick={handlePublish} title="Publish">Publish</button>
+            <button 
+              onClick={handlePublish} 
+              className="success"
+              title="Save and make this post public"
+            >
+              Publish
+            </button>
           ) : (
-            <button onClick={handleUnpublish} className="secondary" title="Unpublish">
+            <button 
+              onClick={handleUnpublish} 
+              className="secondary" 
+              title="Return to draft status"
+            >
               Unpublish
             </button>
           )}
-          <button onClick={handleSave} disabled={!isDirty || isSaving} title="Save (Ctrl+S)">
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-          <button onClick={handleDelete} className="secondary danger" title="Delete">
+          {hasPublishedVersion && (
+            <button 
+              onClick={handleDiscard} 
+              className="secondary"
+              title="Revert to last published version"
+            >
+              Discard Changes
+            </button>
+          )}
+          <button onClick={handleDelete} className="secondary danger" title="Delete this post permanently">
             Delete
           </button>
         </div>
@@ -401,314 +510,6 @@ const SavedPostEditor: React.FC<SavedPostEditorProps> = ({ post }) => {
   );
 };
 
-interface UnsavedDraftEditorProps {
-  draft: UnsavedDraft;
-}
-
-const UnsavedDraftEditor: React.FC<UnsavedDraftEditorProps> = ({ draft }) => {
-  const { 
-    updateUnsavedDraft, 
-    removeUnsavedDraft,
-    addPost,
-    setSelectedPost,
-    preferredEditorMode,
-    setPreferredEditorMode,
-    showErrorModal,
-    markClean,
-  } = useAppStore();
-  
-  const [title, setTitle] = useState(draft.title);
-  const [content, setContent] = useState(draft.content);
-  const [tags, setTags] = useState(draft.tags.join(', '));
-  const [categories, setCategories] = useState(draft.categories.join(', '));
-  const [isSaving, setIsSaving] = useState(false);
-  const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
-  const editorRef = useRef<unknown>(null);
-
-  // Extract images from content for lightbox
-  const images = useMarkdownImages(content);
-
-  // Update draft in store when local state changes (for recovery purposes)
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      updateUnsavedDraft(draft.id, { 
-        title, 
-        content, 
-        tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
-        categories: categories.split(',').map(c => c.trim()).filter(c => c.length > 0),
-      });
-    }, 500); // Debounce updates
-    
-    return () => clearTimeout(timeout);
-  }, [title, content, tags, categories, draft.id, updateUnsavedDraft]);
-
-  // Handle editor mode change and persist preference
-  const handleEditorModeChange = (mode: EditorMode) => {
-    setEditorMode(mode);
-    setPreferredEditorMode(mode);
-  };
-
-  const handleSave = useCallback(async () => {
-    if (isSaving) return;
-    
-    // Validate - need at least a title
-    if (!title.trim()) {
-      showErrorModal({
-        title: 'Validation Error',
-        message: 'Please enter a title for your post before saving.',
-      });
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      // Create the post in the database
-      const newPost = await window.electronAPI?.posts.create({
-        title: title.trim(),
-        content,
-        tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
-        categories: categories.split(',').map(c => c.trim()).filter(c => c.length > 0),
-      });
-      
-      if (newPost) {
-        const postData = newPost as PostData;
-        // Add to posts list
-        addPost(postData);
-        // Remove the unsaved draft
-        removeUnsavedDraft(draft.id);
-        // Select the new post
-        setSelectedPost(postData.id);
-        markClean(postData.id);
-        showToast.success('Post saved');
-      }
-    } catch (error) {
-      console.error('Failed to save post:', error);
-      const err = error as Error;
-      showErrorModal({
-        title: 'Save Failed',
-        message: err.message || 'Failed to save post',
-        stack: err.stack,
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [title, content, tags, categories, isSaving, draft.id, addPost, removeUnsavedDraft, setSelectedPost, markClean, showErrorModal]);
-
-  const handleDiscard = () => {
-    if (title.trim() || content.trim()) {
-      if (!confirm('Are you sure you want to discard this unsaved post?')) {
-        return;
-      }
-    }
-    removeUnsavedDraft(draft.id);
-    setSelectedPost(null);
-  };
-
-  // Handle Monaco editor mount
-  const handleEditorDidMount = (editor: unknown) => {
-    editorRef.current = editor;
-  };
-
-  // Save on Ctrl+S
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSave]);
-
-  // Listen for menu events
-  useEffect(() => {
-    const unsubscribeSave = window.electronAPI?.on('menu:save', handleSave);
-    return () => {
-      unsubscribeSave?.();
-    };
-  }, [handleSave]);
-
-  const hasContent = title.trim() || content.trim();
-
-  return (
-    <div className="editor">
-      <div className="editor-header">
-        <div className="editor-tabs">
-          <div className="editor-tab active dirty">
-            <span className="editor-tab-title">{title || 'New Post'}</span>
-            <span className="editor-tab-dirty">●</span>
-            <span className="editor-tab-badge new">NEW</span>
-          </div>
-        </div>
-        <div className="editor-actions">
-          <span className="status-badge status-unsaved">unsaved</span>
-          <button onClick={handleSave} disabled={isSaving} title="Save (Ctrl+S)">
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-          <button onClick={handleDiscard} className="secondary danger" title="Discard">
-            Discard
-          </button>
-        </div>
-      </div>
-
-      <div className="editor-content">
-        <div className="editor-meta">
-          <div className="editor-field">
-            <label>Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter post title..."
-              autoFocus
-            />
-          </div>
-          <div className="editor-field slug-preview">
-            <label>Slug (auto-generated on save)</label>
-            <input
-              type="text"
-              value={title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : ''}
-              disabled
-              className="disabled"
-              placeholder="will-be-generated-from-title"
-            />
-          </div>
-          <div className="editor-field-row">
-            <div className="editor-field">
-              <label>Tags (comma-separated)</label>
-              <input
-                type="text"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="tag1, tag2, tag3"
-              />
-            </div>
-            <div className="editor-field">
-              <label>Categories (comma-separated)</label>
-              <input
-                type="text"
-                value={categories}
-                onChange={(e) => setCategories(e.target.value)}
-                placeholder="category1, category2"
-              />
-            </div>
-          </div>
-        </div>
-        
-        <div className="editor-body">
-          <div className="editor-toolbar">
-            <label>Content</label>
-            <div className="editor-mode-toggle">
-              <button 
-                className={editorMode === 'wysiwyg' ? 'active' : ''} 
-                onClick={() => handleEditorModeChange('wysiwyg')}
-                title="Visual editor"
-              >
-                Visual
-              </button>
-              <button 
-                className={editorMode === 'markdown' ? 'active' : ''} 
-                onClick={() => handleEditorModeChange('markdown')}
-                title="Markdown source"
-              >
-                Markdown
-              </button>
-              <button 
-                className={editorMode === 'preview' ? 'active' : ''} 
-                onClick={() => handleEditorModeChange('preview')}
-                title="Read-only preview"
-              >
-                Preview
-              </button>
-            </div>
-            {images.length > 0 && (
-              <button 
-                className="gallery-button"
-                onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
-                title={`View ${images.length} image(s)`}
-              >
-                📷 {images.length}
-              </button>
-            )}
-          </div>
-          
-          {editorMode === 'wysiwyg' && (
-            <WysiwygEditor
-              content={content}
-              onChange={setContent}
-              placeholder="Start writing your post..."
-            />
-          )}
-          
-          {editorMode === 'markdown' && (
-            <MonacoEditor
-              height="100%"
-              defaultLanguage="markdown"
-              value={content}
-              onChange={(value) => setContent(value || '')}
-              onMount={handleEditorDidMount}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                wordWrap: 'on',
-                lineNumbers: 'on',
-                fontSize: 14,
-                fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
-                padding: { top: 12, bottom: 12 },
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                renderLineHighlight: 'line',
-                quickSuggestions: false,
-                formatOnPaste: true,
-                cursorStyle: 'line',
-                cursorBlinking: 'smooth',
-              }}
-            />
-          )}
-          
-          {editorMode === 'preview' && (
-            <div className="editor-preview markdown-body">
-              {!content.trim() ? (
-                <div className="preview-empty">
-                  <p className="text-muted">No content to preview</p>
-                </div>
-              ) : (
-                <div
-                  className="preview-content"
-                  dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
-                />
-              )}
-            </div>
-          )}
-        </div>
-        
-        {/* Lightbox for viewing images in content */}
-        <Lightbox
-          images={images}
-          initialIndex={lightboxIndex}
-          isOpen={lightboxOpen}
-          onClose={() => setLightboxOpen(false)}
-        />
-      </div>
-
-      <div className="editor-footer">
-        <span className="text-muted text-small">
-          New post - not yet saved
-        </span>
-        {hasContent && (
-          <span className="text-muted text-small">
-            Press Ctrl+S to save
-          </span>
-        )}
-      </div>
-    </div>
-  );
-};
-
 const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const { media, updateMedia, showErrorModal } = useAppStore();
   const item = media.find(m => m.id === mediaId);
@@ -857,11 +658,23 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 };
 
 const WelcomeScreen: React.FC = () => {
-  const { createUnsavedDraft, setSelectedPost } = useAppStore();
+  const { addPost, setSelectedPost } = useAppStore();
 
-  const handleNewPost = () => {
-    const draftId = createUnsavedDraft();
-    setSelectedPost(draftId);
+  const handleNewPost = async () => {
+    try {
+      const newPost = await window.electronAPI?.posts.create({
+        title: 'Untitled',
+        content: '',
+        tags: [],
+        categories: [],
+      });
+      if (newPost) {
+        addPost(newPost as PostData);
+        setSelectedPost(newPost.id);
+      }
+    } catch (error) {
+      console.error('Failed to create post:', error);
+    }
   };
 
   return (
@@ -926,9 +739,10 @@ export const Editor: React.FC = () => {
     selectedPostId, 
     selectedMediaId, 
     posts, 
-    unsavedDrafts,
     errorModal,
     hideErrorModal,
+    isLoading,
+    setSelectedPost,
   } = useAppStore();
 
   // Show error modal if present
@@ -937,29 +751,32 @@ export const Editor: React.FC = () => {
   );
 
   if (activeView === 'posts' && selectedPostId) {
-    // Check if it's an unsaved draft
-    if (isUnsavedDraftId(selectedPostId)) {
-      const draft = unsavedDrafts.find(d => d.id === selectedPostId);
-      if (draft) {
-        return (
-          <>
-            <UnsavedDraftEditor draft={draft} />
-            {renderErrorModal()}
-          </>
-        );
-      }
-    }
-    
-    // Otherwise, it's a saved post
     const post = posts.find(p => p.id === selectedPostId);
     if (post) {
       return (
         <>
-          <SavedPostEditor post={post} />
+          <PostEditor post={post} />
           {renderErrorModal()}
         </>
       );
     }
+    
+    // Post not found - show loading if still loading, otherwise clear selection
+    if (isLoading) {
+      return (
+        <>
+          <div className="editor-empty">
+            <div className="welcome-content">
+              <p className="text-muted">Loading post...</p>
+            </div>
+          </div>
+          {renderErrorModal()}
+        </>
+      );
+    }
+    
+    // Post truly not found - clear selection and fall through to welcome screen
+    setSelectedPost(null);
   }
 
   if (activeView === 'media' && selectedMediaId) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAppStore, PostData, UnsavedDraft } from '../../store';
+import { useAppStore, PostData } from '../../store';
 import { showToast } from '../Toast';
 import './Sidebar.css';
 
@@ -222,7 +222,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
 };
 
 const PostsList: React.FC = () => {
-  const { posts, selectedPostId, setSelectedPost, unsavedDrafts } = useAppStore();
+  const { posts, selectedPostId, setSelectedPost } = useAppStore();
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -321,11 +321,23 @@ const PostsList: React.FC = () => {
     applyFilters();
   }, [selectedTags, selectedCategories]);
 
-  const handleCreatePost = () => {
-    // Create an unsaved draft instead of immediately saving to database
-    const { createUnsavedDraft, setSelectedPost: selectPost } = useAppStore.getState();
-    const draftId = createUnsavedDraft();
-    selectPost(draftId);
+  const handleCreatePost = async () => {
+    // Create a real post immediately in the database with default empty content
+    try {
+      const { addPost, setSelectedPost: selectPost } = useAppStore.getState();
+      const newPost = await window.electronAPI?.posts.create({
+        title: 'Untitled',
+        content: '',
+        tags: [],
+        categories: [],
+      });
+      if (newPost) {
+        addPost(newPost as PostData);
+        selectPost(newPost.id);
+      }
+    } catch (error) {
+      console.error('Failed to create post:', error);
+    }
   };
 
   // Determine which posts to display
@@ -402,34 +414,6 @@ const PostsList: React.FC = () => {
           <button onClick={clearAllFilters} title="Clear all filters">
             Clear filters
           </button>
-        </div>
-      )}
-
-      {/* Unsaved Drafts Section - always show at top if there are any */}
-      {unsavedDrafts.length > 0 && (
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span className="section-icon status-unsaved">●</span>
-            Unsaved ({unsavedDrafts.length})
-          </div>
-          <div className="sidebar-list">
-            {unsavedDrafts.map((draft: UnsavedDraft) => (
-              <div
-                key={draft.id}
-                className={`sidebar-item post-type-new unsaved ${selectedPostId === draft.id ? 'selected' : ''}`}
-                onClick={() => setSelectedPost(draft.id)}
-              >
-                <span className="post-type-icon" title="New post">✨</span>
-                <div className="sidebar-item-content">
-                  <div className="sidebar-item-title">
-                    {draft.title || 'New Post'}
-                    <span className="unsaved-indicator">●</span>
-                  </div>
-                  <div className="sidebar-item-meta">Not yet saved</div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

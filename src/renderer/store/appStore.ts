@@ -30,17 +30,6 @@ export interface PostData {
   categories: string[];
 }
 
-// Unsaved draft that only exists in memory/local storage until saved
-export interface UnsavedDraft {
-  id: string; // Temporary ID (prefixed with 'draft-')
-  title: string;
-  content: string;
-  tags: string[];
-  categories: string[];
-  createdAt: string;
-  isNew: true; // Always true for unsaved drafts
-}
-
 export interface MediaData {
   id: string;
   filename: string;
@@ -93,9 +82,7 @@ interface AppState {
   media: MediaData[];
   tasks: TaskProgress[];
   
-  // Unsaved drafts (memory only until saved)
-  unsavedDrafts: UnsavedDraft[];
-  // Track which posts have unsaved changes (by post ID or draft ID)
+  // Track which posts have unsaved changes (by post ID)
   dirtyPosts: Set<string>;
   
   // Error modal
@@ -129,12 +116,6 @@ interface AppState {
   addPost: (post: PostData) => void;
   updatePost: (id: string, post: Partial<PostData>) => void;
   removePost: (id: string) => void;
-  
-  // Unsaved draft actions
-  createUnsavedDraft: () => string; // Returns the draft ID
-  updateUnsavedDraft: (id: string, data: Partial<UnsavedDraft>) => void;
-  removeUnsavedDraft: (id: string) => void;
-  getUnsavedDraft: (id: string) => UnsavedDraft | undefined;
   
   // Dirty tracking
   markDirty: (id: string) => void;
@@ -181,8 +162,7 @@ export const useAppStore = create<AppState>()(
       media: [],
       tasks: [],
       
-      // Unsaved drafts
-      unsavedDrafts: [],
+      // Dirty posts tracking
       dirtyPosts: new Set<string>(),
       
       // Error modal
@@ -222,48 +202,15 @@ export const useAppStore = create<AppState>()(
       updatePost: (id, updatedPost) => set((state) => ({
         posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedPost } : p)),
       })),
-      removePost: (id) => set((state) => ({
-        posts: state.posts.filter((p) => p.id !== id),
-        selectedPostId: state.selectedPostId === id ? null : state.selectedPostId,
-      })),
-      
-      // Unsaved draft actions
-      createUnsavedDraft: () => {
-        const id = `draft-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        const draft: UnsavedDraft = {
-          id,
-          title: '',
-          content: '',
-          tags: [],
-          categories: [],
-          createdAt: new Date().toISOString(),
-          isNew: true,
-        };
-        set((state) => ({
-          unsavedDrafts: [...state.unsavedDrafts, draft],
-          dirtyPosts: new Set([...state.dirtyPosts, id]),
-        }));
-        return id;
-      },
-      
-      updateUnsavedDraft: (id, data) => set((state) => ({
-        unsavedDrafts: state.unsavedDrafts.map((d) => 
-          d.id === id ? { ...d, ...data } : d
-        ),
-        dirtyPosts: new Set([...state.dirtyPosts, id]),
-      })),
-      
-      removeUnsavedDraft: (id) => set((state) => {
+      removePost: (id) => set((state) => {
         const newDirtyPosts = new Set(state.dirtyPosts);
         newDirtyPosts.delete(id);
         return {
-          unsavedDrafts: state.unsavedDrafts.filter((d) => d.id !== id),
+          posts: state.posts.filter((p) => p.id !== id),
           dirtyPosts: newDirtyPosts,
           selectedPostId: state.selectedPostId === id ? null : state.selectedPostId,
         };
       }),
-      
-      getUnsavedDraft: (id) => get().unsavedDrafts.find((d) => d.id === id),
       
       // Dirty tracking
       markDirty: (id) => set((state) => ({
@@ -318,8 +265,6 @@ export const useAppStore = create<AppState>()(
         selectedPostId: state.selectedPostId,
         selectedMediaId: state.selectedMediaId,
         preferredEditorMode: state.preferredEditorMode,
-        // Persist unsaved drafts for recovery
-        unsavedDrafts: state.unsavedDrafts,
         // Convert Set to array for storage
         dirtyPosts: [...state.dirtyPosts],
       }),

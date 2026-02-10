@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getByStatus: (status: string) => ipcRenderer.invoke('posts:getByStatus', status),
     publish: (id: string) => ipcRenderer.invoke('posts:publish', id),
     unpublish: (id: string) => ipcRenderer.invoke('posts:unpublish', id),
+    discard: (id: string) => ipcRenderer.invoke('posts:discard', id),
+    hasPublishedVersion: (id: string) => ipcRenderer.invoke('posts:hasPublishedVersion', id),
     rebuildFromFiles: () => ipcRenderer.invoke('posts:rebuildFromFiles'),
     search: (query: string) => ipcRenderer.invoke('posts:search', query),
     filter: (filter: unknown) => ipcRenderer.invoke('posts:filter', filter),
@@ -33,6 +35,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLinksTo: (id: string) => ipcRenderer.invoke('posts:getLinksTo', id),
     getLinkedBy: (id: string) => ipcRenderer.invoke('posts:getLinkedBy', id),
     rebuildLinks: () => ipcRenderer.invoke('posts:rebuildLinks'),
+    isSlugAvailable: (slug: string, excludePostId?: string) => ipcRenderer.invoke('posts:isSlugAvailable', slug, excludePostId),
+    generateUniqueSlug: (title: string, excludePostId?: string) => ipcRenderer.invoke('posts:generateUniqueSlug', title, excludePostId),
   },
 
   // Media

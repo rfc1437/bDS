@@ -63,6 +63,16 @@ export function registerIpcHandlers(): void {
     return engine.createPost(data);
   });
 
+  ipcMain.handle('posts:isSlugAvailable', async (_, slug: string, excludePostId?: string) => {
+    const engine = getPostEngine();
+    return engine.isSlugAvailable(slug, excludePostId);
+  });
+
+  ipcMain.handle('posts:generateUniqueSlug', async (_, title: string, excludePostId?: string) => {
+    const engine = getPostEngine();
+    return engine.generateUniqueSlug(title, excludePostId);
+  });
+
   ipcMain.handle('posts:update', async (_, id: string, data: Partial<PostData>) => {
     const engine = getPostEngine();
     return engine.updatePost(id, data);
@@ -96,6 +106,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('posts:unpublish', async (_, id: string) => {
     const engine = getPostEngine();
     return engine.unpublishPost(id);
+  });
+
+  ipcMain.handle('posts:discard', async (_, id: string) => {
+    const engine = getPostEngine();
+    return engine.discardChanges(id);
+  });
+
+  ipcMain.handle('posts:hasPublishedVersion', async (_, id: string) => {
+    const engine = getPostEngine();
+    return engine.hasPublishedVersion(id);
   });
 
   ipcMain.handle('posts:rebuildFromFiles', async () => {

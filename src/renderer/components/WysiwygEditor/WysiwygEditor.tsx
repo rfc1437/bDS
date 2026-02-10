@@ -1,12 +1,11 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { BubbleMenu } from '@tiptap/extension-bubble-menu';
-import { FloatingMenu } from '@tiptap/extension-floating-menu';
+import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
-import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
+import Link from '@tiptap/extension-link';
+import Underline from '@tiptap/extension-underline';
 import TurndownService from 'turndown';
 import './WysiwygEditor.css';
 
@@ -88,6 +87,10 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
   onChange,
   placeholder = 'Start writing your content...',
 }) => {
+  // Track if we're updating from internal changes vs external prop changes
+  const isInternalChange = useRef(false);
+  const lastExternalContent = useRef(content);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -101,34 +104,38 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
           class: 'editor-link',
         },
       }),
+      Underline,
       Image.configure({
         HTMLAttributes: {
           class: 'editor-image',
         },
       }),
-      Underline,
       Placeholder.configure({
         placeholder,
       }),
     ],
     content: markdownToHtml(content),
     onUpdate: ({ editor }) => {
+      isInternalChange.current = true;
       const html = editor.getHTML();
       const markdown = turndownService.turndown(html);
       onChange(markdown);
     },
+    editable: true,
   });
 
+  // Sync content from external changes only (e.g., post switch)
   useEffect(() => {
-    if (editor && content) {
-      const currentHtml = editor.getHTML();
-      const newHtml = markdownToHtml(content);
-      // Only update if content is significantly different
-      if (turndownService.turndown(currentHtml) !== content) {
+    if (editor && content !== lastExternalContent.current) {
+      // This is an external change (e.g., switching posts)
+      if (!isInternalChange.current) {
+        const newHtml = markdownToHtml(content);
         editor.commands.setContent(newHtml);
       }
+      lastExternalContent.current = content;
+      isInternalChange.current = false;
     }
-  }, [content]);
+  }, [content, editor]);
 
   const addImage = useCallback(() => {
     const url = window.prompt('Enter image URL:');
@@ -161,7 +168,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
     <div className="wysiwyg-editor">
       {/* Bubble menu appears when text is selected */}
       {editor && (
-        <BubbleMenu className="bubble-menu" editor={editor} tippyOptions={{ duration: 100 }}>
+        <BubbleMenu className="bubble-menu" editor={editor}>
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
             className={editor.isActive('bold') ? 'is-active' : ''}
@@ -206,7 +213,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
 
       {/* Floating menu appears on empty lines */}
       {editor && (
-        <FloatingMenu className="floating-menu" editor={editor} tippyOptions={{ duration: 100 }}>
+        <FloatingMenu className="floating-menu" editor={editor}>
           <button
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             className={editor.isActive('heading', { level: 1 }) ? 'is-active' : ''}

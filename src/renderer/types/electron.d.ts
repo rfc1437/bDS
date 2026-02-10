@@ -104,12 +104,19 @@ export interface ElectronAPI {
     getByStatus: (status: string) => Promise<PostData[]>;
     publish: (id: string) => Promise<PostData | null>;
     unpublish: (id: string) => Promise<PostData | null>;
+    discard: (id: string) => Promise<PostData | null>;
+    hasPublishedVersion: (id: string) => Promise<boolean>;
     rebuildFromFiles: () => Promise<void>;
     search: (query: string) => Promise<SearchResult[]>;
     filter: (filter: PostFilter) => Promise<PostData[]>;
     getTags: () => Promise<string[]>;
     getCategories: () => Promise<string[]>;
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
+    getLinksTo: (id: string) => Promise<PostData[]>;
+    getLinkedBy: (id: string) => Promise<PostData[]>;
+    rebuildLinks: () => Promise<void>;
+    isSlugAvailable: (slug: string, excludePostId?: string) => Promise<boolean>;
+    generateUniqueSlug: (title: string, excludePostId?: string) => Promise<string>;
   };
   media: {
     import: (sourcePath: string, metadata?: Partial<MediaData>) => Promise<MediaData>;

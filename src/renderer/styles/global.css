@@ -164,6 +164,31 @@ button.secondary:hover {
   background-color: #4a4d51;
 }
 
+button.primary {
+  background-color: var(--vscode-button-background);
+  font-weight: 500;
+}
+
+button.primary:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+button.success {
+  background-color: #28a745;
+}
+
+button.success:hover {
+  background-color: #218838;
+}
+
+button.danger {
+  background-color: #dc3545;
+}
+
+button.danger:hover {
+  background-color: #c82333;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

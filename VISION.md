@@ -8,6 +8,10 @@ sync to a cloud system for syncing data and also rendering the full blog.
 
 create a electron app in this folder that uses typescript for all the logic code and sqlite and a proper database framework around it for local storage of data and turso/libsql to sync against a cloud location for having offline work capabilities with syncing. The UI should be aligned with the UI patterns used by vscode. The name of the application is "blogging Desktop Server" and the shortname is bDS. Start with default layout for edit and view menues and things like that. I don't want the app to use raw SQL, I want some proper layer between those and proper wiring where all actual functional code  is kept in engine classes and the UI realy just does  presentation and reacts to state changes properly, so that long-running processes can properly integrate as async tasks.
 
+We need a good way to handle the syncing of the non-metadata components (posts and media files), because that
+is not part of the database sync. One way could be using something like dropbox in the background, so that
+the posts/ and media/ folders are automatically synced to some area in dropbox and transported that way.
+
 Blog post metadata should be managed in the SQLite database in the user local folder, so it persists application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a markdown file with a properties segment in the top of the file with YAML like property definitions, so all metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the user local path, in that case storing the image file sand for each image file a properties sidecar file that uses the same header structure as for posts.
 
 The application must be able to support multiple projects (ie web sites), so there must be a way to create
@@ -22,6 +26,35 @@ Additionally bring in a good markdown library, because all posts will be formatt
 Integrate toasts as notification mechanism that will be used whenever anything has to communicate success/failure to the user.
 
 Integrated images in posts should be shown with a lightbox effect als galleries when there are multiple photos, or just as single images with lightbox when there is only one. The wysiwyg editor should support this at least on a basic level.
+
+## Posting life-cycle
+
+New posts start in draft state. Drafts are automatically saved in the background, but the draft content is
+not directly part of the publishing pipeline. A user can discard a draft, which either deltes a new  post
+or reverts a post that is edited to the last published state.
+
+A user can publish a post, that moves the content from the draft state to the published state. Also a user
+can start editing in a published post, that moves it to draft state with a copy of the original post as
+the starting point.
+
+So essentially posts have two content fields, one for draft and one for published. Editing only happens on
+the draft state. Undo/Redo is also only available on the draft state editing session in the text field
+with standard mechanisms.
+
+published posts have a delete button that allows deleting a post that exists. This will internally switch
+the post to deleted, and filter it out, but will not remove it fully from the database, because the publishing
+pipeline later might need the fact of the deletion as information source to do its thing (update relevant
+files).
+
+So a post starts in "draft" and can go to "published" and from there to "deleted". From "draft" it can only
+go back to "published" (via discard) or vanish fully from the database (because drafts for new posts are
+not relevant for the pipeline, as they never were published before).
+
+Posts in draft are automatically saved during edit every 20 seconds and a dot in the tab title gives
+information about its state as unsaved. The user can force the save with the standard hotkey for that
+purpose or just wait. Switching to another post will also save a draft automatically.
+
+Published content is only ever updated when the publish action is done by the user.
 
 ## UI and UX specifics
 

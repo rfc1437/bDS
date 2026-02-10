@@ -29,6 +29,12 @@ export const posts = sqliteTable('posts', {
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
   categories: text('categories'), // JSON array stored as text
+  // Published snapshot - stores the last published version for discard functionality
+  publishedTitle: text('published_title'),
+  publishedContent: text('published_content'),
+  publishedTags: text('published_tags'), // JSON array stored as text
+  publishedCategories: text('published_categories'), // JSON array stored as text
+  publishedExcerpt: text('published_excerpt'),
 });
 
 // Media table - stores metadata for images and other media

@@ -149,7 +149,12 @@ export class DatabaseConnection {
         synced_at INTEGER,
         checksum TEXT,
         tags TEXT,
-        categories TEXT
+        categories TEXT,
+        published_title TEXT,
+        published_content TEXT,
+        published_tags TEXT,
+        published_categories TEXT,
+        published_excerpt TEXT
       );
 
       CREATE TABLE IF NOT EXISTS media (
@@ -240,6 +245,18 @@ export class DatabaseConnection {
       await this.localClient.execute(
         "CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id)"
       );
+    }
+
+    // Migration: Add published snapshot columns for discard functionality
+    const publishedContentCol = await this.localClient.execute(
+      "SELECT name FROM pragma_table_info('posts') WHERE name = 'published_content'"
+    );
+    if (publishedContentCol.rows.length === 0) {
+      await this.localClient.execute("ALTER TABLE posts ADD COLUMN published_title TEXT");
+      await this.localClient.execute("ALTER TABLE posts ADD COLUMN published_content TEXT");
+      await this.localClient.execute("ALTER TABLE posts ADD COLUMN published_tags TEXT");
+      await this.localClient.execute("ALTER TABLE posts ADD COLUMN published_categories TEXT");
+      await this.localClient.execute("ALTER TABLE posts ADD COLUMN published_excerpt TEXT");
     }
 
     // Create FTS5 virtual table for full-text search

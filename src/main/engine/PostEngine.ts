@@ -112,6 +112,52 @@ export class PostEngine extends EventEmitter {
       .replace(/^-|-$/g, '');
   }
 
+  /**
+   * Check if a slug is available (not used by any existing post)
+   * @param slug The slug to check
+   * @param excludePostId Optional post ID to exclude (for updates)
+   */
+  async isSlugAvailable(slug: string, excludePostId?: string): Promise<boolean> {
+    const db = getDatabase().getLocal();
+    const existing = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(
+        eq(posts.slug, slug),
+        eq(posts.projectId, this.currentProjectId)
+      ))
+      .get();
+    
+    if (!existing) return true;
+    if (excludePostId && existing.id === excludePostId) return true;
+    return false;
+  }
+
+  /**
+   * Generate a unique slug based on a title
+   * If the slug already exists, appends -2, -3, etc.
+   */
+  async generateUniqueSlug(title: string, excludePostId?: string): Promise<string> {
+    const baseSlug = this.generateSlug(title || 'untitled');
+    
+    if (await this.isSlugAvailable(baseSlug, excludePostId)) {
+      return baseSlug;
+    }
+
+    // Find next available number
+    let counter = 2;
+    while (counter < 1000) {
+      const candidateSlug = `${baseSlug}-${counter}`;
+      if (await this.isSlugAvailable(candidateSlug, excludePostId)) {
+        return candidateSlug;
+      }
+      counter++;
+    }
+
+    // Fallback: add timestamp
+    return `${baseSlug}-${Date.now()}`;
+  }
+
   private calculateChecksum(content: string): string {
     return crypto.createHash('md5').update(content).digest('hex');
   }
@@ -177,7 +223,11 @@ export class PostEngine extends EventEmitter {
     const client = getDatabase().getLocalClient();
     const now = new Date();
     const id = uuidv4();
-    const slug = data.slug || this.generateSlug(data.title || 'untitled');
+    
+    // Use provided slug or generate a unique one from title
+    const slug = data.slug 
+      ? (await this.isSlugAvailable(data.slug) ? data.slug : await this.generateUniqueSlug(data.title || 'untitled'))
+      : await this.generateUniqueSlug(data.title || 'untitled');
 
     const post: PostData = {
       id,
@@ -539,10 +589,58 @@ export class PostEngine extends EventEmitter {
   }
 
   async publishPost(id: string): Promise<PostData | null> {
-    return this.updatePost(id, {
+    const db = getDatabase().getLocal();
+    const existing = await this.getPost(id);
+    
+    if (!existing) {
+      return null;
+    }
+
+    // First update the post with published status
+    const result = await this.updatePost(id, {
       status: 'published',
       publishedAt: new Date(),
     });
+
+    if (result) {
+      // Save the published snapshot for discard functionality
+      await db.update(posts)
+        .set({
+          publishedTitle: result.title,
+          publishedContent: result.content,
+          publishedExcerpt: result.excerpt,
+          publishedTags: JSON.stringify(result.tags),
+          publishedCategories: JSON.stringify(result.categories),
+        })
+        .where(eq(posts.id, id));
+    }
+
+    return result;
+  }
+
+  async discardChanges(id: string): Promise<PostData | null> {
+    const db = getDatabase().getLocal();
+    const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
+    
+    if (!dbPost || !dbPost.publishedContent) {
+      // No published version to revert to
+      return null;
+    }
+
+    // Revert to the published snapshot
+    return this.updatePost(id, {
+      title: dbPost.publishedTitle || dbPost.title,
+      content: dbPost.publishedContent,
+      excerpt: dbPost.publishedExcerpt || undefined,
+      tags: JSON.parse(dbPost.publishedTags || '[]'),
+      categories: JSON.parse(dbPost.publishedCategories || '[]'),
+    });
+  }
+
+  async hasPublishedVersion(id: string): Promise<boolean> {
+    const db = getDatabase().getLocal();
+    const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
+    return !!(dbPost && dbPost.publishedContent);
   }
 
   async unpublishPost(id: string): Promise<PostData | null> {
