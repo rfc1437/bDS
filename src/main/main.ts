@@ -190,12 +190,6 @@ function createApplicationMenu(): Menu {
             mainWindow?.webContents.send('menu:publishSelected');
           },
         },
-        {
-          label: 'Unpublish Selected',
-          click: () => {
-            mainWindow?.webContents.send('menu:unpublishSelected');
-          },
-        },
         { type: 'separator' },
         {
           label: 'Preview Post',
@@ -264,14 +258,14 @@ function createApplicationMenu(): Menu {
           label: 'View on GitHub',
           click: async () => {
             const { shell } = require('electron');
-            await shell.openExternal('https://github.com/bds/blogging-desktop-server');
+            await shell.openExternal('https://github.com/rfc1437/bDS');
           },
         },
         {
           label: 'Report Issue',
           click: async () => {
             const { shell } = require('electron');
-            await shell.openExternal('https://github.com/bds/blogging-desktop-server/issues');
+            await shell.openExternal('https://github.com/rfc1437/bDS/issues');
           },
         },
       ],
