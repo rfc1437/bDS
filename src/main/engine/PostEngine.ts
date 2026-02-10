@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import matter from 'gray-matter';
-import { eq, and, desc, gte, lte, like } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, like, inArray } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { posts, Post, NewPost, postLinks } from '../database/schema';
@@ -193,6 +193,14 @@ export class PostEngine extends EventEmitter {
 
   private async readPostFile(filePath: string): Promise<PostData | null> {
     try {
+      // Check if file exists first to avoid noisy errors
+      try {
+        await fs.access(filePath);
+      } catch {
+        // File doesn't exist - this is expected when DB has stale paths
+        return null;
+      }
+
       const content = await fs.readFile(filePath, 'utf-8');
       const { data, content: body } = matter(content);
       const metadata = data as PostMetadata;
@@ -213,7 +221,7 @@ export class PostEngine extends EventEmitter {
         categories: metadata.categories || [],
       };
     } catch (error) {
-      console.error(`Failed to read post file: ${filePath}`, error);
+      console.error(`Failed to parse post file: ${filePath}`, error);
       return null;
     }
   }
@@ -833,9 +841,29 @@ export class PostEngine extends EventEmitter {
       execute: async (onProgress) => {
         const db = getDatabase().getLocal();
         const client = getDatabase().getLocalClient();
-        
-        onProgress(0, 'Scanning posts directory...');
-        
+
+        onProgress(0, 'Deleting existing posts for project...');
+
+        // Delete all posts for the current project - clean slate rebuild
+        const existingPosts = await db.select({ id: posts.id }).from(posts).where(eq(posts.projectId, this.currentProjectId)).all();
+        if (existingPosts.length > 0) {
+          const postIds = existingPosts.map(p => p.id);
+          // Delete FTS entries first
+          if (client) {
+            for (const post of existingPosts) {
+              await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [post.id] });
+            }
+          }
+          // Delete post links where source or target is in the posts being deleted
+          await db.delete(postLinks).where(inArray(postLinks.sourcePostId, postIds));
+          await db.delete(postLinks).where(inArray(postLinks.targetPostId, postIds));
+          // Delete posts
+          await db.delete(posts).where(eq(posts.projectId, this.currentProjectId));
+          console.log(`Deleted ${existingPosts.length} existing post(s) for project ${this.currentProjectId}`);
+        }
+
+        onProgress(5, 'Scanning posts directory...');
+
         // Recursively find all .md files in the posts directory tree
         const mdFiles: string[] = [];
         const scanDir = async (dir: string) => {
@@ -860,45 +888,37 @@ export class PostEngine extends EventEmitter {
           // Already exists
         }
         await scanDir(postsBaseDir);
-        
+
         onProgress(10, `Found ${mdFiles.length} post files`);
-        
+
+        // Track slugs to detect duplicates
+        const insertedSlugs = new Map<string, string>(); // slug -> filePath
+
         for (let i = 0; i < mdFiles.length; i++) {
           const filePath = mdFiles[i];
           const fileName = path.basename(filePath);
-          
+
           onProgress(10 + (80 * (i / mdFiles.length)), `Processing ${fileName}...`);
-          
+
           const postData = await this.readPostFile(filePath);
-          
+
           if (postData) {
-            const existing = await db.select().from(posts).where(eq(posts.id, postData.id)).get();
-            const checksum = this.calculateChecksum(postData.content);
-            
-            if (existing) {
-              // Only update if no active draft content in DB (don't overwrite edits)
-              if (!existing.content) {
-                await db.update(posts)
-                  .set({
-                    title: postData.title,
-                    slug: postData.slug,
-                    excerpt: postData.excerpt,
-                    content: null, // Content lives in the file, not DB
-                    status: 'published', // Files on disk = published
-                    author: postData.author,
-                    updatedAt: postData.updatedAt,
-                    publishedAt: postData.publishedAt,
-                    filePath,
-                    checksum,
-                    tags: JSON.stringify(postData.tags),
-                    categories: JSON.stringify(postData.categories),
-                  })
-                  .where(eq(posts.id, postData.id));
+            try {
+              const projectId = postData.projectId || this.currentProjectId;
+              const slugKey = `${projectId}:${postData.slug}`;
+
+              // Check for duplicate slugs
+              if (insertedSlugs.has(slugKey)) {
+                console.error(`Duplicate slug "${postData.slug}" found. File "${filePath}" duplicates "${insertedSlugs.get(slugKey)}". Skipping.`);
+                continue;
               }
-            } else {
+
+              const checksum = this.calculateChecksum(postData.content);
+
+              // Insert fresh - we deleted all records at the start
               await db.insert(posts).values({
                 id: postData.id,
-                projectId: postData.projectId || this.currentProjectId,
+                projectId,
                 title: postData.title,
                 slug: postData.slug,
                 excerpt: postData.excerpt,
@@ -914,24 +934,33 @@ export class PostEngine extends EventEmitter {
                 tags: JSON.stringify(postData.tags),
                 categories: JSON.stringify(postData.categories),
               });
-            }
 
-            // Update FTS index (use file content for search)
-            if (client) {
-              await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [postData.id] });
-              await client.execute({
-                sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-                args: [postData.id, postData.title, postData.content, postData.excerpt || '', postData.tags.join(' '), postData.categories.join(' ')],
-              });
+              insertedSlugs.set(slugKey, filePath);
+
+              // Update FTS index (use file content for search)
+              if (client) {
+                await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [postData.id] });
+                await client.execute({
+                  sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
+                  args: [postData.id, postData.title, postData.content, postData.excerpt || '', postData.tags.join(' '), postData.categories.join(' ')],
+                });
+              }
+            } catch (error: any) {
+              // Handle constraint violations and other errors gracefully
+              if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                console.error(`Failed to insert post "${postData.title}" from ${filePath}: Unique constraint violation (likely slug conflict)`);
+              } else {
+                console.error(`Failed to process post from ${filePath}:`, error);
+              }
             }
           }
         }
-        
+
         onProgress(100, 'Database rebuild complete');
         this.emit('databaseRebuilt');
       },
     };
-    
+
     await taskManager.runTask(task);
   }
 

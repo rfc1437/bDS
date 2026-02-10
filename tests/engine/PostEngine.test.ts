@@ -1240,6 +1240,9 @@ const code = 'example';
         mockDirent('post2.md'),
         mockDirent('other.txt'),
       ] as any);
+
+      // Mock access to allow file reads
+      vi.mocked(fs.access).mockResolvedValue(undefined);
       
       // Mock readFile to return valid post content
       vi.mocked(fs.readFile).mockImplementation(async (filePath: any) => {
@@ -1313,10 +1316,13 @@ Content 2`;
       expect(fs.mkdir).toHaveBeenCalled();
     });
 
-    it('should update existing posts in database', async () => {
+    it('should delete all existing posts before inserting fresh from files', async () => {
       const fs = await import('fs/promises');
       
       vi.mocked(fs.readdir).mockResolvedValueOnce([mockDirent('existing.md')] as any);
+
+      // Mock access to allow file reads
+      vi.mocked(fs.access).mockResolvedValue(undefined);
       
       vi.mocked(fs.readFile).mockResolvedValueOnce(`---
 id: existing-id
@@ -1331,28 +1337,31 @@ categories: []
 ---
 Updated content`);
 
-      // Mock that post exists in database
+      // Mock that project has existing posts to delete
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
         const chain = createSelectChain();
         chain.where = vi.fn().mockReturnValue({
           ...chain,
-          get: vi.fn().mockResolvedValue({
-            id: 'existing-id',
-            title: 'Old Title',
-          }),
+          all: vi.fn().mockResolvedValue([{ id: 'existing-id' }]),
+          get: vi.fn().mockResolvedValue(null),
         });
         return chain;
       });
 
       await postEngine.rebuildDatabaseFromFiles();
 
-      expect(mockLocalDb.update).toHaveBeenCalled();
+      // Should delete existing posts first, then insert fresh
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+      expect(mockLocalDb.insert).toHaveBeenCalled();
     });
 
     it('should insert new posts not in database', async () => {
       const fs = await import('fs/promises');
       
       vi.mocked(fs.readdir).mockResolvedValueOnce([mockDirent('new-post.md')] as any);
+
+      // Mock access to allow file reads
+      vi.mocked(fs.access).mockResolvedValue(undefined);
       
       vi.mocked(fs.readFile).mockResolvedValueOnce(`---
 id: new-post-id
@@ -1386,6 +1395,9 @@ New content`);
       const fs = await import('fs/promises');
       
       vi.mocked(fs.readdir).mockResolvedValueOnce([mockDirent('fts-test.md')] as any);
+
+      // Mock access to allow file reads
+      vi.mocked(fs.access).mockResolvedValue(undefined);
       
       vi.mocked(fs.readFile).mockResolvedValueOnce(`---
 id: fts-test-id

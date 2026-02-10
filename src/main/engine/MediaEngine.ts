@@ -238,6 +238,14 @@ export class MediaEngine extends EventEmitter {
 
   private async readSidecarFile(sidecarPath: string): Promise<MediaMetadata | null> {
     try {
+      // Check if file exists first to avoid noisy errors
+      try {
+        await fs.access(sidecarPath);
+      } catch {
+        // File doesn't exist - this is expected when DB has stale paths
+        return null;
+      }
+
       const content = await fs.readFile(sidecarPath, 'utf-8');
       const lines = content.split('\n');
       
@@ -309,7 +317,7 @@ export class MediaEngine extends EventEmitter {
 
       return metadata as MediaMetadata;
     } catch (error) {
-      console.error(`Failed to read sidecar file: ${sidecarPath}`, error);
+      console.error(`Failed to parse sidecar file: ${sidecarPath}`, error);
       return null;
     }
   }
@@ -535,7 +543,16 @@ export class MediaEngine extends EventEmitter {
       execute: async (onProgress) => {
         const db = getDatabase().getLocal();
         
-        onProgress(0, 'Scanning media directory...');
+        onProgress(0, 'Deleting existing media for project...');
+
+        // Delete all media for the current project - clean slate rebuild
+        const existingMedia = await db.select({ id: media.id }).from(media).where(eq(media.projectId, this.currentProjectId)).all();
+        if (existingMedia.length > 0) {
+          await db.delete(media).where(eq(media.projectId, this.currentProjectId));
+          console.log(`Deleted ${existingMedia.length} existing media record(s) for project ${this.currentProjectId}`);
+        }
+
+        onProgress(5, 'Scanning media directory...');
         
         // Recursively find all .meta files in the media directory tree
         const metaFiles: string[] = [];
@@ -580,44 +597,26 @@ export class MediaEngine extends EventEmitter {
               const checksum = this.calculateChecksum(buffer);
               const filename = path.basename(mediaFilePath);
 
-              const existing = await db.select().from(media).where(eq(media.id, metadata.id)).get();
-              
-              if (existing) {
-                await db.update(media)
-                  .set({
-                    originalName: metadata.originalName,
-                    mimeType: metadata.mimeType,
-                    size: stats.size,
-                    width: metadata.width,
-                    height: metadata.height,
-                    alt: metadata.alt,
-                    caption: metadata.caption,
-                    updatedAt: new Date(metadata.updatedAt),
-                    checksum,
-                    tags: JSON.stringify(metadata.tags),
-                  })
-                  .where(eq(media.id, metadata.id));
-              } else {
-                await db.insert(media).values({
-                  id: metadata.id,
-                  projectId: this.currentProjectId,
-                  filename,
-                  originalName: metadata.originalName,
-                  mimeType: metadata.mimeType,
-                  size: stats.size,
-                  width: metadata.width,
-                  height: metadata.height,
-                  alt: metadata.alt,
-                  caption: metadata.caption,
-                  filePath: mediaFilePath,
-                  sidecarPath,
-                  createdAt: new Date(metadata.createdAt),
-                  updatedAt: new Date(metadata.updatedAt),
-                  syncStatus: 'pending',
-                  checksum,
-                  tags: JSON.stringify(metadata.tags),
-                });
-              }
+              // Insert fresh - we deleted all records at the start
+              await db.insert(media).values({
+                id: metadata.id,
+                projectId: this.currentProjectId,
+                filename,
+                originalName: metadata.originalName,
+                mimeType: metadata.mimeType,
+                size: stats.size,
+                width: metadata.width,
+                height: metadata.height,
+                alt: metadata.alt,
+                caption: metadata.caption,
+                filePath: mediaFilePath,
+                sidecarPath,
+                createdAt: new Date(metadata.createdAt),
+                updatedAt: new Date(metadata.updatedAt),
+                syncStatus: 'pending',
+                checksum,
+                tags: JSON.stringify(metadata.tags),
+              });
             } catch (error) {
               console.error(`Media file not found for sidecar: ${sidecarPath}`, error);
             }
