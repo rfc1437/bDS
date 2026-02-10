@@ -2,6 +2,9 @@
   position: relative;
   padding: 8px 12px;
   border-bottom: 1px solid var(--vscode-sideBar-border);
+  flex-shrink: 0;
+  background-color: var(--vscode-sideBar-background);
+  min-height: 44px;
 }
 
 .project-selector-trigger {
@@ -10,10 +13,10 @@
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
-  background-color: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border);
+  background-color: #3c3c3c;
+  border: 1px solid #555555;
   border-radius: 4px;
-  color: var(--vscode-input-foreground);
+  color: #e0e0e0;
   cursor: pointer;
   font-size: 13px;
   text-align: left;

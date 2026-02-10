@@ -192,13 +192,45 @@ export class DatabaseConnection {
 
       CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);
       CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
-      CREATE INDEX IF NOT EXISTS idx_posts_project_id ON posts(project_id);
       CREATE INDEX IF NOT EXISTS idx_posts_sync_status ON posts(sync_status);
       CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at);
-      CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id);
       CREATE INDEX IF NOT EXISTS idx_media_sync_status ON media(sync_status);
       CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
     `);
+
+    // Check if project_id column exists in posts table, add if missing (migration)
+    const postsColumns = await this.localClient.execute(
+      "SELECT name FROM pragma_table_info('posts') WHERE name = 'project_id'"
+    );
+    if (postsColumns.rows.length === 0) {
+      await this.localClient.execute(
+        "ALTER TABLE posts ADD COLUMN project_id TEXT NOT NULL DEFAULT 'default'"
+      );
+      await this.localClient.execute(
+        "CREATE INDEX IF NOT EXISTS idx_posts_project_id ON posts(project_id)"
+      );
+    } else {
+      await this.localClient.execute(
+        "CREATE INDEX IF NOT EXISTS idx_posts_project_id ON posts(project_id)"
+      );
+    }
+
+    // Check if project_id column exists in media table, add if missing (migration)
+    const mediaColumns = await this.localClient.execute(
+      "SELECT name FROM pragma_table_info('media') WHERE name = 'project_id'"
+    );
+    if (mediaColumns.rows.length === 0) {
+      await this.localClient.execute(
+        "ALTER TABLE media ADD COLUMN project_id TEXT NOT NULL DEFAULT 'default'"
+      );
+      await this.localClient.execute(
+        "CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id)"
+      );
+    } else {
+      await this.localClient.execute(
+        "CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id)"
+      );
+    }
 
     // Create FTS5 virtual table for full-text search
     await this.localClient.execute(`

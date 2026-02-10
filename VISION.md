@@ -33,6 +33,12 @@ All sidebar areas and panels can be resized easily and resizings are persisted s
 application start. UI configuration is persisted on the project level, so when I switch projects, I get the
 same layout and opened tabs as the last time I worked on that project.
 
+Sidebar will be shown/hidden by repeated clicking on same icon, just as with vscode. Also the title bar
+has the typical "show/hide left sidebar" icon as vscode has it.
+
+The main area is a tabbed layout with proper tab support that stay open even on sidebar switching and that
+grow and shrink accordingly when the sidebar is activated or deactivated.
+
 There are no lengthy synchronous actions in the UI thread, everything is offloaded to the main thread and
 if it is complex, to async tasks, with proper integration with the UI and notification about state of those
 asynchronous tasks via toasts. There is a central notification framework used by everything, so we are sure

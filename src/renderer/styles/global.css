@@ -12,14 +12,21 @@
   --vscode-tab-inactiveBackground: #2d2d2d;
   --vscode-list-hoverBackground: #2a2d2e;
   --vscode-list-activeSelectionBackground: #094771;
+  --vscode-list-activeSelectionForeground: #ffffff;
   --vscode-list-inactiveSelectionBackground: #37373d;
   --vscode-input-background: #3c3c3c;
   --vscode-dropdown-background: #3c3c3c;
+  --vscode-dropdown-foreground: #f0f0f0;
+  --vscode-dropdown-border: #3c3c3c;
+  --vscode-widget-border: #454545;
   --vscode-button-background: #0e639c;
   --vscode-button-hoverBackground: #1177bb;
   --vscode-button-secondaryBackground: #3a3d41;
+  --vscode-button-secondaryForeground: #ffffff;
+  --vscode-button-secondaryHoverBackground: #45494e;
   
   /* Foreground colors */
+  --vscode-foreground: #cccccc;
   --vscode-editor-foreground: #d4d4d4;
   --vscode-sideBar-foreground: #cccccc;
   --vscode-activityBar-foreground: #ffffff;
@@ -44,6 +51,7 @@
   --vscode-notificationsErrorIcon-foreground: #f48771;
   --vscode-testing-iconPassed: #73c991;
   --vscode-testing-iconFailed: #f14c4c;
+  --vscode-terminal-ansiGreen: #23d18b;
   
   /* Badge colors */
   --vscode-badge-background: #4d4d4d;
