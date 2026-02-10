@@ -243,11 +243,11 @@ describe('MediaEngine', () => {
       expect(fs.mkdir).toHaveBeenCalled();
     });
 
-    it('should write media file to destination', async () => {
+    it('should copy media file to destination', async () => {
       const fs = await import('fs/promises');
       await mediaEngine.importMedia('/source/image.jpg');
 
-      expect(fs.writeFile).toHaveBeenCalled();
+      expect(fs.copyFile).toHaveBeenCalled();
     });
 
     it('should insert media record into database', async () => {
@@ -260,8 +260,9 @@ describe('MediaEngine', () => {
       const fs = await import('fs/promises');
       await mediaEngine.importMedia('/source/image.jpg');
 
-      // Should write both the media file and the sidecar file
-      expect(vi.mocked(fs.writeFile).mock.calls.length).toBeGreaterThanOrEqual(2);
+      // Should copy the media file and write the sidecar file
+      expect(vi.mocked(fs.copyFile).mock.calls.length).toBeGreaterThanOrEqual(1);
+      expect(vi.mocked(fs.writeFile).mock.calls.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -446,6 +447,76 @@ describe('MediaEngine', () => {
 
       expect(media.alt).toBeUndefined();
       expect(media.caption).toBeUndefined();
+    });
+  });
+
+  describe('Date-based folder structure', () => {
+    beforeEach(() => {
+      mockFiles.set('/source/dated-image.jpg', Buffer.from('image-data'));
+    });
+
+    it('should store media in YYYY/MM folder based on createdAt date', async () => {
+      const fs = await import('fs/promises');
+      
+      const media = await mediaEngine.importMedia('/source/dated-image.jpg');
+
+      const copyCall = vi.mocked(fs.copyFile).mock.calls[0];
+      expect(copyCall).toBeDefined();
+
+      const destPath = copyCall[1] as string;
+      const year = media.createdAt.getFullYear();
+      const month = (media.createdAt.getMonth() + 1).toString().padStart(2, '0');
+
+      // Path should contain YYYY/MM structure (handle both / and \ separators)
+      expect(destPath).toMatch(new RegExp(`[/\\\\]${year}[/\\\\]${month}[/\\\\]`));
+    });
+
+    it('should create nested year/month directories on media import', async () => {
+      const fs = await import('fs/promises');
+      
+      await mediaEngine.importMedia('/source/dated-image.jpg');
+
+      // mkdir should be called with recursive: true
+      expect(fs.mkdir).toHaveBeenCalled();
+      const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+      
+      // Should have created directory containing year/month structure
+      const yearMonthDirCall = mkdirCalls.find((call) => {
+        const dirPath = call[0] as string;
+        return dirPath.match(/[/\\]\d{4}[/\\]\d{2}$/);
+      });
+      expect(yearMonthDirCall).toBeDefined();
+    });
+
+    it('should return correct path via getMediaPath method', async () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+
+      const mediaPath = mediaEngine.getMediaPathForDate('test-uuid', 'jpg', now);
+      
+      // Handle both Windows (\) and Unix (/) path separators
+      expect(mediaPath).toMatch(new RegExp(`[/\\\\]${year}[/\\\\]${month}[/\\\\]`));
+      expect(mediaPath).toContain('test-uuid.jpg');
+    });
+
+    it('should handle media from previous years correctly', async () => {
+      const oldDate = new Date('2021-06-20');
+      const mediaPath = mediaEngine.getMediaPathForDate('old-id', 'png', oldDate);
+
+      expect(mediaPath).toMatch(/[/\\]2021[/\\]06[/\\]/);
+      expect(mediaPath).toContain('old-id.png');
+    });
+
+    it('should use zero-padded month numbers (01-12)', async () => {
+      const january = new Date('2024-01-15');
+      const december = new Date('2024-12-15');
+      
+      const januaryPath = mediaEngine.getMediaPathForDate('jan-id', 'jpg', january);
+      const decemberPath = mediaEngine.getMediaPathForDate('dec-id', 'jpg', december);
+
+      expect(januaryPath).toMatch(/[/\\]2024[/\\]01[/\\]/);
+      expect(decemberPath).toMatch(/[/\\]2024[/\\]12[/\\]/);
     });
   });
 });

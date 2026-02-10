@@ -45,9 +45,35 @@ export class MediaEngine extends EventEmitter {
     super();
   }
 
-  private getMediaDir(): string {
+  private getMediaBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId, 'media');
+  }
+
+  private getMediaDir(): string {
+    // Kept for backwards compatibility - returns base media directory
+    return this.getMediaBaseDir();
+  }
+
+  /**
+   * Get the date-based directory for media based on its creation date.
+   * Format: media/YYYY/MM/
+   */
+  private getMediaDirForDate(date: Date): string {
+    const baseDir = this.getMediaBaseDir();
+    const year = date.getFullYear().toString();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return path.join(baseDir, year, month);
+  }
+
+  /**
+   * Get the full path for a media file based on id, extension, and date.
+   * Returns: media/YYYY/MM/{id}.{ext}
+   */
+  getMediaPathForDate(id: string, ext: string, date: Date): string {
+    const dir = this.getMediaDirForDate(date);
+    const extension = ext.startsWith('.') ? ext : `.${ext}`;
+    return path.join(dir, `${id}${extension}`);
   }
 
   setProjectContext(projectId: string): void {
@@ -204,12 +230,14 @@ export class MediaEngine extends EventEmitter {
     const originalName = path.basename(sourcePath);
     const ext = path.extname(originalName);
     const filename = `${id}${ext}`;
-    const mediaDir = this.getMediaDir();
+    
+    // Use date-based directory structure (media/YYYY/MM/)
+    const mediaDir = this.getMediaDirForDate(now);
     await fs.mkdir(mediaDir, { recursive: true });
     const destPath = path.join(mediaDir, filename);
 
     // Copy file to media directory
-    await fs.writeFile(destPath, sourceBuffer);
+    await fs.copyFile(sourcePath, destPath);
 
     const mediaData: MediaData = {
       id,

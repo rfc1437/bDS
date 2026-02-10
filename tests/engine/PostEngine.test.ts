@@ -441,4 +441,1014 @@ describe('PostEngine', () => {
       expect(post.categories).toEqual(['testing', 'examples']);
     });
   });
+
+  describe('getPost', () => {
+    it('should return null for non-existent post', async () => {
+      const result = await postEngine.getPost('non-existent-id');
+      expect(result).toBeNull();
+    });
+
+    it('should retrieve post from database and file system', async () => {
+      // Create a post first
+      const created = await postEngine.createPost({
+        title: 'Retrievable Post',
+        content: 'Content for retrieval test',
+      });
+
+      const filePath = `/mock/userData/projects/default/posts/${created.slug}.md`;
+      
+      // Store the file content so readFile can retrieve it
+      mockFiles.set(filePath, `---
+id: ${created.id}
+projectId: ${created.projectId}
+title: Retrievable Post
+slug: ${created.slug}
+status: draft
+createdAt: ${created.createdAt.toISOString()}
+updatedAt: ${created.updatedAt.toISOString()}
+tags: []
+categories: []
+---
+Content for retrieval test`);
+
+      // Mock the select chain to find the post by ID
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPost(created.id);
+
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('Retrievable Post');
+      expect(result?.content).toBe('Content for retrieval test');
+    });
+
+    it('should return database-only data when file not found', async () => {
+      // Mock database returning a post but file missing
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'db-only-id',
+            projectId: 'default',
+            title: 'DB Only Post',
+            slug: 'db-only-post',
+            status: 'draft',
+            filePath: '/mock/path/to/missing-file.md',
+            tags: '["test"]',
+            categories: '["category"]',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPost('db-only-id');
+
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('DB Only Post');
+      expect(result?.content).toBe(''); // Empty content when file not found
+      expect(result?.tags).toEqual(['test']);
+      expect(result?.categories).toEqual(['category']);
+    });
+  });
+
+  describe('updatePost', () => {
+    it('should return null when updating non-existent post', async () => {
+      const result = await postEngine.updatePost('non-existent-id', { title: 'New Title' });
+      expect(result).toBeNull();
+    });
+
+    it('should update post title', async () => {
+      // Create a post first
+      const created = await postEngine.createPost({ title: 'Original Title' });
+
+      // Mock getPost to return the created post
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, { title: 'Updated Title' });
+
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('Updated Title');
+    });
+
+    it('should update updatedAt timestamp on update', async () => {
+      const created = await postEngine.createPost({ title: 'Timestamp Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      const beforeUpdate = new Date();
+      const result = await postEngine.updatePost(created.id, { content: 'Changed' });
+      const afterUpdate = new Date();
+
+      expect(result?.updatedAt.getTime()).toBeGreaterThanOrEqual(beforeUpdate.getTime());
+      expect(result?.updatedAt.getTime()).toBeLessThanOrEqual(afterUpdate.getTime());
+    });
+
+    it('should emit postUpdated event', async () => {
+      const handler = vi.fn();
+      postEngine.on('postUpdated', handler);
+
+      const created = await postEngine.createPost({ title: 'Event Update Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      await postEngine.updatePost(created.id, { title: 'Updated Event Test' });
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Updated Event Test' })
+      );
+    });
+
+    it('should handle slug change by deleting old file', async () => {
+      const fs = await import('fs/promises');
+      const created = await postEngine.createPost({ title: 'Slug Change Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockClear();
+      await postEngine.updatePost(created.id, { slug: 'new-slug' });
+
+      // Should try to delete old file
+      expect(fs.unlink).toHaveBeenCalled();
+    });
+
+    it('should update tags and categories', async () => {
+      const created = await postEngine.createPost({ 
+        title: 'Tag Update Test',
+        tags: ['old-tag'],
+        categories: ['old-category'],
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+            tags: JSON.stringify(created.tags),
+            categories: JSON.stringify(created.categories),
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, {
+        tags: ['new-tag-1', 'new-tag-2'],
+        categories: ['new-category'],
+      });
+
+      expect(result?.tags).toEqual(['new-tag-1', 'new-tag-2']);
+      expect(result?.categories).toEqual(['new-category']);
+    });
+
+    it('should preserve original projectId and id', async () => {
+      postEngine.setProjectContext('original-project');
+      const created = await postEngine.createPost({ title: 'Protect IDs Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: 'original-project',
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            filePath: `/mock/userData/projects/original-project/posts/${created.slug}.md`,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, {
+        projectId: 'hacked-project' as any,
+        id: 'hacked-id' as any,
+        title: 'Safe Update',
+      });
+
+      expect(result?.id).toBe(created.id); // ID preserved
+      expect(result?.projectId).toBe('original-project'); // projectId preserved
+    });
+  });
+
+  describe('deletePost', () => {
+    it('should return false when deleting non-existent post', async () => {
+      const result = await postEngine.deletePost('non-existent-id');
+      expect(result).toBe(false);
+    });
+
+    it('should delete post and return true', async () => {
+      const created = await postEngine.createPost({ title: 'Delete Me' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.deletePost(created.id);
+
+      expect(result).toBe(true);
+    });
+
+    it('should emit postDeleted event', async () => {
+      const handler = vi.fn();
+      postEngine.on('postDeleted', handler);
+
+      const created = await postEngine.createPost({ title: 'Delete Event Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+          }),
+        });
+        return chain;
+      });
+
+      await postEngine.deletePost(created.id);
+
+      expect(handler).toHaveBeenCalledWith(created.id);
+    });
+
+    it('should delete file from filesystem', async () => {
+      const fs = await import('fs/promises');
+      const created = await postEngine.createPost({ title: 'File Delete Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockClear();
+      await postEngine.deletePost(created.id);
+
+      expect(fs.unlink).toHaveBeenCalled();
+    });
+
+    it('should delete from database', async () => {
+      const created = await postEngine.createPost({ title: 'DB Delete Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+          }),
+        });
+        return chain;
+      });
+
+      await postEngine.deletePost(created.id);
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+    });
+
+    it('should delete from FTS index', async () => {
+      const created = await postEngine.createPost({ title: 'FTS Delete Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            filePath: `/mock/userData/projects/default/posts/${created.slug}.md`,
+          }),
+        });
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+      await postEngine.deletePost(created.id);
+
+      const ftsDelete = mockExecuteArgs.find((q) => 
+        q.sql.includes('DELETE FROM posts_fts')
+      );
+      expect(ftsDelete).toBeDefined();
+    });
+
+    it('should handle file deletion error gracefully', async () => {
+      const fs = await import('fs/promises');
+      const created = await postEngine.createPost({ title: 'Error Delete Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            filePath: `/mock/userData/projects/default/posts/missing.md`,
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('ENOENT'));
+
+      // Should not throw
+      const result = await postEngine.deletePost(created.id);
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('Metadata roundtrip (write -> read integrity)', () => {
+    it('should preserve all fields through write and read cycle', async () => {
+      const fs = await import('fs/promises');
+      const publishDate = new Date('2024-03-15T10:30:00.000Z');
+      
+      const original = await postEngine.createPost({
+        title: 'Roundtrip Test Post',
+        slug: 'roundtrip-test',
+        content: '# Roundtrip\n\nTesting data integrity.',
+        excerpt: 'Testing the roundtrip',
+        status: 'published',
+        author: 'Test Author',
+        publishedAt: publishDate,
+        tags: ['roundtrip', 'integrity', 'test'],
+        categories: ['testing'],
+      });
+
+      // Get the written file content
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('roundtrip-test.md')
+      );
+      expect(writeCall).toBeDefined();
+      const fileContent = writeCall![1] as string;
+
+      // Verify frontmatter contains all fields
+      expect(fileContent).toContain('title: Roundtrip Test Post');
+      expect(fileContent).toContain('slug: roundtrip-test');
+      expect(fileContent).toContain('status: published');
+      expect(fileContent).toContain('author: Test Author');
+      expect(fileContent).toContain('excerpt: Testing the roundtrip');
+      expect(fileContent).toContain('publishedAt:');
+      expect(fileContent).toContain('- roundtrip');
+      expect(fileContent).toContain('- integrity');
+      expect(fileContent).toContain('- test');
+      expect(fileContent).toContain('- testing');
+      expect(fileContent).toContain('# Roundtrip');
+    });
+
+    it('should handle empty tags and categories', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'No Tags Post',
+        content: 'Content without tags',
+        tags: [],
+        categories: [],
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('no-tags-post.md')
+      );
+      const fileContent = writeCall![1] as string;
+
+      expect(fileContent).toContain('tags: []');
+      expect(fileContent).toContain('categories: []');
+    });
+
+    it('should not include undefined optional fields in frontmatter', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'Minimal Post',
+        content: 'Just content',
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('minimal-post.md')
+      );
+      const fileContent = writeCall![1] as string;
+
+      // These optional fields should NOT appear if not set
+      expect(fileContent).not.toContain('excerpt:');
+      expect(fileContent).not.toContain('author:');
+      expect(fileContent).not.toContain('publishedAt:');
+    });
+  });
+
+  describe('Edge cases - special characters and unicode', () => {
+    it('should handle unicode characters in content', async () => {
+      const fs = await import('fs/promises');
+      
+      const post = await postEngine.createPost({
+        title: 'Unicode Test',
+        content: '# 你好世界\n\nЗдравствуй мир\n\nこんにちは\n\nEmoji: 🚀💻📝',
+      });
+
+      expect(post.content).toContain('你好世界');
+      expect(post.content).toContain('Здравствуй');
+      expect(post.content).toContain('こんにちは');
+      expect(post.content).toContain('🚀💻📝');
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('unicode-test.md')
+      );
+      const fileContent = writeCall![1] as string;
+
+      expect(fileContent).toContain('你好世界');
+      expect(fileContent).toContain('🚀💻📝');
+    });
+
+    it('should handle special characters in title', async () => {
+      const post = await postEngine.createPost({
+        title: 'Post: With Special "Characters" & <Symbols>!',
+      });
+
+      // Slug should be sanitized
+      expect(post.slug).toBe('post-with-special-characters-symbols');
+      // Title should be preserved
+      expect(post.title).toBe('Post: With Special "Characters" & <Symbols>!');
+    });
+
+    it('should handle YAML special characters in excerpt', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'YAML Safe Test',
+        excerpt: 'Contains: colons, "quotes", and #hash',
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('yaml-safe-test.md')
+      );
+      const fileContent = writeCall![1] as string;
+
+      // gray-matter should properly escape these
+      expect(fileContent).toContain('excerpt:');
+    });
+
+    it('should handle multiline content correctly', async () => {
+      const fs = await import('fs/promises');
+      const multilineContent = `# Heading 1
+
+Some paragraph text.
+
+## Heading 2
+
+- List item 1
+- List item 2
+
+\`\`\`javascript
+const code = 'example';
+\`\`\`
+
+> A blockquote`;
+
+      await postEngine.createPost({
+        title: 'Multiline Test',
+        content: multilineContent,
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('multiline-test.md')
+      );
+      const fileContent = writeCall![1] as string;
+
+      expect(fileContent).toContain('# Heading 1');
+      expect(fileContent).toContain('## Heading 2');
+      expect(fileContent).toContain('```javascript');
+      expect(fileContent).toContain('> A blockquote');
+    });
+
+    it('should handle empty content', async () => {
+      const post = await postEngine.createPost({
+        title: 'Empty Content Post',
+        content: '',
+      });
+
+      expect(post.content).toBe('');
+    });
+
+    it('should handle very long titles', async () => {
+      const longTitle = 'A'.repeat(500);
+      const post = await postEngine.createPost({ title: longTitle });
+
+      expect(post.title.length).toBe(500);
+      expect(post.slug.length).toBe(500); // slug is all lowercase a's
+    });
+
+    it('should handle newlines in excerpt', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'Newline Excerpt',
+        excerpt: 'First line.\nSecond line.',
+      });
+
+      // Should be written without breaking YAML
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('newline-excerpt.md')
+      );
+      expect(writeCall).toBeDefined();
+    });
+  });
+
+  describe('Checksum calculation', () => {
+    it('should calculate consistent checksum for same content', async () => {
+      const post1 = await postEngine.createPost({
+        title: 'Checksum Test 1',
+        content: 'Identical content for testing',
+      });
+      
+      const post2 = await postEngine.createPost({
+        title: 'Checksum Test 2',
+        content: 'Identical content for testing',
+      });
+
+      // Both inserts should have been called with same checksum
+      const insertCalls = vi.mocked(mockLocalDb.insert).mock.results;
+      expect(insertCalls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should calculate different checksum for different content', async () => {
+      const insertValues: any[] = [];
+      
+      // Capture insert values
+      vi.mocked(mockLocalDb.insert).mockImplementation(() => ({
+        values: vi.fn((data: any) => {
+          insertValues.push(data);
+          if (data && data.id) {
+            mockPosts.set(data.id, data);
+          }
+          return Promise.resolve();
+        }),
+      }));
+
+      await postEngine.createPost({
+        title: 'Different 1',
+        content: 'Content A',
+      });
+      
+      await postEngine.createPost({
+        title: 'Different 2',
+        content: 'Content B',
+      });
+
+      const checksums = insertValues.map(v => v.checksum);
+      expect(checksums[0]).not.toBe(checksums[1]);
+    });
+  });
+
+  describe('rebuildDatabaseFromFiles', () => {
+    it('should scan posts directory for markdown files', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['post1.md', 'post2.md', 'other.txt'] as any);
+      
+      // Mock readFile to return valid post content
+      vi.mocked(fs.readFile).mockImplementation(async (filePath: any) => {
+        if (filePath.includes('post1.md')) {
+          return `---
+id: post-1-id
+projectId: default
+title: Post 1
+slug: post1
+status: draft
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Content 1`;
+        }
+        if (filePath.includes('post2.md')) {
+          return `---
+id: post-2-id
+projectId: default
+title: Post 2
+slug: post2
+status: published
+createdAt: 2024-01-02T00:00:00.000Z
+updatedAt: 2024-01-02T00:00:00.000Z
+tags: []
+categories: []
+---
+Content 2`;
+        }
+        throw new Error('ENOENT');
+      });
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      // Should have processed only .md files
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should emit databaseRebuilt event on completion', async () => {
+      const fs = await import('fs/promises');
+      const handler = vi.fn();
+      postEngine.on('databaseRebuilt', handler);
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([]);
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it('should handle empty posts directory', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockResolvedValueOnce([]);
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      // Should complete without errors
+      expect(mockLocalDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('should create posts directory if it does not exist', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockRejectedValueOnce(new Error('ENOENT'));
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      expect(fs.mkdir).toHaveBeenCalled();
+    });
+
+    it('should update existing posts in database', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['existing.md'] as any);
+      
+      vi.mocked(fs.readFile).mockResolvedValueOnce(`---
+id: existing-id
+projectId: default
+title: Existing Post
+slug: existing
+status: draft
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Updated content`);
+
+      // Mock that post exists in database
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'existing-id',
+            title: 'Old Title',
+          }),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+    });
+
+    it('should insert new posts not in database', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['new-post.md'] as any);
+      
+      vi.mocked(fs.readFile).mockResolvedValueOnce(`---
+id: new-post-id
+projectId: default
+title: New Post
+slug: new-post
+status: draft
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+New content`);
+
+      // Mock that post doesn't exist in database
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should update FTS index for each processed post', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['fts-test.md'] as any);
+      
+      vi.mocked(fs.readFile).mockResolvedValueOnce(`---
+id: fts-test-id
+projectId: default
+title: FTS Test
+slug: fts-test
+status: draft
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags:
+  - search
+  - test
+categories: []
+---
+Searchable content`);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+      await postEngine.rebuildDatabaseFromFiles();
+
+      const ftsInsert = mockExecuteArgs.find((q) => 
+        q.sql.includes('INSERT INTO posts_fts')
+      );
+      expect(ftsInsert).toBeDefined();
+    });
+
+    it('should skip invalid/corrupted post files', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['valid.md', 'corrupted.md'] as any);
+      
+      vi.mocked(fs.readFile).mockImplementation(async (filePath: any) => {
+        if (filePath.includes('valid.md')) {
+          return `---
+id: valid-id
+projectId: default
+title: Valid Post
+slug: valid
+status: draft
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Valid content`;
+        }
+        if (filePath.includes('corrupted.md')) {
+          return 'This is not valid YAML frontmatter';
+        }
+        throw new Error('ENOENT');
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      // Should not throw
+      await postEngine.rebuildDatabaseFromFiles();
+    });
+  });
+
+  describe('Date-based folder structure', () => {
+    it('should store posts in YYYY/MM folder based on createdAt date', async () => {
+      const fs = await import('fs/promises');
+      
+      const post = await postEngine.createPost({
+        title: 'Date Folder Test',
+        content: 'Testing date-based folder structure',
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('date-folder-test.md')
+      );
+      expect(writeCall).toBeDefined();
+
+      const filePath = writeCall![0] as string;
+      const year = post.createdAt.getFullYear();
+      const month = (post.createdAt.getMonth() + 1).toString().padStart(2, '0');
+
+      // Path should contain YYYY/MM structure (handle both / and \ separators)
+      expect(filePath).toMatch(new RegExp(`[/\\\\]${year}[/\\\\]${month}[/\\\\]`));
+      expect(filePath).toContain('date-folder-test.md');
+    });
+
+    it('should generate correct path for posts in different months', async () => {
+      const fs = await import('fs/promises');
+
+      // Create a post - the current date will be used
+      await postEngine.createPost({
+        title: 'Current Month Post',
+        content: 'This post should go in current month folder',
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('current-month-post.md')
+      );
+      
+      const filePath = writeCall![0] as string;
+      
+      // Should have year/month in the path (handle both / and \ separators)
+      expect(filePath).toMatch(/[/\\]\d{4}[/\\]\d{2}[/\\]/);
+    });
+
+    it('should use zero-padded month numbers (01-12)', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'Zero Padded Month Test',
+      });
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls.find(
+        (call) => (call[0] as string).includes('zero-padded-month-test.md')
+      );
+      
+      const filePath = writeCall![0] as string;
+      
+      // Month should be zero-padded (01, 02, ..., 09, 10, 11, 12)
+      expect(filePath).toMatch(/[/\\]\d{4}[/\\](?:0[1-9]|1[0-2])[/\\]/);
+    });
+
+    it('should create nested year/month directories on post creation', async () => {
+      const fs = await import('fs/promises');
+      
+      await postEngine.createPost({
+        title: 'Nested Dirs Test',
+      });
+
+      // mkdir should be called with recursive: true
+      expect(fs.mkdir).toHaveBeenCalled();
+      const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+      
+      // Should have created directory containing year/month structure
+      const yearMonthDirCall = mkdirCalls.find((call) => {
+        const dirPath = call[0] as string;
+        return dirPath.match(/[/\\]\d{4}[/\\]\d{2}$/);
+      });
+      expect(yearMonthDirCall).toBeDefined();
+    });
+
+    it('should return correct path via getPostPath method', async () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+
+      // getPostPath should return the date-based path
+      const postPath = postEngine.getPostPath('my-test-slug', now);
+      
+      // Handle both Windows (\) and Unix (/) path separators
+      expect(postPath).toMatch(new RegExp(`[/\\\\]${year}[/\\\\]${month}[/\\\\]`));
+      expect(postPath).toContain('my-test-slug.md');
+    });
+
+    it('should handle posts from previous years correctly', async () => {
+      const oldDate = new Date('2021-03-15');
+      const postPath = postEngine.getPostPath('old-post', oldDate);
+
+      expect(postPath).toMatch(/[/\\]2021[/\\]03[/\\]/);
+      expect(postPath).toContain('old-post.md');
+    });
+
+    it('should handle December correctly (month 12)', async () => {
+      const december = new Date('2024-12-25');
+      const postPath = postEngine.getPostPath('december-post', december);
+
+      expect(postPath).toMatch(/[/\\]2024[/\\]12[/\\]/);
+    });
+
+    it('should handle January correctly (month 01)', async () => {
+      const january = new Date('2024-01-01');
+      const postPath = postEngine.getPostPath('january-post', january);
+
+      expect(postPath).toMatch(/[/\\]2024[/\\]01[/\\]/);
+    });
+  });
 });

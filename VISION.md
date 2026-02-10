@@ -91,7 +91,8 @@ Additionally we need another importer to traverse a full website and deduct post
 and rebuild posts in the database based on such a web traversal. To be able to do that, use copilot SDK
 to integrate copilot directly, so that HTML pages can be directly inspected and turned into actual blog
 posts in proper structure and proper markdown, despite the source being HTML. This is a variant of the
-wordpress importer that directly works on already rendered HTML websites.
+wordpress importer that directly works on already rendered HTML websites. The importer should only stay
+within the actual site it was handled, not following any off-site links.
 
 For this AI support during import to work, the blog application needs to provide post management and media
 management functionality as proper SDK tools to the copilot instance, so that it will be able to work
@@ -115,6 +116,11 @@ Imports must be able to recognize duplicates of posts to some degree, so that we
 posts from new import runs if the original posts are already there. In the case of recognized duplicates,
 the original post will just be linked to the same tag of the new import, so that the user can see it was
 referenced by multiple imports.
+
+Essentially my main idea for imports is that the importer is classes that can read websits from different
+sources (starting with wordprss backup and HTTP URL) and that each discovered element is handed to the AI
+to convert to markdown and in the case of the HTTP URL also separate out posts, then use the tools to
+check for duplicates and update tags or create new posts based on the process.
 
 Import runs can be shown in the main panel, so that the user can see what came with what import and can
 manage posts and media from imports that way. Migration is the main interesting part of this tool, because

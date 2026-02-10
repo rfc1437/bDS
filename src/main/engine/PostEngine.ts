@@ -67,9 +67,34 @@ export class PostEngine extends EventEmitter {
     super();
   }
 
-  private getPostsDir(): string {
+  private getPostsBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId, 'posts');
+  }
+
+  private getPostsDir(): string {
+    // Kept for backwards compatibility - returns base posts directory
+    return this.getPostsBaseDir();
+  }
+
+  /**
+   * Get the date-based directory for a post based on its creation date.
+   * Format: posts/YYYY/MM/
+   */
+  private getPostsDirForDate(date: Date): string {
+    const baseDir = this.getPostsBaseDir();
+    const year = date.getFullYear().toString();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return path.join(baseDir, year, month);
+  }
+
+  /**
+   * Get the full path for a post file based on slug and date.
+   * Returns: posts/YYYY/MM/{slug}.md
+   */
+  getPostPath(slug: string, date: Date): string {
+    const dir = this.getPostsDirForDate(date);
+    return path.join(dir, `${slug}.md`);
   }
 
   setProjectContext(projectId: string): void {
@@ -109,7 +134,8 @@ export class PostEngine extends EventEmitter {
     if (post.author) metadata.author = post.author;
     if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
 
-    const postsDir = this.getPostsDir();
+    // Use date-based directory structure (posts/YYYY/MM/)
+    const postsDir = this.getPostsDirForDate(post.createdAt);
     await fs.mkdir(postsDir, { recursive: true });
     
     const fileContent = matter.stringify(post.content, metadata);
