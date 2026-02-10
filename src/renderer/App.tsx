@@ -33,10 +33,11 @@ const App: React.FC = () => {
         // First, get active project to set the correct context in backend engines
         await window.electronAPI?.projects.getActive();
         
-        // Load posts (now with correct project context)
-        const posts = await window.electronAPI?.posts.getAll();
-        if (posts) {
-          setPosts(posts as PostData[]);
+        // Load posts (now with correct project context, limited to 500)
+        const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
+        if (postsResult) {
+          const { items, hasMore, total } = postsResult as { items: PostData[]; hasMore: boolean; total: number };
+          setPosts(items, hasMore, total);
         }
 
         // Load media

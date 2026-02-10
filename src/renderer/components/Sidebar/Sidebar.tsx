@@ -222,7 +222,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
 };
 
 const PostsList: React.FC = () => {
-  const { posts, selectedPostId, setSelectedPost } = useAppStore();
+  const { posts, selectedPostId, setSelectedPost, hasMorePosts, totalPosts, appendPosts } = useAppStore();
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -235,6 +235,7 @@ const PostsList: React.FC = () => {
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [filteredPosts, setFilteredPosts] = useState<PostData[] | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Load available tags and categories
   useEffect(() => {
@@ -336,6 +337,24 @@ const PostsList: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to create post:', error);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMorePosts) return;
+    
+    setIsLoadingMore(true);
+    try {
+      const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: posts.length });
+      if (postsResult) {
+        const { items, hasMore } = postsResult as { items: PostData[]; hasMore: boolean };
+        appendPosts(items, hasMore);
+      }
+    } catch (error) {
+      console.error('Failed to load more posts:', error);
+      showToast.error('Failed to load more posts');
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
@@ -508,6 +527,19 @@ const PostsList: React.FC = () => {
         <div className="sidebar-empty">
           <p>No matching posts</p>
           <button onClick={clearAllFilters}>Clear filters</button>
+        </div>
+      )}
+
+      {/* Load More button - only show when not filtering and has more posts */}
+      {!isFiltered && hasMorePosts && (
+        <div className="sidebar-load-more">
+          <button 
+            onClick={handleLoadMore} 
+            disabled={isLoadingMore}
+            className="load-more-button"
+          >
+            {isLoadingMore ? 'Loading...' : `Load more (${posts.length} of ${totalPosts})`}
+          </button>
         </div>
       )}
     </div>

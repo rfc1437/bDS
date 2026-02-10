@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import MonacoEditor from '@monaco-editor/react';
-import { useAppStore, PostData, EditorMode } from '../../store';
+import { useAppStore, PostData, EditorMode, MediaData } from '../../store';
 import { showToast } from '../Toast';
 import { WysiwygEditor } from '../WysiwygEditor';
 import { Lightbox, useMarkdownImages } from '../Lightbox';
@@ -8,6 +8,60 @@ import { PostLinks } from '../PostLinks';
 import { ErrorModal } from '../ErrorModal';
 import { SettingsView } from '../SettingsView';
 import './Editor.css';
+
+/**
+ * Resolves media references in markdown content to bds-media:// URLs
+ * Matches images by:
+ * 1. Media ID in the path (e.g., /media/2025/01/{id}.jpg)
+ * 2. Original filename (e.g., image.jpg)
+ * 3. Filename pattern (e.g., {id}.jpg)
+ */
+const resolveMediaUrls = (content: string, mediaList: MediaData[]): string => {
+  if (!content || mediaList.length === 0) return content;
+  
+  // Build lookup maps for efficient matching
+  const byId = new Map<string, string>();
+  const byOriginalName = new Map<string, string>();
+  const byFilename = new Map<string, string>();
+  
+  for (const m of mediaList) {
+    byId.set(m.id, m.id);
+    byOriginalName.set(m.originalName.toLowerCase(), m.id);
+    byFilename.set(m.filename.toLowerCase(), m.id);
+  }
+  
+  // Replace image URLs in markdown
+  return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
+    // Skip if already using bds-media protocol or external URLs
+    if (src.startsWith('bds-media://') || src.startsWith('http://') || src.startsWith('https://')) {
+      return match;
+    }
+    
+    // Extract the filename from the path
+    const filename = src.split('/').pop() || '';
+    const filenameWithoutExt = filename.replace(/\.[^.]+$/, '');
+    const filenameLower = filename.toLowerCase();
+    
+    // Try to match by:
+    // 1. UUID in path (the file is named by ID)
+    if (byId.has(filenameWithoutExt)) {
+      return `![${alt}](bds-media://${filenameWithoutExt})`;
+    }
+    
+    // 2. Filename lookup
+    if (byFilename.has(filenameLower)) {
+      return `![${alt}](bds-media://${byFilename.get(filenameLower)})`;
+    }
+    
+    // 3. Original name lookup
+    if (byOriginalName.has(filenameLower)) {
+      return `![${alt}](bds-media://${byOriginalName.get(filenameLower)})`;
+    }
+    
+    // No match found, return original
+    return match;
+  });
+};
 
 // Simple markdown to HTML converter for preview
 const markdownToHtml = (markdown: string): string => {
@@ -52,6 +106,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     preferredEditorMode,
     setPreferredEditorMode,
     showErrorModal,
+    media,
   } = useAppStore();
   
   const [title, setTitle] = useState(post.title);
@@ -88,8 +143,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     }
   }, []);
 
-  // Extract images from content for lightbox
-  const images = useMarkdownImages(content);
+  // Resolve media URLs in content for display
+  const resolvedContent = useMemo(() => resolveMediaUrls(content, media), [content, media]);
+
+  // Extract images from resolved content for lightbox
+  const images = useMarkdownImages(resolvedContent);
 
   // Track latest values for auto-save on unmount/switch
   const pendingChangesRef = useRef<{
@@ -505,7 +563,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
             <div className="editor-preview markdown-body">
               <div
                 className="preview-content"
-                dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
+                dangerouslySetInnerHTML={{ __html: markdownToHtml(resolvedContent) }}
               />
             </div>
           )}
