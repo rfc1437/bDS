@@ -60,6 +60,17 @@ export interface PostFilter {
   month?: number;
 }
 
+export interface PaginatedResult<T> {
+  items: T[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface PaginationOptions {
+  limit?: number;
+  offset?: number;
+}
+
 export class PostEngine extends EventEmitter {
   private currentProjectId: string = 'default';
 
@@ -455,7 +466,49 @@ export class PostEngine extends EventEmitter {
     return this.dbRowToPostData(dbPost, '');
   }
 
-  async getAllPosts(): Promise<PostData[]> {
+  async getAllPosts(options?: PaginationOptions): Promise<PaginatedResult<PostData>> {
+    const db = getDatabase().getLocal();
+    const limit = options?.limit ?? 500;
+    const offset = options?.offset ?? 0;
+
+    // Get total count for hasMore calculation
+    const countResult = await db
+      .select({ count: posts.id })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+    const total = countResult.length;
+
+    const dbPosts = await db
+      .select()
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .orderBy(desc(posts.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+    
+    const items: PostData[] = [];
+    
+    for (const dbPost of dbPosts) {
+      const postData = await this.getPost(dbPost.id);
+      if (postData) {
+        items.push(postData);
+      }
+    }
+
+    return {
+      items,
+      hasMore: offset + items.length < total,
+      total,
+    };
+  }
+
+  /**
+   * Internal method to get all posts without pagination.
+   * Used by methods that need to iterate over all posts (search, tags, categories, etc.)
+   */
+  private async getAllPostsUnpaginated(): Promise<PostData[]> {
     const db = getDatabase().getLocal();
     const dbPosts = await db
       .select()
@@ -574,7 +627,7 @@ export class PostEngine extends EventEmitter {
         args: [query],
       });
 
-      const projectPosts = await this.getAllPosts();
+      const projectPosts = await this.getAllPostsUnpaginated();
       const projectPostIds = new Set(projectPosts.map(p => p.id));
 
       return result.rows
@@ -594,7 +647,7 @@ export class PostEngine extends EventEmitter {
   }
 
   async getAvailableTags(): Promise<string[]> {
-    const allPosts = await this.getAllPosts();
+    const allPosts = await this.getAllPostsUnpaginated();
     const tags = new Set<string>();
     for (const post of allPosts) {
       for (const tag of post.tags) {
@@ -605,7 +658,7 @@ export class PostEngine extends EventEmitter {
   }
 
   async getAvailableCategories(): Promise<string[]> {
-    const allPosts = await this.getAllPosts();
+    const allPosts = await this.getAllPostsUnpaginated();
     const categories = new Set<string>();
     for (const post of allPosts) {
       for (const cat of post.categories) {
@@ -616,7 +669,7 @@ export class PostEngine extends EventEmitter {
   }
 
   async getPostsByYearMonth(): Promise<{ year: number; month: number; count: number }[]> {
-    const allPosts = await this.getAllPosts();
+    const allPosts = await this.getAllPostsUnpaginated();
     const counts = new Map<string, { year: number; month: number; count: number }>();
 
     for (const post of allPosts) {

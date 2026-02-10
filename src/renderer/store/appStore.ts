@@ -82,6 +82,10 @@ interface AppState {
   media: MediaData[];
   tasks: TaskProgress[];
   
+  // Pagination
+  hasMorePosts: boolean;
+  totalPosts: number;
+  
   // Track which posts have unsaved changes (by post ID)
   dirtyPosts: Set<string>;
   
@@ -112,7 +116,8 @@ interface AppState {
   setSelectedMedia: (id: string | null) => void;
   setPreferredEditorMode: (mode: EditorMode) => void;
   
-  setPosts: (posts: PostData[]) => void;
+  setPosts: (posts: PostData[], hasMore?: boolean, total?: number) => void;
+  appendPosts: (posts: PostData[], hasMore: boolean) => void;
   addPost: (post: PostData) => void;
   updatePost: (id: string, post: Partial<PostData>) => void;
   removePost: (id: string) => void;
@@ -162,6 +167,10 @@ export const useAppStore = create<AppState>()(
       media: [],
       tasks: [],
       
+      // Pagination
+      hasMorePosts: false,
+      totalPosts: 0,
+      
       // Dirty posts tracking
       dirtyPosts: new Set<string>(),
       
@@ -197,8 +206,12 @@ export const useAppStore = create<AppState>()(
       setPreferredEditorMode: (mode) => set({ preferredEditorMode: mode }),
       
       // Post Actions
-      setPosts: (posts) => set({ posts }),
-      addPost: (post) => set((state) => ({ posts: [...state.posts, post] })),
+      setPosts: (posts, hasMore = false, total = 0) => set({ posts, hasMorePosts: hasMore, totalPosts: total }),
+      appendPosts: (newPosts, hasMore) => set((state) => ({
+        posts: [...state.posts, ...newPosts],
+        hasMorePosts: hasMore,
+      })),
+      addPost: (post) => set((state) => ({ posts: [post, ...state.posts], totalPosts: state.totalPosts + 1 })),
       updatePost: (id, updatedPost) => set((state) => ({
         posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedPost } : p)),
       })),

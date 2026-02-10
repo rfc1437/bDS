@@ -145,6 +145,34 @@
   margin-bottom: 16px;
 }
 
+/* Load More Button */
+.sidebar-load-more {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.load-more-button {
+  width: 100%;
+  padding: 8px 16px;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.load-more-button:hover:not(:disabled) {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.load-more-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Media Grid */
 .media-grid {
   display: grid;

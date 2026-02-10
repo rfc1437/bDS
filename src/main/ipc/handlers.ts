@@ -1,6 +1,6 @@
 import { ipcMain, dialog, shell } from 'electron';
 import { eq } from 'drizzle-orm';
-import { getPostEngine, PostData, PostFilter } from '../engine/PostEngine';
+import { getPostEngine, PostData, PostFilter, PaginationOptions } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
 import { getDropboxSyncEngine, DropboxSyncConfig, ConflictResolution } from '../engine/DropboxSyncEngine';
@@ -99,9 +99,9 @@ export function registerIpcHandlers(): void {
     return engine.getPost(id);
   });
 
-  ipcMain.handle('posts:getAll', async () => {
+  ipcMain.handle('posts:getAll', async (_, options?: PaginationOptions) => {
     const engine = getPostEngine();
-    return engine.getAllPosts();
+    return engine.getAllPosts(options);
   });
 
   ipcMain.handle('posts:getByStatus', async (_, status: 'draft' | 'published' | 'archived') => {
@@ -229,6 +229,18 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('media:get', async (_, id: string) => {
     const engine = getMediaEngine();
     return engine.getMedia(id);
+  });
+
+  ipcMain.handle('media:getUrl', async (_, id: string) => {
+    // Returns the bds-media:// protocol URL for a media item
+    return `bds-media://${id}`;
+  });
+
+  ipcMain.handle('media:getFilePath', async (_, id: string) => {
+    // Returns the actual file path for a media item (for debugging/advanced use)
+    const db = getDatabase().getLocal();
+    const mediaItem = await db.select().from(media).where(eq(media.id, id)).get();
+    return mediaItem?.filePath ?? null;
   });
 
   ipcMain.handle('media:getAll', async () => {

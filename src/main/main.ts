@@ -1,13 +1,28 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol, net } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase } from './database';
 import { registerIpcHandlers } from './ipc';
+import { media } from './database/schema';
+import { eq } from 'drizzle-orm';
 
 let mainWindow: BrowserWindow | null = null;
 
 // Check if dev server is likely running (only in development)
 const isDev = process.env.NODE_ENV === 'development';
+
+// Register custom protocol scheme as privileged (must be done before app is ready)
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'bds-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -297,6 +312,53 @@ async function initialize(): Promise<void> {
   // Initialize database
   const db = getDatabase();
   await db.initializeLocal();
+
+  // Register custom protocol for serving media files
+  // URLs like bds-media://media-id will be resolved to the actual file
+  protocol.handle('bds-media', async (request) => {
+    try {
+      const url = new URL(request.url);
+      const mediaIdentifier = url.hostname; // bds-media://media-id or bds-media://filename.jpg
+      
+      const database = getDatabase().getLocal();
+      
+      // First, try to find by ID (most common case)
+      let mediaItem = await database
+        .select()
+        .from(media)
+        .where(eq(media.id, mediaIdentifier))
+        .get();
+      
+      // If not found by ID, try by filename
+      if (!mediaItem) {
+        mediaItem = await database
+          .select()
+          .from(media)
+          .where(eq(media.filename, mediaIdentifier))
+          .get();
+      }
+      
+      // If still not found, try by original name
+      if (!mediaItem) {
+        mediaItem = await database
+          .select()
+          .from(media)
+          .where(eq(media.originalName, mediaIdentifier))
+          .get();
+      }
+      
+      if (mediaItem && mediaItem.filePath) {
+        // Use net.fetch to get the file - this handles the file protocol properly
+        return net.fetch(`file://${mediaItem.filePath}`);
+      }
+      
+      // Return a 404 response if media not found
+      return new Response('Media not found', { status: 404 });
+    } catch (error) {
+      console.error('Error serving media:', error);
+      return new Response('Internal server error', { status: 500 });
+    }
+  });
 
   // Register IPC handlers
   registerIpcHandlers();
