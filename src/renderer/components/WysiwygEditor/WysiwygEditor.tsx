@@ -22,6 +22,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
 }) => {
   // Track if we're updating from internal changes vs external prop changes
   const isInternalChange = useRef(false);
+  // Track if we're in the middle of a programmatic content sync (shouldn't trigger onChange)
+  const isSyncingContent = useRef(false);
   const lastExternalContent = useRef(content);
 
   const editor = useEditor({
@@ -55,6 +57,10 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
     ],
     content,
     onUpdate: ({ editor }) => {
+      // Don't call onChange during programmatic content sync
+      if (isSyncingContent.current) {
+        return;
+      }
       isInternalChange.current = true;
       const markdown = editor.storage.markdown.getMarkdown();
       onChange(markdown);
@@ -67,7 +73,13 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
     if (editor && content !== lastExternalContent.current) {
       // This is an external change (e.g., switching posts)
       if (!isInternalChange.current) {
+        // Mark that we're syncing to prevent onChange from firing
+        isSyncingContent.current = true;
         editor.commands.setContent(content);
+        // Reset sync flag after a microtask to ensure onUpdate has fired
+        Promise.resolve().then(() => {
+          isSyncingContent.current = false;
+        });
       }
       lastExternalContent.current = content;
       isInternalChange.current = false;
