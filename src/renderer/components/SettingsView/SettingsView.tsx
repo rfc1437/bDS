@@ -58,6 +58,9 @@ const SearchIcon = () => (
 // Default post categories based on VISION.md
 const DEFAULT_POST_CATEGORIES = ['article', 'picture', 'aside', 'page'];
 
+// Standard categories that cannot be deleted
+const PROTECTED_CATEGORIES = ['article', 'aside', 'page', 'picture'];
+
 // Individual setting row component (VS Code style)
 const SettingRow: React.FC<{
   id: string;
@@ -328,6 +331,10 @@ export const SettingsView: React.FC = () => {
   };
 
   const handleRemoveCategory = (categoryToRemove: string) => {
+    if (PROTECTED_CATEGORIES.includes(categoryToRemove)) {
+      showToast.error(`Cannot delete standard category "${categoryToRemove}"`);
+      return;
+    }
     if (postCategories.length <= 1) {
       showToast.error('Must have at least one category');
       return;
@@ -352,9 +359,12 @@ export const SettingsView: React.FC = () => {
       hidden={!sectionHasMatches(contentKeywords)}
     >
         <div className="categories-list">
-          {postCategories.map((cat) => (
+          {postCategories.map((cat) => {
+            const isProtected = PROTECTED_CATEGORIES.includes(cat);
+            return (
             <div key={cat} className="category-item">
-              <span className="category-name">{cat}</span>
+              <span className="category-name">{cat}{isProtected && ' (standard)'}</span>
+              {!isProtected && (
               <button
                 className="category-remove"
                 onClick={() => handleRemoveCategory(cat)}
@@ -362,8 +372,10 @@ export const SettingsView: React.FC = () => {
               >
                 ✕
               </button>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="category-add-form">
