@@ -305,8 +305,18 @@ export class PostEngine extends EventEmitter {
 
     // Auto-update slug when title changes, but only if post was never published
     let newSlug = data.slug ?? existing.slug;
+    console.log('[updatePost] Slug update check:', {
+      'data.title': data.title,
+      'existing.title': existing.title,
+      'existing.publishedAt': existing.publishedAt,
+      'titleDefined': data.title !== undefined,
+      'titleChanged': data.title !== existing.title,
+      'neverPublished': !existing.publishedAt,
+      'shouldUpdateSlug': data.title !== undefined && data.title !== existing.title && !existing.publishedAt,
+    });
     if (data.title !== undefined && data.title !== existing.title && !existing.publishedAt) {
       newSlug = await this.generateUniqueSlug(data.title || 'untitled', id);
+      console.log('[updatePost] Generated new slug:', newSlug);
     }
 
     const updated: PostData = {

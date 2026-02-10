@@ -19,7 +19,11 @@ the posts/ and media/ folders are automatically synced to some area in dropbox a
 In addition to dropbox sync, also provide a file sync handler that uses git as the mechanism. That way
 the user can provide a git URL to push to and pull from, where the app does regular fetch to see if stuff
 was there and has mechanisms to handle conflicts. This will work without special requirements for some
-cloud provider for the file data.
+cloud provider for the file data. Git syncing should only require a repository URL supported by git and
+will have to handle the authentication outside the app, but users with git will know what they do. But it
+might make sense to provide buttons to do a proper git setup in the project to allow the use of the
+device authentication flow, so that the user does not have to go into the data folder manually for the
+base setup to work.
 
 Blog post metadata should be managed in the SQLite database in the user local folder, so it persists application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a markdown file with a properties segment in the top of the file with YAML like property definitions, so all metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the user local path, in that case storing the image file sand for each image file a properties sidecar file that uses the same header structure as for posts.
 
@@ -171,6 +175,10 @@ to integrate copilot directly, so that HTML pages can be directly inspected and 
 posts in proper structure and proper markdown, despite the source being HTML. This is a variant of the
 wordpress importer that directly works on already rendered HTML websites. The importer should only stay
 within the actual site it was handled, not following any off-site links.
+
+In general, HTML elements of the post have to all be transformed into markdown equivalents, and not use
+embedded HTML, for as much as possible. We want clean markdown in the posts after the import, not a mix
+of markdown and HTML.
 
 For this AI support during import to work, the blog application needs to provide post management and media
 management functionality as proper SDK tools to the copilot instance, so that it will be able to work
