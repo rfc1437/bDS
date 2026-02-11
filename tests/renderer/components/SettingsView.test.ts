@@ -68,19 +68,6 @@ describe('SettingsView Behavior', () => {
   });
 
   describe('Credentials Storage (localStorage)', () => {
-    it('should save Turso credentials to localStorage', () => {
-      const creds = {
-        tursoUrl: 'libsql://test.turso.io',
-        tursoToken: 'test-token',
-      };
-
-      localStorage.setItem('bds-credentials', JSON.stringify(creds));
-
-      const saved = JSON.parse(localStorage.getItem('bds-credentials') || '{}');
-      expect(saved.tursoUrl).toBe('libsql://test.turso.io');
-      expect(saved.tursoToken).toBe('test-token');
-    });
-
     it('should save Dropbox credentials to localStorage', () => {
       const creds = {
         dropboxAccessToken: 'dbx-token',
@@ -98,48 +85,24 @@ describe('SettingsView Behavior', () => {
 
     it('should load credentials from localStorage', () => {
       const creds = {
-        tursoUrl: 'libsql://saved.turso.io',
-        tursoToken: 'saved-token',
         dropboxAccessToken: 'saved-dbx-token',
+        dropboxAppKey: 'saved-key',
+        dropboxRemotePath: '/blog',
       };
 
       localStorage.setItem('bds-credentials', JSON.stringify(creds));
 
       const loaded = JSON.parse(localStorage.getItem('bds-credentials') || '{}');
-      expect(loaded.tursoUrl).toBe('libsql://saved.turso.io');
       expect(loaded.dropboxAccessToken).toBe('saved-dbx-token');
     });
 
-    it('should handle clearing Turso credentials independently', () => {
+    it('should handle clearing Dropbox credentials', () => {
       const creds = {
-        tursoUrl: 'libsql://test.turso.io',
-        tursoToken: 'test-token',
-        dropboxAccessToken: 'dbx-token',
-        dropboxAppKey: 'dbx-key',
-      };
-
-      localStorage.setItem('bds-credentials', JSON.stringify(creds));
-
-      // Clear only Turso credentials
-      const loaded = JSON.parse(localStorage.getItem('bds-credentials') || '{}');
-      const cleared = { ...loaded, tursoUrl: '', tursoToken: '' };
-      localStorage.setItem('bds-credentials', JSON.stringify(cleared));
-
-      const result = JSON.parse(localStorage.getItem('bds-credentials') || '{}');
-      expect(result.tursoUrl).toBe('');
-      expect(result.tursoToken).toBe('');
-      // Dropbox credentials should be untouched
-      expect(result.dropboxAccessToken).toBe('dbx-token');
-      expect(result.dropboxAppKey).toBe('dbx-key');
-    });
-
-    it('should handle clearing Dropbox credentials independently', () => {
-      const creds = {
-        tursoUrl: 'libsql://test.turso.io',
-        tursoToken: 'test-token',
         dropboxAccessToken: 'dbx-token',
         dropboxAppKey: 'dbx-key',
         dropboxRemotePath: '/blog',
+        ftpHost: 'ftp.example.com',
+        ftpUser: 'user',
       };
 
       localStorage.setItem('bds-credentials', JSON.stringify(creds));
@@ -155,11 +118,11 @@ describe('SettingsView Behavior', () => {
       localStorage.setItem('bds-credentials', JSON.stringify(cleared));
 
       const result = JSON.parse(localStorage.getItem('bds-credentials') || '{}');
-      // Turso credentials should be untouched
-      expect(result.tursoUrl).toBe('libsql://test.turso.io');
-      expect(result.tursoToken).toBe('test-token');
       expect(result.dropboxAccessToken).toBe('');
       expect(result.dropboxAppKey).toBe('');
+      // FTP credentials should be untouched
+      expect(result.ftpHost).toBe('ftp.example.com');
+      expect(result.ftpUser).toBe('user');
     });
   });
 
@@ -231,8 +194,6 @@ describe('SettingsView Behavior', () => {
       (window as any).electronAPI.sync.configure = mockConfigure;
 
       const config = {
-        tursoUrl: 'libsql://test.turso.io',
-        tursoAuthToken: 'test-token',
         autoSync: true,
         syncInterval: 5,
       };
@@ -240,8 +201,6 @@ describe('SettingsView Behavior', () => {
       await window.electronAPI?.sync.configure(config);
 
       expect(mockConfigure).toHaveBeenCalledWith({
-        tursoUrl: 'libsql://test.turso.io',
-        tursoAuthToken: 'test-token',
         autoSync: true,
         syncInterval: 5,
       });
