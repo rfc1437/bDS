@@ -261,7 +261,9 @@ to easy template creation.
 For the styling I want the system to be based on css templates, so that the look can be easily swapped
 to the wish of the user. There should be a selection of light and dark themes bundled with the application,
 so that starting is simple. New css templates must be easily integrateable into the application,
-maybe even with easy importing from a central repository site or something like that.
+maybe even with easy importing from a central repository site or something like that. I think Pico CSS is a
+good choice, since it sticks to semantic HTML and auto-adapts to light/dark mode settings of users.
+I want to work minimalist, but still allow some style influence into the site based on user prefs.
 
 Check the site https://hugo.rfc1437.de/ for its structure, this is the structure of blog I want to be
 capable of building with this tooling. So we need templates for overview pages and ways to manage menues

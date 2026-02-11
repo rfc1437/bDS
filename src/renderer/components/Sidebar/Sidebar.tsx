@@ -634,7 +634,14 @@ const SettingsNav: React.FC = () => {
       </div>
 
       <div className="settings-nav-list">
-        <button 
+        <button
+          className={`settings-nav-entry ${activeSection === 'project' ? 'active' : ''}`}
+          onClick={() => handleNavClick('project')}
+        >
+          <span className="settings-nav-entry-icon">📁</span>
+          <span>Project</span>
+        </button>
+        <button
           className={`settings-nav-entry ${activeSection === 'editor' ? 'active' : ''}`}
           onClick={() => handleNavClick('editor')}
         >

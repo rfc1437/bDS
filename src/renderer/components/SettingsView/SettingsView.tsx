@@ -4,7 +4,7 @@ import { showToast } from '../Toast';
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
-export type SettingsCategory = 'editor' | 'content' | 'sync' | 'publishing' | 'data';
+export type SettingsCategory = 'project' | 'editor' | 'content' | 'sync' | 'publishing' | 'data';
 
 // Scroll to a settings section by category ID
 export const scrollToSettingsSection = (category: SettingsCategory) => {
@@ -102,14 +102,18 @@ const SettingSection: React.FC<{
 };
 
 export const SettingsView: React.FC = () => {
-  const { preferredEditorMode, setPreferredEditorMode, syncConfigured } = useAppStore();
+  const { preferredEditorMode, setPreferredEditorMode, syncConfigured, activeProject, setActiveProject } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [credentials, setCredentials] = useState<Credentials>(defaultCredentials);
   const [showSecrets, setShowSecrets] = useState(false);
   const [dropboxConfigured, setDropboxConfigured] = useState(false);
   const [dropboxLastSync, setDropboxLastSync] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  
+
+  // Project settings
+  const [projectName, setProjectName] = useState('');
+  const [projectDescription, setProjectDescription] = useState('');
+
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
   const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -127,6 +131,14 @@ export const SettingsView: React.FC = () => {
       keyword.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery]);
+
+  // Sync project fields from active project
+  useEffect(() => {
+    if (activeProject) {
+      setProjectName(activeProject.name);
+      setProjectDescription(activeProject.description || '');
+    }
+  }, [activeProject]);
 
   // Load saved credentials and categories
   useEffect(() => {
@@ -284,12 +296,75 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  // Save project settings
+  const handleSaveProject = async () => {
+    if (!activeProject) return;
+    try {
+      const updated = await window.electronAPI?.projects.update(activeProject.id, {
+        name: projectName.trim() || activeProject.name,
+        description: projectDescription.trim(),
+      });
+      if (updated) {
+        setActiveProject(updated as any);
+        useAppStore.getState().updateProject(activeProject.id, updated as any);
+      }
+      showToast.success('Project settings saved');
+    } catch (error) {
+      console.error('Failed to save project settings:', error);
+      showToast.error('Failed to save project settings');
+    }
+  };
+
   // Keywords for each section for search filtering
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const syncKeywords = ['sync', 'turso', 'libsql', 'cloud', 'database', 'dropbox', 'file', 'backup', 'token', 'remote'];
   const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
+
+  const renderProjectSettings = () => (
+    <SettingSection
+      id="settings-section-project"
+      title="Project"
+      description="General settings for the active blog project."
+      hidden={!sectionHasMatches(projectKeywords)}
+    >
+      <SettingRow
+        id="project-name"
+        label="Project Name"
+        description="The display name of your blog project."
+      >
+        <input
+          id="project-name"
+          type="text"
+          placeholder="My Blog"
+          value={projectName}
+          onChange={(e) => setProjectName(e.target.value)}
+        />
+      </SettingRow>
+
+      <SettingRow
+        id="project-description"
+        label="Description"
+        description="A short description of your blog. This can be used in templates and metadata."
+      >
+        <textarea
+          id="project-description"
+          placeholder="A blog about..."
+          value={projectDescription}
+          onChange={(e) => setProjectDescription(e.target.value)}
+          rows={3}
+        />
+      </SettingRow>
+
+      <div className="setting-actions">
+        <button className="primary" onClick={handleSaveProject}>
+          Save Project Settings
+        </button>
+      </div>
+    </SettingSection>
+  );
 
   const renderEditorSettings = () => (
     <SettingSection
@@ -781,7 +856,8 @@ export const SettingsView: React.FC = () => {
   );
 
   // Check if any results match the search
-  const hasAnyMatches = !searchQuery || 
+  const hasAnyMatches = !searchQuery ||
+    sectionHasMatches(projectKeywords) ||
     sectionHasMatches(editorKeywords) ||
     sectionHasMatches(contentKeywords) ||
     sectionHasMatches(syncKeywords) ||
@@ -816,6 +892,7 @@ export const SettingsView: React.FC = () => {
       <div className="settings-content" ref={contentRef}>
         {hasAnyMatches ? (
           <>
+            {renderProjectSettings()}
             {renderEditorSettings()}
             {renderContentSettings()}
             {renderSyncSettings()}
