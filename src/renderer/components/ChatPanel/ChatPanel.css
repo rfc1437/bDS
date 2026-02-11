@@ -207,6 +207,8 @@
   padding: 10px 14px;
   border-radius: 12px;
   background-color: var(--vscode-input-background);
+  user-select: text;
+  cursor: text;
 }
 
 .chat-message.user .chat-message-text {

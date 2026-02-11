@@ -132,14 +132,33 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
 
     try {
       // Send message and wait for complete response
-      await window.electronAPI?.chat.sendMessage(conversationId, message);
+      const result = await window.electronAPI?.chat.sendMessage(conversationId, message);
 
-      // Reload messages to get the saved assistant response
-      const msgs = await window.electronAPI?.chat.getHistory(conversationId);
-      if (msgs) setMessages(msgs);
+      // Use the streamed content we accumulated via onStreamDelta
+      const assistantContent = streamingRef.current;
+
+      if (assistantContent) {
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          conversationId,
+          role: 'assistant',
+          content: assistantContent,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } else if (result && !result.success) {
+        // Backend returned an error (API failure, model unavailable, etc.)
+        const errorMessage: ChatMessage = {
+          id: `error-${Date.now()}`,
+          conversationId,
+          role: 'assistant',
+          content: `Error: ${result.error || 'Failed to get a response. Please try again.'}`,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Add error message
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         conversationId,
@@ -167,6 +186,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       await window.electronAPI?.chat.abortMessage(conversationId);
     } catch (error) {
       console.error('Failed to abort:', error);
+    } finally {
+      // Keep any streamed content as a visible message
+      const partialContent = streamingRef.current;
+      setIsStreaming(false);
+      setStreamingContent('');
+      streamingRef.current = '';
+
+      if (partialContent) {
+        const partialMessage: ChatMessage = {
+          id: `partial-${Date.now()}`,
+          conversationId,
+          role: 'assistant',
+          content: partialContent + '\n\n*(cancelled)*',
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, partialMessage]);
+      }
     }
   };
 

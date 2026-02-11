@@ -247,27 +247,27 @@ export class OpenCodeManager {
       const abortController = new AbortController();
       this.abortControllers.set(conversationId, abortController);
 
+      const modelId = conversation.model || 'claude-sonnet-4';
+      const provider = this.detectProvider(modelId);
+
+      // Get system prompt
+      const systemMessage = conversation.messages.find(m => m.role === 'system');
+      const systemPrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
+
+      // Build message history from DB (excluding system messages)
+      const dbMessages = conversation.messages.filter(m => m.role !== 'system');
+      // Add the new user message
+      dbMessages.push({
+        conversationId,
+        role: 'user',
+        content: userMessage,
+        createdAt: new Date(),
+      });
+
+      let fullResponse = '';
+      const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
+
       try {
-        const modelId = conversation.model || 'claude-sonnet-4';
-        const provider = this.detectProvider(modelId);
-
-        // Get system prompt
-        const systemMessage = conversation.messages.find(m => m.role === 'system');
-        const systemPrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
-
-        // Build message history from DB (excluding system messages)
-        const dbMessages = conversation.messages.filter(m => m.role !== 'system');
-        // Add the new user message
-        dbMessages.push({
-          conversationId,
-          role: 'user',
-          content: userMessage,
-          createdAt: new Date(),
-        });
-
-        let fullResponse = '';
-        const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
-
         if (provider === 'anthropic') {
           const result = await this.sendAnthropicMessage(
             modelId,
@@ -288,34 +288,40 @@ export class OpenCodeManager {
           );
           fullResponse = result.content;
         }
-
-        // Save assistant response
-        if (fullResponse) {
-          await this.chatEngine.addMessage({
-            conversationId,
-            role: 'assistant',
-            content: fullResponse,
-            toolCalls: toolCallsCollected.length > 0 ? JSON.stringify(toolCallsCollected) : undefined,
-            createdAt: new Date(),
-          });
+      } catch (error) {
+        const isAborted = abortController.signal.aborted || (error as Error).message === 'Request cancelled';
+        if (!isAborted) {
+          throw error;
         }
-
-        // Generate title after first exchange
-        const userMsgCount = conversation.messages.filter(m => m.role === 'user').length;
-        if (userMsgCount === 0 && fullResponse) {
-          this.generateConversationTitle(conversationId, userMessage, fullResponse).catch(err =>
-            console.error('[OpenCodeManager] Error generating title:', err)
-          );
-        }
-
-        return {
-          success: true,
-          message: fullResponse,
-          toolCalls: toolCallsCollected.length > 0 ? toolCallsCollected : undefined,
-        };
+        // On abort, keep whatever was streamed so far (already in fullResponse or empty)
       } finally {
         this.abortControllers.delete(conversationId);
       }
+
+      // Save assistant response (including partial content from aborted requests)
+      if (fullResponse) {
+        await this.chatEngine.addMessage({
+          conversationId,
+          role: 'assistant',
+          content: fullResponse,
+          toolCalls: toolCallsCollected.length > 0 ? JSON.stringify(toolCallsCollected) : undefined,
+          createdAt: new Date(),
+        });
+      }
+
+      // Generate title after first exchange
+      const userMsgCount = conversation.messages.filter(m => m.role === 'user').length;
+      if (userMsgCount === 0 && fullResponse) {
+        this.generateConversationTitle(conversationId, userMessage, fullResponse).catch(err =>
+          console.error('[OpenCodeManager] Error generating title:', err)
+        );
+      }
+
+      return {
+        success: true,
+        message: fullResponse,
+        toolCalls: toolCallsCollected.length > 0 ? toolCallsCollected : undefined,
+      };
     } catch (error) {
       console.error('[OpenCodeManager] Error sending message:', error);
       return { success: false, error: (error as Error).message };
@@ -338,6 +344,7 @@ export class OpenCodeManager {
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     const tools = this.getToolDefinitions();
     const allToolCalls: Array<{ name: string; args: unknown }> = [];
+    let accumulatedText = '';
 
     // Convert DB messages to Anthropic format
     let messages = this.buildAnthropicMessages(dbMessages);
@@ -376,6 +383,8 @@ export class OpenCodeManager {
 
       const data = JSON.parse(response.body);
 
+      console.log('[OpenCodeManager] Round', round, 'stop_reason:', data.stop_reason, 'content blocks:', JSON.stringify(data.content?.map((b: AnthropicContentBlock) => ({ type: b.type, textLen: b.text?.length, name: b.name }))));
+
       if (!data.content) {
         throw new Error('API response missing content field');
       }
@@ -388,17 +397,22 @@ export class OpenCodeManager {
         (b: AnthropicContentBlock) => b.type === 'text'
       );
 
-      // Stream text content to frontend
+      // Accumulate and stream text content to frontend
       for (const block of textBlocks) {
-        if (block.text && callbacks.onDelta) {
-          callbacks.onDelta(block.text);
+        if (block.text) {
+          accumulatedText += block.text;
+          if (callbacks.onDelta) {
+            callbacks.onDelta(block.text);
+          }
         }
       }
 
+      console.log('[OpenCodeManager] Round', round, 'accumulatedText length:', accumulatedText.length, 'toolUseBlocks:', toolUseBlocks.length);
+
       if (toolUseBlocks.length === 0 || data.stop_reason !== 'tool_use') {
-        // No more tool calls - extract final text and return
-        const finalText = textBlocks.map((b: AnthropicContentBlock) => b.text || '').join('');
-        return { content: finalText, toolCalls: allToolCalls };
+        // No more tool calls - return all accumulated text
+        console.log('[OpenCodeManager] Returning accumulated text length:', accumulatedText.length);
+        return { content: accumulatedText, toolCalls: allToolCalls };
       }
 
       // Execute tool calls
@@ -438,7 +452,8 @@ export class OpenCodeManager {
     }
 
     // If we hit max rounds, return whatever we have
-    return { content: 'I reached the maximum number of tool calls. Please try again.', toolCalls: allToolCalls };
+    const fallbackText = accumulatedText || 'I reached the maximum number of tool calls. Please try again.';
+    return { content: fallbackText, toolCalls: allToolCalls };
   }
 
   /**
