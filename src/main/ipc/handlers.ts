@@ -137,7 +137,10 @@ export function registerIpcHandlers(): void {
     if (project) {
       engine.setProjectContext(project.id);
     }
-    return engine.rebuildDatabaseFromFiles();
+    // Fire and forget - don't await, let it run in background
+    engine.rebuildDatabaseFromFiles().catch(err => {
+      console.error('Post rebuild failed:', err);
+    });
   });
 
   ipcMain.handle('posts:search', async (_, query: string) => {
@@ -256,7 +259,10 @@ export function registerIpcHandlers(): void {
     if (project) {
       engine.setProjectContext(project.id);
     }
-    return engine.rebuildDatabaseFromFiles();
+    // Fire and forget - don't await, let it run in background
+    engine.rebuildDatabaseFromFiles().catch(err => {
+      console.error('Media rebuild failed:', err);
+    });
   });
 
   ipcMain.handle('media:getThumbnail', async (_, id: string, size?: 'small' | 'medium' | 'large') => {
@@ -440,11 +446,13 @@ export function registerIpcHandlers(): void {
   postEngine.on('postCreated', forwardEvent('post:created'));
   postEngine.on('postUpdated', forwardEvent('post:updated'));
   postEngine.on('postDeleted', forwardEvent('post:deleted'));
+  postEngine.on('rebuildStarted', forwardEvent('posts:rebuildStarted'));
   postEngine.on('databaseRebuilt', forwardEvent('posts:databaseRebuilt'));
 
   mediaEngine.on('mediaImported', forwardEvent('media:imported'));
   mediaEngine.on('mediaUpdated', forwardEvent('media:updated'));
   mediaEngine.on('mediaDeleted', forwardEvent('media:deleted'));
+  mediaEngine.on('rebuildStarted', forwardEvent('media:rebuildStarted'));
   mediaEngine.on('databaseRebuilt', forwardEvent('media:databaseRebuilt'));
 
   syncEngine.on('syncStarted', forwardEvent('sync:started'));

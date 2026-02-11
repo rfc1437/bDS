@@ -542,8 +542,11 @@ export class MediaEngine extends EventEmitter {
       name: 'Rebuild database from media files',
       execute: async (onProgress) => {
         const db = getDatabase().getLocal();
-        
+
         onProgress(0, 'Deleting existing media for project...');
+
+        // Notify UI that rebuild is starting so it can clear the list
+        this.emit('rebuildStarted');
 
         // Delete all media for the current project - clean slate rebuild
         const existingMedia = await db.select({ id: media.id }).from(media).where(eq(media.projectId, this.currentProjectId)).all();
@@ -553,7 +556,7 @@ export class MediaEngine extends EventEmitter {
         }
 
         onProgress(5, 'Scanning media directory...');
-        
+
         // Recursively find all .meta files in the media directory tree
         const metaFiles: string[] = [];
         const scanDir = async (dir: string) => {
@@ -578,18 +581,18 @@ export class MediaEngine extends EventEmitter {
           // Already exists
         }
         await scanDir(mediaBaseDir);
-        
+
         onProgress(10, `Found ${metaFiles.length} media sidecar files`);
-        
+
         for (let i = 0; i < metaFiles.length; i++) {
           const sidecarPath = metaFiles[i];
           const mediaFilePath = sidecarPath.replace('.meta', '');
           const metaFileName = path.basename(sidecarPath);
-          
-          onProgress(10 + (80 * (i / metaFiles.length)), `Processing ${metaFileName}...`);
-          
+
+          onProgress(10 + (80 * (i / metaFiles.length)), `Processing ${i + 1}/${metaFiles.length}: ${metaFileName}`);
+
           const metadata = await this.readSidecarFile(sidecarPath);
-          
+
           if (metadata) {
             try {
               const stats = await fs.stat(mediaFilePath);
@@ -621,13 +624,18 @@ export class MediaEngine extends EventEmitter {
               console.error(`Media file not found for sidecar: ${sidecarPath}`, error);
             }
           }
+
+          // Yield to event loop periodically so the window stays responsive
+          if (i % 10 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
         }
-        
+
         onProgress(100, 'Database rebuild complete');
         this.emit('databaseRebuilt');
       },
     };
-    
+
     await taskManager.runTask(task);
   }
 }

@@ -897,6 +897,9 @@ export class PostEngine extends EventEmitter {
 
         onProgress(0, 'Deleting existing posts for project...');
 
+        // Notify UI that rebuild is starting so it can clear the list
+        this.emit('rebuildStarted');
+
         // Delete all posts for the current project - clean slate rebuild
         const existingPosts = await db.select({ id: posts.id }).from(posts).where(eq(posts.projectId, this.currentProjectId)).all();
         if (existingPosts.length > 0) {
@@ -951,7 +954,7 @@ export class PostEngine extends EventEmitter {
           const filePath = mdFiles[i];
           const fileName = path.basename(filePath);
 
-          onProgress(10 + (80 * (i / mdFiles.length)), `Processing ${fileName}...`);
+          onProgress(10 + (80 * (i / mdFiles.length)), `Processing ${i + 1}/${mdFiles.length}: ${fileName}`);
 
           const postData = await this.readPostFile(filePath);
 
@@ -1006,6 +1009,11 @@ export class PostEngine extends EventEmitter {
                 console.error(`Failed to process post from ${filePath}:`, error);
               }
             }
+          }
+
+          // Yield to event loop periodically so the window stays responsive
+          if (i % 10 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
           }
         }
 
