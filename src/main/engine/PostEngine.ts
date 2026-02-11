@@ -948,57 +948,6 @@ export class PostEngine extends EventEmitter {
     return !!(dbPost && dbPost.filePath && dbPost.filePath !== '');
   }
 
-  async unpublishPost(id: string): Promise<PostData | null> {
-    const db = getDatabase().getLocal();
-    const client = getDatabase().getLocalClient();
-    const existing = await this.getPost(id);
-    
-    if (!existing) {
-      return null;
-    }
-
-    const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
-    if (!dbPost) {
-      return null;
-    }
-
-    // Delete the published file (content moves to DB)
-    if (dbPost.filePath) {
-      try {
-        await fs.unlink(dbPost.filePath);
-      } catch {
-        // File might not exist
-      }
-    }
-
-    const updated: PostData = {
-      ...existing,
-      status: 'draft',
-      updatedAt: new Date(),
-    };
-
-    const checksum = this.calculateChecksum(updated.content);
-
-    // Store content in DB, clear filePath
-    await db.update(posts)
-      .set({
-        content: updated.content,
-        status: 'draft',
-        filePath: '',
-        updatedAt: updated.updatedAt,
-        publishedAt: null,
-        syncStatus: 'pending',
-        checksum,
-      })
-      .where(eq(posts.id, id));
-
-    // Update FTS index
-    await this.updateFTSIndex(updated);
-
-    this.emit('postUpdated', updated);
-    return updated;
-  }
-
   /**
    * Rebuild the FTS index for all posts in the current project.
    * Call this after changing the search language or after migration.

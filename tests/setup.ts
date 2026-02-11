@@ -44,7 +44,6 @@ Object.defineProperty(globalThis, 'window', {
         getAll: vi.fn(),
         getByStatus: vi.fn(),
         publish: vi.fn(),
-        unpublish: vi.fn(),
         rebuildFromFiles: vi.fn(),
         search: vi.fn(),
         filter: vi.fn(),
