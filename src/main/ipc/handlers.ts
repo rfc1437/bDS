@@ -6,6 +6,7 @@ import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
 import { getDropboxSyncEngine, DropboxSyncConfig, ConflictResolution } from '../engine/DropboxSyncEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
+import { getTagEngine } from '../engine/TagEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
@@ -52,9 +53,11 @@ export function registerIpcHandlers(): void {
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
+      const tagEngine = getTagEngine();
       postEngine.setProjectContext(project.id);
       mediaEngine.setProjectContext(project.id);
       metaEngine.setProjectContext(project.id);
+      tagEngine.setProjectContext(project.id);
       
       // Sync meta on startup
       await metaEngine.syncOnStartup();
@@ -72,9 +75,11 @@ export function registerIpcHandlers(): void {
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
+      const tagEngine = getTagEngine();
       postEngine.setProjectContext(project.id);
       mediaEngine.setProjectContext(project.id);
       metaEngine.setProjectContext(project.id);
+      tagEngine.setProjectContext(project.id);
       
       // Sync meta on project switch
       await metaEngine.syncOnStartup();
@@ -549,6 +554,63 @@ export function registerIpcHandlers(): void {
     return engine.getProjectMetadata();
   });
 
+  // ============ Tag Management Handlers ============
+
+  ipcMain.handle('tags:getAll', async () => {
+    const engine = getTagEngine();
+    return engine.getAllTags();
+  });
+
+  ipcMain.handle('tags:getWithCounts', async () => {
+    const engine = getTagEngine();
+    return engine.getTagsWithCounts();
+  });
+
+  ipcMain.handle('tags:get', async (_, id: string) => {
+    const engine = getTagEngine();
+    return engine.getTag(id);
+  });
+
+  ipcMain.handle('tags:getByName', async (_, name: string) => {
+    const engine = getTagEngine();
+    return engine.getTagByName(name);
+  });
+
+  ipcMain.handle('tags:create', async (_, data: { name: string; color?: string }) => {
+    const engine = getTagEngine();
+    return engine.createTag(data);
+  });
+
+  ipcMain.handle('tags:update', async (_, id: string, data: { name?: string; color?: string | null }) => {
+    const engine = getTagEngine();
+    return engine.updateTag(id, data);
+  });
+
+  ipcMain.handle('tags:delete', async (_, id: string) => {
+    const engine = getTagEngine();
+    return engine.deleteTag(id);
+  });
+
+  ipcMain.handle('tags:merge', async (_, sourceTagIds: string[], targetTagId: string) => {
+    const engine = getTagEngine();
+    return engine.mergeTags(sourceTagIds, targetTagId);
+  });
+
+  ipcMain.handle('tags:rename', async (_, id: string, newName: string) => {
+    const engine = getTagEngine();
+    return engine.renameTag(id, newName);
+  });
+
+  ipcMain.handle('tags:getPostsWithTag', async (_, tagId: string) => {
+    const engine = getTagEngine();
+    return engine.getPostsWithTag(tagId);
+  });
+
+  ipcMain.handle('tags:syncFromPosts', async () => {
+    const engine = getTagEngine();
+    return engine.syncTagsFromPosts();
+  });
+
   // ============ Event Forwarding ============
   
   // Forward engine events to renderer
@@ -557,6 +619,7 @@ export function registerIpcHandlers(): void {
   const syncEngine = getSyncEngine();
   const projectEngine = getProjectEngine();
   const metaEngine = getMetaEngine();
+  const tagEngine = getTagEngine();
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -585,6 +648,13 @@ export function registerIpcHandlers(): void {
   metaEngine.on('tagsChanged', forwardEvent('meta:tagsChanged'));
   metaEngine.on('categoriesChanged', forwardEvent('meta:categoriesChanged'));
   metaEngine.on('projectMetadataChanged', forwardEvent('meta:projectMetadataChanged'));
+
+  tagEngine.on('tagCreated', forwardEvent('tag:created'));
+  tagEngine.on('tagUpdated', forwardEvent('tag:updated'));
+  tagEngine.on('tagDeleted', forwardEvent('tag:deleted'));
+  tagEngine.on('tagRenamed', forwardEvent('tag:renamed'));
+  tagEngine.on('tagsMerged', forwardEvent('tags:merged'));
+  tagEngine.on('tagsSynced', forwardEvent('tags:synced'));
 
   syncEngine.on('syncStarted', forwardEvent('sync:started'));
   syncEngine.on('syncCompleted', forwardEvent('sync:completed'));

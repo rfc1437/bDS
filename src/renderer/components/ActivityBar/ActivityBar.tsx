@@ -22,6 +22,12 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const TagsIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
+  </svg>
+);
+
 const SyncIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
@@ -35,10 +41,18 @@ export const ActivityBar: React.FC = () => {
   
   // Check if settings tab is currently active
   const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
+  
+  // Check if tags tab is currently active
+  const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
 
   const handleSettingsClick = () => {
     // Open settings as a dedicated (non-transient) tab
     openTab({ type: 'settings', id: 'settings', isTransient: false });
+  };
+
+  const handleTagsClick = () => {
+    // Open tags as a dedicated (non-transient) tab
+    openTab({ type: 'tags', id: 'tags', isTransient: false });
   };
 
   return (
@@ -57,6 +71,13 @@ export const ActivityBar: React.FC = () => {
           title="Media"
         >
           <MediaIcon />
+        </button>
+        <button
+          className={`activity-bar-item ${isTagsTabActive ? 'active' : ''}`}
+          onClick={handleTagsClick}
+          title="Tags"
+        >
+          <TagsIcon />
         </button>
       </div>
       

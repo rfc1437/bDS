@@ -131,6 +131,45 @@ export interface CategoryCount {
   count: number;
 }
 
+export interface TagData {
+  id: string;
+  projectId: string;
+  name: string;
+  color?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TagWithCount {
+  name: string;
+  color: string | null;
+  count: number;
+}
+
+export interface DeleteTagResult {
+  success: boolean;
+  postsUpdated: number;
+}
+
+export interface MergeTagsResult {
+  success: boolean;
+  postsUpdated: number;
+  tagsDeleted: number;
+  targetTag: string;
+}
+
+export interface RenameTagResult {
+  success: boolean;
+  postsUpdated: number;
+  oldName: string;
+  newName: string;
+}
+
+export interface SyncTagsResult {
+  discovered: number;
+  added: string[];
+}
+
 export interface ElectronAPI {
   projects: {
     create: (data: { name: string; description?: string; slug?: string }) => Promise<ProjectData>;
@@ -222,6 +261,19 @@ export interface ElectronAPI {
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
     updateProjectMetadata: (updates: { name?: string; description?: string }) => Promise<ProjectMetadata | null>;
+  };
+  tags: {
+    getAll: () => Promise<TagData[]>;
+    getWithCounts: () => Promise<TagWithCount[]>;
+    get: (id: string) => Promise<TagData | null>;
+    getByName: (name: string) => Promise<TagData | null>;
+    create: (data: { name: string; color?: string }) => Promise<TagData>;
+    update: (id: string, data: { name?: string; color?: string | null }) => Promise<TagData | null>;
+    delete: (id: string) => Promise<DeleteTagResult>;
+    merge: (sourceTagIds: string[], targetTagId: string) => Promise<MergeTagsResult>;
+    rename: (id: string, newName: string) => Promise<RenameTagResult>;
+    getPostsWithTag: (tagId: string) => Promise<string[]>;
+    syncFromPosts: () => Promise<SyncTagsResult>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

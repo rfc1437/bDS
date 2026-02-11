@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 const STORAGE_KEY = 'bds-app-state';
 
 // Tab types
-export type TabType = 'post' | 'media' | 'settings';
+export type TabType = 'post' | 'media' | 'settings' | 'tags';
 
 export interface Tab {
   type: TabType;
@@ -88,7 +88,7 @@ interface AppState {
   activeTabId: string | null;
   
   // UI State
-  activeView: 'posts' | 'media' | 'settings';
+  activeView: 'posts' | 'media' | 'settings' | 'tags';
   sidebarVisible: boolean;
   panelVisible: boolean;
   selectedPostId: string | null;
@@ -136,7 +136,7 @@ interface AppState {
   restoreTabState: (state: TabState) => void;
   
   // Actions
-  setActiveView: (view: 'posts' | 'media' | 'settings') => void;
+  setActiveView: (view: 'posts' | 'media' | 'settings' | 'tags') => void;
   toggleSidebar: () => void;
   togglePanel: () => void;
   setSelectedPost: (id: string | null) => void;

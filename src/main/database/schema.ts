@@ -95,6 +95,19 @@ export const postLinks = sqliteTable('post_links', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Tags table - stores tag metadata with optional colors
+export const tags = sqliteTable('tags', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  name: text('name').notNull(),
+  color: text('color'), // Optional hex color like #ff0000
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  // Composite unique index: tag name must be unique within each project
+  projectNameIdx: uniqueIndex('tags_project_name_idx').on(table.projectId, table.name),
+}));
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -108,3 +121,5 @@ export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
 export type PostLink = typeof postLinks.$inferSelect;
 export type NewPostLink = typeof postLinks.$inferInsert;
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;

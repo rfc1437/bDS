@@ -7,6 +7,7 @@ import { Lightbox, useMarkdownImages } from '../Lightbox';
 import { PostLinks } from '../PostLinks';
 import { ErrorModal } from '../ErrorModal';
 import { SettingsView } from '../SettingsView';
+import { TagsView } from '../TagsView';
 import { AutoSaveManager } from '../../utils';
 import './Editor.css';
 
@@ -1029,6 +1030,7 @@ export const Editor: React.FC = () => {
   const showPost = activeTab?.type === 'post';
   const showMedia = activeTab?.type === 'media';
   const showSettings = activeTab?.type === 'settings' || (activeView === 'settings' && !activeTab);
+  const showTags = activeTab?.type === 'tags' || (activeView === 'tags' && !activeTab);
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
@@ -1077,6 +1079,16 @@ export const Editor: React.FC = () => {
     return (
       <>
         <SettingsView />
+        {renderErrorModal()}
+      </>
+    );
+  }
+
+  // Show tags if tags tab is active
+  if (showTags) {
+    return (
+      <>
+        <TagsView />
         {renderErrorModal()}
       </>
     );
