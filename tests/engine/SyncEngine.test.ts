@@ -561,9 +561,22 @@ describe('SyncEngine', () => {
     });
 
     it('should log sync completion with results', async () => {
+      // Use real timers for this test as TaskManager may use timers
+      vi.useRealTimers();
+      
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       const { getDatabase } = await import('../../src/main/database');
+
+      // Reset the Dropbox sync mock to return success (might have been modified by previous test)
+      mockDropboxSyncEngine.syncAll.mockResolvedValue({
+        success: true,
+        uploaded: 0,
+        downloaded: 0,
+        deleted: 0,
+        conflicts: 0,
+        errors: [],
+      });
 
       // Mock a complete sync with no pending items (so it completes quickly)
       vi.mocked(getDatabase).mockReturnValue({
@@ -595,10 +608,15 @@ describe('SyncEngine', () => {
       };
 
       await syncEngine.configure(config);
-      await syncEngine.sync('push');
+      const result = await syncEngine.sync('push');
 
-      // Check that at least one log call contains "[SyncEngine]" and "complete"
+      // Debug: check what was logged
       const calls = consoleSpy.mock.calls;
+      
+      // Check that sync completed successfully
+      expect(result.success).toBe(true);
+      
+      // Check that at least one log call contains "[SyncEngine]" and "complete"
       const hasCompleteLog = calls.some((call: any[]) => 
         call.some((arg: any) => typeof arg === 'string' && arg.includes('[SyncEngine]') && arg.includes('complete'))
       );

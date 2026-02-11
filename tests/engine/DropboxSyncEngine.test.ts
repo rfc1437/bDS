@@ -43,15 +43,6 @@ const { mockFs, mockWatcher, mockChokidarWatch } = vi.hoisted(() => {
 
 vi.mock('fs/promises', () => mockFs);
 
-// Mock path (use posix-style for consistent tests)
-vi.mock('path', async () => {
-  const actual = await vi.importActual<typeof import('path')>('path');
-  return {
-    ...actual,
-    default: actual,
-  };
-});
-
 // Mock electron
 vi.mock('electron', () => ({
   app: {
