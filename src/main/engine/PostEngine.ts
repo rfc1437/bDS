@@ -9,6 +9,7 @@ import { app } from 'electron';
 import { getDatabase } from '../database';
 import { posts, Post, NewPost, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
+import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 
 export interface PostData {
   id: string;
@@ -46,8 +47,6 @@ export interface SearchResult {
   title: string;
   slug: string;
   excerpt?: string;
-  matchSnippet?: string;
-  rank?: number;
 }
 
 export interface PostFilter {
@@ -73,9 +72,72 @@ export interface PaginationOptions {
 
 export class PostEngine extends EventEmitter {
   private currentProjectId: string = 'default';
+  private searchLanguage: SupportedLanguage = 'english';
 
   constructor() {
     super();
+  }
+
+  /**
+   * Set the language used for full-text search stemming.
+   * Affects both indexing and query processing.
+   */
+  setSearchLanguage(language: SupportedLanguage): void {
+    this.searchLanguage = language;
+  }
+
+  /**
+   * Get the current search language.
+   */
+  getSearchLanguage(): SupportedLanguage {
+    return this.searchLanguage;
+  }
+
+  /**
+   * Update the FTS index for a post.
+   * Updates the FTS index for a post.
+   * Stores only the stemmed content (combining title, excerpt, content, tags, categories).
+   * Only the post ID is returned from searches - actual post data comes from DB/files.
+   */
+  private async updateFTSIndex(post: {
+    id: string;
+    title: string;
+    content: string;
+    excerpt?: string;
+    tags: string[];
+    categories: string[];
+  }): Promise<void> {
+    const client = getDatabase().getLocalClient();
+    if (!client) return;
+
+    // Delete existing entry
+    await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [post.id] });
+
+    // Combine all searchable fields and stem them
+    const allText = [
+      post.title,
+      post.excerpt || '',
+      post.content,
+      post.tags.join(' '),
+      post.categories.join(' '),
+    ].join(' ');
+
+    const stemmedContent = stemText(allText, this.searchLanguage);
+
+    // Insert with only id and stemmed content
+    await client.execute({
+      sql: 'INSERT INTO posts_fts (id, content) VALUES (?, ?)',
+      args: [post.id, stemmedContent],
+    });
+  }
+
+  /**
+   * Delete a post from the FTS index.
+   */
+  private async deleteFTSIndex(id: string): Promise<void> {
+    const client = getDatabase().getLocalClient();
+    if (!client) return;
+    await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
   }
 
   private getPostsBaseDir(): string {
@@ -289,12 +351,7 @@ export class PostEngine extends EventEmitter {
     await db.insert(posts).values(dbPost);
 
     // Update FTS index
-    if (client) {
-      await client.execute({
-        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [post.id, post.title, post.content, post.excerpt || '', post.tags.join(' '), post.categories.join(' ')],
-      });
-    }
+    await this.updateFTSIndex(post);
 
     this.emit('postCreated', post);
     return post;
@@ -369,13 +426,7 @@ export class PostEngine extends EventEmitter {
       .where(eq(posts.id, id));
 
     // Update FTS index
-    if (client) {
-      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
-      await client.execute({
-        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [updated.id, updated.title, updated.content, updated.excerpt || '', updated.tags.join(' '), updated.categories.join(' ')],
-      });
-    }
+    await this.updateFTSIndex(updated);
 
     // Update post links if content changed
     if (data.content) {
@@ -412,9 +463,7 @@ export class PostEngine extends EventEmitter {
     await db.delete(posts).where(eq(posts.id, id));
 
     // Delete from FTS index
-    if (client) {
-      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
-    }
+    await this.deleteFTSIndex(id);
 
     this.emit('postDeleted', id);
     return true;
@@ -618,28 +667,34 @@ export class PostEngine extends EventEmitter {
     if (!client) return [];
 
     try {
+      // Stem the query for multilingual matching
+      const stemmedQuery = stemQuery(query, this.searchLanguage);
+      
+      // Search the stemmed content, only return post IDs
       const result = await client.execute({
-        sql: `SELECT id, title, excerpt, snippet(posts_fts, 2, '<mark>', '</mark>', '...', 32) as snippet, rank
-              FROM posts_fts
-              WHERE posts_fts MATCH ?
-              ORDER BY rank
-              LIMIT 50`,
-        args: [query],
+        sql: `SELECT id FROM posts_fts WHERE posts_fts MATCH ? ORDER BY rank LIMIT 50`,
+        args: [stemmedQuery],
       });
 
+      // Filter to current project and fetch actual post data
       const projectPosts = await this.getAllPostsUnpaginated();
-      const projectPostIds = new Set(projectPosts.map(p => p.id));
+      const projectPostMap = new Map(projectPosts.map(p => [p.id, p]));
 
-      return result.rows
-        .filter(row => projectPostIds.has(row.id as string))
-        .map(row => ({
-          id: row.id as string,
-          title: row.title as string,
-          slug: '', // Will be filled in by caller if needed
-          excerpt: row.excerpt as string | undefined,
-          matchSnippet: row.snippet as string | undefined,
-          rank: row.rank as number | undefined,
-        }));
+      const searchResults: SearchResult[] = [];
+      for (const row of result.rows) {
+        const postId = row.id as string;
+        const post = projectPostMap.get(postId);
+        if (post) {
+          searchResults.push({
+            id: post.id,
+            title: post.title,
+            slug: post.slug,
+            excerpt: post.excerpt,
+          });
+        }
+      }
+
+      return searchResults;
     } catch (error) {
       console.error('Search failed:', error);
       return [];
@@ -816,13 +871,7 @@ export class PostEngine extends EventEmitter {
       .where(eq(posts.id, id));
 
     // Update FTS index
-    if (client) {
-      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
-      await client.execute({
-        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [published.id, published.title, published.content, published.excerpt || '', published.tags.join(' '), published.categories.join(' ')],
-      });
-    }
+    await this.updateFTSIndex(published);
 
     // Update post links based on published content
     await this.updatePostLinks(id, published.content);
@@ -886,13 +935,7 @@ export class PostEngine extends EventEmitter {
     };
 
     // Update FTS index
-    if (client) {
-      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
-      await client.execute({
-        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [reverted.id, reverted.title, reverted.content, reverted.excerpt || '', reverted.tags.join(' '), reverted.categories.join(' ')],
-      });
-    }
+    await this.updateFTSIndex(reverted);
 
     this.emit('postUpdated', reverted);
     return reverted;
@@ -949,16 +992,27 @@ export class PostEngine extends EventEmitter {
       .where(eq(posts.id, id));
 
     // Update FTS index
-    if (client) {
-      await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
-      await client.execute({
-        sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [updated.id, updated.title, updated.content, updated.excerpt || '', updated.tags.join(' '), updated.categories.join(' ')],
-      });
-    }
+    await this.updateFTSIndex(updated);
 
     this.emit('postUpdated', updated);
     return updated;
+  }
+
+  /**
+   * Rebuild the FTS index for all posts in the current project.
+   * Call this after changing the search language or after migration.
+   */
+  async rebuildFTSIndex(): Promise<void> {
+    const client = getDatabase().getLocalClient();
+    if (!client) return;
+
+    const allPosts = await this.getAllPostsUnpaginated();
+    
+    for (const post of allPosts) {
+      await this.updateFTSIndex(post);
+    }
+    
+    console.log(`Rebuilt FTS index for ${allPosts.length} posts`);
   }
 
   async rebuildDatabaseFromFiles(): Promise<void> {
@@ -980,10 +1034,8 @@ export class PostEngine extends EventEmitter {
         if (existingPosts.length > 0) {
           const postIds = existingPosts.map(p => p.id);
           // Delete FTS entries first
-          if (client) {
-            for (const post of existingPosts) {
-              await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [post.id] });
-            }
+          for (const post of existingPosts) {
+            await this.deleteFTSIndex(post.id);
           }
           // Delete post links where source or target is in the posts being deleted
           await db.delete(postLinks).where(inArray(postLinks.sourcePostId, postIds));
@@ -1069,13 +1121,7 @@ export class PostEngine extends EventEmitter {
               insertedSlugs.set(slugKey, filePath);
 
               // Update FTS index (use file content for search)
-              if (client) {
-                await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [postData.id] });
-                await client.execute({
-                  sql: 'INSERT INTO posts_fts (id, title, content, excerpt, tags, categories) VALUES (?, ?, ?, ?, ?, ?)',
-                  args: [postData.id, postData.title, postData.content, postData.excerpt || '', postData.tags.join(' '), postData.categories.join(' ')],
-                });
-              }
+              await this.updateFTSIndex(postData);
             } catch (error: any) {
               // Handle constraint violations and other errors gracefully
               if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
