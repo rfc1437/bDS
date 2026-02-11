@@ -683,12 +683,22 @@ const TagsNav: React.FC = () => {
 };
 
 const SettingsNav: React.FC = () => {
-  const { syncConfigured } = useAppStore();
+  const { syncConfigured, tabs, activeTabId, openTab } = useAppStore();
   const [activeSection, setActiveSection] = useState<SettingsCategory | null>(null);
 
+  // Check if settings panel is currently active
+  const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
+
   const handleNavClick = (category: SettingsCategory) => {
+    // If settings panel is not open or not active, open it first
+    if (!isSettingsTabActive) {
+      openTab({ type: 'settings', id: 'settings', isTransient: false });
+    }
     setActiveSection(category);
-    scrollToSettingsSection(category);
+    // Use setTimeout to allow panel to open before scrolling
+    setTimeout(() => {
+      scrollToSettingsSection(category);
+    }, isSettingsTabActive ? 0 : 100);
   };
 
   return (
@@ -720,6 +730,13 @@ const SettingsNav: React.FC = () => {
         >
           <span className="settings-nav-entry-icon">📋</span>
           <span>Content</span>
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'ai' ? 'active' : ''}`}
+          onClick={() => handleNavClick('ai')}
+        >
+          <span className="settings-nav-entry-icon">🤖</span>
+          <span>AI Assistant</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'sync' ? 'active' : ''}`}
