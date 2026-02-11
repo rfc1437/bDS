@@ -44,7 +44,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   // Load conversation and messages
   const loadData = useCallback(async () => {
     try {
-      const [conv, msgs, models] = await Promise.all([
+      const [conv, msgs, modelsResult] = await Promise.all([
         window.electronAPI?.chat.getConversation(conversationId),
         window.electronAPI?.chat.getHistory(conversationId),
         window.electronAPI?.chat.getAvailableModels()
@@ -52,7 +52,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
 
       if (conv) setConversation(conv);
       if (msgs) setMessages(msgs);
-      if (models) setAvailableModels(models);
+      if (modelsResult?.models) setAvailableModels(modelsResult.models);
     } catch (error) {
       console.error('Failed to load chat data:', error);
     }

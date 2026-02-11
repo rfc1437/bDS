@@ -341,7 +341,7 @@ export interface ElectronAPI {
     getApiKey: () => Promise<ChatApiKeyStatus>;
 
     // Settings
-    getAvailableModels: () => Promise<ChatModel[]>;
+    getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;
     setDefaultModel: (modelId: string) => Promise<void>;
     getSystemPrompt: () => Promise<string | null>;
     setSystemPrompt: (prompt: string) => Promise<void>;
