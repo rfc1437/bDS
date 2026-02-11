@@ -159,8 +159,8 @@ export const SettingsView: React.FC = () => {
         // Load AI settings
         try {
           const promptResult = await window.electronAPI?.chat.getSystemPrompt();
-          if (promptResult?.success && promptResult.prompt) {
-            setAiSystemPrompt(promptResult.prompt);
+          if (promptResult?.success) {
+            setAiSystemPrompt(promptResult.prompt || '');
           }
           
           const keyResult = await window.electronAPI?.chat.getApiKey();
@@ -512,8 +512,8 @@ export const SettingsView: React.FC = () => {
       // Set to empty to use built-in default
       await window.electronAPI?.chat.setSystemPrompt('');
       const result = await window.electronAPI?.chat.getSystemPrompt();
-      if (result?.prompt) {
-        setAiSystemPrompt(result.prompt);
+      if (result?.success) {
+        setAiSystemPrompt(result.prompt || '');
         setAiSystemPromptModified(false);
         showToast.success('System prompt reset to default');
       }
