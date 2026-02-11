@@ -750,7 +750,7 @@ const SettingsNav: React.FC = () => {
 
 // Chat conversations list
 const ChatList: React.FC = () => {
-  const { openTab } = useAppStore();
+  const { openTab, closeTab } = useAppStore();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
@@ -819,6 +819,8 @@ const ChatList: React.FC = () => {
     try {
       await window.electronAPI?.chat.deleteConversation(conversationId);
       setConversations(prev => prev.filter(c => c.id !== conversationId));
+      // Close the tab for the deleted chat
+      closeTab(conversationId);
     } catch (error) {
       console.error('Failed to delete conversation:', error);
       showToast.error('Failed to delete chat');

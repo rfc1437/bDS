@@ -135,7 +135,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       const result = await window.electronAPI?.chat.sendMessage(conversationId, message);
 
       // Use the streamed content we accumulated via onStreamDelta
-      const assistantContent = streamingRef.current;
+      // Fall back to the backend result message if streaming didn't capture the content
+      const assistantContent = streamingRef.current || (result?.success ? result.message : '');
 
       if (assistantContent) {
         const assistantMessage: ChatMessage = {
@@ -156,6 +157,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           createdAt: new Date().toISOString()
         };
         setMessages(prev => [...prev, errorMessage]);
+      } else {
+        // No content from streaming AND no error, but also no success message
+        // This can happen with some models that don't return content properly
+        const noContentMessage: ChatMessage = {
+          id: `empty-${Date.now()}`,
+          conversationId,
+          role: 'assistant',
+          content: 'The model returned an empty response. Try a different model or rephrase your question.',
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, noContentMessage]);
       }
     } catch (error) {
       console.error('Failed to send message:', error);

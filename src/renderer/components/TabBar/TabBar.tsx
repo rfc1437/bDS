@@ -2,7 +2,14 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore, Tab } from '../../store';
 import './TabBar.css';
 
-const getTabTitle = (tab: Tab, posts: { id: string; title: string }[], media: { id: string; originalName: string }[]): string => {
+const MAX_CHAT_TITLE_LENGTH = 25;
+
+const getTabTitle = (
+  tab: Tab,
+  posts: { id: string; title: string }[],
+  media: { id: string; originalName: string }[],
+  chatTitles: Map<string, string>
+): string => {
   if (tab.type === 'settings') {
     return 'Settings';
   }
@@ -19,6 +26,17 @@ const getTabTitle = (tab: Tab, posts: { id: string; title: string }[], media: { 
   if (tab.type === 'media') {
     const mediaItem = media.find(m => m.id === tab.id);
     return mediaItem?.originalName || 'Media';
+  }
+  
+  if (tab.type === 'chat') {
+    const title = chatTitles.get(tab.id);
+    if (title && title !== 'New Chat') {
+      // Truncate long titles for display
+      return title.length > MAX_CHAT_TITLE_LENGTH 
+        ? title.substring(0, MAX_CHAT_TITLE_LENGTH) + '…'
+        : title;
+    }
+    return 'New Chat';
   }
   
   return 'Unknown';
@@ -48,6 +66,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M14.28 7.72l-6-6A1 1 0 007.57 1.5H2.5A1 1 0 001.5 2.5v5.07a1 1 0 00.22.56l6 6a1 1 0 001.41 0l5.15-5a1 1 0 000-1.41zM4 5a1 1 0 110-2 1 1 0 010 2z"/>
+        </svg>
+      );
+    case 'chat':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M14 1H2a1 1 0 00-1 1v10a1 1 0 001 1h3v2.5l4-2.5h5a1 1 0 001-1V2a1 1 0 00-1-1zm0 11H8.5L5 14v-2H2V2h12v10z"/>
         </svg>
       );
     default:
@@ -94,6 +118,52 @@ export const TabBar: React.FC = () => {
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+  const [chatTitles, setChatTitles] = useState<Map<string, string>>(new Map());
+
+  // Fetch chat titles for chat tabs
+  useEffect(() => {
+    const chatTabs = tabs.filter(t => t.type === 'chat');
+    if (chatTabs.length === 0) return;
+
+    // Fetch titles for chat tabs that don't have a title yet
+    const fetchTitles = async () => {
+      const newTitles = new Map(chatTitles);
+      
+      for (const tab of chatTabs) {
+        if (!chatTitles.has(tab.id)) {
+          try {
+            const conversation = await window.electronAPI?.chat.getConversation(tab.id);
+            if (conversation) {
+              newTitles.set(tab.id, conversation.title);
+            }
+          } catch (error) {
+            console.error('Failed to fetch chat title:', error);
+          }
+        }
+      }
+      
+      if (newTitles.size !== chatTitles.size) {
+        setChatTitles(newTitles);
+      }
+    };
+
+    fetchTitles();
+  }, [tabs]); // Note: intentionally not including chatTitles to avoid infinite loops
+
+  // Listen for chat title updates
+  useEffect(() => {
+    const unsub = window.electronAPI?.chat.onTitleUpdated((data) => {
+      setChatTitles(prev => {
+        const newTitles = new Map(prev);
+        newTitles.set(data.conversationId, data.title);
+        return newTitles;
+      });
+    });
+
+    return () => {
+      unsub?.();
+    };
+  }, []);
 
   // Check if arrows are needed based on scroll position
   const updateArrowVisibility = useCallback(() => {
@@ -229,7 +299,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, posts, media);
+          const title = getTabTitle(tab, posts, media, chatTitles);
           const icon = getTabIcon(tab);
           
           return (

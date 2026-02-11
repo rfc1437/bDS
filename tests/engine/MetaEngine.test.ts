@@ -17,24 +17,31 @@ const mockDirs = new Set<string>();
 let mockPosts: any[] = [];
 let mockProject: any = null;
 
+// Helper to normalize paths (handle both Windows and Unix separators)
+const normalizePath = (p: string): string => p.replace(/\\/g, '/');
+
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(async (filePath: string) => {
-    if (mockFiles.has(filePath)) {
-      return mockFiles.get(filePath);
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    if (mockFiles.has(normalizedPath)) {
+      return mockFiles.get(normalizedPath);
     }
     const err = new Error(`ENOENT: no such file or directory, open '${filePath}'`) as NodeJS.ErrnoException;
     err.code = 'ENOENT';
     throw err;
   }),
   writeFile: vi.fn(async (filePath: string, content: string) => {
-    mockFiles.set(filePath, content);
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    mockFiles.set(normalizedPath, content);
   }),
   mkdir: vi.fn(async (dirPath: string) => {
-    mockDirs.add(dirPath);
+    const normalizedPath = dirPath.replace(/\\/g, '/');
+    mockDirs.add(normalizedPath);
   }),
   access: vi.fn(async (filePath: string) => {
-    if (!mockFiles.has(filePath) && !mockDirs.has(filePath)) {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    if (!mockFiles.has(normalizedPath) && !mockDirs.has(normalizedPath)) {
       const err = new Error(`ENOENT: no such file or directory, access '${filePath}'`) as NodeJS.ErrnoException;
       err.code = 'ENOENT';
       throw err;
@@ -165,13 +172,13 @@ describe('MetaEngine', () => {
       await metaEngine.saveTags();
       
       const metaDir = metaEngine.getMetaDir();
-      const tagsPath = `${metaDir}\\tags.json`;
-      expect(mockFiles.has(tagsPath) || mockFiles.has(tagsPath.replace(/\\/g, '/'))).toBe(true);
+      const tagsPath = normalizePath(`${metaDir}/tags.json`);
+      expect(mockFiles.has(tagsPath)).toBe(true);
     });
 
     it('should load tags from filesystem', async () => {
       const metaDir = metaEngine.getMetaDir();
-      const tagsPath = `${metaDir}\\tags.json`;
+      const tagsPath = normalizePath(`${metaDir}/tags.json`);
       mockFiles.set(tagsPath, JSON.stringify(['saved-tag-1', 'saved-tag-2']));
       
       await metaEngine.loadTags();
@@ -214,13 +221,13 @@ describe('MetaEngine', () => {
       await metaEngine.saveCategories();
       
       const metaDir = metaEngine.getMetaDir();
-      const catPath = `${metaDir}\\categories.json`;
-      expect(mockFiles.has(catPath) || mockFiles.has(catPath.replace(/\\/g, '/'))).toBe(true);
+      const catPath = normalizePath(`${metaDir}/categories.json`);
+      expect(mockFiles.has(catPath)).toBe(true);
     });
 
     it('should load categories from filesystem', async () => {
       const metaDir = metaEngine.getMetaDir();
-      const catPath = `${metaDir}\\categories.json`;
+      const catPath = normalizePath(`${metaDir}/categories.json`);
       mockFiles.set(catPath, JSON.stringify(['cat-1', 'cat-2']));
       
       await metaEngine.loadCategories();
@@ -263,7 +270,7 @@ describe('MetaEngine', () => {
     it('should merge file tags with database tags', async () => {
       // File has some tags
       const metaDir = metaEngine.getMetaDir();
-      mockFiles.set(`${metaDir}\\tags.json`, JSON.stringify(['file-tag']));
+      mockFiles.set(normalizePath(`${metaDir}/tags.json`), JSON.stringify(['file-tag']));
       
       // Posts have different tags
       mockPosts = [
@@ -279,7 +286,7 @@ describe('MetaEngine', () => {
 
     it('should merge file categories with database categories', async () => {
       const metaDir = metaEngine.getMetaDir();
-      mockFiles.set(`${metaDir}\\categories.json`, JSON.stringify(['file-cat']));
+      mockFiles.set(normalizePath(`${metaDir}/categories.json`), JSON.stringify(['file-cat']));
       
       mockPosts = [
         { categories: JSON.stringify(['db-cat']) },
@@ -302,7 +309,7 @@ describe('MetaEngine', () => {
 
     it('should save merged results back to file', async () => {
       const metaDir = metaEngine.getMetaDir();
-      mockFiles.set(`${metaDir}\\tags.json`, JSON.stringify(['existing']));
+      mockFiles.set(normalizePath(`${metaDir}/tags.json`), JSON.stringify(['existing']));
       mockPosts = [{ tags: JSON.stringify(['new-from-db']), categories: JSON.stringify([]) }];
       
       await metaEngine.syncOnStartup();
@@ -428,11 +435,11 @@ describe('MetaEngine', () => {
       });
       
       const metaDir = metaEngine.getMetaDir();
-      const projectPath = `${metaDir}\\project.json`;
-      expect(mockFiles.has(projectPath) || mockFiles.has(projectPath.replace(/\\/g, '/'))).toBe(true);
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      expect(mockFiles.has(projectPath)).toBe(true);
       
       // Verify content
-      const content = mockFiles.get(projectPath) || mockFiles.get(projectPath.replace(/\\/g, '/'));
+      const content = mockFiles.get(projectPath);
       const parsed = JSON.parse(content!);
       expect(parsed.name).toBe('Test Project');
       expect(parsed.description).toBe('Test description');
@@ -440,7 +447,7 @@ describe('MetaEngine', () => {
 
     it('should load project metadata from filesystem', async () => {
       const metaDir = metaEngine.getMetaDir();
-      const projectPath = `${metaDir}\\project.json`;
+      const projectPath = normalizePath(`${metaDir}/project.json`);
       mockFiles.set(projectPath, JSON.stringify({
         name: 'Loaded Project',
         description: 'Loaded description',
@@ -489,7 +496,7 @@ describe('MetaEngine', () => {
 
     it('should load project metadata during syncOnStartup if file exists', async () => {
       const metaDir = metaEngine.getMetaDir();
-      mockFiles.set(`${metaDir}\\project.json`, JSON.stringify({
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
         name: 'Synced Project',
         description: 'Synced description',
       }));
@@ -503,7 +510,7 @@ describe('MetaEngine', () => {
 
     it('should create project.json with data from database during syncOnStartup if file does not exist', async () => {
       const metaDir = metaEngine.getMetaDir();
-      const projectPath = `${metaDir}\\project.json`;
+      const projectPath = normalizePath(`${metaDir}/project.json`);
       
       // Setup mock project in database
       mockProject = {
@@ -522,7 +529,7 @@ describe('MetaEngine', () => {
       await metaEngine.syncOnStartup();
       
       // File should be created
-      expect(mockFiles.has(projectPath) || mockFiles.has(projectPath.replace(/\\/g, '/'))).toBe(true);
+      expect(mockFiles.has(projectPath)).toBe(true);
       
       // Should have metadata from database
       const metadata = await metaEngine.getProjectMetadata();
@@ -540,7 +547,7 @@ describe('MetaEngine', () => {
 
     it('should create categories.json with defaults for new project with no posts', async () => {
       const metaDir = metaEngine.getMetaDir();
-      const catPath = `${metaDir}\\categories.json`;
+      const catPath = normalizePath(`${metaDir}/categories.json`);
       
       // Setup mock project in database
       mockProject = {
@@ -559,7 +566,7 @@ describe('MetaEngine', () => {
       await metaEngine.syncOnStartup();
       
       // File should be created with default categories
-      expect(mockFiles.has(catPath) || mockFiles.has(catPath.replace(/\\/g, '/'))).toBe(true);
+      expect(mockFiles.has(catPath)).toBe(true);
       
       const categories = await metaEngine.getCategories();
       expect(categories).toContain('article');
