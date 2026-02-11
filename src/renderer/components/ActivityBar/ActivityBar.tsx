@@ -35,7 +35,7 @@ const SyncIcon = () => (
 );
 
 export const ActivityBar: React.FC = () => {
-  const { activeView, setActiveView, syncStatus, pendingChanges, openTab, tabs, activeTabId } = useAppStore();
+  const { activeView, setActiveView, sidebarVisible, toggleSidebar, syncStatus, pendingChanges, openTab, tabs, activeTabId } = useAppStore();
   
   const totalPending = pendingChanges.posts + pendingChanges.media;
   
@@ -44,6 +44,23 @@ export const ActivityBar: React.FC = () => {
   
   // Check if tags tab is currently active
   const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
+
+  // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
+  const handleViewClick = (view: 'posts' | 'media') => {
+    if (activeView === view && sidebarVisible) {
+      // Clicking on active view toggles sidebar off
+      toggleSidebar();
+    } else if (activeView === view && !sidebarVisible) {
+      // Clicking on active view when hidden shows it
+      toggleSidebar();
+    } else {
+      // Switching to a different view - ensure sidebar is visible
+      if (!sidebarVisible) {
+        toggleSidebar();
+      }
+      setActiveView(view);
+    }
+  };
 
   const handleSettingsClick = () => {
     // Open settings as a dedicated (non-transient) tab
@@ -59,16 +76,16 @@ export const ActivityBar: React.FC = () => {
     <div className="activity-bar">
       <div className="activity-bar-top">
         <button
-          className={`activity-bar-item ${activeView === 'posts' ? 'active' : ''}`}
-          onClick={() => setActiveView('posts')}
-          title="Posts"
+          className={`activity-bar-item ${activeView === 'posts' && sidebarVisible ? 'active' : ''}`}
+          onClick={() => handleViewClick('posts')}
+          title="Posts (click again to toggle sidebar)"
         >
           <PostsIcon />
         </button>
         <button
-          className={`activity-bar-item ${activeView === 'media' ? 'active' : ''}`}
-          onClick={() => setActiveView('media')}
-          title="Media"
+          className={`activity-bar-item ${activeView === 'media' && sidebarVisible ? 'active' : ''}`}
+          onClick={() => handleViewClick('media')}
+          title="Media (click again to toggle sidebar)"
         >
           <MediaIcon />
         </button>

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast } from './components';
+import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress, TabState } from './store';
 import './App.css';
 
@@ -357,11 +357,24 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const { sidebarVisible } = useAppStore();
+
   return (
     <div className="app">
       <div className="app-main">
         <ActivityBar />
-        <Sidebar />
+        {sidebarVisible && (
+          <ResizablePanel
+            direction="horizontal"
+            initialSize={280}
+            minSize={200}
+            maxSize={500}
+            storageKey="sidebar-width"
+            resizerPosition="end"
+          >
+            <Sidebar />
+          </ResizablePanel>
+        )}
         <div className="app-content">
           <TabBar />
           <Editor />
