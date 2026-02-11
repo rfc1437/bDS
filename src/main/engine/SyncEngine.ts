@@ -64,14 +64,17 @@ export class SyncEngine extends EventEmitter {
     // Start auto-sync if enabled
     if (config.autoSync && config.syncInterval > 0) {
       this.syncIntervalId = setInterval(
-        () => this.sync('bidirectional'),
+        () => this.fullSync('bidirectional'),
         config.syncInterval * 60 * 1000
       );
     }
 
-    // Initialize remote database connection
+    // Initialize remote database connection with the provided credentials
     const db = getDatabase();
-    await db.initializeRemote();
+    await db.initializeRemote({
+      tursoUrl: config.tursoUrl,
+      tursoAuthToken: config.tursoAuthToken,
+    });
 
     this.emit('configured', config);
   }

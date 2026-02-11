@@ -185,6 +185,7 @@ export const SettingsView: React.FC = () => {
           autoSync: true,
           syncInterval: 5,
         });
+        useAppStore.getState().setSyncConfigured(true);
         showToast.success('Cloud sync configured');
       } else {
         showToast.success('Credentials saved');
@@ -232,6 +233,7 @@ export const SettingsView: React.FC = () => {
       case 'turso':
         newCreds.tursoUrl = '';
         newCreds.tursoToken = '';
+        useAppStore.getState().setSyncConfigured(false);
         break;
       case 'dropbox':
         newCreds.dropboxAccessToken = '';

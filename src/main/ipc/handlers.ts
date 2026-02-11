@@ -307,7 +307,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('sync:start', async (_, direction: SyncDirection = 'bidirectional') => {
     const engine = getSyncEngine();
-    return engine.sync(direction);
+    return engine.fullSync(direction);
   });
 
   ipcMain.handle('sync:getStatus', async () => {
@@ -337,9 +337,28 @@ export function registerIpcHandlers(): void {
 
   // ============ Dropbox Sync Handlers ============
 
-  ipcMain.handle('dropbox:configure', async (_, config: DropboxSyncConfig) => {
+  ipcMain.handle('dropbox:configure', async (_, config: Partial<DropboxSyncConfig>) => {
     const engine = getDropboxSyncEngine();
-    return engine.configure(config);
+
+    // Inject local project paths so the engine knows where files live
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    const projectId = activeProject?.id || 'default';
+    const paths = projectEngine.getProjectPaths(projectId);
+
+    const fullConfig: DropboxSyncConfig = {
+      accessToken: config.accessToken,
+      appKey: config.appKey || '',
+      appSecret: config.appSecret,
+      refreshToken: config.refreshToken,
+      syncEnabled: config.syncEnabled ?? true,
+      syncInterval: config.syncInterval ?? 60,
+      localPostsDir: paths.posts,
+      localMediaDir: paths.media,
+      remoteBasePath: config.remoteBasePath ?? (config as any).remotePath ?? '',
+    };
+
+    return engine.configure(fullConfig);
   });
 
   ipcMain.handle('dropbox:isConfigured', async () => {
