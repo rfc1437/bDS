@@ -272,8 +272,13 @@ export interface ElectronAPI {
     update: (id: string, data: Partial<MediaData>) => Promise<MediaData | null>;
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<MediaData | null>;
+    getUrl: (id: string) => Promise<string | null>;
+    getFilePath: (id: string) => Promise<string | null>;
     getAll: () => Promise<MediaData[]>;
     rebuildFromFiles: () => Promise<void>;
+    getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => Promise<string | null>;
+    regenerateThumbnails: (id: string) => Promise<Record<string, string> | null>;
+    regenerateMissingThumbnails: () => Promise<{ processed: number; generated: number; failed: number }>;
   };
   sync: {
     configure: (config: SyncConfig) => Promise<void>;

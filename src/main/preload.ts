@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     rebuildFromFiles: () => ipcRenderer.invoke('media:rebuildFromFiles'),
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => ipcRenderer.invoke('media:getThumbnail', id, size),
     regenerateThumbnails: (id: string) => ipcRenderer.invoke('media:regenerateThumbnails', id),
+    regenerateMissingThumbnails: () => ipcRenderer.invoke('media:regenerateMissingThumbnails'),
   },
 
   // Sync

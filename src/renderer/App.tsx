@@ -342,6 +342,8 @@ const App: React.FC = () => {
         // Fire and forget - the handlers return immediately now
         window.electronAPI?.posts.rebuildFromFiles();
         window.electronAPI?.media.rebuildFromFiles();
+        // Also regenerate missing thumbnails after media rebuild
+        window.electronAPI?.media.regenerateMissingThumbnails();
       }) || (() => {})
     );
 

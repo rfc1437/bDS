@@ -939,6 +939,35 @@ export const SettingsView: React.FC = () => {
             Rebuild Links
           </button>
         </SettingRow>
+
+        <SettingRow
+          id="regenerate-thumbnails"
+          label="Regenerate Thumbnails"
+          description="Generate missing thumbnails for all images. Useful after importing media externally."
+        >
+          <button
+            className="secondary"
+            onClick={async () => {
+              showToast.loading('Generating thumbnails...');
+              try {
+                const result = await window.electronAPI?.media.regenerateMissingThumbnails();
+                showToast.dismiss();
+                if (result && result.generated > 0) {
+                  showToast.success(`Generated ${result.generated} thumbnails`);
+                } else if (result && result.processed === 0) {
+                  showToast.success('All thumbnails already exist');
+                } else {
+                  showToast.success('Thumbnail generation complete');
+                }
+              } catch {
+                showToast.dismiss();
+                showToast.error('Failed to generate thumbnails');
+              }
+            }}
+          >
+            Generate Thumbnails
+          </button>
+        </SettingRow>
       </SettingSection>
 
       <SettingSection
