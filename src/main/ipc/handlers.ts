@@ -327,6 +327,16 @@ export function registerIpcHandlers(): void {
     return null;
   });
 
+  ipcMain.handle('media:regenerateMissingThumbnails', async () => {
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+    const engine = getMediaEngine();
+    if (project) {
+      engine.setProjectContext(project.id);
+    }
+    return engine.regenerateMissingThumbnails();
+  });
+
   // ============ Sync Handlers ============
 
   ipcMain.handle('sync:configure', async (_, config: SyncConfig) => {

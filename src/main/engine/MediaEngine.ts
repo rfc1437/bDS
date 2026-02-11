@@ -638,6 +638,96 @@ export class MediaEngine extends EventEmitter {
 
     await taskManager.runTask(task);
   }
+
+  /**
+   * Regenerate missing thumbnails for all image media.
+   * Useful for media imported externally without thumbnails.
+   */
+  async regenerateMissingThumbnails(): Promise<{ processed: number; generated: number; failed: number }> {
+    const result = { processed: 0, generated: 0, failed: 0 };
+
+    const task: Task<{ processed: number; generated: number; failed: number }> = {
+      id: uuidv4(),
+      name: 'Generate missing thumbnails',
+      execute: async (onProgress) => {
+        const db = getDatabase().getLocal();
+
+        onProgress(0, 'Finding images without thumbnails...');
+
+        // Get all image media for current project
+        const allMedia = await db
+          .select()
+          .from(media)
+          .where(eq(media.projectId, this.currentProjectId))
+          .all();
+
+        // Filter to images only (not SVG - they don't need thumbnails)
+        const imageMedia = allMedia.filter(
+          m => m.mimeType.startsWith('image/') && !m.mimeType.includes('svg')
+        );
+
+        if (imageMedia.length === 0) {
+          onProgress(100, 'No images found');
+          return result;
+        }
+
+        onProgress(5, `Checking ${imageMedia.length} images...`);
+
+        // Find which ones are missing thumbnails
+        const missingThumbnails: typeof imageMedia = [];
+        for (const item of imageMedia) {
+          const thumbnails = await this.getThumbnailPaths(item.id);
+          // Consider missing if any size is missing
+          if (!thumbnails.small || !thumbnails.medium || !thumbnails.large) {
+            missingThumbnails.push(item);
+          }
+        }
+
+        if (missingThumbnails.length === 0) {
+          onProgress(100, 'All thumbnails exist');
+          return result;
+        }
+
+        onProgress(10, `Generating thumbnails for ${missingThumbnails.length} images...`);
+
+        for (let i = 0; i < missingThumbnails.length; i++) {
+          const item = missingThumbnails[i];
+          result.processed++;
+
+          const progress = 10 + (90 * ((i + 1) / missingThumbnails.length));
+          onProgress(progress, `Processing ${i + 1}/${missingThumbnails.length}: ${item.originalName}`);
+
+          try {
+            // Verify the source file exists
+            await fs.access(item.filePath);
+            
+            const thumbnails = await this.generateThumbnails(item.id, item.filePath);
+            
+            // Check if thumbnails were actually generated
+            if (Object.keys(thumbnails).length > 0) {
+              result.generated++;
+            } else {
+              result.failed++;
+            }
+          } catch (error) {
+            console.error(`Failed to generate thumbnails for ${item.id}:`, error);
+            result.failed++;
+          }
+
+          // Yield to event loop periodically
+          if (i % 5 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
+        }
+
+        onProgress(100, `Generated ${result.generated} thumbnails, ${result.failed} failed`);
+        this.emit('thumbnailsRegenerated', result);
+        return result;
+      },
+    };
+
+    return await taskManager.runTask(task);
+  }
 }
 
 // Singleton instance
