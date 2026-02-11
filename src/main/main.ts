@@ -37,6 +37,7 @@ function createWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      devTools: true,
     },
     icon: path.join(__dirname, '../../assets/icon.png'),
   });
@@ -44,6 +45,16 @@ function createWindow(): void {
   // Set up the application menu
   const menu = createApplicationMenu();
   Menu.setApplicationMenu(menu);
+
+  // Register keyboard shortcuts for DevTools via before-input-event (more reliable)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // F12 or Ctrl+Shift+I to toggle DevTools
+    if (input.key === 'F12' || 
+        (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+      mainWindow?.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
 
   // Load the app - use built files unless explicitly in dev mode
   const rendererPath = path.join(__dirname, '../renderer/index.html');
@@ -186,7 +197,13 @@ function createApplicationMenu(): Menu {
         { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        {
+          label: 'Toggle Developer Tools',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Option+I' : 'Ctrl+Shift+I',
+          click: () => {
+            mainWindow?.webContents.toggleDevTools();
+          },
+        },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
