@@ -83,13 +83,20 @@ export class TaskManager extends EventEmitter {
     this.emit('taskStarted', progress);
 
     try {
+      let lastEmitTime = 0;
+      const THROTTLE_MS = 250; // Only emit progress to renderer every 250ms
+
       const result = await task.execute((progressValue, message) => {
         if (abortController.signal.aborted) {
           throw new Error('Task cancelled');
         }
         progress.progress = progressValue;
         progress.message = message;
-        this.emit('taskProgress', progress);
+        const now = Date.now();
+        if (now - lastEmitTime >= THROTTLE_MS || progressValue >= 100) {
+          lastEmitTime = now;
+          this.emit('taskProgress', { ...progress });
+        }
       });
 
       progress.status = 'completed';

@@ -145,6 +145,13 @@ const App: React.FC = () => {
 
     // Task events
     unsubscribers.push(
+      window.electronAPI?.on('task:started', (task: unknown) => {
+        const t = task as TaskProgress;
+        updateTask(t.taskId, t);
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('task:progress', (task: unknown) => {
         const t = task as TaskProgress;
         updateTask(t.taskId, t);
@@ -235,19 +242,44 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    // Rebuild events - clear store on start, reload on complete
     unsubscribers.push(
-      window.electronAPI?.on('menu:rebuildDatabase', async () => {
-        await window.electronAPI?.posts.rebuildFromFiles();
-        await window.electronAPI?.media.rebuildFromFiles();
-        // Reload data
-        const posts = await window.electronAPI?.posts.getAll();
-        if (posts) {
-          setPosts(posts as PostData[]);
+      window.electronAPI?.on('posts:rebuildStarted', () => {
+        setPosts([], false, 0);
+        setSelectedPost(null);
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('posts:databaseRebuilt', async () => {
+        const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
+        if (postsResult) {
+          const { items, hasMore, total } = postsResult as { items: PostData[]; hasMore: boolean; total: number };
+          setPosts(items, hasMore, total);
         }
-        const media = await window.electronAPI?.media.getAll();
-        if (media) {
-          setMedia(media as MediaData[]);
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('media:rebuildStarted', () => {
+        setMedia([]);
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('media:databaseRebuilt', async () => {
+        const mediaResult = await window.electronAPI?.media.getAll();
+        if (mediaResult) {
+          setMedia(mediaResult as MediaData[]);
         }
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('menu:rebuildDatabase', () => {
+        // Fire and forget - the handlers return immediately now
+        window.electronAPI?.posts.rebuildFromFiles();
+        window.electronAPI?.media.rebuildFromFiles();
       }) || (() => {})
     );
 

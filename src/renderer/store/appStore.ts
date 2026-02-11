@@ -255,9 +255,14 @@ export const useAppStore = create<AppState>()(
       
       // Task Actions
       setTasks: (tasks) => set({ tasks }),
-      updateTask: (taskId, task) => set((state) => ({
-        tasks: state.tasks.map((t) => (t.taskId === taskId ? { ...t, ...task } : t)),
-      })),
+      updateTask: (taskId, task) => set((state) => {
+        const exists = state.tasks.some((t) => t.taskId === taskId);
+        if (exists) {
+          return { tasks: state.tasks.map((t) => (t.taskId === taskId ? { ...t, ...task } : t)) };
+        }
+        // Add new task if it doesn't exist yet
+        return { tasks: [...state.tasks, { taskId, status: 'running', progress: 0, message: '', startTime: new Date().toISOString(), ...task } as TaskProgress] };
+      }),
       
       // Sync Actions
       setSyncStatus: (syncStatus) => set({ syncStatus }),
