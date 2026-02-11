@@ -51,6 +51,9 @@ export const ActivityBar: React.FC = () => {
   // Check if settings tab is currently active
   const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
   
+  // Check if settings view is active (either tab or sidebar)
+  const isSettingsActive = (activeView === 'settings' && sidebarVisible) || isSettingsTabActive;
+  
   // Check if tags tab is currently active
   const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
 
@@ -75,8 +78,17 @@ export const ActivityBar: React.FC = () => {
   };
 
   const handleSettingsClick = () => {
-    // Open settings as a dedicated (non-transient) tab
-    openTab({ type: 'settings', id: 'settings', isTransient: false });
+    // Toggle sidebar if settings is already active, otherwise switch to settings
+    if (activeView === 'settings' && sidebarVisible) {
+      toggleSidebar();
+    } else {
+      // Open settings tab and show settings sidebar
+      openTab({ type: 'settings', id: 'settings', isTransient: false });
+      setActiveView('settings');
+      if (!sidebarVisible) {
+        toggleSidebar();
+      }
+    }
   };
 
   const handleTagsClick = () => {
@@ -129,9 +141,9 @@ export const ActivityBar: React.FC = () => {
           )}
         </button>
         <button
-          className={`activity-bar-item ${isSettingsTabActive ? 'active' : ''}`}
+          className={`activity-bar-item ${isSettingsActive ? 'active' : ''}`}
           onClick={handleSettingsClick}
-          title="Settings"
+          title="Settings (click again to toggle sidebar)"
         >
           <SettingsIcon />
         </button>
