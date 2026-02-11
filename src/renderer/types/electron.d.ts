@@ -354,7 +354,7 @@ export interface ElectronAPI {
     deleteConversation: (id: string) => Promise<boolean>;
 
     // Messaging
-    sendMessage: (conversationId: string, message: string) => Promise<string>;
+    sendMessage: (conversationId: string, message: string) => Promise<{ success: boolean; message?: string; error?: string }>;
     abortMessage: (conversationId: string) => Promise<void>;
     getHistory: (conversationId: string) => Promise<ChatMessage[]>;
     clearMessages: (conversationId: string) => Promise<void>;
