@@ -344,3 +344,54 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* API Key form */
+.api-key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.api-key-input {
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--vscode-input-foreground);
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.api-key-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.api-key-submit {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vscode-button-foreground);
+  background-color: var(--vscode-button-background);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.api-key-submit:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.api-key-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.api-key-error {
+  font-size: 13px;
+  color: var(--vscode-errorForeground);
+  margin-top: 4px;
+}

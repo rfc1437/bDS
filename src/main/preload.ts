@@ -129,34 +129,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncFromPosts: () => ipcRenderer.invoke('tags:syncFromPosts'),
   },
 
-  // AI Chat (Copilot SDK integration)
+  // AI Chat (OpenCode Zen API integration)
   chat: {
-    // Authentication
+    // API Key Management
     checkReady: () => ipcRenderer.invoke('chat:checkReady'),
-    copilotAuthStatus: () => ipcRenderer.invoke('chat:copilotAuthStatus'),
-    copilotLogin: () => ipcRenderer.invoke('chat:copilotLogin'),
-    copilotLogout: () => ipcRenderer.invoke('chat:copilotLogout'),
-    
+    validateApiKey: (apiKey: string) => ipcRenderer.invoke('chat:validateApiKey', apiKey),
+    setApiKey: (apiKey: string) => ipcRenderer.invoke('chat:setApiKey', apiKey),
+    getApiKey: () => ipcRenderer.invoke('chat:getApiKey'),
+
     // Settings
     getAvailableModels: () => ipcRenderer.invoke('chat:getAvailableModels'),
     setDefaultModel: (modelId: string) => ipcRenderer.invoke('chat:setDefaultModel', modelId),
     getSystemPrompt: () => ipcRenderer.invoke('chat:getSystemPrompt'),
     setSystemPrompt: (prompt: string) => ipcRenderer.invoke('chat:setSystemPrompt', prompt),
-    
+
     // Conversations
     getConversations: () => ipcRenderer.invoke('chat:getConversations'),
     createConversation: (title?: string, model?: string) => ipcRenderer.invoke('chat:createConversation', title, model),
     getConversation: (id: string) => ipcRenderer.invoke('chat:getConversation', id),
     updateConversation: (id: string, updates: { title?: string; model?: string }) => ipcRenderer.invoke('chat:updateConversation', id, updates),
     deleteConversation: (id: string) => ipcRenderer.invoke('chat:deleteConversation', id),
-    
+
     // Messaging
     sendMessage: (conversationId: string, message: string) => ipcRenderer.invoke('chat:sendMessage', conversationId, message),
     abortMessage: (conversationId: string) => ipcRenderer.invoke('chat:abortMessage', conversationId),
     getHistory: (conversationId: string) => ipcRenderer.invoke('chat:getHistory', conversationId),
     clearMessages: (conversationId: string) => ipcRenderer.invoke('chat:clearMessages', conversationId),
     setConversationModel: (conversationId: string, modelId: string) => ipcRenderer.invoke('chat:setConversationModel', conversationId, modelId),
-    
+
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {
       const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; delta: string }) => callback(data);
@@ -177,11 +177,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; title: string }) => callback(data);
       ipcRenderer.on('chat-title-updated', subscription);
       return () => ipcRenderer.removeListener('chat-title-updated', subscription);
-    },
-    onDeviceCode: (callback: (data: { verificationUri: string; userCode: string }) => void) => {
-      const subscription = (_event: Electron.IpcRendererEvent, data: { verificationUri: string; userCode: string }) => callback(data);
-      ipcRenderer.on('copilot-device-code', subscription);
-      return () => ipcRenderer.removeListener('copilot-device-code', subscription);
     },
   },
 
@@ -295,38 +290,37 @@ export interface ElectronAPI {
     syncFromPosts: () => Promise<void>;
   };
   chat: {
-    // Authentication
-    checkReady: () => Promise<{ ready: boolean; authenticated: boolean }>;
-    copilotAuthStatus: () => Promise<{ authenticated: boolean; username?: string }>;
-    copilotLogin: () => Promise<{ success: boolean; error?: string; login?: string }>;
-    copilotLogout: () => Promise<void>;
-    
+    // API Key Management
+    checkReady: () => Promise<{ ready: boolean; error?: string; backend?: string }>;
+    validateApiKey: (apiKey: string) => Promise<{ isValid: boolean; models: Array<{ id: string; name: string }> }>;
+    setApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+    getApiKey: () => Promise<{ hasKey: boolean; maskedKey: string }>;
+
     // Settings
     getAvailableModels: () => Promise<Array<{ id: string; name: string }>>;
     setDefaultModel: (modelId: string) => Promise<void>;
     getSystemPrompt: () => Promise<string | null>;
     setSystemPrompt: (prompt: string) => Promise<void>;
-    
+
     // Conversations
     getConversations: () => Promise<unknown[]>;
     createConversation: (title?: string, model?: string) => Promise<unknown>;
     getConversation: (id: string) => Promise<unknown>;
     updateConversation: (id: string, updates: { title?: string; model?: string }) => Promise<unknown>;
     deleteConversation: (id: string) => Promise<boolean>;
-    
+
     // Messaging
     sendMessage: (conversationId: string, message: string) => Promise<string>;
     abortMessage: (conversationId: string) => Promise<void>;
     getHistory: (conversationId: string) => Promise<unknown[]>;
     clearMessages: (conversationId: string) => Promise<void>;
     setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
-    
+
     // Event listeners
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => () => void;
     onToolCall: (callback: (data: { conversationId: string; toolCall: unknown }) => void) => () => void;
     onToolResult: (callback: (data: { conversationId: string; result: unknown }) => void) => () => void;
     onTitleUpdated: (callback: (data: { conversationId: string; title: string }) => void) => () => void;
-    onDeviceCode: (callback: (data: { verificationUri: string; userCode: string }) => void) => () => void;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

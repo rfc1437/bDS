@@ -1,16 +1,16 @@
 /**
- * Chat IPC handlers - AI chat functionality using GitHub Copilot SDK
+ * Chat IPC handlers - AI chat functionality using OpenCode Zen API
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { ChatEngine } from '../engine/ChatEngine';
-import { CopilotManager } from '../engine/CopilotManager';
+import { OpenCodeManager } from '../engine/OpenCodeManager';
 import { getPostEngine } from '../engine/PostEngine';
 import { getMediaEngine } from '../engine/MediaEngine';
 import { getDatabase } from '../database';
 
 let chatEngine: ChatEngine | null = null;
-let copilotManager: CopilotManager | null = null;
+let openCodeManager: OpenCodeManager | null = null;
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 
 /**
@@ -31,35 +31,43 @@ function getChatEngine(): ChatEngine {
 }
 
 /**
- * Get or create the CopilotManager instance
+ * Get or create the OpenCodeManager instance
  */
-function getCopilotManager(): CopilotManager {
-  if (!copilotManager) {
-    copilotManager = new CopilotManager(
+function getOpenCodeManager(): OpenCodeManager {
+  if (!openCodeManager) {
+    openCodeManager = new OpenCodeManager(
       getChatEngine(),
       getPostEngine(),
       getMediaEngine(),
       () => mainWindowGetter?.() || null
     );
+
+    // Load API key from settings
+    const engine = getChatEngine();
+    engine.getSetting('opencode_api_key').then(key => {
+      if (key) {
+        openCodeManager!.setApiKey(key);
+      }
+    }).catch(() => {});
   }
-  return copilotManager;
+  return openCodeManager;
 }
 
 /**
  * Register all chat-related IPC handlers
  */
 export function registerChatHandlers(): void {
-  // ============ Copilot Authentication & Status ============
+  // ============ API Key & Status ============
 
-  // Check if Copilot is ready
+  // Check if service is ready
   ipcMain.handle('chat:checkReady', async () => {
     try {
-      const manager = getCopilotManager();
+      const manager = getOpenCodeManager();
       const result = await manager.checkReady();
       return {
         ready: result.ready,
         error: result.error,
-        backend: result.ready ? 'copilot' : undefined,
+        backend: 'opencode',
       };
     } catch (error) {
       console.error('[Chat IPC] Error checking ready:', error);
@@ -67,61 +75,47 @@ export function registerChatHandlers(): void {
     }
   });
 
-  // Get Copilot authentication status
-  ipcMain.handle('chat:copilotAuthStatus', async () => {
+  // Validate API key
+  ipcMain.handle('chat:validateApiKey', async (_, apiKey: string) => {
     try {
-      const manager = getCopilotManager();
-      const status = await manager.getAuthStatus();
-      // Transform to match frontend ChatAuthStatus type
-      return {
-        authenticated: status.isAuthenticated,
-        username: status.login,
-      };
-    } catch (error) {
-      console.error('[Chat IPC] Error getting auth status:', error);
-      return { authenticated: false };
-    }
-  });
-
-  // Trigger Copilot login
-  ipcMain.handle('chat:copilotLogin', async () => {
-    try {
-      console.log('[Chat IPC] copilotLogin called');
-      const manager = getCopilotManager();
-      const mainWindow = mainWindowGetter?.();
-
-      console.log('[Chat IPC] Calling manager.triggerLogin()');
-      const result = await manager.triggerLogin({
-        onDeviceCode: (deviceCode) => {
-          console.log('[Chat IPC] Received device code, sending to renderer:', deviceCode);
-          if (mainWindow) {
-            mainWindow.webContents.send('copilot-device-code', deviceCode);
-          }
-        },
-        onMessage: (message) => {
-          console.log('[Chat IPC] Auth message:', message);
-          if (mainWindow) {
-            mainWindow.webContents.send('copilot-auth-message', { message });
-          }
-        },
-      });
-
-      console.log('[Chat IPC] triggerLogin result:', result);
+      const manager = getOpenCodeManager();
+      const result = await manager.validateApiKey(apiKey);
       return result;
     } catch (error) {
-      console.error('[Chat IPC] Error during login:', error);
+      console.error('[Chat IPC] Error validating API key:', error);
+      return { isValid: false, models: [] };
+    }
+  });
+
+  // Set API key
+  ipcMain.handle('chat:setApiKey', async (_, apiKey: string) => {
+    try {
+      const manager = getOpenCodeManager();
+      manager.setApiKey(apiKey);
+
+      // Persist to settings
+      const engine = getChatEngine();
+      await engine.setSetting('opencode_api_key', apiKey);
+
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting API key:', error);
       return { success: false, error: (error as Error).message };
     }
   });
 
-  // Logout from Copilot
-  ipcMain.handle('chat:copilotLogout', async () => {
+  // Get API key (masked)
+  ipcMain.handle('chat:getApiKey', async () => {
     try {
-      const manager = getCopilotManager();
-      return await manager.logout();
+      const manager = getOpenCodeManager();
+      const key = manager.getApiKey();
+      if (!key) return { hasKey: false, maskedKey: '' };
+      // Mask all but last 4 characters
+      const masked = '•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4);
+      return { hasKey: true, maskedKey: masked };
     } catch (error) {
-      console.error('[Chat IPC] Error during logout:', error);
-      return { success: false, error: (error as Error).message };
+      console.error('[Chat IPC] Error getting API key:', error);
+      return { hasKey: false, maskedKey: '' };
     }
   });
 
@@ -130,7 +124,7 @@ export function registerChatHandlers(): void {
   // Get available models
   ipcMain.handle('chat:getAvailableModels', async () => {
     try {
-      const manager = getCopilotManager();
+      const manager = getOpenCodeManager();
       const models = await manager.getAvailableModels();
       const engine = getChatEngine();
       const selectedModel = await engine.getSelectedModel();
@@ -238,11 +232,6 @@ export function registerChatHandlers(): void {
     try {
       const engine = getChatEngine();
       await engine.deleteConversation(id);
-      
-      // Also destroy any active session
-      const manager = getCopilotManager();
-      await manager.destroySession(id);
-      
       return { success: true };
     } catch (error) {
       console.error('[Chat IPC] Error deleting conversation:', error);
@@ -255,7 +244,7 @@ export function registerChatHandlers(): void {
   // Send a message
   ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string) => {
     try {
-      const manager = getCopilotManager();
+      const manager = getOpenCodeManager();
       const mainWindow = mainWindowGetter?.();
 
       const result = await manager.sendMessage(conversationId, message, {
@@ -286,7 +275,7 @@ export function registerChatHandlers(): void {
   // Abort a running message
   ipcMain.handle('chat:abortMessage', async (_, conversationId: string) => {
     try {
-      const manager = getCopilotManager();
+      const manager = getOpenCodeManager();
       return await manager.abortMessage(conversationId);
     } catch (error) {
       console.error('[Chat IPC] Error aborting message:', error);
@@ -334,9 +323,9 @@ export function registerChatHandlers(): void {
  * Cleanup chat resources
  */
 export async function cleanupChatHandlers(): Promise<void> {
-  if (copilotManager) {
-    await copilotManager.stop();
-    copilotManager = null;
+  if (openCodeManager) {
+    await openCodeManager.stop();
+    openCodeManager = null;
   }
   chatEngine = null;
 }
