@@ -44,9 +44,10 @@ export {
   type CreateConversationInput,
 } from './ChatEngine';
 export {
-  CopilotManager,
+  OpenCodeManager,
   type SendMessageOptions,
   type SendMessageResult,
-} from './CopilotManager';
+  type ModelInfo,
+} from './OpenCodeManager';
 
 

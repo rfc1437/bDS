@@ -210,8 +210,8 @@ We should use UpdraftPlus for backups and loading data into the system from thos
 have full data available from the site, including all meta data and uploads.
 
 Additionally we need another importer to traverse a full website and deduct post structure from that website
-and rebuild posts in the database based on such a web traversal. To be able to do that, use copilot SDK
-to integrate copilot directly, so that HTML pages can be directly inspected and turned into actual blog
+and rebuild posts in the database based on such a web traversal. To be able to do that, use the OpenCode Zen
+AI integration so that HTML pages can be directly inspected and turned into actual blog
 posts in proper structure and proper markdown, despite the source being HTML. This is a variant of the
 wordpress importer that directly works on already rendered HTML websites. The importer should only stay
 within the actual site it was handled, not following any off-site links.
@@ -221,7 +221,7 @@ embedded HTML, for as much as possible. We want clean markdown in the posts afte
 of markdown and HTML.
 
 For this AI support during import to work, the blog application needs to provide post management and media
-management functionality as proper SDK tools to the copilot instance, so that it will be able to work
+management functionality as proper AI tools to the OpenCode Zen API, so that it will be able to work
 on those posts.
 
 The AI importing agent must discover the language of a post and put that in an attribute. Posts must have

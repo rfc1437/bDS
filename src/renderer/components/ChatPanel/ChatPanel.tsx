@@ -14,6 +14,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   const [streamingContent, setStreamingContent] = useState('');
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [needsApiKey, setNeedsApiKey] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeyError, setApiKeyError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamingRef = useRef('');
@@ -21,6 +25,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   // Scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  // Check if service is ready
+  const checkReady = useCallback(async () => {
+    try {
+      const status = await window.electronAPI?.chat.checkReady();
+      if (!status?.ready) {
+        setNeedsApiKey(true);
+      } else {
+        setNeedsApiKey(false);
+      }
+    } catch {
+      setNeedsApiKey(true);
+    }
   }, []);
 
   // Load conversation and messages
@@ -31,7 +49,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
         window.electronAPI?.chat.getHistory(conversationId),
         window.electronAPI?.chat.getAvailableModels()
       ]);
-      
+
       if (conv) setConversation(conv);
       if (msgs) setMessages(msgs);
       if (models) setAvailableModels(models);
@@ -41,8 +59,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   }, [conversationId]);
 
   useEffect(() => {
+    checkReady();
     loadData();
-    
+
     // Subscribe to stream events
     const unsubDelta = window.electronAPI?.chat.onStreamDelta((data) => {
       if (data.conversationId === conversationId) {
@@ -62,12 +81,35 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       unsubDelta?.();
       unsubTitle?.();
     };
-  }, [conversationId, loadData, scrollToBottom]);
+  }, [conversationId, loadData, scrollToBottom, checkReady]);
 
   // Scroll on new messages or streaming content
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingContent, scrollToBottom]);
+
+  const handleApiKeySubmit = async () => {
+    if (!apiKeyInput.trim()) return;
+
+    setIsValidating(true);
+    setApiKeyError('');
+
+    try {
+      const result = await window.electronAPI?.chat.validateApiKey(apiKeyInput.trim());
+      if (result?.isValid) {
+        await window.electronAPI?.chat.setApiKey(apiKeyInput.trim());
+        setNeedsApiKey(false);
+        setApiKeyInput('');
+        loadData();
+      } else {
+        setApiKeyError('Invalid API key. Please check and try again.');
+      }
+    } catch {
+      setApiKeyError('Failed to validate API key.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   const handleSend = async () => {
     const message = inputValue.trim();
@@ -91,7 +133,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     try {
       // Send message and wait for complete response
       await window.electronAPI?.chat.sendMessage(conversationId, message);
-      
+
       // Reload messages to get the saved assistant response
       const msgs = await window.electronAPI?.chat.getHistory(conversationId);
       if (msgs) setMessages(msgs);
@@ -144,7 +186,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     return (
       <div key={msg.id} className={`chat-message ${msg.role}`}>
         <div className="chat-message-avatar">
-          {msg.role === 'user' ? '👤' : '🤖'}
+          {msg.role === 'user' ? '\u{1F464}' : '\u{1F916}'}
         </div>
         <div className="chat-message-content">
           <div className="chat-message-header">
@@ -158,6 +200,43 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     );
   };
 
+  // API key setup screen
+  if (needsApiKey) {
+    return (
+      <div className="chat-panel">
+        <div className="chat-panel-header">
+          <div className="chat-panel-title">AI Chat Setup</div>
+        </div>
+        <div className="chat-messages">
+          <div className="chat-welcome">
+            <div className="chat-welcome-icon">{'\u{1F511}'}</div>
+            <h2>OpenCode Zen API Key Required</h2>
+            <p>Enter your OpenCode API key to enable AI chat.</p>
+            <div className="api-key-form">
+              <input
+                type="password"
+                className="api-key-input"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleApiKeySubmit()}
+                placeholder="Enter your API key..."
+                disabled={isValidating}
+              />
+              <button
+                className="api-key-submit"
+                onClick={handleApiKeySubmit}
+                disabled={!apiKeyInput.trim() || isValidating}
+              >
+                {isValidating ? 'Validating...' : 'Save Key'}
+              </button>
+              {apiKeyError && <div className="api-key-error">{apiKeyError}</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="chat-panel">
       <div className="chat-panel-header">
@@ -165,12 +244,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           {conversation?.title || 'New Chat'}
         </div>
         <div className="chat-panel-model">
-          <button 
+          <button
             className="model-selector-button"
             onClick={() => setShowModelSelector(!showModelSelector)}
           >
-            {conversation?.model || 'gpt-4o'}
-            <span className="model-dropdown-icon">▾</span>
+            {conversation?.model || 'claude-sonnet-4'}
+            <span className="model-dropdown-icon">{'\u25BE'}</span>
           </button>
           {showModelSelector && (
             <div className="model-dropdown">
@@ -191,36 +270,37 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       <div className="chat-messages">
         {messages.length === 0 && !isStreaming && (
           <div className="chat-welcome">
-            <div className="chat-welcome-icon">🤖</div>
+            <div className="chat-welcome-icon">{'\u{1F916}'}</div>
             <h2>Welcome to the AI Assistant</h2>
             <p>I can help you manage your posts and media. Try asking me to:</p>
             <ul>
               <li>Search for posts about a specific topic</li>
               <li>Get details about a specific post</li>
+              <li>List all tags or categories in your blog</li>
               <li>Update metadata for posts or media</li>
               <li>List all images in your media library</li>
             </ul>
           </div>
         )}
-        
+
         {messages.map(renderMessage)}
-        
+
         {isStreaming && streamingContent && (
           <div className="chat-message assistant streaming">
-            <div className="chat-message-avatar">🤖</div>
+            <div className="chat-message-avatar">{'\u{1F916}'}</div>
             <div className="chat-message-content">
               <div className="chat-message-header">
                 <span className="chat-message-role">Assistant</span>
-                <span className="streaming-indicator">●</span>
+                <span className="streaming-indicator">{'\u25CF'}</span>
               </div>
               <div className="chat-message-text">{streamingContent}</div>
             </div>
           </div>
         )}
-        
+
         {isStreaming && !streamingContent && (
           <div className="chat-message assistant thinking">
-            <div className="chat-message-avatar">🤖</div>
+            <div className="chat-message-avatar">{'\u{1F916}'}</div>
             <div className="chat-message-content">
               <div className="chat-thinking-indicator">
                 <span></span><span></span><span></span>
@@ -228,14 +308,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
       <div className="chat-input-container">
         {isStreaming && (
           <button className="chat-abort-button" onClick={handleAbort}>
-            ◼ Stop
+            {'\u25FC'} Stop
           </button>
         )}
         <div className="chat-input-wrapper">
@@ -249,12 +329,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             rows={1}
             disabled={isStreaming}
           />
-          <button 
+          <button
             className="chat-send-button"
             onClick={handleSend}
             disabled={!inputValue.trim() || isStreaming}
           >
-            ↑
+            {'\u2191'}
           </button>
         </div>
       </div>

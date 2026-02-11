@@ -113,7 +113,7 @@ export const chatConversations = sqliteTable('chat_conversations', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   model: text('model'), // Model used for this conversation
-  copilotSessionId: text('copilot_session_id'), // Copilot SDK session ID for resuming
+  copilotSessionId: text('copilot_session_id'), // Legacy, no longer used
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });

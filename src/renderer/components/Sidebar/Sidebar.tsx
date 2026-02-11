@@ -753,8 +753,7 @@ const ChatList: React.FC = () => {
   const { openTab } = useAppStore();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; username?: string } | null>(null);
-  const [deviceCode, setDeviceCode] = useState<{ verificationUri: string; userCode: string } | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -768,20 +767,20 @@ const ChatList: React.FC = () => {
     }
   }, []);
 
-  // Check auth status
-  const checkAuth = useCallback(async () => {
+  // Check if service is ready
+  const checkReady = useCallback(async () => {
     try {
-      const status = await window.electronAPI?.chat.copilotAuthStatus();
-      setAuthStatus(status ?? null);
-    } catch (error) {
-      console.error('Failed to check auth:', error);
+      const status = await window.electronAPI?.chat.checkReady();
+      setIsReady(status?.ready ?? false);
+    } catch {
+      setIsReady(false);
     }
   }, []);
 
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await checkAuth();
+      await checkReady();
       await loadConversations();
       setIsLoading(false);
     };
@@ -789,21 +788,15 @@ const ChatList: React.FC = () => {
 
     // Subscribe to title updates
     const unsubTitle = window.electronAPI?.chat.onTitleUpdated((data) => {
-      setConversations(prev => 
+      setConversations(prev =>
         prev.map(c => c.id === data.conversationId ? { ...c, title: data.title } : c)
       );
     });
 
-    // Subscribe to device code for login flow
-    const unsubDevice = window.electronAPI?.chat.onDeviceCode((data) => {
-      setDeviceCode(data);
-    });
-
     return () => {
       unsubTitle?.();
-      unsubDevice?.();
     };
-  }, [loadConversations, checkAuth]);
+  }, [loadConversations, checkReady]);
 
   const handleNewChat = async () => {
     try {
@@ -829,22 +822,6 @@ const ChatList: React.FC = () => {
     } catch (error) {
       console.error('Failed to delete conversation:', error);
       showToast.error('Failed to delete chat');
-    }
-  };
-
-  const handleLogin = async () => {
-    try {
-      const result = await window.electronAPI?.chat.copilotLogin();
-      if (result?.success) {
-        setDeviceCode(null);
-        await checkAuth();
-      } else if (result?.error) {
-        console.error('Login failed:', result.error);
-        showToast.error(result.error);
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-      showToast.error('Login failed');
     }
   };
 
@@ -874,33 +851,6 @@ const ChatList: React.FC = () => {
     );
   }
 
-  // Show login prompt if not authenticated
-  if (!authStatus?.authenticated) {
-    return (
-      <div className="chat-list">
-        <div className="chat-list-header">
-          <span>AI ASSISTANT</span>
-        </div>
-        <div className="chat-auth-prompt">
-          <p>Sign in to GitHub Copilot to start chatting</p>
-          {deviceCode ? (
-            <div className="device-code-prompt">
-              <p>Enter this code at:</p>
-              <a href={deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">
-                {deviceCode.verificationUri}
-              </a>
-              <div className="device-code">{deviceCode.userCode}</div>
-            </div>
-          ) : (
-            <button className="chat-login-button" onClick={handleLogin}>
-              Sign in with GitHub
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="chat-list">
       <div className="chat-list-header">
@@ -909,10 +859,9 @@ const ChatList: React.FC = () => {
           +
         </button>
       </div>
-      {authStatus.username && (
-        <div className="chat-user-info">
-          <span className="chat-user-icon">👤</span>
-          <span className="chat-username">{authStatus.username}</span>
+      {!isReady && (
+        <div className="chat-auth-prompt">
+          <p>API key needed. Open a chat to configure.</p>
         </div>
       )}
       <div className="chat-list-items">

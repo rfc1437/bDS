@@ -14,7 +14,6 @@ export interface ChatConversationData {
   id: string;
   title: string;
   model?: string;
-  copilotSessionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,7 +52,7 @@ export class ChatEngine {
 
     const id = `chat_${uuidv4()}`;
     const title = input.title || 'New Chat';
-    const model = input.model || 'gpt-4.1';
+    const model = input.model || 'claude-sonnet-4';
     const now = Date.now();
 
     await client.execute({
@@ -103,7 +102,6 @@ export class ChatEngine {
       id: row.id as string,
       title: row.title as string,
       model: row.model as string | undefined,
-      copilotSessionId: row.copilot_session_id as string | undefined,
       createdAt: new Date(row.created_at as number),
       updatedAt: new Date(row.updated_at as number),
     };
@@ -144,7 +142,6 @@ export class ChatEngine {
       id: row.id as string,
       title: row.title as string,
       model: row.model as string | undefined,
-      copilotSessionId: row.copilot_session_id as string | undefined,
       createdAt: new Date(row.created_at as number),
       updatedAt: new Date(row.updated_at as number),
     }));
@@ -153,7 +150,7 @@ export class ChatEngine {
   /**
    * Update a conversation's metadata
    */
-  async updateConversation(id: string, updates: Partial<Pick<ChatConversationData, 'title' | 'model' | 'copilotSessionId'>>): Promise<void> {
+  async updateConversation(id: string, updates: Partial<Pick<ChatConversationData, 'title' | 'model'>>): Promise<void> {
     const client = this.db.getLocalClient();
     if (!client) {
       throw new Error('Database not initialized');
@@ -169,10 +166,6 @@ export class ChatEngine {
     if (updates.model !== undefined) {
       setClauses.push('model = ?');
       args.push(updates.model);
-    }
-    if (updates.copilotSessionId !== undefined) {
-      setClauses.push('copilot_session_id = ?');
-      args.push(updates.copilotSessionId);
     }
 
     args.push(id);
@@ -332,15 +325,53 @@ You help users manage their blog posts and media files.
 You have access to tools that allow you to:
 - Search for posts using full-text search with optional category/tag filters
 - Read individual post content and metadata
+- List and filter posts by status, category, or tags
 - View information about media files (images)
 - Update metadata for posts and media files
+- List all tags with post counts
+- List all categories with post counts
 
 When answering questions about the user's blog content:
-1. Use the search tool to find relevant posts
+1. Use the search or list tools to find relevant posts
 2. Read specific posts to get detailed content
-3. Provide helpful summaries and suggestions
+3. Use list_tags and list_categories to understand the taxonomy
+4. Provide helpful summaries and suggestions
 
 Be concise but thorough in your responses. When displaying post information, format it clearly.`;
+  }
+
+  /**
+   * Get a setting by key
+   */
+  async getSetting(key: string): Promise<string | null> {
+    const client = this.db.getLocalClient();
+    if (!client) return null;
+
+    const result = await client.execute({
+      sql: `SELECT value FROM settings WHERE key = ?`,
+      args: [key],
+    });
+
+    if (result.rows.length > 0) {
+      return result.rows[0].value as string;
+    }
+    return null;
+  }
+
+  /**
+   * Set a setting by key
+   */
+  async setSetting(key: string, value: string): Promise<void> {
+    const client = this.db.getLocalClient();
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
+
+    const now = Date.now();
+    await client.execute({
+      sql: `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)`,
+      args: [key, value, now],
+    });
   }
 
   /**
@@ -349,7 +380,7 @@ Be concise but thorough in your responses. When displaying post information, for
   async getSelectedModel(): Promise<string> {
     const client = this.db.getLocalClient();
     if (!client) {
-      return 'gpt-4.1';
+      return 'claude-sonnet-4';
     }
 
     const result = await client.execute({
@@ -361,7 +392,7 @@ Be concise but thorough in your responses. When displaying post information, for
       return result.rows[0].value as string;
     }
 
-    return 'gpt-4.1';
+    return 'claude-sonnet-4';
   }
 
   /**
