@@ -195,6 +195,9 @@ we have all the metadata in our model set up in a similar way as Wordpress handl
 seamless integration. Posts in Wordpress backups are html, but should be interpreted and transformed into
 proper markdown in the import.
 
+We should use UpdraftPlus for backups and loading data into the system from those backups, so that we
+have full data available from the site, including all meta data and uploads.
+
 Additionally we need another importer to traverse a full website and deduct post structure from that website
 and rebuild posts in the database based on such a web traversal. To be able to do that, use copilot SDK
 to integrate copilot directly, so that HTML pages can be directly inspected and turned into actual blog

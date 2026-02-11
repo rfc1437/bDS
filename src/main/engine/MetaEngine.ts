@@ -4,7 +4,20 @@ import * as path from 'path';
 import { app } from 'electron';
 import { eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
-import { posts } from '../database/schema';
+import { posts, projects } from '../database/schema';
+
+/**
+ * Project metadata stored in meta/project.json
+ */
+export interface ProjectMetadata {
+  name: string;
+  description?: string;
+}
+
+/**
+ * Default categories for new projects (from VISION.md)
+ */
+export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
 
 /**
  * MetaEngine manages project metadata like available tags and categories.
@@ -20,6 +33,7 @@ export class MetaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private tags: Set<string> = new Set();
   private categories: Set<string> = new Set();
+  private projectMetadata: ProjectMetadata | null = null;
   private initialized: boolean = false;
 
   constructor() {
@@ -43,11 +57,16 @@ export class MetaEngine extends EventEmitter {
     return path.join(this.getMetaDir(), 'categories.json');
   }
 
+  private getProjectMetadataFilePath(): string {
+    return path.join(this.getMetaDir(), 'project.json');
+  }
+
   setProjectContext(projectId: string): void {
     this.currentProjectId = projectId;
     // Reset in-memory cache when project changes
     this.tags.clear();
     this.categories.clear();
+    this.projectMetadata = null;
     this.initialized = false;
   }
 
@@ -67,6 +86,41 @@ export class MetaEngine extends EventEmitter {
    */
   async getCategories(): Promise<string[]> {
     return Array.from(this.categories).sort();
+  }
+
+  /**
+   * Get the project metadata.
+   */
+  async getProjectMetadata(): Promise<ProjectMetadata | null> {
+    return this.projectMetadata;
+  }
+
+  /**
+   * Set the project metadata (replaces existing).
+   */
+  async setProjectMetadata(metadata: ProjectMetadata): Promise<void> {
+    this.projectMetadata = { ...metadata };
+    await this.saveProjectMetadata();
+    this.emit('projectMetadataChanged', this.projectMetadata);
+  }
+
+  /**
+   * Update specific fields of project metadata.
+   */
+  async updateProjectMetadata(updates: Partial<ProjectMetadata>): Promise<void> {
+    if (!this.projectMetadata) {
+      this.projectMetadata = {
+        name: updates.name || '',
+        description: updates.description,
+      };
+    } else {
+      this.projectMetadata = {
+        ...this.projectMetadata,
+        ...updates,
+      };
+    }
+    await this.saveProjectMetadata();
+    this.emit('projectMetadataChanged', this.projectMetadata);
   }
 
   /**
@@ -142,6 +196,40 @@ export class MetaEngine extends EventEmitter {
     } catch (error) {
       console.error('[MetaEngine] Failed to save categories:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Save project metadata to the filesystem.
+   */
+  async saveProjectMetadata(): Promise<void> {
+    try {
+      await this.ensureMetaDirExists();
+      const filePath = this.getProjectMetadataFilePath();
+      const content = JSON.stringify(this.projectMetadata, null, 2);
+      await fs.writeFile(filePath, content, 'utf-8');
+    } catch (error) {
+      console.error('[MetaEngine] Failed to save project metadata:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load project metadata from the filesystem.
+   */
+  async loadProjectMetadata(): Promise<void> {
+    try {
+      const filePath = this.getProjectMetadataFilePath();
+      const content = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content) as ProjectMetadata;
+      this.projectMetadata = parsed;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[MetaEngine] Failed to load project metadata:', error);
+        throw error;
+      }
+      // File doesn't exist, that's OK
+      this.projectMetadata = null;
     }
   }
 
@@ -244,6 +332,20 @@ export class MetaEngine extends EventEmitter {
   }
 
   /**
+   * Fetch the current project's data from the database.
+   */
+  private async fetchProjectFromDatabase(): Promise<{ name: string; description: string | null } | null> {
+    const db = getDatabase().getLocal();
+    const project = await db
+      .select({ name: projects.name, description: projects.description })
+      .from(projects)
+      .where(eq(projects.id, this.currentProjectId))
+      .get();
+    
+    return project || null;
+  }
+
+  /**
    * Ensure the meta directory exists.
    */
   private async ensureMetaDirExists(): Promise<void> {
@@ -281,9 +383,11 @@ export class MetaEngine extends EventEmitter {
     
     const tagsFilePath = this.getTagsFilePath();
     const categoriesFilePath = this.getCategoriesFilePath();
+    const projectMetadataFilePath = this.getProjectMetadataFilePath();
     
     const tagsFileExists = await this.fileExists(tagsFilePath);
     const categoriesFileExists = await this.fileExists(categoriesFilePath);
+    const projectMetadataFileExists = await this.fileExists(projectMetadataFilePath);
     
     // Collect tags/categories from database (posts)
     const dbTags = await this.collectTagsFromPosts();
@@ -337,12 +441,35 @@ export class MetaEngine extends EventEmitter {
         await this.saveCategories();
       }
     } else {
-      // No file exists, create from database
+      // No file exists, create from database or use defaults
       this.categories.clear();
-      for (const cat of dbCategories) {
-        this.categories.add(cat);
+      if (dbCategories.length > 0) {
+        for (const cat of dbCategories) {
+          this.categories.add(cat);
+        }
+      } else {
+        // New project with no posts - use default categories
+        for (const cat of DEFAULT_CATEGORIES) {
+          this.categories.add(cat);
+        }
       }
       await this.saveCategories();
+    }
+    
+    // Handle project metadata
+    if (projectMetadataFileExists) {
+      await this.loadProjectMetadata();
+    } else {
+      // No file exists, fetch project data from database and create file
+      const projectData = await this.fetchProjectFromDatabase();
+      if (!projectData) {
+        throw new Error(`Project not found in database: ${this.currentProjectId}`);
+      }
+      this.projectMetadata = {
+        name: projectData.name,
+        description: projectData.description || undefined,
+      };
+      await this.saveProjectMetadata();
     }
     
     this.initialized = true;

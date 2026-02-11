@@ -101,7 +101,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showItemInFolder: (itemPath: string) => ipcRenderer.invoke('app:showItemInFolder', itemPath),
   },
 
-  // Meta (tags and categories)
+  // Meta (tags, categories, and project metadata)
   meta: {
     getTags: () => ipcRenderer.invoke('meta:getTags'),
     getCategories: () => ipcRenderer.invoke('meta:getCategories'),
@@ -110,6 +110,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addCategory: (category: string) => ipcRenderer.invoke('meta:addCategory', category),
     removeCategory: (category: string) => ipcRenderer.invoke('meta:removeCategory', category),
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
+    getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
+    setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
+    updateProjectMetadata: (updates: { name?: string; description?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
   // Event listeners

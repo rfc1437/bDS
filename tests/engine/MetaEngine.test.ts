@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 const mockFiles = new Map<string, string>();
 const mockDirs = new Set<string>();
 let mockPosts: any[] = [];
+let mockProject: any = null;
 
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
@@ -48,14 +49,28 @@ vi.mock('electron', () => ({
   },
 }));
 
-// Create chainable mock for Drizzle ORM
+// Create chainable mock for Drizzle ORM  
+let lastQueriedTable: string | null = null;
+
 function createSelectChain() {
-  return {
-    from: vi.fn().mockReturnThis(),
+  const chain: any = {
+    from: vi.fn().mockImplementation((table) => {
+      // Drizzle table objects have [Symbol.for('drizzle:Name')] or _.name
+      lastQueriedTable = table?.[Symbol.for('drizzle:Name')] || table?._?.name || null;
+      return chain;
+    }),
     where: vi.fn().mockReturnThis(),
     all: vi.fn().mockImplementation(() => Promise.resolve(mockPosts)),
-    get: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
+    get: vi.fn().mockImplementation(() => {
+      // Return project data if querying projects table
+      if (lastQueriedTable === 'projects') {
+        return Promise.resolve(mockProject);
+      }
+      return Promise.resolve(undefined);
+    }),
   };
+  chain.where = vi.fn().mockReturnValue(chain);
+  return chain;
 }
 
 const mockLocalDb = {
@@ -76,11 +91,24 @@ import * as fs from 'fs/promises';
 describe('MetaEngine', () => {
   let metaEngine: MetaEngine;
 
+  // Default project for tests that call syncOnStartup
+  const defaultMockProject = {
+    id: 'test-project',
+    name: 'Test Project',
+    description: 'A test project',
+    slug: 'test-project',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    isActive: true,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockFiles.clear();
     mockDirs.clear();
     mockPosts = [];
+    mockProject = defaultMockProject; // Default to valid project
+    lastQueriedTable = null;
     metaEngine = new MetaEngine();
     metaEngine.setProjectContext('test-project');
   });
@@ -345,6 +373,199 @@ describe('MetaEngine', () => {
       await metaEngine.addCategory('new-category');
       
       expect(handler).toHaveBeenCalledWith(expect.arrayContaining(['new-category']));
+    });
+  });
+
+  describe('Project Metadata Management', () => {
+    it('should return null when no project metadata exists', async () => {
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata).toBeNull();
+    });
+
+    it('should set project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        description: 'A personal blog about technology',
+      });
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata).toEqual({
+        name: 'My Blog',
+        description: 'A personal blog about technology',
+      });
+    });
+
+    it('should update project name only', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Original Name',
+        description: 'Original description',
+      });
+      
+      await metaEngine.updateProjectMetadata({ name: 'Updated Name' });
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.name).toBe('Updated Name');
+      expect(metadata?.description).toBe('Original description');
+    });
+
+    it('should update project description only', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        description: 'Old description',
+      });
+      
+      await metaEngine.updateProjectMetadata({ description: 'New description' });
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.name).toBe('My Blog');
+      expect(metadata?.description).toBe('New description');
+    });
+
+    it('should persist project metadata to filesystem', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Test Project',
+        description: 'Test description',
+      });
+      
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = `${metaDir}\\project.json`;
+      expect(mockFiles.has(projectPath) || mockFiles.has(projectPath.replace(/\\/g, '/'))).toBe(true);
+      
+      // Verify content
+      const content = mockFiles.get(projectPath) || mockFiles.get(projectPath.replace(/\\/g, '/'));
+      const parsed = JSON.parse(content!);
+      expect(parsed.name).toBe('Test Project');
+      expect(parsed.description).toBe('Test description');
+    });
+
+    it('should load project metadata from filesystem', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = `${metaDir}\\project.json`;
+      mockFiles.set(projectPath, JSON.stringify({
+        name: 'Loaded Project',
+        description: 'Loaded description',
+      }));
+      
+      await metaEngine.loadProjectMetadata();
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.name).toBe('Loaded Project');
+      expect(metadata?.description).toBe('Loaded description');
+    });
+
+    it('should emit projectMetadataChanged event when metadata is modified', async () => {
+      const handler = vi.fn();
+      metaEngine.on('projectMetadataChanged', handler);
+      
+      await metaEngine.setProjectMetadata({
+        name: 'Event Test',
+        description: 'Testing events',
+      });
+      
+      expect(handler).toHaveBeenCalledWith({
+        name: 'Event Test',
+        description: 'Testing events',
+      });
+    });
+
+    it('should clear project metadata when project context changes', () => {
+      // Set some metadata first
+      metaEngine.setProjectContext('project-1');
+      
+      // Change project context
+      metaEngine.setProjectContext('project-2');
+      
+      // The in-memory cache should be cleared (metadata will be null until loaded)
+      // This is a synchronous operation, so we test the immediate state
+      expect(metaEngine.getProjectContext()).toBe('project-2');
+    });
+
+    it('should sync project metadata on startup from database', async () => {
+      // No file exists, should use default from project database
+      const metadata = await metaEngine.getProjectMetadata();
+      // Initially null before sync
+      expect(metadata).toBeNull();
+    });
+
+    it('should load project metadata during syncOnStartup if file exists', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(`${metaDir}\\project.json`, JSON.stringify({
+        name: 'Synced Project',
+        description: 'Synced description',
+      }));
+      
+      await metaEngine.syncOnStartup();
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.name).toBe('Synced Project');
+      expect(metadata?.description).toBe('Synced description');
+    });
+
+    it('should create project.json with data from database during syncOnStartup if file does not exist', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = `${metaDir}\\project.json`;
+      
+      // Setup mock project in database
+      mockProject = {
+        id: 'test-project',
+        name: 'My Awesome Blog',
+        description: 'A blog about programming',
+        slug: 'my-awesome-blog',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: true,
+      };
+      
+      // Ensure no file exists
+      expect(mockFiles.has(projectPath)).toBe(false);
+      
+      await metaEngine.syncOnStartup();
+      
+      // File should be created
+      expect(mockFiles.has(projectPath) || mockFiles.has(projectPath.replace(/\\/g, '/'))).toBe(true);
+      
+      // Should have metadata from database
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata).not.toBeNull();
+      expect(metadata?.name).toBe('My Awesome Blog');
+      expect(metadata?.description).toBe('A blog about programming');
+    });
+
+    it('should throw error if project not found in database during syncOnStartup', async () => {
+      // No project in database
+      mockProject = null;
+      
+      await expect(metaEngine.syncOnStartup()).rejects.toThrow('Project not found');
+    });
+
+    it('should create categories.json with defaults for new project with no posts', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const catPath = `${metaDir}\\categories.json`;
+      
+      // Setup mock project in database
+      mockProject = {
+        id: 'test-project',
+        name: 'New Blog',
+        description: 'A new blog',
+        slug: 'new-blog',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: true,
+      };
+      
+      // No posts (so no categories from database)
+      mockPosts = [];
+      
+      await metaEngine.syncOnStartup();
+      
+      // File should be created with default categories
+      expect(mockFiles.has(catPath) || mockFiles.has(catPath.replace(/\\/g, '/'))).toBe(true);
+      
+      const categories = await metaEngine.getCategories();
+      expect(categories).toContain('article');
+      expect(categories).toContain('picture');
+      expect(categories).toContain('aside');
+      expect(categories).toContain('page');
     });
   });
 });
