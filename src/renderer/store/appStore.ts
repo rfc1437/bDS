@@ -4,6 +4,20 @@ import { persist } from 'zustand/middleware';
 // Storage key for persisted state
 const STORAGE_KEY = 'bds-app-state';
 
+// Tab types
+export type TabType = 'post' | 'media' | 'settings';
+
+export interface Tab {
+  type: TabType;
+  id: string;
+  isTransient: boolean;
+}
+
+export interface TabState {
+  tabs: Tab[];
+  activeTabId: string | null;
+}
+
 // Types
 export interface ProjectData {
   id: string;
@@ -69,6 +83,10 @@ interface AppState {
   projects: ProjectData[];
   activeProject: ProjectData | null;
   
+  // Tabs
+  tabs: Tab[];
+  activeTabId: string | null;
+  
   // UI State
   activeView: 'posts' | 'media' | 'settings';
   sidebarVisible: boolean;
@@ -107,6 +125,15 @@ interface AppState {
   addProject: (project: ProjectData) => void;
   updateProject: (id: string, project: Partial<ProjectData>) => void;
   removeProject: (id: string) => void;
+  
+  // Tab Actions
+  openTab: (tab: { type: TabType; id: string; isTransient: boolean }) => void;
+  closeTab: (id: string) => void;
+  setActiveTab: (id: string) => void;
+  pinTab: (id: string) => void;
+  clearTabs: () => void;
+  getTabState: () => TabState;
+  restoreTabState: (state: TabState) => void;
   
   // Actions
   setActiveView: (view: 'posts' | 'media' | 'settings') => void;
@@ -154,6 +181,10 @@ export const useAppStore = create<AppState>()(
       projects: [],
       activeProject: null,
       
+      // Initial Tabs State
+      tabs: [],
+      activeTabId: null,
+      
       // Initial UI State
       activeView: 'posts',
       sidebarVisible: true,
@@ -196,6 +227,82 @@ export const useAppStore = create<AppState>()(
       removeProject: (id) => set((state) => ({
         projects: state.projects.filter((p) => p.id !== id),
       })),
+      
+      // Tab Actions
+      openTab: ({ type, id, isTransient }) => set((state) => {
+        const existingTabIndex = state.tabs.findIndex((t) => t.id === id && t.type === type);
+        
+        if (existingTabIndex >= 0) {
+          // Tab already exists - if trying to pin (isTransient=false), update it
+          if (!isTransient) {
+            const updatedTabs = [...state.tabs];
+            updatedTabs[existingTabIndex] = { ...updatedTabs[existingTabIndex], isTransient: false };
+            return { tabs: updatedTabs, activeTabId: id };
+          }
+          // Just switch to the existing tab
+          return { activeTabId: id };
+        }
+        
+        // If opening as transient, replace existing transient tab of the same type
+        if (isTransient) {
+          const transientIndex = state.tabs.findIndex((t) => t.isTransient && t.type === type);
+          if (transientIndex >= 0) {
+            const updatedTabs = [...state.tabs];
+            updatedTabs[transientIndex] = { type, id, isTransient: true };
+            return { tabs: updatedTabs, activeTabId: id };
+          }
+        }
+        
+        // Add new tab
+        const newTab: Tab = { type, id, isTransient };
+        return { tabs: [...state.tabs, newTab], activeTabId: id };
+      }),
+      
+      closeTab: (id) => set((state) => {
+        const tabIndex = state.tabs.findIndex((t) => t.id === id);
+        if (tabIndex === -1) return state;
+        
+        const newTabs = state.tabs.filter((t) => t.id !== id);
+        let newActiveTabId = state.activeTabId;
+        
+        // If closing the active tab, activate an adjacent tab
+        if (state.activeTabId === id) {
+          if (newTabs.length === 0) {
+            newActiveTabId = null;
+          } else if (tabIndex < newTabs.length) {
+            // Activate the tab that moved into this position (next tab)
+            newActiveTabId = newTabs[tabIndex].id;
+          } else {
+            // Activate the previous tab
+            newActiveTabId = newTabs[newTabs.length - 1].id;
+          }
+        }
+        
+        return { tabs: newTabs, activeTabId: newActiveTabId };
+      }),
+      
+      setActiveTab: (id) => set((state) => {
+        // Only set if the tab exists
+        const tabExists = state.tabs.some((t) => t.id === id);
+        if (!tabExists) return state;
+        return { activeTabId: id };
+      }),
+      
+      pinTab: (id) => set((state) => ({
+        tabs: state.tabs.map((t) => (t.id === id ? { ...t, isTransient: false } : t)),
+      })),
+      
+      clearTabs: () => set({ tabs: [], activeTabId: null }),
+      
+      getTabState: () => {
+        const state = get();
+        return { tabs: state.tabs, activeTabId: state.activeTabId };
+      },
+      
+      restoreTabState: (tabState) => set({ 
+        tabs: tabState.tabs, 
+        activeTabId: tabState.activeTabId 
+      }),
       
       // UI Actions
       setActiveView: (view) => set({ activeView: view }),
@@ -283,15 +390,20 @@ export const useAppStore = create<AppState>()(
         selectedPostId: state.selectedPostId,
         selectedMediaId: state.selectedMediaId,
         preferredEditorMode: state.preferredEditorMode,
+        // Tabs are persisted here for now (project-specific persistence handled separately)
+        tabs: state.tabs,
+        activeTabId: state.activeTabId,
         // Convert Set to array for storage
         dirtyPosts: [...state.dirtyPosts],
       }),
       // Merge function to restore Set from array
       merge: (persisted, current) => {
-        const persistedState = persisted as Partial<AppState> & { dirtyPosts?: string[] };
+        const persistedState = persisted as Partial<AppState> & { dirtyPosts?: string[]; tabs?: Tab[] };
         return {
           ...current,
           ...persistedState,
+          tabs: persistedState.tabs || [],
+          activeTabId: persistedState.activeTabId || null,
           dirtyPosts: new Set(persistedState.dirtyPosts || []),
         };
       },

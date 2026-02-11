@@ -153,6 +153,17 @@ I can link to other places, if needed, and those references should also be part 
 posts. So each post should give a "links to" part in the UI (right sidebar or lower area of left sidebar
 like with vscode?) and a "linked to by" part where incoming links are shown.
 
+Post need to support drag-and-drop image insert, and adding images must automatically create the related
+media file entry, so that metadata for images can easily be set in the UI, but users get their posts
+set up quickly without lots of hassle. Images that are referenced by posts are also linked in metadata to
+the post, so that we have full overview what imags a post references in the actual post data. And that data
+is also included in the published post file on the file system.
+
+Linkage data must be recoverable form posts and image links must be discoverable from post text, too,
+so that a blog can be repaired if anything goes wrong. There must be a strong focus on being indestructable
+for the blog, the most that could get lost can be draft content, but everything published must be
+fully recoverable from data on the file system.
+
 ### default category "article"
 
 This is for articles that are focused on long text. They will show fully only on the full page, but will
