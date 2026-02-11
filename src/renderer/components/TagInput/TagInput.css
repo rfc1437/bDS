@@ -10,14 +10,14 @@
   gap: 6px;
   padding: 6px 8px;
   min-height: 38px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--vscode-input-border, #3c3c3c);
   border-radius: 4px;
-  background: var(--background-primary);
+  background: var(--vscode-input-background, #3c3c3c);
   cursor: text;
 }
 
 .tag-input-wrapper:focus-within {
-  border-color: var(--accent-color);
+  border-color: var(--vscode-focusBorder, #007fd4);
   outline: none;
 }
 
@@ -28,10 +28,10 @@
   gap: 4px;
   padding: 3px 8px;
   font-size: 0.85rem;
-  background: var(--background-tertiary);
-  border: 1px solid var(--border-color);
+  background: var(--vscode-badge-background, #4d4d4d);
+  border: 1px solid var(--vscode-widget-border, #454545);
   border-radius: 4px;
-  color: var(--text-primary);
+  color: var(--vscode-badge-foreground, #ffffff);
   white-space: nowrap;
 }
 
@@ -75,14 +75,14 @@
   padding: 2px 4px;
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--vscode-input-foreground, #cccccc);
   font-family: inherit;
   font-size: 0.9rem;
   outline: none;
 }
 
 .tag-input-field::placeholder {
-  color: var(--text-secondary);
+  color: var(--vscode-input-placeholderForeground, #a6a6a6);
 }
 
 .tag-input-field:disabled {
@@ -97,11 +97,11 @@
   right: 0;
   margin-top: 4px;
   padding: 4px;
-  background: var(--background-primary);
-  border: 1px solid var(--border-color);
+  background: var(--vscode-dropdown-background, #3c3c3c);
+  border: 1px solid var(--vscode-widget-border, #454545);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
   max-height: 240px;
   overflow-y: auto;
 }
@@ -114,7 +114,7 @@
   padding: 8px 12px;
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--vscode-dropdown-foreground, #f0f0f0);
   font-family: inherit;
   font-size: 0.9rem;
   text-align: left;
@@ -125,7 +125,7 @@
 
 .tag-suggestion:hover,
 .tag-suggestion.selected {
-  background: var(--background-hover);
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
 }
 
 .tag-suggestion-color {
@@ -144,10 +144,10 @@
 
 /* Create new tag option */
 .tag-suggestion.create-new {
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--vscode-widget-border, #454545);
   margin-top: 4px;
   padding-top: 12px;
-  color: var(--accent-color);
+  color: var(--vscode-notificationsInfoIcon-foreground, #75beff);
 }
 
 .tag-suggestion.create-new:first-child {
