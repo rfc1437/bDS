@@ -99,7 +99,22 @@ interface AnthropicContentBlock {
   name?: string;
   input?: unknown;
   tool_use_id?: string;
-  content?: string;
+  content?: string | AnthropicToolResultContent[];
+  source?: {
+    type: 'base64';
+    media_type: string;
+    data: string;
+  };
+}
+
+interface AnthropicToolResultContent {
+  type: 'text' | 'image';
+  text?: string;
+  source?: {
+    type: 'base64';
+    media_type: string;
+    data: string;
+  };
 }
 
 interface HttpResponse {
@@ -441,11 +456,44 @@ export class OpenCodeManager {
           callbacks.onToolResult({ name: toolName, result });
         }
 
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUseId,
-          content: JSON.stringify(result),
-        });
+        // Check if this is an image result that needs special formatting
+        if (result && typeof result === 'object' && (result as Record<string, unknown>).__isImageResult) {
+          const imageResult = result as {
+            __isImageResult: boolean;
+            success: boolean;
+            mediaType: string;
+            base64: string;
+            metadata: Record<string, unknown>;
+          };
+          
+          // Format as Anthropic multimodal content (image + text)
+          const imageContent: AnthropicToolResultContent[] = [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: imageResult.mediaType,
+                data: imageResult.base64,
+              },
+            },
+            {
+              type: 'text',
+              text: JSON.stringify({ success: true, metadata: imageResult.metadata }),
+            },
+          ];
+          
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: imageContent,
+          });
+        } else {
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: JSON.stringify(result),
+          });
+        }
       }
 
       // Add assistant response and tool results to messages for next round
@@ -702,6 +750,22 @@ export class OpenCodeManager {
           properties: {},
         },
       },
+      {
+        name: 'view_image',
+        description: 'View an image to analyze its visual content. Returns the actual image for visual inspection. Use this when you need to see, describe, or analyze what an image looks like. Only works with image files (not PDFs or other media types).',
+        input_schema: {
+          type: 'object',
+          properties: {
+            mediaId: { type: 'string', description: 'The unique ID of the image to view' },
+            size: {
+              type: 'string',
+              enum: ['small', 'medium', 'large'],
+              description: 'Image size: small (150px) for quick reference, medium (400px, default) for details, large (800px) for full analysis',
+            },
+          },
+          required: ['mediaId'],
+        },
+      },
     ];
   }
 
@@ -869,6 +933,49 @@ export class OpenCodeManager {
             success: true,
             count: categoriesWithCounts.length,
             categories: categoriesWithCounts,
+          };
+        }
+
+        case 'view_image': {
+          const mediaId = args.mediaId as string;
+          const size = (args.size as 'small' | 'medium' | 'large') || 'medium';
+          
+          // Get media metadata first
+          const mediaItem = await this.mediaEngine.getMedia(mediaId);
+          if (!mediaItem) {
+            return { success: false, error: 'Image not found' };
+          }
+          
+          // Verify it's an image (not PDF, video, etc)
+          if (!mediaItem.mimeType.startsWith('image/')) {
+            return { success: false, error: `Cannot view this file type: ${mediaItem.mimeType}. Only images are supported.` };
+          }
+          
+          // Get thumbnail data URL (base64)
+          const dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, size);
+          if (!dataUrl) {
+            return { success: false, error: 'Thumbnail not available. Try regenerating thumbnails from Settings.' };
+          }
+          
+          // Extract base64 data (remove data:image/webp;base64, prefix)
+          const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+          
+          // Return special image result format
+          return {
+            __isImageResult: true,
+            success: true,
+            mediaType: 'image/webp',
+            base64: base64Data,
+            metadata: {
+              id: mediaItem.id,
+              filename: mediaItem.filename,
+              originalName: mediaItem.originalName,
+              width: mediaItem.width,
+              height: mediaItem.height,
+              alt: mediaItem.alt,
+              caption: mediaItem.caption,
+              size: size,
+            },
           };
         }
 

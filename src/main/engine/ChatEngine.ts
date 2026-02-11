@@ -292,7 +292,8 @@ export class ChatEngine {
       args: [],
     });
 
-    if (result.rows.length > 0) {
+    // Return saved prompt if it exists and is non-empty
+    if (result.rows.length > 0 && result.rows[0].value) {
       return result.rows[0].value as string;
     }
 
@@ -300,12 +301,22 @@ export class ChatEngine {
   }
 
   /**
-   * Set default system prompt for new conversations
+   * Set default system prompt for new conversations.
+   * Pass empty string to reset to built-in default.
    */
   async setDefaultSystemPrompt(prompt: string): Promise<void> {
     const client = this.db.getLocalClient();
     if (!client) {
       throw new Error('Database not initialized');
+    }
+
+    // If empty string, delete the setting to use built-in default
+    if (!prompt || prompt.trim() === '') {
+      await client.execute({
+        sql: `DELETE FROM settings WHERE key = ?`,
+        args: ['chat_system_prompt'],
+      });
+      return;
     }
 
     const now = Date.now();
@@ -331,6 +342,7 @@ Available Tools:
 - list_posts: List posts with optional filtering by status, category, or tags.
 - get_media: Get information about a specific media file by ID.
 - list_media: List media files with optional MIME type filtering.
+- view_image: View an image to analyze its visual content. Use this when you need to describe or analyze what an image looks like.
 - update_post_metadata: Update a post's title, excerpt, tags, or categories.
 - update_media_metadata: Update a media file's alt text, caption, or tags.
 - list_tags: List all tags with post counts.
@@ -340,7 +352,8 @@ When answering questions:
 1. USE THE TOOLS to find information. Never make up data about posts or media.
 2. If asked about something outside your tools (weather, news, websites), explain that you can only access the user's local blog content.
 3. Be concise and helpful. Format post information clearly when displaying it.
-4. If a search returns no results, suggest alternative queries or filters.`;
+4. If a search returns no results, suggest alternative queries or filters.
+5. When asked to describe or analyze an image, use the view_image tool to see the actual image content.`;
   }
 
   /**
