@@ -18,6 +18,13 @@ The main area of the window must be a tabbled view, where multiple tabs can be o
 retained over program runs. The tabs can be different tabs like media file tabs, post tabs for multiple
 posts and setting tabs or whatever will come later.
 
+Blog post metadata should be managed in the SQLite database in the user local folder, so it persists
+application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a
+markdown file with a properties segment in the top of the file with YAML like property definitions, so all
+metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the
+user local path, in that case storing the image file sand for each image file a properties sidecar file that
+uses the same header structure as for posts.
+
 The application must be offline-first, everything must work in airplane mode (except publishing of course).
 It must be fully self-contained during editing and previewing and managing content. Every internal structure
 must have reflections in the filesystem, so available tags, available categories, all those things must be
@@ -30,20 +37,26 @@ to sync blog projects. This also should be on a per-project level and the UI sho
 git init and github auth with device flow properly when setting up git syncing. git syncing should also be
 handled asynchronously when online and should use auto-resolve of merge conflicts.
 
-Blog post metadata should be managed in the SQLite database in the user local folder, so it persists application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a markdown file with a properties segment in the top of the file with YAML like property definitions, so all metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the user local path, in that case storing the image file sand for each image file a properties sidecar file that uses the same header structure as for posts.
-
 The application must be able to support multiple projects (ie web sites), so there must be a way to create
 new projects and select current project. The UI is only showing all data of the current selected project and
 all tools are only working against the selected project. I can imagine that projects will be separate
 databases and folders for post and media.
 
-I want  proper full-text search for posts based on the integrated sqlite database using fts5, so that I can quickly find posts. So build proper text search index update into the core model right away, so that regardless how posts come into the system, they are always properly indexed.
+I want  proper full-text search for posts based on the integrated sqlite database using fts5, so that I can
+quickly find posts. So build proper text search index update into the core model right away, so that
+regardless how posts come into the system, they are always properly indexed.
 
-Additionally bring in a good markdown library, because all posts will be formatted in markdown for easy portability to future systems. Media files can be attached to posts and can be referenced with standard markdown notation with a post-relative path, so it is easy for the user to include images. The  post editor should support both a wysiwyg editor and raw markdown editor, so the user does not have to know markdown, but everything is handled by the editor, but for complex parts, markdown is available for power users.
+Additionally bring in a good markdown library, because all posts will be formatted in markdown for easy
+portability to future systems. Media files can be attached to posts and can be referenced with standard
+markdown notation with a post-relative path, so it is easy for the user to include images. The  post editor
+should support both a wysiwyg editor and raw markdown editor, so the user does not have to know markdown,
+but everything is handled by the editor, but for complex parts, markdown is available for power users.
 
 Integrate toasts as notification mechanism that will be used whenever anything has to communicate success/failure to the user.
 
-Integrated images in posts should be shown with a lightbox effect als galleries when there are multiple photos, or just as single images with lightbox when there is only one. The wysiwyg editor should support this at least on a basic level.
+Integrated images in posts should be shown with a lightbox effect als galleries when there are multiple
+photos, or just as single images with lightbox when there is only one. The wysiwyg editor should support
+this at least on a basic level.
 
 ## Posting life-cycle
 

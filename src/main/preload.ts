@@ -99,6 +99,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showItemInFolder: (itemPath: string) => ipcRenderer.invoke('app:showItemInFolder', itemPath),
   },
 
+  // Meta (tags and categories)
+  meta: {
+    getTags: () => ipcRenderer.invoke('meta:getTags'),
+    getCategories: () => ipcRenderer.invoke('meta:getCategories'),
+    addTag: (tag: string) => ipcRenderer.invoke('meta:addTag', tag),
+    removeTag: (tag: string) => ipcRenderer.invoke('meta:removeTag', tag),
+    addCategory: (category: string) => ipcRenderer.invoke('meta:addCategory', category),
+    removeCategory: (category: string) => ipcRenderer.invoke('meta:removeCategory', category),
+    syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
+  },
+
   // Event listeners
   on: (channel: string, callback: (...args: unknown[]) => void) => {
     const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args);
@@ -185,6 +196,15 @@ export interface ElectronAPI {
     getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;
     openFolder: (folderPath: string) => Promise<string>;
     showItemInFolder: (itemPath: string) => Promise<void>;
+  };
+  meta: {
+    getTags: () => Promise<string[]>;
+    getCategories: () => Promise<string[]>;
+    addTag: (tag: string) => Promise<string[]>;
+    removeTag: (tag: string) => Promise<string[]>;
+    addCategory: (category: string) => Promise<string[]>;
+    removeCategory: (category: string) => Promise<string[]>;
+    syncOnStartup: () => Promise<{ tags: string[]; categories: string[] }>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

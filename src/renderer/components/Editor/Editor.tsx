@@ -955,11 +955,33 @@ export const Editor: React.FC = () => {
     selectedPostId, 
     selectedMediaId, 
     posts, 
+    media,
     errorModal,
     hideErrorModal,
     isLoading,
     setSelectedPost,
+    setSelectedMedia,
   } = useAppStore();
+
+  // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
+  useEffect(() => {
+    if (activeView === 'posts' && selectedPostId && !isLoading) {
+      const postExists = posts.some(p => p.id === selectedPostId);
+      if (!postExists) {
+        setSelectedPost(null);
+      }
+    }
+  }, [activeView, selectedPostId, posts, isLoading, setSelectedPost]);
+
+  // Clear selectedMediaId if the media doesn't exist (e.g., after project switch)
+  useEffect(() => {
+    if (activeView === 'media' && selectedMediaId && !isLoading) {
+      const mediaExists = media.some(m => m.id === selectedMediaId);
+      if (!mediaExists) {
+        setSelectedMedia(null);
+      }
+    }
+  }, [activeView, selectedMediaId, media, isLoading, setSelectedMedia]);
 
   // Show error modal if present
   const renderErrorModal = () => (
@@ -986,22 +1008,17 @@ export const Editor: React.FC = () => {
       );
     }
     
-    // Post not found - show loading if still loading, otherwise clear selection
-    if (isLoading) {
-      return (
-        <>
-          <div className="editor-empty">
-            <div className="welcome-content">
-              <p className="text-muted">Loading post...</p>
-            </div>
+    // Post not found - show loading or empty state while useEffect clears selection
+    return (
+      <>
+        <div className="editor-empty">
+          <div className="welcome-content">
+            <p className="text-muted">{isLoading ? 'Loading post...' : ''}</p>
           </div>
-          {renderErrorModal()}
-        </>
-      );
-    }
-    
-    // Post truly not found - clear selection and fall through to welcome screen
-    setSelectedPost(null);
+        </div>
+        {renderErrorModal()}
+      </>
+    );
   }
 
   if (activeView === 'media' && selectedMediaId) {

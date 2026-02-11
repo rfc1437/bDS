@@ -5,6 +5,7 @@ import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
 import { getDropboxSyncEngine, DropboxSyncConfig, ConflictResolution } from '../engine/DropboxSyncEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
+import { getMetaEngine } from '../engine/MetaEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
@@ -41,12 +42,17 @@ export function registerIpcHandlers(): void {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.getActiveProject();
     
-    // Ensure post and media engines have the correct project context
+    // Ensure all engines have the correct project context
     if (project) {
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
+      const metaEngine = getMetaEngine();
       postEngine.setProjectContext(project.id);
       mediaEngine.setProjectContext(project.id);
+      metaEngine.setProjectContext(project.id);
+      
+      // Sync meta on startup
+      await metaEngine.syncOnStartup();
     }
     
     return project;
@@ -56,12 +62,17 @@ export function registerIpcHandlers(): void {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.setActiveProject(id);
     
-    // Update post and media engines to use the new project context
+    // Update all engines to use the new project context
     if (project) {
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
+      const metaEngine = getMetaEngine();
       postEngine.setProjectContext(project.id);
       mediaEngine.setProjectContext(project.id);
+      metaEngine.setProjectContext(project.id);
+      
+      // Sync meta on project switch
+      await metaEngine.syncOnStartup();
     }
     
     return project;
@@ -457,6 +468,51 @@ export function registerIpcHandlers(): void {
     return shell.showItemInFolder(itemPath);
   });
 
+  // ============ Meta Handlers ============
+
+  ipcMain.handle('meta:getTags', async () => {
+    const engine = getMetaEngine();
+    return engine.getTags();
+  });
+
+  ipcMain.handle('meta:getCategories', async () => {
+    const engine = getMetaEngine();
+    return engine.getCategories();
+  });
+
+  ipcMain.handle('meta:addTag', async (_, tag: string) => {
+    const engine = getMetaEngine();
+    await engine.addTag(tag);
+    return engine.getTags();
+  });
+
+  ipcMain.handle('meta:removeTag', async (_, tag: string) => {
+    const engine = getMetaEngine();
+    await engine.removeTag(tag);
+    return engine.getTags();
+  });
+
+  ipcMain.handle('meta:addCategory', async (_, category: string) => {
+    const engine = getMetaEngine();
+    await engine.addCategory(category);
+    return engine.getCategories();
+  });
+
+  ipcMain.handle('meta:removeCategory', async (_, category: string) => {
+    const engine = getMetaEngine();
+    await engine.removeCategory(category);
+    return engine.getCategories();
+  });
+
+  ipcMain.handle('meta:syncOnStartup', async () => {
+    const engine = getMetaEngine();
+    await engine.syncOnStartup();
+    return {
+      tags: await engine.getTags(),
+      categories: await engine.getCategories(),
+    };
+  });
+
   // ============ Event Forwarding ============
   
   // Forward engine events to renderer
@@ -464,6 +520,7 @@ export function registerIpcHandlers(): void {
   const mediaEngine = getMediaEngine();
   const syncEngine = getSyncEngine();
   const projectEngine = getProjectEngine();
+  const metaEngine = getMetaEngine();
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -488,6 +545,9 @@ export function registerIpcHandlers(): void {
   mediaEngine.on('mediaDeleted', forwardEvent('media:deleted'));
   mediaEngine.on('rebuildStarted', forwardEvent('media:rebuildStarted'));
   mediaEngine.on('databaseRebuilt', forwardEvent('media:databaseRebuilt'));
+
+  metaEngine.on('tagsChanged', forwardEvent('meta:tagsChanged'));
+  metaEngine.on('categoriesChanged', forwardEvent('meta:categoriesChanged'));
 
   syncEngine.on('syncStarted', forwardEvent('sync:started'));
   syncEngine.on('syncCompleted', forwardEvent('sync:completed'));
