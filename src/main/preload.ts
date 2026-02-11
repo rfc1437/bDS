@@ -297,10 +297,10 @@ export interface ElectronAPI {
     getApiKey: () => Promise<{ hasKey: boolean; maskedKey: string }>;
 
     // Settings
-    getAvailableModels: () => Promise<Array<{ id: string; name: string }>>;
-    setDefaultModel: (modelId: string) => Promise<void>;
-    getSystemPrompt: () => Promise<string | null>;
-    setSystemPrompt: (prompt: string) => Promise<void>;
+    getAvailableModels: () => Promise<{ success: boolean; models?: Array<{ id: string; name: string }>; selectedModel?: string; error?: string }>;
+    setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+    getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
+    setSystemPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
 
     // Conversations
     getConversations: () => Promise<unknown[]>;

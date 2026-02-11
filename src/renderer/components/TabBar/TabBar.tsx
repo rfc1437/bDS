@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore, Tab } from '../../store';
 import './TabBar.css';
 
-const MAX_CHAT_TITLE_LENGTH = 25;
+const MAX_CHAT_TITLE_LENGTH = 18;
 
 const getTabTitle = (
   tab: Tab,

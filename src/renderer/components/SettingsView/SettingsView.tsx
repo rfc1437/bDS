@@ -4,7 +4,7 @@ import { showToast } from '../Toast';
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
-export type SettingsCategory = 'project' | 'editor' | 'content' | 'sync' | 'publishing' | 'data';
+export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'sync' | 'publishing' | 'data';
 
 // Scroll to a settings section by category ID
 export const scrollToSettingsSection = (category: SettingsCategory) => {
@@ -113,6 +113,15 @@ export const SettingsView: React.FC = () => {
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
+  // AI Assistant settings
+  const [aiSystemPrompt, setAiSystemPrompt] = useState('');
+  const [aiSystemPromptModified, setAiSystemPromptModified] = useState(false);
+  const [aiApiKeyMasked, setAiApiKeyMasked] = useState('');
+  const [aiHasApiKey, setAiHasApiKey] = useState(false);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [availableModels, setAvailableModels] = useState<{id: string; name: string}[]>([]);
+  const [selectedModel, setSelectedModel] = useState('');
+
   // Check if a section has any matching settings
   const sectionHasMatches = useCallback((sectionKeywords: string[]) => {
     if (!searchQuery) return true;
@@ -145,6 +154,28 @@ export const SettingsView: React.FC = () => {
         } else {
           // Initialize with defaults if no categories exist
           setPostCategories(DEFAULT_POST_CATEGORIES);
+        }
+
+        // Load AI settings
+        try {
+          const promptResult = await window.electronAPI?.chat.getSystemPrompt();
+          if (promptResult?.success && promptResult.prompt) {
+            setAiSystemPrompt(promptResult.prompt);
+          }
+          
+          const keyResult = await window.electronAPI?.chat.getApiKey();
+          if (keyResult) {
+            setAiHasApiKey(keyResult.hasKey);
+            setAiApiKeyMasked(keyResult.maskedKey || '');
+          }
+          
+          const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+          if (modelsResult?.success && modelsResult.models) {
+            setAvailableModels(modelsResult.models);
+            setSelectedModel(modelsResult.selectedModel || '');
+          }
+        } catch (error) {
+          console.error('Failed to load AI settings:', error);
         }
 
         // Check Dropbox status
@@ -270,6 +301,7 @@ export const SettingsView: React.FC = () => {
   const projectKeywords = ['project', 'name', 'description', 'blog', 'site'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
+  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
   const syncKeywords = ['sync', 'dropbox', 'file', 'backup', 'token', 'remote'];
   const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
@@ -456,6 +488,168 @@ export const SettingsView: React.FC = () => {
             Reset to Defaults
           </button>
         </div>
+    </SettingSection>
+  );
+
+  // AI Assistant handlers
+  const handleSaveSystemPrompt = async () => {
+    try {
+      const result = await window.electronAPI?.chat.setSystemPrompt(aiSystemPrompt);
+      if (result?.success) {
+        setAiSystemPromptModified(false);
+        showToast.success('System prompt saved');
+      } else {
+        showToast.error('Failed to save system prompt');
+      }
+    } catch (error) {
+      console.error('Failed to save system prompt:', error);
+      showToast.error('Failed to save system prompt');
+    }
+  };
+
+  const handleResetSystemPrompt = async () => {
+    try {
+      // Set to empty to use built-in default
+      await window.electronAPI?.chat.setSystemPrompt('');
+      const result = await window.electronAPI?.chat.getSystemPrompt();
+      if (result?.prompt) {
+        setAiSystemPrompt(result.prompt);
+        setAiSystemPromptModified(false);
+        showToast.success('System prompt reset to default');
+      }
+    } catch (error) {
+      console.error('Failed to reset system prompt:', error);
+      showToast.error('Failed to reset system prompt');
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!newApiKey.trim()) return;
+    try {
+      const validateResult = await window.electronAPI?.chat.validateApiKey(newApiKey.trim());
+      if (validateResult?.isValid) {
+        await window.electronAPI?.chat.setApiKey(newApiKey.trim());
+        setAiHasApiKey(true);
+        setAiApiKeyMasked('•'.repeat(Math.max(0, newApiKey.length - 4)) + newApiKey.slice(-4));
+        setNewApiKey('');
+        showToast.success('API key saved and validated');
+      } else {
+        showToast.error('Invalid API key');
+      }
+    } catch (error) {
+      console.error('Failed to save API key:', error);
+      showToast.error('Failed to save API key');
+    }
+  };
+
+  const handleModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setDefaultModel(modelId);
+      if (result?.success) {
+        setSelectedModel(modelId);
+        showToast.success('Default model updated');
+      }
+    } catch (error) {
+      console.error('Failed to set model:', error);
+      showToast.error('Failed to set default model');
+    }
+  };
+
+  const renderAISettings = () => (
+    <SettingSection
+      id="settings-section-ai"
+      title="AI Assistant"
+      description="Configure the AI chat assistant that helps you manage your blog content."
+      hidden={!sectionHasMatches(aiKeywords)}
+    >
+      <SettingRow
+        id="ai-api-key"
+        label="OpenCode API Key"
+        description="Your API key for the OpenCode Zen gateway. Required to use AI features."
+      >
+        <div className="setting-input-group">
+          {aiHasApiKey ? (
+            <>
+              <input
+                id="ai-api-key"
+                type="text"
+                value={aiApiKeyMasked}
+                disabled
+                placeholder="API key configured"
+              />
+              <span className="setting-status-badge success">✓ Configured</span>
+            </>
+          ) : (
+            <>
+              <input
+                id="ai-api-key"
+                type="password"
+                value={newApiKey}
+                onChange={(e) => setNewApiKey(e.target.value)}
+                placeholder="Enter your API key..."
+              />
+              <button className="primary" onClick={handleSaveApiKey} disabled={!newApiKey.trim()}>
+                Save Key
+              </button>
+            </>
+          )}
+        </div>
+        {aiHasApiKey && (
+          <div className="setting-inline-action">
+            <button className="text-button" onClick={() => { setAiHasApiKey(false); setAiApiKeyMasked(''); }}>
+              Change API Key
+            </button>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
+        id="ai-model"
+        label="Default Model"
+        description="The AI model to use for new chat conversations."
+      >
+        <select
+          id="ai-model"
+          value={selectedModel}
+          onChange={(e) => handleModelChange(e.target.value)}
+          disabled={!aiHasApiKey}
+        >
+          {availableModels.length === 0 && <option value="">No models available</option>}
+          {availableModels.map(model => (
+            <option key={model.id} value={model.id}>{model.name}</option>
+          ))}
+        </select>
+      </SettingRow>
+
+      <SettingRow
+        id="ai-system-prompt"
+        label="System Prompt"
+        description="Instructions given to the AI at the start of each conversation. This defines how the assistant behaves and what tools it knows about."
+      >
+        <textarea
+          id="ai-system-prompt"
+          value={aiSystemPrompt}
+          onChange={(e) => {
+            setAiSystemPrompt(e.target.value);
+            setAiSystemPromptModified(true);
+          }}
+          placeholder="Enter system instructions for the AI assistant..."
+          rows={12}
+          className="system-prompt-textarea"
+        />
+        <div className="setting-actions">
+          <button
+            className="primary"
+            onClick={handleSaveSystemPrompt}
+            disabled={!aiSystemPromptModified}
+          >
+            Save Prompt
+          </button>
+          <button className="secondary" onClick={handleResetSystemPrompt}>
+            Reset to Default
+          </button>
+        </div>
+      </SettingRow>
     </SettingSection>
   );
 
@@ -778,6 +972,7 @@ export const SettingsView: React.FC = () => {
     sectionHasMatches(projectKeywords) ||
     sectionHasMatches(editorKeywords) ||
     sectionHasMatches(contentKeywords) ||
+    sectionHasMatches(aiKeywords) ||
     sectionHasMatches(syncKeywords) ||
     sectionHasMatches(publishingKeywords) ||
     sectionHasMatches(dataKeywords);
@@ -813,6 +1008,7 @@ export const SettingsView: React.FC = () => {
             {renderProjectSettings()}
             {renderEditorSettings()}
             {renderContentSettings()}
+            {renderAISettings()}
             {renderSyncSettings()}
             {renderPublishingSettings()}
             {renderDataSettings()}
