@@ -6,24 +6,29 @@ sync to a cloud system for syncing data and also rendering the full blog.
 
 ## Main Vision
 
-create a electron app in this folder that uses typescript for all the logic code and sqlite and a proper database framework around it for local storage of data and turso/libsql to sync against a cloud location for having offline work capabilities with syncing. The UI should be aligned with the UI patterns used by vscode. The name of the application is "blogging Desktop Server" and the shortname is bDS. Start with default layout for edit and view menues and things like that. I don't want the app to use raw SQL, I want some proper layer between those and proper wiring where all actual functional code  is kept in engine classes and the UI realy just does  presentation and reacts to state changes properly, so that long-running processes can properly integrate as async tasks.
+create a electron app in this folder that uses typescript for all the logic code and sqlite and a proper
+database framework around it for local storage of data. The UI should be aligned with the UI patterns
+used by vscode. The name of the application is "blogging Desktop Server" and the shortname is bDS. Startwith
+default layout for edit and view menues and things like that. I don't want the app to use raw SQL, I want some
+proper layer between those and proper wiring where all actual functional code  is kept in engine classes and the
+UI realy just does  presentation and reacts to state changes properly, so that long-running processes can
+properly integrate as async tasks.
 
 The main area of the window must be a tabbled view, where multiple tabs can be open at the same time and are
 retained over program runs. The tabs can be different tabs like media file tabs, post tabs for multiple
 posts and setting tabs or whatever will come later.
 
-We need a good way to handle the syncing of the non-metadata components (posts and media files), because that
-is not part of the database sync. One way could be using something like dropbox in the background, so that
-the posts/ and media/ folders are automatically synced to some area in dropbox and transported that way.
+The application must be offline-first, everything must work in airplane mode (except publishing of course).
+It must be fully self-contained during editing and previewing and managing content. Every internal structure
+must have reflections in the filesystem, so available tags, available categories, all those things must be
+automatically reflected to the filesystem in a per-project way. Use a meta/ folder under the project folder
+for those files.
 
-In addition to dropbox sync, also provide a file sync handler that uses git as the mechanism. That way
-the user can provide a git URL to push to and pull from, where the app does regular fetch to see if stuff
-was there and has mechanisms to handle conflicts. This will work without special requirements for some
-cloud provider for the file data. Git syncing should only require a repository URL supported by git and
-will have to handle the authentication outside the app, but users with git will know what they do. But it
-might make sense to provide buttons to do a proper git setup in the project to allow the use of the
-device authentication flow, so that the user does not have to go into the data folder manually for the
-base setup to work.
+There should be good cloud-storage based syncing that can be triggered when online again and should use
+asynchronous syncing with auto-resolving of issues. Also there should be support to use git as another way
+to sync blog projects. This also should be on a per-project level and the UI should support the user to
+git init and github auth with device flow properly when setting up git syncing. git syncing should also be
+handled asynchronously when online and should use auto-resolve of merge conflicts.
 
 Blog post metadata should be managed in the SQLite database in the user local folder, so it persists application runs properly. for blog posts, create a subfolder /posts/ there where each post is stored as a markdown file with a properties segment in the top of the file with YAML like property definitions, so all metadata can always be reconstructed from posts. Do the same with images, keeping them in /media/ under the user local path, in that case storing the image file sand for each image file a properties sidecar file that uses the same header structure as for posts.
 

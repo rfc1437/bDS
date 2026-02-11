@@ -43,10 +43,6 @@ migrations/
 .env.production
 .env.*.local
 
-# Turso/LibSQL credentials
-turso-credentials.json
-.turso/
-
 # ===================
 # IDE & Editor
 # ===================

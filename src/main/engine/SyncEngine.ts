@@ -29,25 +29,13 @@ export interface SyncResult {
   };
 }
 
-// Default timeout for sync operations (30 seconds)
-const DEFAULT_SYNC_TIMEOUT = 30000;
-
 export class SyncEngine extends EventEmitter {
   private syncStatus: SyncStatus = 'idle';
   private syncConfig: SyncConfig | null = null;
   private syncIntervalId: NodeJS.Timeout | null = null;
-  private syncTimeout: number = DEFAULT_SYNC_TIMEOUT;
 
   constructor() {
     super();
-  }
-
-  getSyncTimeout(): number {
-    return this.syncTimeout;
-  }
-
-  setSyncTimeout(timeoutMs: number): void {
-    this.syncTimeout = timeoutMs;
   }
 
   getSyncStatus(): SyncStatus {
@@ -164,6 +152,13 @@ export class SyncEngine extends EventEmitter {
   }
 
   /**
+   * Sync alias for fullSync for backward compatibility
+   */
+  async sync(direction: SyncDirection = 'bidirectional'): Promise<SyncResult> {
+    return this.fullSync(direction);
+  }
+
+  /**
    * Full sync: Files via Dropbox.
    * Synchronizes posts and media files to Dropbox for backup and cross-device access.
    */
@@ -197,7 +192,7 @@ export class SyncEngine extends EventEmitter {
       };
     }
 
-    console.log('[SyncEngine] Starting Dropbox file sync...');
+    console.log('[SyncEngine] Starting Dropbox file sync...', direction);
 
     const task: Task<SyncResult> = {
       id: uuidv4(),

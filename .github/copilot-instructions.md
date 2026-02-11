@@ -45,6 +45,20 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
+## ⚠️ MANDATORY: Remove Unused Code
+
+**Never keep unused code around. Always delete it completely.**
+
+- When a feature is removed, delete ALL related code (implementation, tests, types, configs)
+- Do NOT comment out code "for later" - use version control history
+- Do NOT skip tests for removed functionality - delete them
+- Do NOT leave dead code paths, unused imports, or orphaned functions
+- When refactoring, actively look for and remove any code that becomes unused
+
+> **Delete unused code immediately. No exceptions.**
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns
