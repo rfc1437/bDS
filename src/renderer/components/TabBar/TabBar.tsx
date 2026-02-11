@@ -229,10 +229,6 @@ export const TabBar: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTabId, closeTab, toggleSidebar]);
 
-  if (tabs.length === 0) {
-    return null;
-  }
-
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
   };
