@@ -528,7 +528,25 @@ export function registerIpcHandlers(): void {
     return {
       tags: await engine.getTags(),
       categories: await engine.getCategories(),
+      projectMetadata: await engine.getProjectMetadata(),
     };
+  });
+
+  ipcMain.handle('meta:getProjectMetadata', async () => {
+    const engine = getMetaEngine();
+    return engine.getProjectMetadata();
+  });
+
+  ipcMain.handle('meta:setProjectMetadata', async (_, metadata: { name: string; description?: string }) => {
+    const engine = getMetaEngine();
+    await engine.setProjectMetadata(metadata);
+    return engine.getProjectMetadata();
+  });
+
+  ipcMain.handle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string }) => {
+    const engine = getMetaEngine();
+    await engine.updateProjectMetadata(updates);
+    return engine.getProjectMetadata();
   });
 
   // ============ Event Forwarding ============
@@ -566,6 +584,7 @@ export function registerIpcHandlers(): void {
 
   metaEngine.on('tagsChanged', forwardEvent('meta:tagsChanged'));
   metaEngine.on('categoriesChanged', forwardEvent('meta:categoriesChanged'));
+  metaEngine.on('projectMetadataChanged', forwardEvent('meta:projectMetadataChanged'));
 
   syncEngine.on('syncStarted', forwardEvent('sync:started'));
   syncEngine.on('syncCompleted', forwardEvent('sync:completed'));
