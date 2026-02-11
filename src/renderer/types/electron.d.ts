@@ -71,8 +71,6 @@ export interface TaskProgress {
 }
 
 export interface SyncConfig {
-  tursoUrl: string;
-  tursoAuthToken: string;
   autoSync: boolean;
   syncInterval: number;
 }

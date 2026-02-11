@@ -48,10 +48,14 @@ describe('TaskManager', () => {
         });
       });
 
+      // Use delays between progress calls to work with the 250ms throttle
       const task = createMockTask(async (onProgress) => {
         onProgress(25, 'Step 1');
+        await new Promise(r => setTimeout(r, 260));
         onProgress(50, 'Step 2');
+        await new Promise(r => setTimeout(r, 260));
         onProgress(75, 'Step 3');
+        await new Promise(r => setTimeout(r, 260));
         onProgress(100, 'Complete');
       });
 

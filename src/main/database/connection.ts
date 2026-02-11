@@ -7,17 +7,13 @@ import * as fs from 'fs';
 
 export interface DatabaseConfig {
   localPath: string;
-  tursoUrl?: string;
-  tursoAuthToken?: string;
 }
 
 type DrizzleDB = ReturnType<typeof drizzle>;
 
 export class DatabaseConnection {
   private localDb: DrizzleDB | null = null;
-  private remoteDb: DrizzleDB | null = null;
   private localClient: Client | null = null;
-  private remoteClient: Client | null = null;
   private config: DatabaseConfig;
 
   constructor(config?: Partial<DatabaseConfig>) {
@@ -25,8 +21,6 @@ export class DatabaseConnection {
     
     this.config = {
       localPath: config?.localPath || path.join(userDataPath, 'bds.db'),
-      tursoUrl: config?.tursoUrl,
-      tursoAuthToken: config?.tursoAuthToken,
     };
 
     // Ensure user data directory exists
@@ -64,47 +58,11 @@ export class DatabaseConnection {
     return this.localDb;
   }
 
-  async initializeRemote(remoteConfig?: { tursoUrl: string; tursoAuthToken: string }): Promise<DrizzleDB | null> {
-    // Update config if new credentials are provided
-    if (remoteConfig) {
-      // Close existing remote connection if credentials changed
-      if (this.remoteClient &&
-          (this.config.tursoUrl !== remoteConfig.tursoUrl ||
-           this.config.tursoAuthToken !== remoteConfig.tursoAuthToken)) {
-        this.remoteClient.close();
-        this.remoteClient = null;
-        this.remoteDb = null;
-      }
-      this.config.tursoUrl = remoteConfig.tursoUrl;
-      this.config.tursoAuthToken = remoteConfig.tursoAuthToken;
-    }
-
-    if (!this.config.tursoUrl || !this.config.tursoAuthToken) {
-      return null;
-    }
-
-    if (this.remoteDb) {
-      return this.remoteDb;
-    }
-
-    this.remoteClient = createClient({
-      url: this.config.tursoUrl,
-      authToken: this.config.tursoAuthToken,
-    });
-
-    this.remoteDb = drizzle(this.remoteClient, { schema });
-    return this.remoteDb;
-  }
-
   getLocal(): DrizzleDB {
     if (!this.localDb) {
       throw new Error('Local database not initialized. Call initializeLocal() first.');
     }
     return this.localDb;
-  }
-
-  getRemote(): DrizzleDB | null {
-    return this.remoteDb;
   }
 
   getLocalClient(): Client | null {
@@ -388,11 +346,6 @@ export class DatabaseConnection {
       this.localClient.close();
       this.localClient = null;
       this.localDb = null;
-    }
-    if (this.remoteClient) {
-      this.remoteClient.close();
-      this.remoteClient = null;
-      this.remoteDb = null;
     }
   }
 

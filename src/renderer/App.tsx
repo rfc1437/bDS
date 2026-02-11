@@ -46,19 +46,11 @@ const App: React.FC = () => {
           setMedia(media as MediaData[]);
         }
 
-        // Re-configure sync backends from saved credentials
+        // Re-configure Dropbox sync from saved credentials
         const savedCreds = localStorage.getItem('bds-credentials');
         if (savedCreds) {
           try {
             const creds = JSON.parse(savedCreds);
-            if (creds.tursoUrl && creds.tursoToken) {
-              await window.electronAPI?.sync.configure({
-                tursoUrl: creds.tursoUrl,
-                tursoAuthToken: creds.tursoToken,
-                autoSync: true,
-                syncInterval: 5,
-              });
-            }
             if (creds.dropboxAccessToken && creds.dropboxAppKey) {
               await window.electronAPI?.dropbox?.configure({
                 accessToken: creds.dropboxAccessToken,
@@ -71,7 +63,7 @@ const App: React.FC = () => {
           }
         }
 
-        // Check sync status
+        // Check sync status (uses Dropbox configuration)
         const syncConfigured = await window.electronAPI?.sync.isConfigured();
         setSyncConfigured(syncConfigured || false);
 
