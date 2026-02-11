@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     discard: (id: string) => ipcRenderer.invoke('posts:discard', id),
     hasPublishedVersion: (id: string) => ipcRenderer.invoke('posts:hasPublishedVersion', id),
     rebuildFromFiles: () => ipcRenderer.invoke('posts:rebuildFromFiles'),
+    reindexText: () => ipcRenderer.invoke('posts:reindexText'),
     search: (query: string) => ipcRenderer.invoke('posts:search', query),
     filter: (filter: unknown) => ipcRenderer.invoke('posts:filter', filter),
     getTags: () => ipcRenderer.invoke('posts:getTags'),

@@ -302,6 +302,13 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:reindexText', () => {
+        // Fire and forget - runs as a background task
+        window.electronAPI?.posts.reindexText();
+      }) || (() => {})
+    );
+
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };

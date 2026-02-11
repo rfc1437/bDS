@@ -149,6 +149,7 @@ export interface ElectronAPI {
     discard: (id: string) => Promise<PostData | null>;
     hasPublishedVersion: (id: string) => Promise<boolean>;
     rebuildFromFiles: () => Promise<void>;
+    reindexText: () => Promise<void>;
     search: (query: string) => Promise<SearchResult[]>;
     filter: (filter: PostFilter) => Promise<PostData[]>;
     getTags: () => Promise<string[]>;

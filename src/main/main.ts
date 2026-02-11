@@ -237,6 +237,12 @@ function createApplicationMenu(): Menu {
             mainWindow?.webContents.send('menu:rebuildDatabase');
           },
         },
+        {
+          label: 'Reindex Search Text',
+          click: () => {
+            mainWindow?.webContents.send('menu:reindexText');
+          },
+        },
       ],
     },
     {
