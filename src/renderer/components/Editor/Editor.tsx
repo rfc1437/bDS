@@ -8,6 +8,7 @@ import { PostLinks } from '../PostLinks';
 import { ErrorModal } from '../ErrorModal';
 import { SettingsView } from '../SettingsView';
 import { TagsView } from '../TagsView';
+import { TagInput } from '../TagInput';
 import { AutoSaveManager } from '../../utils';
 import './Editor.css';
 
@@ -149,7 +150,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   
   const [title, setTitle] = useState(post.title);
   const [content, setContent] = useState(post.content);
-  const [tags, setTags] = useState(post.tags.join(', '));
+  const [tags, setTags] = useState<string[]>(post.tags);
   const [category, setCategory] = useState(post.categories[0] || 'article');
   const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
   const [isSaving, setIsSaving] = useState(false);
@@ -191,7 +192,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const pendingChangesRef = useRef<{
     title: string;
     content: string;
-    tags: string;
+    tags: string[];
     category: string;
     postId: string;
     isDirty: boolean;
@@ -225,7 +226,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
         window.electronAPI?.posts.update(pending.postId, {
           title: pending.title,
           content: pending.content,
-          tags: pending.tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
+          tags: pending.tags,
           categories: pending.category ? [pending.category] : ['article'],
         }).then((updated) => {
           if (updated) {
@@ -243,7 +244,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   useEffect(() => {
     setTitle(post.title);
     setContent(post.content);
-    setTags(post.tags.join(', '));
+    setTags(post.tags);
     setCategory(post.categories[0] || 'article');
     markClean(post.id);
   }, [post.id, post.title, post.content, post.tags, post.categories, markClean]);
@@ -251,19 +252,21 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   // Track changes and notify auto-save manager
   useEffect(() => {
     const currentCategory = post.categories[0] || 'article';
+    const tagsChanged = JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort());
     const hasChanges = 
       title !== post.title ||
       content !== post.content ||
-      tags !== post.tags.join(', ') ||
+      tagsChanged ||
       category !== currentCategory;
     
     if (hasChanges) {
       markDirty(post.id);
       // Notify auto-save manager with accumulated changes
+      // Convert tags array to comma-separated string for auto-save compatibility
       autoSaveManager.notifyChange(post.id, {
         title,
         content,
-        tags,
+        tags: tags.join(', '),
         category,
       });
     } else {
@@ -288,7 +291,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       const updated = await window.electronAPI?.posts.update(post.id, {
         title,
         content,
-        tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
+        tags,
         categories: category ? [category] : ['article'],
       });
       
@@ -364,7 +367,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
         if (reverted) {
           setTitle(reverted.title);
           setContent(reverted.content);
-          setTags(reverted.tags.join(', '));
+          setTags(reverted.tags);
           setCategory(reverted.categories[0] || 'article');
           updatePost(post.id, reverted as Partial<PostData>);
           markClean(post.id);
@@ -512,12 +515,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           </div>
           <div className="editor-field-row">
             <div className="editor-field">
-              <label>Tags (comma-separated)</label>
-              <input
-                type="text"
+              <label>Tags</label>
+              <TagInput
                 value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="tag1, tag2, tag3"
+                onChange={setTags}
+                placeholder="Add tags..."
               />
             </div>
             <div className="editor-field">
