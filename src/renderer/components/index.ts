@@ -13,5 +13,6 @@ export { ResizablePanel } from './ResizablePanel';
 export { CredentialsPanel } from './CredentialsPanel';
 export { SettingsView } from './SettingsView';
 export { TagsView, scrollToTagsSection, type TagsCategory } from './TagsView';
+export { TagInput } from './TagInput';
 export { PostLinks } from './PostLinks';
 export { ErrorModal, type ErrorDetails } from './ErrorModal';
