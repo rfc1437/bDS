@@ -396,8 +396,10 @@ export class OpenCodeManager {
       const toolUseBlocks = (data.content as AnthropicContentBlock[]).filter(
         (b: AnthropicContentBlock) => b.type === 'tool_use'
       );
+      
+      // Capture text from any block type that has a text field (text, thinking, etc.)
       const textBlocks = (data.content as AnthropicContentBlock[]).filter(
-        (b: AnthropicContentBlock) => b.type === 'text'
+        (b: AnthropicContentBlock) => b.text
       );
 
       // Accumulate and stream text content to frontend
@@ -536,10 +538,22 @@ export class OpenCodeManager {
         textContent = content;
       } else if (Array.isArray(content)) {
         // Handle array of content parts (some models return this format)
+        // Accept any part that has a text field, regardless of type
         textContent = content
-          .filter((part: { type?: string; text?: string }) => part.type === 'text' && part.text)
+          .filter((part: { type?: string; text?: string }) => part.text)
           .map((part: { text: string }) => part.text)
           .join('');
+        
+        // Log what types we're seeing for debugging
+        const types = content.map((p: { type?: string }) => p.type).filter(Boolean);
+        if (types.length > 0) {
+          console.log('[OpenCodeManager:OpenAI] Content block types:', types);
+        }
+      } else if (content && typeof content === 'object') {
+        // Handle single object with text field
+        if ('text' in content && typeof content.text === 'string') {
+          textContent = content.text;
+        }
       }
       
       if (textContent) {
@@ -892,17 +906,17 @@ export class OpenCodeManager {
   private async generateConversationTitle(
     conversationId: string,
     userMessage: string,
-    assistantResponse: string
+    _assistantResponse: string
   ): Promise<void> {
     try {
       const body = {
         model: 'claude-haiku-4-5',
-        max_tokens: 100,
-        system: 'Generate a short, concise title (max 6 words) for this conversation. Only output the title, nothing else.',
+        max_tokens: 20,
+        system: 'Generate an ultra-short title (2-3 words, max 25 characters) for this conversation. Focus ONLY on the topic. Ignore any capability disclaimers. Output ONLY the title text.',
         messages: [
           {
             role: 'user',
-            content: `User: ${userMessage.substring(0, 200)}\nAssistant: ${assistantResponse.substring(0, 200)}`,
+            content: `Topic: ${userMessage.substring(0, 100)}`,
           },
         ],
       };
@@ -930,7 +944,14 @@ export class OpenCodeManager {
           title = data.content || '';
         }
 
-        title = title.trim().replace(/^["']|["']$/g, '');
+        // Clean up and truncate title
+        title = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]+$/, '');
+        
+        // Hard limit on title length
+        const MAX_TITLE_LENGTH = 30;
+        if (title.length > MAX_TITLE_LENGTH) {
+          title = title.substring(0, MAX_TITLE_LENGTH - 1) + '…';
+        }
 
         if (title) {
           await this.chatEngine.updateConversation(conversationId, { title });

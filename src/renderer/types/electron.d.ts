@@ -342,9 +342,9 @@ export interface ElectronAPI {
 
     // Settings
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;
-    setDefaultModel: (modelId: string) => Promise<void>;
-    getSystemPrompt: () => Promise<string | null>;
-    setSystemPrompt: (prompt: string) => Promise<void>;
+    setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+    getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
+    setSystemPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
 
     // Conversations
     getConversations: () => Promise<ChatConversation[]>;

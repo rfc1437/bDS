@@ -414,4 +414,61 @@
   color: var(--vscode-input-placeholderForeground);
 }
 
+/* AI Settings */
+.system-prompt-textarea {
+  width: 100%;
+  min-height: 150px;
+  max-height: 400px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: var(--vscode-editor-font-family), monospace;
+  line-height: 1.5;
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  color: var(--vscode-input-foreground);
+  border-radius: 4px;
+  outline: none;
+  resize: vertical;
+}
 
+.system-prompt-textarea:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.system-prompt-textarea::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.setting-inline-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.setting-inline-action input {
+  flex: 1;
+  max-width: 300px;
+}
+
+.setting-row-full {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.setting-row-full:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.setting-row-full .setting-control {
+  width: 100%;
+}
+
+.setting-row-full .setting-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

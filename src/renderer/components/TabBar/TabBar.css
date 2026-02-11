@@ -82,8 +82,8 @@
   gap: 4px;
   padding: 0 10px;
   height: 100%;
-  min-width: 120px;
-  max-width: 200px;
+  min-width: 100px;
+  max-width: 160px;
   cursor: pointer;
   background-color: var(--vscode-tab-inactiveBackground, #2d2d2d);
   border-right: 1px solid var(--vscode-tab-border, #252526);
