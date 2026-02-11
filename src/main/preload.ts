@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: (data: { name: string; description?: string; slug?: string }) => ipcRenderer.invoke('projects:create', data),
     update: (id: string, data: unknown) => ipcRenderer.invoke('projects:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('projects:delete', id),
+    deleteWithData: (id: string) => ipcRenderer.invoke('projects:deleteWithData', id),
     get: (id: string) => ipcRenderer.invoke('projects:get', id),
     getAll: () => ipcRenderer.invoke('projects:getAll'),
     getActive: () => ipcRenderer.invoke('projects:getActive'),

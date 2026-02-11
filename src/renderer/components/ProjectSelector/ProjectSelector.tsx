@@ -1,12 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useAppStore, ProjectData } from '../../store';
+import { useAppStore, ProjectData, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
 import './ProjectSelector.css';
 
 export const ProjectSelector: React.FC = () => {
-  const { projects, activeProject, setProjects, setActiveProject, setPosts, setMedia, setSelectedPost, setSelectedMedia } = useAppStore();
+  const { projects, activeProject, setProjects, setActiveProject, setPosts, setMedia, setSelectedPost, setSelectedMedia, removeProject } = useAppStore();
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<ProjectData | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -56,12 +59,16 @@ export const ProjectSelector: React.FC = () => {
         setSelectedMedia(null);
         
         // Reload posts and media for new project
-        const [posts, media] = await Promise.all([
-          window.electronAPI?.posts.getAll(),
+        const [postsResult, mediaResult] = await Promise.all([
+          window.electronAPI?.posts.getAll({ limit: 500, offset: 0 }),
           window.electronAPI?.media.getAll(),
         ]);
-        if (posts) setPosts(posts);
-        if (media) setMedia(media);
+        // posts.getAll returns { items, hasMore, total }
+        if (postsResult) {
+          const { items, hasMore, total } = postsResult as { items: PostData[]; hasMore: boolean; total: number };
+          setPosts(items, hasMore, total);
+        }
+        if (mediaResult) setMedia(mediaResult as MediaData[]);
         
         showToast.success(`Switched to ${project.name}`);
       }
@@ -97,6 +104,40 @@ export const ProjectSelector: React.FC = () => {
     }
   };
 
+  const openDeleteModal = (e: React.MouseEvent, project: ProjectData) => {
+    e.stopPropagation();
+    setProjectToDelete(project);
+    setDeleteConfirmText('');
+    setShowDeleteModal(true);
+    setIsOpen(false);
+  };
+
+  const handleDeleteProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!projectToDelete || deleteConfirmText !== projectToDelete.name) return;
+
+    try {
+      const success = await window.electronAPI?.projects.deleteWithData(projectToDelete.id);
+      if (success) {
+        removeProject(projectToDelete.id);
+        showToast.success(`Deleted project "${projectToDelete.name}" and all its data`);
+        setShowDeleteModal(false);
+        setProjectToDelete(null);
+        setDeleteConfirmText('');
+      } else {
+        showToast.error('Failed to delete project');
+      }
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      showToast.error('Failed to delete project');
+    }
+  };
+
+  const canDeleteProject = (project: ProjectData) => {
+    // Cannot delete: default project, or the currently active project
+    return project.id !== 'default' && project.id !== activeProject?.id;
+  };
+
   return (
     <div className="project-selector" ref={dropdownRef}>
       <button
@@ -120,18 +161,34 @@ export const ProjectSelector: React.FC = () => {
           </div>
           <div className="project-list">
             {projects.map(project => (
-              <button
+              <div
                 key={project.id}
                 className={`project-item ${project.id === activeProject?.id ? 'active' : ''}`}
-                onClick={() => handleSwitchProject(project)}
               >
-                <span className="project-item-name">{project.name}</span>
-                {project.id === activeProject?.id && (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="check-icon">
-                    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
-                  </svg>
+                <button
+                  className="project-item-content"
+                  onClick={() => handleSwitchProject(project)}
+                >
+                  <span className="project-item-name">{project.name}</span>
+                  {project.id === activeProject?.id && (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="check-icon">
+                      <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                    </svg>
+                  )}
+                </button>
+                {canDeleteProject(project) && (
+                  <button
+                    className="project-item-delete"
+                    onClick={(e) => openDeleteModal(e, project)}
+                    title={`Delete ${project.name}`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z"/>
+                      <path fillRule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 01-1-1V2a1 1 0 011-1h4a1 1 0 011 1h2a1 1 0 011 1h2.5a1 1 0 011 1v1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                  </button>
                 )}
-              </button>
+              </div>
             ))}
             {projects.length === 0 && (
               <div className="project-empty">No projects yet</div>
@@ -189,6 +246,57 @@ export const ProjectSelector: React.FC = () => {
                 </button>
                 <button type="submit" className="btn-primary" disabled={!newProjectName.trim()}>
                   Create Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && projectToDelete && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content modal-danger" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Delete Project</h3>
+              <button className="modal-close" onClick={() => setShowDeleteModal(false)}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleDeleteProject}>
+              <div className="modal-body">
+                <p className="delete-warning">
+                  This will permanently delete the project <strong>"{projectToDelete.name}"</strong> and all its data including:
+                </p>
+                <ul className="delete-list">
+                  <li>All blog posts</li>
+                  <li>All media files</li>
+                  <li>All project settings</li>
+                </ul>
+                <p className="delete-confirm-text">
+                  Type <strong>{projectToDelete.name}</strong> to confirm deletion:
+                </p>
+                <div className="form-field">
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={e => setDeleteConfirmText(e.target.value)}
+                    placeholder={projectToDelete.name}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-secondary" onClick={() => setShowDeleteModal(false)}>
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-danger" 
+                  disabled={deleteConfirmText !== projectToDelete.name}
+                >
+                  Delete Project
                 </button>
               </div>
             </form>

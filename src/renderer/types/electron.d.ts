@@ -104,11 +104,35 @@ export interface DropboxConflict {
   remoteModified: string;
 }
 
+export interface PaginatedPostsResult {
+  items: PostData[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface DashboardStats {
+  totalPosts: number;
+  draftCount: number;
+  publishedCount: number;
+  archivedCount: number;
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
 export interface ElectronAPI {
   projects: {
     create: (data: { name: string; description?: string; slug?: string }) => Promise<ProjectData>;
     update: (id: string, data: Partial<ProjectData>) => Promise<ProjectData | null>;
     delete: (id: string) => Promise<boolean>;
+    deleteWithData: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<ProjectData | null>;
     getAll: () => Promise<ProjectData[]>;
     getActive: () => Promise<ProjectData | null>;
@@ -119,7 +143,7 @@ export interface ElectronAPI {
     update: (id: string, data: Partial<PostData>) => Promise<PostData | null>;
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<PostData | null>;
-    getAll: () => Promise<PostData[]>;
+    getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;
     publish: (id: string) => Promise<PostData | null>;
     unpublish: (id: string) => Promise<PostData | null>;
@@ -131,6 +155,9 @@ export interface ElectronAPI {
     getTags: () => Promise<string[]>;
     getCategories: () => Promise<string[]>;
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
+    getDashboardStats: () => Promise<DashboardStats>;
+    getTagsWithCounts: () => Promise<TagCount[]>;
+    getCategoriesWithCounts: () => Promise<CategoryCount[]>;
     getLinksTo: (id: string) => Promise<PostData[]>;
     getLinkedBy: (id: string) => Promise<PostData[]>;
     rebuildLinks: () => Promise<void>;

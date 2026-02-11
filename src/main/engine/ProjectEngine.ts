@@ -5,7 +5,7 @@ import * as path from 'path';
 import { eq } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
-import { projects, Project, NewProject } from '../database/schema';
+import { projects, posts, media, Project, NewProject } from '../database/schema';
 
 export interface ProjectData {
   id: string;
@@ -141,6 +141,42 @@ export class ProjectEngine extends EventEmitter {
     // TODO: Optionally delete project files (posts, media)
     // For safety, we'll leave them in place
 
+    await db.delete(projects).where(eq(projects.id, id));
+
+    this.emit('projectDeleted', id);
+    return true;
+  }
+
+  async deleteProjectWithData(id: string): Promise<boolean> {
+    // Prevent deleting the default project
+    if (id === 'default') {
+      throw new Error('Cannot delete the default project');
+    }
+
+    const db = getDatabase().getLocal();
+    const existing = await db.select().from(projects).where(eq(projects.id, id)).get();
+
+    if (!existing) {
+      return false;
+    }
+
+    // Delete associated posts from database
+    await db.delete(posts).where(eq(posts.projectId, id));
+
+    // Delete associated media from database
+    await db.delete(media).where(eq(media.projectId, id));
+
+    // Delete project files and directories
+    const paths = this.getProjectPaths(id);
+    try {
+      // Delete posts directory
+      await fs.rm(path.dirname(paths.posts), { recursive: true, force: true });
+    } catch (error) {
+      // Directory may not exist, that's okay
+      console.warn(`Could not delete project directory for ${id}:`, error);
+    }
+
+    // Delete project from database
     await db.delete(projects).where(eq(projects.id, id));
 
     this.emit('projectDeleted', id);

@@ -9,6 +9,13 @@ import Underline from '@tiptap/extension-underline';
 import { Markdown } from 'tiptap-markdown';
 import './WysiwygEditor.css';
 
+// Type for tiptap-markdown extension storage (not exported by the package)
+interface MarkdownStorage {
+  markdown: {
+    getMarkdown: () => string;
+  };
+}
+
 interface WysiwygEditorProps {
   content: string;
   onChange: (markdown: string) => void;
@@ -62,7 +69,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
         return;
       }
       isInternalChange.current = true;
-      const markdown = editor.storage.markdown.getMarkdown();
+      const markdown = (editor.storage as unknown as MarkdownStorage).markdown.getMarkdown();
       onChange(markdown);
     },
     editable: true,

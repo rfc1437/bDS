@@ -59,6 +59,19 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
+## ⚠️ MANDATORY: TypeScript Checks After Code Changes
+
+**You MUST run TypeScript type checking after making code changes.**
+
+- Run `npx tsc --noEmit` after any code modifications
+- Fix ALL type errors before considering the task complete
+- Type errors indicate mismatches between APIs and their usage - these MUST be resolved
+- Do NOT ignore or work around type errors with `any` casts
+
+> **Zero TypeScript errors. No exceptions.**
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns
