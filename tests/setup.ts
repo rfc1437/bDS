@@ -35,6 +35,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 // Mock window.electronAPI for renderer tests
 Object.defineProperty(globalThis, 'window', {
   value: {
+    localStorage: localStorageMock,
     electronAPI: {
       posts: {
         create: vi.fn(),
