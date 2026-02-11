@@ -185,7 +185,8 @@
 }
 
 .setting-control input[type="text"],
-.setting-control input[type="password"] {
+.setting-control input[type="password"],
+.setting-control textarea {
   width: 100%;
   max-width: 400px;
   padding: 6px 10px;
@@ -195,13 +196,21 @@
   color: var(--vscode-input-foreground);
   border-radius: 4px;
   outline: none;
+  font-family: inherit;
 }
 
-.setting-control input:focus {
+.setting-control textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.setting-control input:focus,
+.setting-control textarea:focus {
   border-color: var(--vscode-focusBorder);
 }
 
-.setting-control input::placeholder {
+.setting-control input::placeholder,
+.setting-control textarea::placeholder {
   color: var(--vscode-input-placeholderForeground);
 }
 
