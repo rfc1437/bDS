@@ -748,76 +748,202 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   );
 };
 
-const WelcomeScreen: React.FC = () => {
-  const { setSelectedPost } = useAppStore();
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
 
-  const handleNewPost = async () => {
-    try {
-      const newPost = await window.electronAPI?.posts.create({
-        title: '',
-        content: '',
-        tags: [],
-        categories: [],
-      });
-      if (newPost) {
-        setSelectedPost(newPost.id);
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+interface DashboardStats {
+  totalPosts: number;
+  draftCount: number;
+  publishedCount: number;
+  archivedCount: number;
+}
+
+interface TagCount {
+  tag: string;
+  count: number;
+}
+
+interface CategoryCount {
+  category: string;
+  count: number;
+}
+
+const Dashboard: React.FC = () => {
+  const { posts, media } = useAppStore();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
+  const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
+  const [categoryCounts, setCategoryCounts] = useState<CategoryCount[]>([]);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const [ds, ym, tc, cc] = await Promise.all([
+          window.electronAPI?.posts.getDashboardStats(),
+          window.electronAPI?.posts.getByYearMonth(),
+          window.electronAPI?.posts.getTagsWithCounts(),
+          window.electronAPI?.posts.getCategoriesWithCounts(),
+        ]);
+        if (ds) setStats(ds);
+        if (ym) setYearMonthData(ym);
+        if (tc) setTagCounts(tc);
+        if (cc) setCategoryCounts(cc);
+      } catch (e) {
+        console.error('Failed to load dashboard stats:', e);
       }
-    } catch (error) {
-      console.error('Failed to create post:', error);
-    }
-  };
+    };
+    loadStats();
+  }, [posts.length, media.length]);
+
+  // Media stats
+  const totalMediaSize = media.reduce((sum, m) => sum + (m.size || 0), 0);
+  const imageCount = media.filter(m => m.mimeType?.startsWith('image/')).length;
+
+  // Recent posts (last 5 updated)
+  const recentPosts = useMemo(() =>
+    [...posts].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5),
+    [posts]
+  );
+
+  // Timeline chart - last 12 months that have posts
+  const timelineEntries = useMemo(() => {
+    const sorted = [...yearMonthData].sort((a, b) => a.year === b.year ? a.month - b.month : a.year - b.year);
+    return sorted.slice(-12);
+  }, [yearMonthData]);
+  const maxCount = Math.max(1, ...timelineEntries.map(e => e.count));
+
+  // Tag cloud font sizing
+  const tagCloudItems = useMemo(() => {
+    if (tagCounts.length === 0) return [];
+    const items = tagCounts.slice(0, 40);
+    const maxTagCount = Math.max(1, ...items.map(t => t.count));
+    const minTagCount = Math.min(...items.map(t => t.count));
+    const range = Math.max(1, maxTagCount - minTagCount);
+    // Font sizes from 11px to 22px
+    return items.map(t => ({
+      ...t,
+      fontSize: 11 + ((t.count - minTagCount) / range) * 11,
+    })).sort((a, b) => a.tag.localeCompare(b.tag)); // alphabetical for cloud layout
+  }, [tagCounts]);
+
+  const displayTotalPosts = stats?.totalPosts ?? posts.length;
+  const displayDraftCount = stats?.draftCount ?? 0;
+  const displayPublishedCount = stats?.publishedCount ?? 0;
+  const displayArchivedCount = stats?.archivedCount ?? 0;
 
   return (
     <div className="editor-empty">
-      <div className="welcome-content">
-        <h1>Blogging Desktop Server</h1>
-        <p className="text-muted">bDS - Your offline-first blogging platform</p>
-        
-        <div className="welcome-actions">
-          <div className="welcome-action">
-            <h3>Create a New Post</h3>
-            <p>Start writing your next blog post with Markdown support.</p>
-            <button onClick={handleNewPost}>
-              New Post
-            </button>
+      <div className="dashboard-content">
+        <h1>Dashboard</h1>
+        <p className="text-muted">Overview of your blog database</p>
+
+        <div className="dashboard-stats">
+          <div className="stat-card">
+            <div className="stat-number">{displayTotalPosts}</div>
+            <div className="stat-label">Total Posts</div>
+            <div className="stat-breakdown">
+              <span className="stat-tag stat-published">{displayPublishedCount} published</span>
+              <span className="stat-tag stat-draft">{displayDraftCount} drafts</span>
+              {displayArchivedCount > 0 && <span className="stat-tag stat-archived">{displayArchivedCount} archived</span>}
+            </div>
           </div>
-          <div className="welcome-action">
-            <h3>Import Media</h3>
-            <p>Add images and files to use in your posts.</p>
-            <button className="secondary" onClick={() => window.electronAPI?.media.importDialog()}>
-              Import Media
-            </button>
+          <div className="stat-card">
+            <div className="stat-number">{media.length}</div>
+            <div className="stat-label">Media Files</div>
+            <div className="stat-breakdown">
+              <span className="stat-tag">{imageCount} images</span>
+              <span className="stat-tag">{formatBytes(totalMediaSize)}</span>
+            </div>
           </div>
-          <div className="welcome-action">
-            <h3>Configure Sync</h3>
-            <p>Connect to Turso for cloud synchronization.</p>
-            <button className="secondary" onClick={() => useAppStore.getState().setActiveView('settings')}>
-              Open Settings
-            </button>
+          <div className="stat-card">
+            <div className="stat-number">{tagCounts.length}</div>
+            <div className="stat-label">Tags</div>
+            <div className="stat-breakdown">
+              <span className="stat-tag">{categoryCounts.length} categories</span>
+            </div>
           </div>
         </div>
 
-        <div className="welcome-shortcuts">
-          <h4>Keyboard Shortcuts</h4>
-          <div className="shortcut-list">
-            <div className="shortcut-item">
-              <kbd>Ctrl</kbd> + <kbd>N</kbd>
-              <span>New Post</span>
-            </div>
-            <div className="shortcut-item">
-              <kbd>Ctrl</kbd> + <kbd>S</kbd>
-              <span>Save</span>
-            </div>
-            <div className="shortcut-item">
-              <kbd>Ctrl</kbd> + <kbd>B</kbd>
-              <span>Toggle Sidebar</span>
-            </div>
-            <div className="shortcut-item">
-              <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>
-              <span>Publish</span>
+        {timelineEntries.length > 0 && (
+          <div className="dashboard-section">
+            <h4>Posts Over Time</h4>
+            <div className="timeline-chart">
+              {timelineEntries.map((entry) => (
+                <div key={`${entry.year}-${entry.month}`} className="timeline-bar-container">
+                  <div className="timeline-bar" style={{ height: `${(entry.count / maxCount) * 100}%` }}>
+                    <span className="timeline-bar-count">{entry.count}</span>
+                  </div>
+                  <div className="timeline-bar-label">{MONTH_NAMES[entry.month]}</div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
+
+        {tagCloudItems.length > 0 && (
+          <div className="dashboard-section">
+            <h4>Tags</h4>
+            <div className="tag-cloud">
+              {tagCloudItems.map(item => (
+                <span
+                  key={item.tag}
+                  className="dashboard-tag"
+                  style={{ fontSize: `${item.fontSize}px` }}
+                  title={`${item.count} post${item.count !== 1 ? 's' : ''}`}
+                >
+                  {item.tag}
+                </span>
+              ))}
+              {tagCounts.length > 40 && <span className="text-muted tag-cloud-more">+{tagCounts.length - 40} more</span>}
+            </div>
+          </div>
+        )}
+
+        {categoryCounts.length > 0 && (
+          <div className="dashboard-section">
+            <h4>Categories</h4>
+            <div className="tag-cloud">
+              {categoryCounts.map(cat => (
+                <span
+                  key={cat.category}
+                  className="dashboard-tag dashboard-category"
+                  title={`${cat.count} post${cat.count !== 1 ? 's' : ''}`}
+                >
+                  {cat.category} <span className="tag-count">{cat.count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {recentPosts.length > 0 && (
+          <div className="dashboard-section">
+            <h4>Recently Updated</h4>
+            <div className="recent-posts-list">
+              {recentPosts.map(post => (
+                <div
+                  key={post.id}
+                  className="recent-post-item"
+                  onClick={() => {
+                    useAppStore.getState().setActiveView('posts');
+                    useAppStore.getState().setSelectedPost(post.id);
+                  }}
+                >
+                  <span className="recent-post-title">{post.title || 'Untitled'}</span>
+                  <span className={`recent-post-status status-${post.status}`}>{post.status}</span>
+                  <span className="recent-post-date">{new Date(post.updatedAt).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -889,7 +1015,7 @@ export const Editor: React.FC = () => {
 
   return (
     <>
-      <WelcomeScreen />
+      <Dashboard />
       {renderErrorModal()}
     </>
   );

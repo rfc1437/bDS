@@ -258,10 +258,10 @@ edit in the application itself. Template editing should provide proper syntax hi
 monaco is important. Choose a good solid template engine for node-js based tools that is especialy targeted
 to easy template creation.
 
-For the styling I want the system to be based on bootstrap templates, so that the look can be easily swapped
+For the styling I want the system to be based on css templates, so that the look can be easily swapped
 to the wish of the user. There should be a selection of light and dark themes bundled with the application,
-so that starting is simple. New bootstrap css templates must be easily integrateable into the application,
-maybe even with easy importing from a central bootstrap site or something like that.
+so that starting is simple. New css templates must be easily integrateable into the application,
+maybe even with easy importing from a central repository site or something like that.
 
 Check the site https://hugo.rfc1437.de/ for its structure, this is the structure of blog I want to be
 capable of building with this tooling. So we need templates for overview pages and ways to manage menues
