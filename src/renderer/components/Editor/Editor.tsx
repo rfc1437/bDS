@@ -7,7 +7,44 @@ import { Lightbox, useMarkdownImages } from '../Lightbox';
 import { PostLinks } from '../PostLinks';
 import { ErrorModal } from '../ErrorModal';
 import { SettingsView } from '../SettingsView';
+import { AutoSaveManager } from '../../utils';
 import './Editor.css';
+
+// Module-level AutoSaveManager for idle-time based auto-saving
+const autoSaveManager = new AutoSaveManager({
+  idleTimeMs: 3000, // Save after 3 seconds of idle time
+  onSave: async (id, changes) => {
+    const state = useAppStore.getState();
+    // Only save if post still exists in store
+    const postExists = state.posts.some(p => p.id === id);
+    if (!postExists) return;
+
+    // Build update payload from changes
+    const update: Parameters<typeof window.electronAPI.posts.update>[1] = {};
+    if ('title' in changes) update.title = changes.title as string;
+    if ('content' in changes) update.content = changes.content as string;
+    if ('tags' in changes) {
+      const tagsStr = changes.tags as string;
+      update.tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    }
+    if ('category' in changes) {
+      const cat = changes.category as string;
+      update.categories = cat ? [cat] : ['article'];
+    }
+
+    const updated = await window.electronAPI?.posts.update(id, update);
+    if (updated) {
+      useAppStore.getState().updatePost(id, updated as Partial<PostData>);
+      useAppStore.getState().markClean(id);
+    }
+  },
+  onSaveComplete: (id) => {
+    console.log(`Auto-saved post ${id}`);
+  },
+  onSaveError: (id, error) => {
+    console.error(`Auto-save failed for ${id}:`, error);
+  },
+});
 
 /**
  * Resolves media references in markdown content to bds-media:// URLs
@@ -176,6 +213,9 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     const prevPostId = post.id;
     
     return () => {
+      // Cancel any pending auto-save timer - we'll save immediately
+      autoSaveManager.cancel(prevPostId);
+      
       const pending = pendingChangesRef.current;
       // Only auto-save if the post still exists in the store (not deleted/discarded)
       const postStillExists = useAppStore.getState().posts.some(p => p.id === prevPostId);
@@ -207,7 +247,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     markClean(post.id);
   }, [post.id, post.title, post.content, post.tags, post.categories, markClean]);
 
-  // Track changes
+  // Track changes and notify auto-save manager
   useEffect(() => {
     const currentCategory = post.categories[0] || 'article';
     const hasChanges = 
@@ -218,6 +258,13 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     
     if (hasChanges) {
       markDirty(post.id);
+      // Notify auto-save manager with accumulated changes
+      autoSaveManager.notifyChange(post.id, {
+        title,
+        content,
+        tags,
+        category,
+      });
     } else {
       markClean(post.id);
     }
@@ -232,6 +279,9 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const handleSave = useCallback(async () => {
     if (!isDirty || isSaving) return;
 
+    // Cancel any pending auto-save since we're saving manually
+    autoSaveManager.cancel(post.id);
+    
     setIsSaving(true);
     try {
       const updated = await window.electronAPI?.posts.update(post.id, {
@@ -934,6 +984,12 @@ const Dashboard: React.FC = () => {
                   onClick={() => {
                     useAppStore.getState().setActiveView('posts');
                     useAppStore.getState().setSelectedPost(post.id);
+                    useAppStore.getState().openTab({ type: 'post', id: post.id, isTransient: true });
+                  }}
+                  onDoubleClick={() => {
+                    useAppStore.getState().setActiveView('posts');
+                    useAppStore.getState().setSelectedPost(post.id);
+                    useAppStore.getState().openTab({ type: 'post', id: post.id, isTransient: false });
                   }}
                 >
                   <span className="recent-post-title">{post.title || 'Untitled'}</span>
@@ -953,7 +1009,9 @@ export const Editor: React.FC = () => {
   const { 
     activeView, 
     selectedPostId, 
-    selectedMediaId, 
+    selectedMediaId,
+    tabs,
+    activeTabId,
     posts, 
     media,
     errorModal,
@@ -961,7 +1019,16 @@ export const Editor: React.FC = () => {
     isLoading,
     setSelectedPost,
     setSelectedMedia,
+    closeTab,
   } = useAppStore();
+
+  // Get the active tab
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
+  // Determine what to show based on active tab
+  const showPost = activeTab?.type === 'post';
+  const showMedia = activeTab?.type === 'media';
+  const showSettings = activeTab?.type === 'settings' || (activeView === 'settings' && !activeTab);
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
@@ -983,12 +1050,30 @@ export const Editor: React.FC = () => {
     }
   }, [activeView, selectedMediaId, media, isLoading, setSelectedMedia]);
 
+  // Close tab if the item doesn't exist anymore
+  useEffect(() => {
+    if (activeTab && !isLoading) {
+      if (activeTab.type === 'post') {
+        const postExists = posts.some(p => p.id === activeTab.id);
+        if (!postExists) {
+          closeTab(activeTab.id);
+        }
+      } else if (activeTab.type === 'media') {
+        const mediaExists = media.some(m => m.id === activeTab.id);
+        if (!mediaExists) {
+          closeTab(activeTab.id);
+        }
+      }
+    }
+  }, [activeTab, posts, media, isLoading, closeTab]);
+
   // Show error modal if present
   const renderErrorModal = () => (
     <ErrorModal error={errorModal} onClose={hideErrorModal} />
   );
 
-  if (activeView === 'settings') {
+  // Show settings if settings tab is active or settings view with no tab
+  if (showSettings) {
     return (
       <>
         <SettingsView />
@@ -997,18 +1082,19 @@ export const Editor: React.FC = () => {
     );
   }
 
-  if (activeView === 'posts' && selectedPostId) {
-    const post = posts.find(p => p.id === selectedPostId);
+  // Show post editor if a post tab is active
+  if (showPost && activeTabId) {
+    const post = posts.find(p => p.id === activeTabId);
     if (post) {
       return (
         <>
-          <PostEditor post={post} />
+          <PostEditor key={post.id} post={post} />
           {renderErrorModal()}
         </>
       );
     }
     
-    // Post not found - show loading or empty state while useEffect clears selection
+    // Post not found - show loading or empty state
     return (
       <>
         <div className="editor-empty">
@@ -1021,15 +1107,17 @@ export const Editor: React.FC = () => {
     );
   }
 
-  if (activeView === 'media' && selectedMediaId) {
+  // Show media editor if a media tab is active
+  if (showMedia && activeTabId) {
     return (
       <>
-        <MediaEditor mediaId={selectedMediaId} />
+        <MediaEditor key={activeTabId} mediaId={activeTabId} />
         {renderErrorModal()}
       </>
     );
   }
 
+  // No tab active - show dashboard
   return (
     <>
       <Dashboard />

@@ -1,0 +1,200 @@
+/* TabBar Styles - VS Code inspired */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  background-color: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, #1e1e1e);
+  height: 35px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.tab-bar-tabs {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar but allow scrolling */
+.tab-bar-tabs::-webkit-scrollbar {
+  height: 0;
+  display: none;
+}
+
+/* Navigation arrows */
+.tab-scroll-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 100%;
+  background-color: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+  border: none;
+  color: var(--vscode-icon-foreground, #c5c5c5);
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.tab-scroll-button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.tab-scroll-left {
+  border-right: 1px solid var(--vscode-tab-border, #252526);
+}
+
+.tab-scroll-right {
+  border-left: 1px solid var(--vscode-tab-border, #252526);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  height: 100%;
+  min-width: 120px;
+  max-width: 200px;
+  cursor: pointer;
+  background-color: var(--vscode-tab-inactiveBackground, #2d2d2d);
+  border-right: 1px solid var(--vscode-tab-border, #252526);
+  color: var(--vscode-tab-inactiveForeground, #969696);
+  font-size: 13px;
+  user-select: none;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background-color: var(--vscode-tab-hoverBackground, #2a2d2e);
+}
+
+.tab.active {
+  background-color: var(--vscode-tab-activeBackground, #1e1e1e);
+  color: var(--vscode-tab-activeForeground, #fff);
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--vscode-tab-activeBorderTop, #0078d4);
+}
+
+.tab.transient .tab-title {
+  font-style: italic;
+}
+
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.tab.active .tab-icon {
+  opacity: 1;
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-title.italic {
+  font-style: italic;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tab-dirty-indicator {
+  color: var(--vscode-editorWarning-foreground, #e2c08d);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-icon-foreground, #c5c5c5);
+  cursor: pointer;
+  opacity: 0;
+  border-radius: 3px;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.tab:hover .tab-close {
+  opacity: 0.7;
+}
+
+.tab.active .tab-close {
+  opacity: 0.7;
+}
+
+.tab-close:hover {
+  opacity: 1 !important;
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.tab-close:active {
+  background-color: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31));
+}
+
+/* When tab is dirty, show close button on hover, swap with dirty indicator */
+.tab.dirty .tab-dirty-indicator {
+  display: block;
+}
+
+.tab.dirty .tab-close {
+  display: none;
+}
+
+.tab.dirty:hover .tab-close {
+  display: flex;
+  opacity: 0.7;
+}
+
+.tab.dirty:hover .tab-dirty-indicator {
+  display: none;
+}
+
+/* Focus styles for keyboard navigation */
+.tab:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+/* Empty state when no tabs */
+.tab-bar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  color: var(--vscode-descriptionForeground, #999);
+  font-size: 12px;
+}

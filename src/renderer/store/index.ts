@@ -5,5 +5,8 @@ export {
   type MediaData, 
   type TaskProgress, 
   type EditorMode, 
-  type ErrorDetails 
+  type ErrorDetails,
+  type Tab,
+  type TabType,
+  type TabState
 } from './appStore';

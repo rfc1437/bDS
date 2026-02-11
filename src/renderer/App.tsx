@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityBar, Sidebar, Editor, StatusBar, Panel, ToastContainer, showToast } from './components';
+import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import './App.css';
 
@@ -23,6 +23,7 @@ const App: React.FC = () => {
     togglePanel,
     setActiveView,
     setSelectedPost,
+    openTab,
   } = useAppStore();
 
   // Load initial data
@@ -257,7 +258,7 @@ const App: React.FC = () => {
 
     unsubscribers.push(
       window.electronAPI?.on('menu:configureSync', () => {
-        setActiveView('settings');
+        openTab({ type: 'settings', id: 'settings', isTransient: false });
       }) || (() => {})
     );
 
@@ -320,6 +321,7 @@ const App: React.FC = () => {
         <ActivityBar />
         <Sidebar />
         <div className="app-content">
+          <TabBar />
           <Editor />
           <Panel />
         </div>

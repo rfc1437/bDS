@@ -29,9 +29,17 @@ const SyncIcon = () => (
 );
 
 export const ActivityBar: React.FC = () => {
-  const { activeView, setActiveView, syncStatus, pendingChanges } = useAppStore();
+  const { activeView, setActiveView, syncStatus, pendingChanges, openTab, tabs, activeTabId } = useAppStore();
   
   const totalPending = pendingChanges.posts + pendingChanges.media;
+  
+  // Check if settings tab is currently active
+  const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
+
+  const handleSettingsClick = () => {
+    // Open settings as a dedicated (non-transient) tab
+    openTab({ type: 'settings', id: 'settings', isTransient: false });
+  };
 
   return (
     <div className="activity-bar">
@@ -64,8 +72,8 @@ export const ActivityBar: React.FC = () => {
           )}
         </button>
         <button
-          className={`activity-bar-item ${activeView === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveView('settings')}
+          className={`activity-bar-item ${isSettingsTabActive ? 'active' : ''}`}
+          onClick={handleSettingsClick}
           title="Settings"
         >
           <SettingsIcon />

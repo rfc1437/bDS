@@ -222,7 +222,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
 };
 
 const PostsList: React.FC = () => {
-  const { posts, selectedPostId, setSelectedPost, hasMorePosts, totalPosts, appendPosts } = useAppStore();
+  const { posts, hasMorePosts, totalPosts, appendPosts, openTab, activeTabId } = useAppStore();
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -379,6 +379,15 @@ const PostsList: React.FC = () => {
     setFilteredPosts(null);
   };
 
+  // Click handlers for tabs
+  const handlePostClick = (postId: string) => {
+    openTab({ type: 'post', id: postId, isTransient: true });
+  };
+
+  const handlePostDoubleClick = (postId: string) => {
+    openTab({ type: 'post', id: postId, isTransient: false });
+  };
+
   return (
     <div className="sidebar-content">
       <div className="sidebar-section">
@@ -447,8 +456,9 @@ const PostsList: React.FC = () => {
               return (
                 <div
                   key={post.id}
-                  className={`sidebar-item post-type-${postType.type} ${selectedPostId === post.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedPost(post.id)}
+                  className={`sidebar-item post-type-${postType.type} ${activeTabId === post.id ? 'selected' : ''}`}
+                  onClick={() => handlePostClick(post.id)}
+                  onDoubleClick={() => handlePostDoubleClick(post.id)}
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
@@ -474,8 +484,9 @@ const PostsList: React.FC = () => {
               return (
                 <div
                   key={post.id}
-                  className={`sidebar-item post-type-${postType.type} ${selectedPostId === post.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedPost(post.id)}
+                  className={`sidebar-item post-type-${postType.type} ${activeTabId === post.id ? 'selected' : ''}`}
+                  onClick={() => handlePostClick(post.id)}
+                  onDoubleClick={() => handlePostDoubleClick(post.id)}
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
@@ -501,8 +512,9 @@ const PostsList: React.FC = () => {
               return (
                 <div
                   key={post.id}
-                  className={`sidebar-item post-type-${postType.type} ${selectedPostId === post.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedPost(post.id)}
+                  className={`sidebar-item post-type-${postType.type} ${activeTabId === post.id ? 'selected' : ''}`}
+                  onClick={() => handlePostClick(post.id)}
+                  onDoubleClick={() => handlePostDoubleClick(post.id)}
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
@@ -547,7 +559,7 @@ const PostsList: React.FC = () => {
 };
 
 const MediaList: React.FC = () => {
-  const { media, selectedMediaId, setSelectedMedia } = useAppStore();
+  const { media, openTab, activeTabId } = useAppStore();
 
   const handleImportMedia = async () => {
     try {
@@ -555,6 +567,14 @@ const MediaList: React.FC = () => {
     } catch (error) {
       console.error('Failed to import media:', error);
     }
+  };
+
+  const handleMediaClick = (mediaId: string) => {
+    openTab({ type: 'media', id: mediaId, isTransient: true });
+  };
+
+  const handleMediaDoubleClick = (mediaId: string) => {
+    openTab({ type: 'media', id: mediaId, isTransient: false });
   };
 
   return (
@@ -574,8 +594,9 @@ const MediaList: React.FC = () => {
         {media.map(item => (
           <div
             key={item.id}
-            className={`media-item ${selectedMediaId === item.id ? 'selected' : ''}`}
-            onClick={() => setSelectedMedia(item.id)}
+            className={`media-item ${activeTabId === item.id ? 'selected' : ''}`}
+            onClick={() => handleMediaClick(item.id)}
+            onDoubleClick={() => handleMediaDoubleClick(item.id)}
             title={item.originalName}
           >
             {item.mimeType.startsWith('image/') ? (
