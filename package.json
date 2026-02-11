@@ -41,7 +41,7 @@
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.20.0",
-    "electron": "^28.0.0",
+    "electron": "^39.5.2",
     "electron-builder": "^24.9.1",
     "jsdom": "^28.0.0",
     "memfs": "^4.6.0",
@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.5",
+    "@github/copilot-sdk": "^0.1.23",
     "@libsql/client": "^0.4.0",
     "@milkdown/kit": "^7.18.0",
     "@milkdown/plugin-block": "^7.18.0",
@@ -79,6 +80,7 @@
     "sharp": "^0.34.5",
     "snowball-stemmers": "^0.6.0",
     "uuid": "^9.0.1",
+    "zod": "^3.25.76",
     "zustand": "^4.4.7"
   },
   "build": {

@@ -108,6 +108,27 @@ export const tags = sqliteTable('tags', {
   projectNameIdx: uniqueIndex('tags_project_name_idx').on(table.projectId, table.name),
 }));
 
+// Chat conversations table - stores AI chat sessions
+export const chatConversations = sqliteTable('chat_conversations', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  model: text('model'), // Model used for this conversation
+  copilotSessionId: text('copilot_session_id'), // Copilot SDK session ID for resuming
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// Chat messages table - stores messages within conversations
+export const chatMessages = sqliteTable('chat_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  conversationId: text('conversation_id').notNull(),
+  role: text('role', { enum: ['system', 'user', 'assistant', 'tool'] }).notNull(),
+  content: text('content'),
+  toolCallId: text('tool_call_id'), // For tool responses
+  toolCalls: text('tool_calls'), // JSON array of tool calls
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -123,3 +144,7 @@ export type PostLink = typeof postLinks.$inferSelect;
 export type NewPostLink = typeof postLinks.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;
+export type ChatConversation = typeof chatConversations.$inferSelect;
+export type NewChatConversation = typeof chatConversations.$inferInsert;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type NewChatMessage = typeof chatMessages.$inferInsert;

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore, PostData } from '../../store';
 import { showToast } from '../Toast';
+import type { ChatConversation } from '../../types/electron';
 import './Sidebar.css';
 
 const formatDate = (dateString: string) => {
@@ -747,6 +748,210 @@ const SettingsNav: React.FC = () => {
   );
 };
 
+// Chat conversations list
+const ChatList: React.FC = () => {
+  const { openTab } = useAppStore();
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; username?: string } | null>(null);
+  const [deviceCode, setDeviceCode] = useState<{ verificationUri: string; userCode: string } | null>(null);
+
+  // Load conversations
+  const loadConversations = useCallback(async () => {
+    try {
+      const convs = await window.electronAPI?.chat.getConversations();
+      if (convs) {
+        setConversations(convs);
+      }
+    } catch (error) {
+      console.error('Failed to load conversations:', error);
+    }
+  }, []);
+
+  // Check auth status
+  const checkAuth = useCallback(async () => {
+    try {
+      const status = await window.electronAPI?.chat.copilotAuthStatus();
+      setAuthStatus(status ?? null);
+    } catch (error) {
+      console.error('Failed to check auth:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      setIsLoading(true);
+      await checkAuth();
+      await loadConversations();
+      setIsLoading(false);
+    };
+    init();
+
+    // Subscribe to title updates
+    const unsubTitle = window.electronAPI?.chat.onTitleUpdated((data) => {
+      setConversations(prev => 
+        prev.map(c => c.id === data.conversationId ? { ...c, title: data.title } : c)
+      );
+    });
+
+    // Subscribe to device code for login flow
+    const unsubDevice = window.electronAPI?.chat.onDeviceCode((data) => {
+      setDeviceCode(data);
+    });
+
+    return () => {
+      unsubTitle?.();
+      unsubDevice?.();
+    };
+  }, [loadConversations, checkAuth]);
+
+  const handleNewChat = async () => {
+    try {
+      const conversation = await window.electronAPI?.chat.createConversation();
+      if (conversation) {
+        setConversations(prev => [conversation, ...prev]);
+        openTab({ type: 'chat', id: conversation.id, isTransient: false });
+      }
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+      showToast.error('Failed to create new chat');
+    }
+  };
+
+  const handleOpenChat = (conversationId: string) => {
+    openTab({ type: 'chat', id: conversationId, isTransient: false });
+  };
+
+  const handleDeleteChat = async (conversationId: string) => {
+    try {
+      await window.electronAPI?.chat.deleteConversation(conversationId);
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      showToast.error('Failed to delete chat');
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const result = await window.electronAPI?.chat.copilotLogin();
+      if (result?.success) {
+        setDeviceCode(null);
+        await checkAuth();
+      } else if (result?.error) {
+        console.error('Login failed:', result.error);
+        showToast.error(result.error);
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+      showToast.error('Login failed');
+    }
+  };
+
+  const formatChatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="chat-list">
+        <div className="chat-list-header">
+          <span>AI ASSISTANT</span>
+        </div>
+        <div className="chat-loading">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!authStatus?.authenticated) {
+    return (
+      <div className="chat-list">
+        <div className="chat-list-header">
+          <span>AI ASSISTANT</span>
+        </div>
+        <div className="chat-auth-prompt">
+          <p>Sign in to GitHub Copilot to start chatting</p>
+          {deviceCode ? (
+            <div className="device-code-prompt">
+              <p>Enter this code at:</p>
+              <a href={deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">
+                {deviceCode.verificationUri}
+              </a>
+              <div className="device-code">{deviceCode.userCode}</div>
+            </div>
+          ) : (
+            <button className="chat-login-button" onClick={handleLogin}>
+              Sign in with GitHub
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-list">
+      <div className="chat-list-header">
+        <span>AI ASSISTANT</span>
+        <button className="chat-new-button" onClick={handleNewChat} title="New Chat">
+          +
+        </button>
+      </div>
+      {authStatus.username && (
+        <div className="chat-user-info">
+          <span className="chat-user-icon">👤</span>
+          <span className="chat-username">{authStatus.username}</span>
+        </div>
+      )}
+      <div className="chat-list-items">
+        {conversations.length === 0 ? (
+          <div className="chat-empty">
+            <p>No conversations yet</p>
+            <button className="chat-start-button" onClick={handleNewChat}>
+              Start a new chat
+            </button>
+          </div>
+        ) : (
+          conversations.map(conv => (
+            <div
+              key={conv.id}
+              className="chat-list-item"
+              onClick={() => handleOpenChat(conv.id)}
+            >
+              <div className="chat-item-content">
+                <div className="chat-item-title">{conv.title}</div>
+                <div className="chat-item-date">{formatChatDate(conv.updatedAt)}</div>
+              </div>
+              <button
+                className="chat-item-delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteChat(conv.id);
+                }}
+                title="Delete conversation"
+              >
+                ×
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const Sidebar: React.FC = () => {
   const { activeView, sidebarVisible } = useAppStore();
 
@@ -760,6 +965,7 @@ export const Sidebar: React.FC = () => {
       {activeView === 'media' && <MediaList />}
       {activeView === 'settings' && <SettingsNav />}
       {activeView === 'tags' && <TagsNav />}
+      {activeView === 'chat' && <ChatList />}
     </div>
   );
 };

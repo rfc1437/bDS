@@ -28,6 +28,15 @@ const TagsIcon = () => (
   </svg>
 );
 
+const ChatIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+    <circle cx="8" cy="10" r="1.5"/>
+    <circle cx="12" cy="10" r="1.5"/>
+    <circle cx="16" cy="10" r="1.5"/>
+  </svg>
+);
+
 const SyncIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
@@ -45,8 +54,11 @@ export const ActivityBar: React.FC = () => {
   // Check if tags tab is currently active
   const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
 
+  // Check if chat sidebar is active (activeView === 'chat' and sidebar is visible)
+  const isChatActive = activeView === 'chat' && sidebarVisible;
+
   // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
-  const handleViewClick = (view: 'posts' | 'media') => {
+  const handleViewClick = (view: 'posts' | 'media' | 'chat') => {
     if (activeView === view && sidebarVisible) {
       // Clicking on active view toggles sidebar off
       toggleSidebar();
@@ -95,6 +107,13 @@ export const ActivityBar: React.FC = () => {
           title="Tags"
         >
           <TagsIcon />
+        </button>
+        <button
+          className={`activity-bar-item ${isChatActive ? 'active' : ''}`}
+          onClick={() => handleViewClick('chat')}
+          title="AI Assistant (click again to toggle sidebar)"
+        >
+          <ChatIcon />
         </button>
       </div>
       

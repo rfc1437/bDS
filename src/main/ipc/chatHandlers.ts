@@ -1,0 +1,342 @@
+/**
+ * Chat IPC handlers - AI chat functionality using GitHub Copilot SDK
+ */
+
+import { ipcMain, BrowserWindow } from 'electron';
+import { ChatEngine } from '../engine/ChatEngine';
+import { CopilotManager } from '../engine/CopilotManager';
+import { getPostEngine } from '../engine/PostEngine';
+import { getMediaEngine } from '../engine/MediaEngine';
+import { getDatabase } from '../database';
+
+let chatEngine: ChatEngine | null = null;
+let copilotManager: CopilotManager | null = null;
+let mainWindowGetter: (() => BrowserWindow | null) | null = null;
+
+/**
+ * Initialize chat handlers with the main window reference
+ */
+export function initializeChatHandlers(getMainWindow: () => BrowserWindow | null): void {
+  mainWindowGetter = getMainWindow;
+}
+
+/**
+ * Get or create the ChatEngine instance
+ */
+function getChatEngine(): ChatEngine {
+  if (!chatEngine) {
+    chatEngine = new ChatEngine(getDatabase());
+  }
+  return chatEngine;
+}
+
+/**
+ * Get or create the CopilotManager instance
+ */
+function getCopilotManager(): CopilotManager {
+  if (!copilotManager) {
+    copilotManager = new CopilotManager(
+      getChatEngine(),
+      getPostEngine(),
+      getMediaEngine(),
+      () => mainWindowGetter?.() || null
+    );
+  }
+  return copilotManager;
+}
+
+/**
+ * Register all chat-related IPC handlers
+ */
+export function registerChatHandlers(): void {
+  // ============ Copilot Authentication & Status ============
+
+  // Check if Copilot is ready
+  ipcMain.handle('chat:checkReady', async () => {
+    try {
+      const manager = getCopilotManager();
+      const result = await manager.checkReady();
+      return {
+        ready: result.ready,
+        error: result.error,
+        backend: result.ready ? 'copilot' : undefined,
+      };
+    } catch (error) {
+      console.error('[Chat IPC] Error checking ready:', error);
+      return { ready: false, error: (error as Error).message };
+    }
+  });
+
+  // Get Copilot authentication status
+  ipcMain.handle('chat:copilotAuthStatus', async () => {
+    try {
+      const manager = getCopilotManager();
+      const status = await manager.getAuthStatus();
+      // Transform to match frontend ChatAuthStatus type
+      return {
+        authenticated: status.isAuthenticated,
+        username: status.login,
+      };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting auth status:', error);
+      return { authenticated: false };
+    }
+  });
+
+  // Trigger Copilot login
+  ipcMain.handle('chat:copilotLogin', async () => {
+    try {
+      console.log('[Chat IPC] copilotLogin called');
+      const manager = getCopilotManager();
+      const mainWindow = mainWindowGetter?.();
+
+      console.log('[Chat IPC] Calling manager.triggerLogin()');
+      const result = await manager.triggerLogin({
+        onDeviceCode: (deviceCode) => {
+          console.log('[Chat IPC] Received device code, sending to renderer:', deviceCode);
+          if (mainWindow) {
+            mainWindow.webContents.send('copilot-device-code', deviceCode);
+          }
+        },
+        onMessage: (message) => {
+          console.log('[Chat IPC] Auth message:', message);
+          if (mainWindow) {
+            mainWindow.webContents.send('copilot-auth-message', { message });
+          }
+        },
+      });
+
+      console.log('[Chat IPC] triggerLogin result:', result);
+      return result;
+    } catch (error) {
+      console.error('[Chat IPC] Error during login:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Logout from Copilot
+  ipcMain.handle('chat:copilotLogout', async () => {
+    try {
+      const manager = getCopilotManager();
+      return await manager.logout();
+    } catch (error) {
+      console.error('[Chat IPC] Error during logout:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Chat Settings ============
+
+  // Get available models
+  ipcMain.handle('chat:getAvailableModels', async () => {
+    try {
+      const manager = getCopilotManager();
+      const models = await manager.getAvailableModels();
+      const engine = getChatEngine();
+      const selectedModel = await engine.getSelectedModel();
+      return { success: true, models, selectedModel };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting models:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Set default model
+  ipcMain.handle('chat:setDefaultModel', async (_, modelId: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.setSelectedModel(modelId);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get system prompt
+  ipcMain.handle('chat:getSystemPrompt', async () => {
+    try {
+      const engine = getChatEngine();
+      const prompt = await engine.getDefaultSystemPrompt();
+      return { success: true, prompt };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting system prompt:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Set system prompt
+  ipcMain.handle('chat:setSystemPrompt', async (_, prompt: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.setDefaultSystemPrompt(prompt);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting system prompt:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Conversation CRUD ============
+
+  // Get all conversations
+  ipcMain.handle('chat:getConversations', async () => {
+    try {
+      const engine = getChatEngine();
+      return await engine.getRecentConversations();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting conversations:', error);
+      return [];
+    }
+  });
+
+  // Create new conversation
+  ipcMain.handle('chat:createConversation', async (_, title?: string, model?: string) => {
+    try {
+      const engine = getChatEngine();
+      const systemPrompt = await engine.getDefaultSystemPrompt();
+      const selectedModel = model || (await engine.getSelectedModel());
+
+      const conversation = await engine.createConversation({
+        title: title || 'New Chat',
+        model: selectedModel,
+        systemPrompt,
+      });
+
+      return conversation;
+    } catch (error) {
+      console.error('[Chat IPC] Error creating conversation:', error);
+      return { error: (error as Error).message };
+    }
+  });
+
+  // Get conversation by ID
+  ipcMain.handle('chat:getConversation', async (_, id: string) => {
+    try {
+      const engine = getChatEngine();
+      return await engine.getConversation(id);
+    } catch (error) {
+      console.error('[Chat IPC] Error getting conversation:', error);
+      return null;
+    }
+  });
+
+  // Update conversation
+  ipcMain.handle('chat:updateConversation', async (_, id: string, updates: { title?: string; model?: string }) => {
+    try {
+      const engine = getChatEngine();
+      await engine.updateConversation(id, updates);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error updating conversation:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Delete conversation
+  ipcMain.handle('chat:deleteConversation', async (_, id: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.deleteConversation(id);
+      
+      // Also destroy any active session
+      const manager = getCopilotManager();
+      await manager.destroySession(id);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error deleting conversation:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Chat Messaging ============
+
+  // Send a message
+  ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string) => {
+    try {
+      const manager = getCopilotManager();
+      const mainWindow = mainWindowGetter?.();
+
+      const result = await manager.sendMessage(conversationId, message, {
+        onDelta: (delta) => {
+          if (mainWindow) {
+            mainWindow.webContents.send('chat-stream-delta', { conversationId, delta });
+          }
+        },
+        onToolCall: (toolCall) => {
+          if (mainWindow) {
+            mainWindow.webContents.send('chat-tool-call', { conversationId, toolCall });
+          }
+        },
+        onToolResult: (result) => {
+          if (mainWindow) {
+            mainWindow.webContents.send('chat-tool-result', { conversationId, result });
+          }
+        },
+      });
+
+      return result;
+    } catch (error) {
+      console.error('[Chat IPC] Error sending message:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Abort a running message
+  ipcMain.handle('chat:abortMessage', async (_, conversationId: string) => {
+    try {
+      const manager = getCopilotManager();
+      return await manager.abortMessage(conversationId);
+    } catch (error) {
+      console.error('[Chat IPC] Error aborting message:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get message history for a conversation
+  ipcMain.handle('chat:getHistory', async (_, conversationId: string) => {
+    try {
+      const engine = getChatEngine();
+      return await engine.getMessages(conversationId);
+    } catch (error) {
+      console.error('[Chat IPC] Error getting history:', error);
+      return [];
+    }
+  });
+
+  // Clear messages from a conversation
+  ipcMain.handle('chat:clearMessages', async (_, conversationId: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.clearMessages(conversationId);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error clearing messages:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Set conversation model
+  ipcMain.handle('chat:setConversationModel', async (_, conversationId: string, modelId: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.updateConversation(conversationId, { model: modelId });
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting conversation model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+}
+
+/**
+ * Cleanup chat resources
+ */
+export async function cleanupChatHandlers(): Promise<void> {
+  if (copilotManager) {
+    await copilotManager.stop();
+    copilotManager = null;
+  }
+  chatEngine = null;
+}

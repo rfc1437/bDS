@@ -9,6 +9,7 @@ import { ErrorModal } from '../ErrorModal';
 import { SettingsView } from '../SettingsView';
 import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
+import { ChatPanel } from '../ChatPanel';
 import { AutoSaveManager } from '../../utils';
 import './Editor.css';
 
@@ -1005,6 +1006,7 @@ export const Editor: React.FC = () => {
   const showMedia = activeTab?.type === 'media';
   const showSettings = activeTab?.type === 'settings' || (activeView === 'settings' && !activeTab);
   const showTags = activeTab?.type === 'tags' || (activeView === 'tags' && !activeTab);
+  const showChat = activeTab?.type === 'chat';
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
@@ -1063,6 +1065,16 @@ export const Editor: React.FC = () => {
     return (
       <>
         <TagsView />
+        {renderErrorModal()}
+      </>
+    );
+  }
+
+  // Show chat if chat tab is active
+  if (showChat && activeTabId) {
+    return (
+      <>
+        <ChatPanel key={activeTabId} conversationId={activeTabId} />
         {renderErrorModal()}
       </>
     );

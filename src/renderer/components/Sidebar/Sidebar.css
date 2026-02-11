@@ -606,3 +606,180 @@
 .sidebar-item.unsaved .sidebar-item-meta {
   font-style: italic;
 }
+
+/* Chat List Styles */
+.chat-list {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-sideBar-foreground);
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.chat-new-button {
+  background: transparent;
+  border: none;
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.chat-new-button:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.chat-user-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.chat-user-icon {
+  font-size: 14px;
+}
+
+.chat-username {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-list-items {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.chat-list-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.chat-list-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.chat-item-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-item-title {
+  font-size: 13px;
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 2px;
+}
+
+.chat-item-date {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.chat-item-delete {
+  background: transparent;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.chat-list-item:hover .chat-item-delete {
+  opacity: 1;
+}
+
+.chat-item-delete:hover {
+  color: var(--vscode-errorForeground);
+}
+
+.chat-loading,
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+}
+
+.chat-start-button,
+.chat-login-button {
+  margin-top: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--vscode-button-foreground);
+  background-color: var(--vscode-button-background);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-start-button:hover,
+.chat-login-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.chat-auth-prompt {
+  padding: 24px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+}
+
+.chat-auth-prompt p {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+}
+
+.device-code-prompt {
+  margin-top: 16px;
+}
+
+.device-code-prompt a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.device-code-prompt a:hover {
+  text-decoration: underline;
+}
+
+.device-code {
+  margin-top: 8px;
+  padding: 8px 16px;
+  font-size: 20px;
+  font-weight: 600;
+  font-family: var(--vscode-editor-font-family, monospace);
+  letter-spacing: 3px;
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+}
