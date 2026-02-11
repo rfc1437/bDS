@@ -9,7 +9,7 @@ This document provides context and best practices for GitHub Copilot when workin
 - **TypeScript** for all code (strict mode)
 - **React** for the renderer UI
 - **Drizzle ORM** for type-safe database access
-- **@libsql/client** for SQLite (local) and Turso (cloud sync)
+- **@libsql/client** for SQLite (local database)
 - **Zustand** for React state management
 
 ---
@@ -29,6 +29,19 @@ This document provides context and best practices for GitHub Copilot when workin
 > Mock only external dependencies (database, filesystem), never the class under test.
 
 See the [TDD Requirements](#test-driven-development-tdd-requirements) section for detailed guidelines.
+
+---
+
+## ⚠️ MANDATORY: Fix All Test Failures
+
+**You MUST investigate and fix ALL test failures before completing any task.**
+
+- Never leave tests failing, even if they appear unrelated to your changes
+- If a test failure is pre-existing, fix it as part of your current work
+- Run the full test suite (`npm test`) before considering any task complete
+- If you cannot fix a test, explain why and propose a solution
+
+> **Zero failing tests. No exceptions.**
 
 ---
 
@@ -240,7 +253,7 @@ app.on('before-quit', async () => {
 });
 ```
 
-## Remote Sync Best Practices (Turso/LibSQL)
+## Remote Sync Best Practices (Dropbox)
 
 ### Sync Strategy
 
@@ -719,5 +732,5 @@ export type NewTableInsert = typeof newTable.$inferInsert;
 - Never log sensitive data (auth tokens, passwords)
 - Validate all IPC inputs before processing
 - Use `contextIsolation: true` and `sandbox: false` only when necessary
-- Store Turso auth tokens in secure storage, not in code
+- Store Dropbox auth tokens in secure storage, not in code
 - Sanitize user input before rendering (XSS prevention)

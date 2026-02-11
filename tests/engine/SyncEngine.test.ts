@@ -66,6 +66,7 @@ vi.mock('../../src/main/database', () => ({
     })),
     initializeLocal: vi.fn(),
     initializeRemote: vi.fn(async () => {}),
+    runRemoteMigrations: vi.fn(async () => {}),
     close: vi.fn(),
   })),
 }));
@@ -448,6 +449,410 @@ describe('SyncEngine', () => {
       await syncEngine.configure(config);
       // Should not crash, but won't set up interval
       expect(syncEngine.isConfigured()).toBe(true);
+    });
+  });
+
+  describe('Remote Schema Migration', () => {
+    it('should run migrations on remote database when initializing', async () => {
+      const { getDatabase } = await import('../../src/main/database');
+      const mockRunRemoteMigrations = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => mockLocalDb),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => mockRemoteDb),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: mockRunRemoteMigrations,
+        close: vi.fn(),
+      } as any);
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+
+      expect(mockRunRemoteMigrations).toHaveBeenCalled();
+    });
+  });
+
+  describe('Sync Timeout', () => {
+    it('should timeout if sync takes too long', async () => {
+      const { getDatabase } = await import('../../src/main/database');
+
+      // Create a mock that never resolves for remote operations
+      const hangingInsert = vi.fn(() => ({
+        values: vi.fn(() => ({
+          onConflictDoUpdate: vi.fn(() => new Promise(() => {})), // Never resolves
+        })),
+      }));
+
+      const hangingRemoteDb = {
+        ...mockRemoteDb,
+        insert: hangingInsert,
+      };
+
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => ({
+          ...mockLocalDb,
+          select: vi.fn(() => ({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            offset: vi.fn().mockReturnThis(),
+            all: vi.fn().mockResolvedValue([{ id: 'test-post', title: 'Test', syncStatus: 'pending' }]),
+          })),
+          update: vi.fn(() => ({
+            set: vi.fn(() => ({
+              where: vi.fn(() => Promise.resolve()),
+            })),
+          })),
+        })),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => hangingRemoteDb),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: vi.fn(async () => {}),
+        close: vi.fn(),
+      } as any);
+
+      // Use real timers and set a short timeout before configuring
+      vi.useRealTimers();
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+      
+      // Set a short timeout for the test (100ms)
+      syncEngine.setSyncTimeout(100);
+
+      // This should timeout rather than hang forever
+      const result = await syncEngine.sync('push');
+
+      expect(result.success).toBe(false);
+      expect(result.errors.some((e: string) => e.includes('timeout') || e.includes('Timeout'))).toBe(true);
+    }, 15000); // Extend test timeout to 15 seconds
+
+    it('should have configurable timeout', () => {
+      expect(typeof syncEngine.getSyncTimeout).toBe('function');
+      expect(typeof syncEngine.setSyncTimeout).toBe('function');
+    });
+  });
+
+  describe('SyncStatus Reset on Failure', () => {
+    it('should reset syncStatus to idle when task manager throws', async () => {
+      const { getDatabase } = await import('../../src/main/database');
+
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => ({
+          ...mockLocalDb,
+          select: vi.fn(() => {
+            throw new Error('Database exploded');
+          }),
+        })),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => mockRemoteDb),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: vi.fn(async () => {}),
+        close: vi.fn(),
+      } as any);
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+
+      // First sync should fail
+      await syncEngine.sync('push');
+
+      // Status should be reset to allow future syncs
+      expect(syncEngine.getSyncStatus()).not.toBe('syncing');
+
+      // A subsequent sync should not return "Sync already in progress"
+      const result = await syncEngine.sync('push');
+      expect(result.errors).not.toContain('Sync already in progress');
+    });
+
+    it('should reset syncStatus to error after failure', async () => {
+      const { getDatabase } = await import('../../src/main/database');
+
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => ({
+          ...mockLocalDb,
+          select: vi.fn(() => {
+            throw new Error('Database error');
+          }),
+        })),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => mockRemoteDb),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: vi.fn(async () => {}),
+        close: vi.fn(),
+      } as any);
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+      await syncEngine.sync('push');
+
+      // After failure, status should be 'error' or 'idle', not 'syncing'
+      const status = syncEngine.getSyncStatus();
+      expect(status === 'error' || status === 'idle').toBe(true);
+    });
+  });
+
+  describe('Console Logging', () => {
+    it('should log sync start with direction', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+      await syncEngine.sync('push');
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[SyncEngine]'),
+        expect.stringContaining('push')
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should log sync completion with results', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { getDatabase } = await import('../../src/main/database');
+
+      // Mock a complete sync with no pending items (so it completes quickly)
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => ({
+          ...mockLocalDb,
+          select: vi.fn(() => ({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            all: vi.fn().mockResolvedValue([]), // No pending items
+          })),
+        })),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => mockRemoteDb),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: vi.fn(async () => {}),
+        close: vi.fn(),
+      } as any);
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+      await syncEngine.sync('push');
+
+      // Check that at least one log call contains "[SyncEngine]" and "complete"
+      const calls = consoleSpy.mock.calls;
+      const hasCompleteLog = calls.some((call: any[]) => 
+        call.some((arg: any) => typeof arg === 'string' && arg.includes('[SyncEngine]') && arg.includes('complete'))
+      );
+
+      expect(hasCompleteLog).toBe(true);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should log errors when sync fails', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { getDatabase } = await import('../../src/main/database');
+
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => ({
+          ...mockLocalDb,
+          select: vi.fn(() => {
+            throw new Error('Test error for logging');
+          }),
+        })),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => mockRemoteDb),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: vi.fn(async () => {}),
+        close: vi.fn(),
+      } as any);
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+      await syncEngine.sync('push');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[SyncEngine]'),
+        expect.anything()
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('Batch Size Configuration', () => {
+    it('should have configurable batch size', () => {
+      expect(typeof syncEngine.getBatchSize).toBe('function');
+      expect(typeof syncEngine.setBatchSize).toBe('function');
+    });
+
+    it('should default to 50 items per batch', () => {
+      expect(syncEngine.getBatchSize()).toBe(50);
+    });
+
+    it('should allow setting custom batch size', () => {
+      syncEngine.setBatchSize(100);
+      expect(syncEngine.getBatchSize()).toBe(100);
+      // Reset to default
+      syncEngine.setBatchSize(50);
+    });
+
+    it('should process posts in batches', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const { getDatabase } = await import('../../src/main/database');
+
+      // Create 150 mock posts (should result in 3 batches with batch size 50)
+      const mockPendingPosts = Array.from({ length: 150 }, (_, i) => ({
+        id: `post-${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+        syncStatus: 'pending',
+        projectId: 'default',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      let queryCount = 0;
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => ({
+          ...mockLocalDb,
+          select: vi.fn(() => ({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            offset: vi.fn().mockImplementation((offset: number) => ({
+              all: vi.fn().mockImplementation(() => {
+                queryCount++;
+                const batch = mockPendingPosts.slice(offset, offset + 50);
+                return Promise.resolve(batch);
+              }),
+            })),
+            all: vi.fn().mockResolvedValue([]), // For media query
+          })),
+          update: vi.fn(() => ({
+            set: vi.fn(() => ({
+              where: vi.fn(() => Promise.resolve()),
+            })),
+          })),
+          insert: vi.fn(() => ({
+            values: vi.fn(() => Promise.resolve()),
+          })),
+        })),
+        getLocalClient: vi.fn(() => null),
+        getRemote: vi.fn(() => ({
+          ...mockRemoteDb,
+          insert: vi.fn(() => ({
+            values: vi.fn(() => ({
+              onConflictDoUpdate: vi.fn(() => Promise.resolve()),
+            })),
+          })),
+        })),
+        getDataPaths: vi.fn(() => ({
+          database: '/mock/userData/bds.db',
+          posts: '/mock/userData/posts',
+          media: '/mock/userData/media',
+        })),
+        initializeLocal: vi.fn(),
+        initializeRemote: vi.fn(async () => {}),
+        runRemoteMigrations: vi.fn(async () => {}),
+        close: vi.fn(),
+      } as any);
+
+      const config: SyncConfig = {
+        tursoUrl: 'libsql://test.turso.io',
+        tursoAuthToken: 'test-token',
+        autoSync: false,
+        syncInterval: 30,
+      };
+
+      await syncEngine.configure(config);
+      syncEngine.setBatchSize(50);
+      await syncEngine.sync('push');
+
+      // Should have logged batch progress
+      const calls = consoleSpy.mock.calls;
+      const hasBatchLog = calls.some((call: any[]) =>
+        call.some((arg: any) => typeof arg === 'string' && arg.includes('batch'))
+      );
+
+      expect(hasBatchLog).toBe(true);
+      consoleSpy.mockRestore();
     });
   });
 });

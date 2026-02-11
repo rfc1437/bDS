@@ -17,9 +17,6 @@ export const scrollToSettingsSection = (category: SettingsCategory) => {
 // Settings categories
 
 interface Credentials {
-  // Turso Cloud Sync
-  tursoUrl: string;
-  tursoToken: string;
   // Dropbox File Sync
   dropboxAccessToken: string;
   dropboxAppKey: string;
@@ -35,8 +32,6 @@ interface Credentials {
 }
 
 const defaultCredentials: Credentials = {
-  tursoUrl: '',
-  tursoToken: '',
   dropboxAccessToken: '',
   dropboxAppKey: '',
   dropboxRemotePath: '/blog',
@@ -173,29 +168,6 @@ export const SettingsView: React.FC = () => {
     loadSettings();
   }, []);
 
-  // Save credentials and configure backends
-  const handleSaveTurso = async () => {
-    try {
-      localStorage.setItem('bds-credentials', JSON.stringify(credentials));
-
-      if (credentials.tursoUrl && credentials.tursoToken) {
-        await window.electronAPI?.sync.configure({
-          tursoUrl: credentials.tursoUrl,
-          tursoAuthToken: credentials.tursoToken,
-          autoSync: true,
-          syncInterval: 5,
-        });
-        useAppStore.getState().setSyncConfigured(true);
-        showToast.success('Cloud sync configured');
-      } else {
-        showToast.success('Credentials saved');
-      }
-    } catch (error) {
-      console.error('Failed to save Turso credentials:', error);
-      showToast.error('Failed to configure cloud sync');
-    }
-  };
-
   const handleSaveDropbox = async () => {
     try {
       localStorage.setItem('bds-credentials', JSON.stringify(credentials));
@@ -227,14 +199,9 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleClearCredentials = (type: 'turso' | 'dropbox' | 'ftp' | 'ssh') => {
+  const handleClearCredentials = (type: 'dropbox' | 'ftp' | 'ssh') => {
     const newCreds = { ...credentials };
     switch (type) {
-      case 'turso':
-        newCreds.tursoUrl = '';
-        newCreds.tursoToken = '';
-        useAppStore.getState().setSyncConfigured(false);
-        break;
       case 'dropbox':
         newCreds.dropboxAccessToken = '';
         newCreds.dropboxAppKey = '';
@@ -270,31 +237,19 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleTestConnection = async (type: 'turso' | 'dropbox') => {
-    showToast.loading(`Testing ${type} connection...`);
+  const handleTestDropboxConnection = async () => {
+    showToast.loading('Testing Dropbox connection...');
     try {
-      if (type === 'turso') {
-        // Simulate connection test
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        if (credentials.tursoUrl && credentials.tursoToken) {
-          showToast.dismiss();
-          showToast.success('Cloud sync connection successful');
-        } else {
-          showToast.dismiss();
-          showToast.error('Missing credentials');
-        }
+      const status = await window.electronAPI?.dropbox?.getStatus();
+      showToast.dismiss();
+      if (status) {
+        showToast.success('Dropbox connection active');
       } else {
-        const status = await window.electronAPI?.dropbox?.getStatus();
-        showToast.dismiss();
-        if (status) {
-          showToast.success('Dropbox connection active');
-        } else {
-          showToast.error('Dropbox connection failed');
-        }
+        showToast.error('Dropbox connection failed');
       }
     } catch {
       showToast.dismiss();
-      showToast.error(`${type} connection failed`);
+      showToast.error('Dropbox connection failed');
     }
   };
 
@@ -321,7 +276,7 @@ export const SettingsView: React.FC = () => {
   const projectKeywords = ['project', 'name', 'description', 'blog', 'site'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
-  const syncKeywords = ['sync', 'turso', 'libsql', 'cloud', 'database', 'dropbox', 'file', 'backup', 'token', 'remote'];
+  const syncKeywords = ['sync', 'dropbox', 'file', 'backup', 'token', 'remote'];
   const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
 
@@ -485,68 +440,6 @@ export const SettingsView: React.FC = () => {
     <>
       <SettingSection
         id="settings-section-sync"
-        title="Cloud Sync — Turso/LibSQL"
-        description="Sync post and media metadata to a Turso cloud database for backup and multi-device access."
-        hidden={!sectionHasMatches(syncKeywords)}
-      >
-        <SettingRow
-          id="turso-url"
-          label="Database URL"
-          description="The Turso/LibSQL database URL. Example: libsql://your-database.turso.io"
-        >
-          <input
-            id="turso-url"
-            type="text"
-            placeholder="libsql://your-database.turso.io"
-            value={credentials.tursoUrl}
-            onChange={(e) => setCredentials({ ...credentials, tursoUrl: e.target.value })}
-          />
-        </SettingRow>
-
-        <SettingRow
-          id="turso-token"
-          label="Auth Token"
-          description="Your Turso database authentication token."
-        >
-          <div className="setting-input-group">
-            <input
-              id="turso-token"
-              type={showSecrets ? 'text' : 'password'}
-              placeholder="Your authentication token"
-              value={credentials.tursoToken}
-              onChange={(e) => setCredentials({ ...credentials, tursoToken: e.target.value })}
-            />
-            <button
-              className="setting-toggle-visibility"
-              onClick={() => setShowSecrets(!showSecrets)}
-              title={showSecrets ? 'Hide secrets' : 'Show secrets'}
-            >
-              {showSecrets ? '🔒' : '👁'}
-            </button>
-          </div>
-        </SettingRow>
-
-        <div className="setting-actions">
-          <button className="primary" onClick={handleSaveTurso}>
-            {syncConfigured ? 'Update Configuration' : 'Enable Cloud Sync'}
-          </button>
-          <button className="secondary" onClick={() => handleTestConnection('turso')}>
-            Test Connection
-          </button>
-          <button className="secondary danger" onClick={() => handleClearCredentials('turso')}>
-            Clear
-          </button>
-        </div>
-
-        {syncConfigured && (
-          <div className="setting-status success">
-            <span className="status-icon">✓</span>
-            <span>Cloud sync is configured and active</span>
-          </div>
-        )}
-      </SettingSection>
-
-      <SettingSection
         title="File Sync — Dropbox"
         description="Synchronize your blog files (posts and media) to Dropbox for backup and cross-device access."
         hidden={!sectionHasMatches(syncKeywords)}
@@ -606,7 +499,7 @@ export const SettingsView: React.FC = () => {
           <button className="primary" onClick={handleSaveDropbox}>
             {dropboxConfigured ? 'Update Configuration' : 'Enable Dropbox Sync'}
           </button>
-          <button className="secondary" onClick={() => handleTestConnection('dropbox')}>
+          <button className="secondary" onClick={handleTestDropboxConnection}>
             Test Connection
           </button>
           {dropboxConfigured && (
