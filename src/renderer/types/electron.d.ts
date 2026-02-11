@@ -1,5 +1,10 @@
 // Type definitions for the Electron API exposed via preload
 
+export interface ProjectMetadata {
+  name: string;
+  description?: string;
+}
+
 export interface ProjectData {
   id: string;
   name: string;
@@ -205,6 +210,18 @@ export interface ElectronAPI {
     getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;
     openFolder: (folderPath: string) => Promise<string>;
     showItemInFolder: (itemPath: string) => Promise<void>;
+  };
+  meta: {
+    getTags: () => Promise<string[]>;
+    getCategories: () => Promise<string[]>;
+    addTag: (tag: string) => Promise<string[]>;
+    removeTag: (tag: string) => Promise<string[]>;
+    addCategory: (category: string) => Promise<string[]>;
+    removeCategory: (category: string) => Promise<string[]>;
+    syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
+    getProjectMetadata: () => Promise<ProjectMetadata | null>;
+    setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string }) => Promise<ProjectMetadata | null>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

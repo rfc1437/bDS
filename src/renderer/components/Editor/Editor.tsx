@@ -128,19 +128,19 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     window.electronAPI?.posts.hasPublishedVersion(post.id).then(setHasPublishedVersion);
   }, [post.id]);
 
-  // Load available categories from localStorage
+  // Load available categories from backend (project-scoped)
   useEffect(() => {
-    const savedCategories = localStorage.getItem('bds-categories');
-    if (savedCategories) {
+    const loadCategories = async () => {
       try {
-        const parsed = JSON.parse(savedCategories);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setAvailableCategories(parsed);
+        const categories = await window.electronAPI?.meta.getCategories();
+        if (categories && categories.length > 0) {
+          setAvailableCategories(categories);
         }
       } catch {
         // Keep defaults
       }
-    }
+    };
+    loadCategories();
   }, []);
 
   // Resolve media URLs in content for display

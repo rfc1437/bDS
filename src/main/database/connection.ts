@@ -318,36 +318,54 @@ export class DatabaseConnection {
     }
 
     // Create FTS5 virtual table for full-text search
-    // Only stores: id (unindexed, for lookups) and content (stemmed text for matching)
+    // Stores: id (unindexed, for lookups), project_id (unindexed, for filtering), content (stemmed text for matching)
     // Post data for display comes from the posts table or filesystem files
     await this.localClient.execute(`
       CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
         id UNINDEXED,
+        project_id UNINDEXED,
         content,
         content_rowid=rowid
       );
     `);
 
-    // Migration: Check if old FTS schema (with multiple columns) exists and recreate
-    // Old schema had: id, title, content, excerpt, tags, categories, content_stemmed
-    // New schema has: id, content (stemmed only)
+    // Migration: Check if old FTS schema exists and recreate with project_id
+    // Old schema had: id, content (or even older: id, title, content, excerpt, tags, categories)
+    // New schema has: id, project_id, content (for project-scoped search)
     try {
-      // Try to query old columns - if they exist, we need to migrate
-      await this.localClient.execute("SELECT title FROM posts_fts LIMIT 0");
-      
-      // Old schema exists - recreate with new simple schema
-      console.log('Migrating posts_fts table to simplified schema...');
+      // Try to query project_id - if it doesn't exist, we need to migrate
+      await this.localClient.execute("SELECT project_id FROM posts_fts LIMIT 0");
+      // project_id exists, check for old multi-column schema
+      try {
+        await this.localClient.execute("SELECT title FROM posts_fts LIMIT 0");
+        // Old multi-column schema exists - recreate
+        console.log('Migrating posts_fts table to new schema with project_id...');
+        await this.localClient.execute('DROP TABLE IF EXISTS posts_fts');
+        await this.localClient.execute(`
+          CREATE VIRTUAL TABLE posts_fts USING fts5(
+            id UNINDEXED,
+            project_id UNINDEXED,
+            content,
+            content_rowid=rowid
+          );
+        `);
+        console.log('FTS table migrated - rebuild index required');
+      } catch {
+        // No title column - we have the correct new schema
+      }
+    } catch {
+      // project_id doesn't exist - migrate from old schema
+      console.log('Migrating posts_fts table to add project_id...');
       await this.localClient.execute('DROP TABLE IF EXISTS posts_fts');
       await this.localClient.execute(`
         CREATE VIRTUAL TABLE posts_fts USING fts5(
           id UNINDEXED,
+          project_id UNINDEXED,
           content,
           content_rowid=rowid
         );
       `);
       console.log('FTS table migrated - rebuild index required');
-    } catch {
-      // Old columns don't exist - we have the new schema or no data, all good
     }
 
     // Create default project if none exists

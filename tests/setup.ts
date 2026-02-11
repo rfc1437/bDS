@@ -88,6 +88,18 @@ Object.defineProperty(globalThis, 'window', {
         resolveConflict: vi.fn(),
         getLastSyncTime: vi.fn(),
       },
+      meta: {
+        getTags: vi.fn(),
+        getCategories: vi.fn(),
+        addTag: vi.fn(),
+        removeTag: vi.fn(),
+        addCategory: vi.fn(),
+        removeCategory: vi.fn(),
+        syncOnStartup: vi.fn(),
+        getProjectMetadata: vi.fn(),
+        setProjectMetadata: vi.fn(),
+        updateProjectMetadata: vi.fn(),
+      },
       tasks: {
         getAll: vi.fn(),
         getRunning: vi.fn(),

@@ -138,13 +138,13 @@ export const SettingsView: React.FC = () => {
           setCredentials({ ...defaultCredentials, ...JSON.parse(savedCreds) });
         }
 
-        // Load saved post categories
-        const savedCategories = localStorage.getItem('bds-categories');
-        if (savedCategories) {
-          const categories = JSON.parse(savedCategories);
-          if (Array.isArray(categories) && categories.length > 0) {
-            setPostCategories(categories);
-          }
+        // Load categories from backend (project-scoped)
+        const categories = await window.electronAPI?.meta.getCategories();
+        if (categories && categories.length > 0) {
+          setPostCategories(categories);
+        } else {
+          // Initialize with defaults if no categories exist
+          setPostCategories(DEFAULT_POST_CATEGORIES);
         }
 
         // Check Dropbox status
@@ -160,7 +160,7 @@ export const SettingsView: React.FC = () => {
       }
     };
     loadSettings();
-  }, []);
+  }, [activeProject?.id]); // Reload when project changes
 
   const handleSaveDropbox = async () => {
     try {
@@ -343,20 +343,26 @@ export const SettingsView: React.FC = () => {
   );
 
   // Handlers for post categories management
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     const trimmed = newCategoryInput.trim().toLowerCase();
     if (trimmed && !postCategories.includes(trimmed)) {
-      const updated = [...postCategories, trimmed];
-      setPostCategories(updated);
-      localStorage.setItem('bds-categories', JSON.stringify(updated));
-      setNewCategoryInput('');
-      showToast.success(`Category "${trimmed}" added`);
+      try {
+        const updatedCategories = await window.electronAPI?.meta.addCategory(trimmed);
+        if (updatedCategories) {
+          setPostCategories(updatedCategories);
+        }
+        setNewCategoryInput('');
+        showToast.success(`Category "${trimmed}" added`);
+      } catch (error) {
+        console.error('Failed to add category:', error);
+        showToast.error('Failed to add category');
+      }
     } else if (postCategories.includes(trimmed)) {
       showToast.error('Category already exists');
     }
   };
 
-  const handleRemoveCategory = (categoryToRemove: string) => {
+  const handleRemoveCategory = async (categoryToRemove: string) => {
     if (PROTECTED_CATEGORIES.includes(categoryToRemove)) {
       showToast.error(`Cannot delete standard category "${categoryToRemove}"`);
       return;
@@ -365,16 +371,39 @@ export const SettingsView: React.FC = () => {
       showToast.error('Must have at least one category');
       return;
     }
-    const updated = postCategories.filter(c => c !== categoryToRemove);
-    setPostCategories(updated);
-    localStorage.setItem('bds-categories', JSON.stringify(updated));
-    showToast.success(`Category "${categoryToRemove}" removed`);
+    try {
+      const updatedCategories = await window.electronAPI?.meta.removeCategory(categoryToRemove);
+      if (updatedCategories) {
+        setPostCategories(updatedCategories);
+      }
+      showToast.success(`Category "${categoryToRemove}" removed`);
+    } catch (error) {
+      console.error('Failed to remove category:', error);
+      showToast.error('Failed to remove category');
+    }
   };
 
-  const handleResetCategories = () => {
-    setPostCategories(DEFAULT_POST_CATEGORIES);
-    localStorage.setItem('bds-categories', JSON.stringify(DEFAULT_POST_CATEGORIES));
-    showToast.success('Categories reset to defaults');
+  const handleResetCategories = async () => {
+    try {
+      // Remove non-protected categories
+      const currentCategories = await window.electronAPI?.meta.getCategories() || [];
+      for (const cat of currentCategories) {
+        if (!PROTECTED_CATEGORIES.includes(cat)) {
+          await window.electronAPI?.meta.removeCategory(cat);
+        }
+      }
+      // Add any missing default categories
+      for (const cat of DEFAULT_POST_CATEGORIES) {
+        await window.electronAPI?.meta.addCategory(cat);
+      }
+      // Refresh the list
+      const updatedCategories = await window.electronAPI?.meta.getCategories();
+      setPostCategories(updatedCategories || DEFAULT_POST_CATEGORIES);
+      showToast.success('Categories reset to defaults');
+    } catch (error) {
+      console.error('Failed to reset categories:', error);
+      showToast.error('Failed to reset categories');
+    }
   };
 
   const renderContentSettings = () => (
