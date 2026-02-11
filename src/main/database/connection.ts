@@ -184,6 +184,18 @@ export class DatabaseConnection {
       CREATE INDEX IF NOT EXISTS idx_post_links_source ON post_links(source_post_id);
       CREATE INDEX IF NOT EXISTS idx_post_links_target ON post_links(target_post_id);
       CREATE UNIQUE INDEX IF NOT EXISTS posts_project_slug_idx ON posts(project_id, slug);
+
+      CREATE TABLE IF NOT EXISTS tags (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tags_project_id ON tags(project_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS tags_project_name_idx ON tags(project_id, name);
     `);
 
     // Check if project_id column exists in posts table, add if missing (migration)
@@ -366,6 +378,27 @@ export class DatabaseConnection {
         );
       `);
       console.log('FTS table migrated - rebuild index required');
+    }
+
+    // Migration: Ensure tags table exists (for databases created before tags feature)
+    const tagsTableExists = await this.localClient.execute(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='tags'"
+    );
+    if (tagsTableExists.rows.length === 0) {
+      console.log('Creating tags table...');
+      await this.localClient.execute(`
+        CREATE TABLE tags (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          color TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `);
+      await this.localClient.execute('CREATE INDEX idx_tags_project_id ON tags(project_id)');
+      await this.localClient.execute('CREATE UNIQUE INDEX tags_project_name_idx ON tags(project_id, name)');
+      console.log('Tags table created successfully');
     }
 
     // Create default project if none exists

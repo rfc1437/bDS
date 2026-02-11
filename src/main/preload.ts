@@ -115,6 +115,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateProjectMetadata: (updates: { name?: string; description?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
+  // Tag Management (advanced tag operations)
+  tags: {
+    getAll: () => ipcRenderer.invoke('tags:getAll'),
+    getWithCounts: () => ipcRenderer.invoke('tags:getWithCounts'),
+    get: (id: string) => ipcRenderer.invoke('tags:get', id),
+    getByName: (name: string) => ipcRenderer.invoke('tags:getByName', name),
+    create: (data: { name: string; color?: string }) => ipcRenderer.invoke('tags:create', data),
+    update: (id: string, data: { name?: string; color?: string | null }) => ipcRenderer.invoke('tags:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('tags:delete', id),
+    merge: (sourceTagIds: string[], targetTagId: string) => ipcRenderer.invoke('tags:merge', sourceTagIds, targetTagId),
+    rename: (id: string, newName: string) => ipcRenderer.invoke('tags:rename', id, newName),
+    getPostsWithTag: (tagId: string) => ipcRenderer.invoke('tags:getPostsWithTag', tagId),
+    syncFromPosts: () => ipcRenderer.invoke('tags:syncFromPosts'),
+  },
+
   // Event listeners
   on: (channel: string, callback: (...args: unknown[]) => void) => {
     const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args);

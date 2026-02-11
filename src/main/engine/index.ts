@@ -5,6 +5,18 @@ export { SyncEngine, getSyncEngine, type SyncConfig, type SyncResult, type SyncD
 export { ProjectEngine, getProjectEngine, type ProjectData } from './ProjectEngine';
 export { MetaEngine, getMetaEngine, type ProjectMetadata, DEFAULT_CATEGORIES } from './MetaEngine';
 export {
+  TagEngine,
+  getTagEngine,
+  type TagData,
+  type TagWithCount,
+  type CreateTagInput,
+  type UpdateTagInput,
+  type DeleteTagResult,
+  type MergeTagsResult,
+  type RenameTagResult,
+  type SyncTagsResult,
+} from './TagEngine';
+export {
   stemText,
   stemWord,
   stemQuery,
@@ -25,3 +37,4 @@ export {
   type FileDownloadResult,
   type ConflictResolution,
 } from './DropboxSyncEngine';
+

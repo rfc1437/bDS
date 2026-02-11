@@ -636,6 +636,50 @@ const MediaList: React.FC = () => {
 };
 
 import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
+import { scrollToTagsSection, TagsCategory } from '../TagsView';
+
+const TagsNav: React.FC = () => {
+  const [activeSection, setActiveSection] = useState<TagsCategory | null>(null);
+
+  const handleNavClick = (category: TagsCategory) => {
+    setActiveSection(category);
+    scrollToTagsSection(category);
+  };
+
+  return (
+    <div className="sidebar-content settings-panel">
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span>TAGS</span>
+        </div>
+      </div>
+
+      <div className="settings-nav-list">
+        <button
+          className={`settings-nav-entry ${activeSection === 'cloud' ? 'active' : ''}`}
+          onClick={() => handleNavClick('cloud')}
+        >
+          <span className="settings-nav-entry-icon">☁️</span>
+          <span>Tag Cloud</span>
+        </button>
+        <button
+          className={`settings-nav-entry ${activeSection === 'manage' ? 'active' : ''}`}
+          onClick={() => handleNavClick('manage')}
+        >
+          <span className="settings-nav-entry-icon">✏️</span>
+          <span>Create & Edit</span>
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'merge' ? 'active' : ''}`}
+          onClick={() => handleNavClick('merge')}
+        >
+          <span className="settings-nav-entry-icon">🔀</span>
+          <span>Merge Tags</span>
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const SettingsNav: React.FC = () => {
   const { syncConfigured } = useAppStore();
@@ -715,6 +759,7 @@ export const Sidebar: React.FC = () => {
       {activeView === 'posts' && <PostsList />}
       {activeView === 'media' && <MediaList />}
       {activeView === 'settings' && <SettingsNav />}
+      {activeView === 'tags' && <TagsNav />}
     </div>
   );
 };
