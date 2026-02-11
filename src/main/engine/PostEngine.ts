@@ -1015,6 +1015,62 @@ export class PostEngine extends EventEmitter {
     console.log(`Rebuilt FTS index for ${allPosts.length} posts`);
   }
 
+  /**
+   * Reindex all text for full-text search.
+   * Runs as a background task with progress updates.
+   * Call this when search algorithms change or to fix search issues.
+   */
+  async reindexText(): Promise<void> {
+    const task: Task<void> = {
+      id: uuidv4(),
+      name: 'Reindex search text',
+      execute: async (onProgress) => {
+        const client = getDatabase().getLocalClient();
+        if (!client) {
+          throw new Error('Database client not available');
+        }
+
+        onProgress(0, 'Clearing existing search index...');
+
+        // Clear the entire FTS table
+        await client.execute('DELETE FROM posts_fts');
+
+        onProgress(5, 'Loading posts...');
+
+        const allPosts = await this.getAllPostsUnpaginated();
+        const total = allPosts.length;
+
+        if (total === 0) {
+          onProgress(100, 'No posts to index');
+          return;
+        }
+
+        onProgress(10, `Indexing ${total} posts...`);
+
+        for (let i = 0; i < allPosts.length; i++) {
+          const post = allPosts[i];
+          await this.updateFTSIndex(post);
+
+          // Update progress (10% to 100%)
+          const progress = 10 + Math.round((i + 1) / total * 90);
+          if (i % 10 === 0 || i === allPosts.length - 1) {
+            onProgress(progress, `Indexed ${i + 1} of ${total} posts`);
+          }
+
+          // Yield to event loop periodically
+          if (i % 20 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
+        }
+
+        onProgress(100, `Reindexed ${total} posts`);
+        console.log(`Reindexed search text for ${total} posts`);
+      },
+    };
+
+    await taskManager.runTask(task);
+  }
+
   async rebuildDatabaseFromFiles(): Promise<void> {
     const postsBaseDir = this.getPostsBaseDir();
     const task: Task<void> = {

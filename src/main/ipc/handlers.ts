@@ -214,6 +214,19 @@ export function registerIpcHandlers(): void {
     return engine.rebuildAllPostLinks();
   });
 
+  ipcMain.handle('posts:reindexText', async () => {
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+    const engine = getPostEngine();
+    if (project) {
+      engine.setProjectContext(project.id);
+    }
+    // Fire and forget - let it run as a background task
+    engine.reindexText().catch(err => {
+      console.error('Text reindex failed:', err);
+    });
+  });
+
   // ============ Media Handlers ============
 
   ipcMain.handle('media:import', async (_, sourcePath: string, metadata?: Partial<MediaData>) => {
