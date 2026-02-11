@@ -1,7 +1,21 @@
 import React, { useEffect } from 'react';
 import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast } from './components';
-import { useAppStore, PostData, MediaData, TaskProgress } from './store';
+import { useAppStore, PostData, MediaData, TaskProgress, TabState } from './store';
 import './App.css';
+
+// Helper to load tabs for a project from localStorage
+const TAB_STATE_PREFIX = 'bds-tabs-';
+const loadTabsForProject = (projectId: string): TabState | null => {
+  try {
+    const stored = localStorage.getItem(`${TAB_STATE_PREFIX}${projectId}`);
+    if (stored) {
+      return JSON.parse(stored) as TabState;
+    }
+  } catch (error) {
+    console.error('Failed to load tab state:', error);
+  }
+  return null;
+};
 
 const App: React.FC = () => {
   const {
@@ -24,6 +38,7 @@ const App: React.FC = () => {
     setActiveView,
     setSelectedPost,
     openTab,
+    restoreTabState,
   } = useAppStore();
 
   // Load initial data
@@ -32,7 +47,7 @@ const App: React.FC = () => {
       setLoading(true);
       try {
         // First, get active project to set the correct context in backend engines
-        await window.electronAPI?.projects.getActive();
+        const activeProject = await window.electronAPI?.projects.getActive();
         
         // Load posts (now with correct project context, limited to 500)
         const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
@@ -45,6 +60,14 @@ const App: React.FC = () => {
         const media = await window.electronAPI?.media.getAll();
         if (media) {
           setMedia(media as MediaData[]);
+        }
+        
+        // Restore tabs for the active project
+        if (activeProject && (activeProject as { id: string }).id) {
+          const savedTabState = loadTabsForProject((activeProject as { id: string }).id);
+          if (savedTabState) {
+            restoreTabState(savedTabState);
+          }
         }
 
         // Re-configure Dropbox sync from saved credentials
@@ -87,6 +110,25 @@ const App: React.FC = () => {
     };
 
     loadData();
+  }, []);
+
+  // Save tabs when window closes
+  useEffect(() => {
+    const saveTabsOnUnload = () => {
+      const state = useAppStore.getState();
+      const projectId = state.activeProject?.id;
+      if (projectId) {
+        const tabState = state.getTabState();
+        try {
+          localStorage.setItem(`${TAB_STATE_PREFIX}${projectId}`, JSON.stringify(tabState));
+        } catch (error) {
+          console.error('Failed to save tab state on unload:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', saveTabsOnUnload);
+    return () => window.removeEventListener('beforeunload', saveTabsOnUnload);
   }, []);
 
   // Set up event listeners for real-time updates

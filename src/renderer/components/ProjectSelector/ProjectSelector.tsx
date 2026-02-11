@@ -1,10 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useAppStore, ProjectData, PostData, MediaData } from '../../store';
+import { useAppStore, ProjectData, PostData, MediaData, TabState } from '../../store';
 import { showToast } from '../Toast';
 import './ProjectSelector.css';
 
+// Helper functions for project-specific tab persistence
+const TAB_STATE_PREFIX = 'bds-tabs-';
+
+const saveTabsForProject = (projectId: string, tabState: TabState): void => {
+  try {
+    localStorage.setItem(`${TAB_STATE_PREFIX}${projectId}`, JSON.stringify(tabState));
+  } catch (error) {
+    console.error('Failed to save tab state:', error);
+  }
+};
+
+const loadTabsForProject = (projectId: string): TabState | null => {
+  try {
+    const stored = localStorage.getItem(`${TAB_STATE_PREFIX}${projectId}`);
+    if (stored) {
+      return JSON.parse(stored) as TabState;
+    }
+  } catch (error) {
+    console.error('Failed to load tab state:', error);
+  }
+  return null;
+};
+
 export const ProjectSelector: React.FC = () => {
-  const { projects, activeProject, setProjects, setActiveProject, setPosts, setMedia, setSelectedPost, setSelectedMedia, removeProject } = useAppStore();
+  const { projects, activeProject, setProjects, setActiveProject, setPosts, setMedia, setSelectedPost, setSelectedMedia, removeProject, getTabState, restoreTabState, clearTabs } = useAppStore();
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -51,6 +74,15 @@ export const ProjectSelector: React.FC = () => {
     }
 
     try {
+      // Save current project's tab state before switching
+      if (activeProject) {
+        const currentTabState = getTabState();
+        saveTabsForProject(activeProject.id, currentTabState);
+      }
+      
+      // Clear tabs for the transition
+      clearTabs();
+      
       const updatedProject = await window.electronAPI?.projects.setActive(project.id);
       if (updatedProject) {
         setActiveProject(updatedProject as ProjectData);
@@ -69,6 +101,12 @@ export const ProjectSelector: React.FC = () => {
           setPosts(items, hasMore, total);
         }
         if (mediaResult) setMedia(mediaResult as MediaData[]);
+        
+        // Restore tabs for the new project
+        const savedTabState = loadTabsForProject(project.id);
+        if (savedTabState) {
+          restoreTabState(savedTabState);
+        }
         
         showToast.success(`Switched to ${project.name}`);
       }
