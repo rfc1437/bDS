@@ -21,7 +21,7 @@ export const CredentialsPanel: React.FC = () => {
     sshKeyPath: '',
   });
   const [activeTab, setActiveTab] = useState<'ftp' | 'ssh'>('ftp');
-  const [showTokens, setShowTokens] = useState(false);
+  const [showTokens, _setShowTokens] = useState(false);
 
   // Load saved credentials (in a real app, use secure storage)
   useEffect(() => {

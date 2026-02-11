@@ -97,7 +97,7 @@ const SettingSection: React.FC<{
 };
 
 export const SettingsView: React.FC = () => {
-  const { preferredEditorMode, setPreferredEditorMode, syncConfigured, activeProject, setActiveProject } = useAppStore();
+  const { preferredEditorMode, setPreferredEditorMode, activeProject, setActiveProject } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [credentials, setCredentials] = useState<Credentials>(defaultCredentials);
   const [showSecrets, setShowSecrets] = useState(false);
@@ -112,12 +112,6 @@ export const SettingsView: React.FC = () => {
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
   const [newCategoryInput, setNewCategoryInput] = useState('');
-
-  // Check if a setting matches the search query
-  const matchesSearch = useCallback((text: string) => {
-    if (!searchQuery) return true;
-    return text.toLowerCase().includes(searchQuery.toLowerCase());
-  }, [searchQuery]);
 
   // Check if a section has any matching settings
   const sectionHasMatches = useCallback((sectionKeywords: string[]) => {
@@ -657,9 +651,9 @@ export const SettingsView: React.FC = () => {
               showToast.loading('Rebuilding posts database...');
               try {
                 await window.electronAPI?.posts.rebuildFromFiles();
-                const posts = await window.electronAPI?.posts.getAll();
-                if (posts) {
-                  useAppStore.getState().setPosts(posts as any[]);
+                const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
+                if (postsResult) {
+                  useAppStore.getState().setPosts(postsResult.items, postsResult.hasMore, postsResult.total);
                 }
                 showToast.dismiss();
                 showToast.success('Posts database rebuilt');

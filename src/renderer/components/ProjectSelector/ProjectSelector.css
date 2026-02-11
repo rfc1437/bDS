@@ -71,29 +71,6 @@
   overflow-y: auto;
 }
 
-.project-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  color: var(--vscode-dropdown-foreground);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-item:hover {
-  background-color: var(--vscode-list-hoverBackground);
-}
-
-.project-item.active {
-  background-color: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
-}
-
 .project-item-name {
   flex: 1;
   overflow: hidden;
@@ -272,4 +249,109 @@
 
 .btn-secondary:hover {
   background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.btn-danger {
+  padding: 6px 14px;
+  background-color: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  color: var(--vscode-inputValidation-errorForeground, #f48771);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #6b2222;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Project item with delete button */
+.project-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: none;
+}
+
+.project-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--vscode-dropdown-foreground);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.project-item.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.project-item.active .project-item-content {
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.project-item-delete {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.project-item:hover .project-item-delete {
+  display: flex;
+}
+
+.project-item-delete:hover {
+  opacity: 1;
+  color: var(--vscode-errorForeground, #f48771);
+}
+
+/* Delete modal styles */
+.modal-danger .modal-header h3 {
+  color: var(--vscode-errorForeground, #f48771);
+}
+
+.delete-warning {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--vscode-foreground);
+  line-height: 1.5;
+}
+
+.delete-list {
+  margin: 0 0 16px 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.6;
+}
+
+.delete-list li {
+  margin: 4px 0;
+}
+
+.delete-confirm-text {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: var(--vscode-foreground);
 }

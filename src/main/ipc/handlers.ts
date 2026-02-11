@@ -28,6 +28,11 @@ export function registerIpcHandlers(): void {
     return engine.deleteProject(id);
   });
 
+  ipcMain.handle('projects:deleteWithData', async (_, id: string) => {
+    const engine = getProjectEngine();
+    return engine.deleteProjectWithData(id);
+  });
+
   ipcMain.handle('projects:get', async (_, id: string) => {
     const engine = getProjectEngine();
     return engine.getProject(id);
