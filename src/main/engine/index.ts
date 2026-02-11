@@ -5,6 +5,14 @@ export { SyncEngine, getSyncEngine, type SyncConfig, type SyncResult, type SyncD
 export { ProjectEngine, getProjectEngine, type ProjectData } from './ProjectEngine';
 export { MetaEngine, getMetaEngine } from './MetaEngine';
 export {
+  stemText,
+  stemWord,
+  stemQuery,
+  prepareForFTS,
+  getSupportedLanguages,
+  type SupportedLanguage,
+} from './stemmer';
+export {
   DropboxSyncEngine,
   getDropboxSyncEngine,
   type DropboxSyncConfig,

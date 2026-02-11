@@ -41,7 +41,6 @@ export interface SearchResult {
   title: string;
   slug: string;
   excerpt?: string;
-  score: number;
 }
 
 export interface MediaData {

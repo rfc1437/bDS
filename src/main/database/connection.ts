@@ -318,17 +318,37 @@ export class DatabaseConnection {
     }
 
     // Create FTS5 virtual table for full-text search
+    // Only stores: id (unindexed, for lookups) and content (stemmed text for matching)
+    // Post data for display comes from the posts table or filesystem files
     await this.localClient.execute(`
       CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
         id UNINDEXED,
-        title,
         content,
-        excerpt,
-        tags,
-        categories,
         content_rowid=rowid
       );
     `);
+
+    // Migration: Check if old FTS schema (with multiple columns) exists and recreate
+    // Old schema had: id, title, content, excerpt, tags, categories, content_stemmed
+    // New schema has: id, content (stemmed only)
+    try {
+      // Try to query old columns - if they exist, we need to migrate
+      await this.localClient.execute("SELECT title FROM posts_fts LIMIT 0");
+      
+      // Old schema exists - recreate with new simple schema
+      console.log('Migrating posts_fts table to simplified schema...');
+      await this.localClient.execute('DROP TABLE IF EXISTS posts_fts');
+      await this.localClient.execute(`
+        CREATE VIRTUAL TABLE posts_fts USING fts5(
+          id UNINDEXED,
+          content,
+          content_rowid=rowid
+        );
+      `);
+      console.log('FTS table migrated - rebuild index required');
+    } catch {
+      // Old columns don't exist - we have the new schema or no data, all good
+    }
 
     // Create default project if none exists
     const existingProjects = await this.localClient.execute('SELECT COUNT(*) as count FROM projects');
