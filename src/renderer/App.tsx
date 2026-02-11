@@ -46,6 +46,31 @@ const App: React.FC = () => {
           setMedia(media as MediaData[]);
         }
 
+        // Re-configure sync backends from saved credentials
+        const savedCreds = localStorage.getItem('bds-credentials');
+        if (savedCreds) {
+          try {
+            const creds = JSON.parse(savedCreds);
+            if (creds.tursoUrl && creds.tursoToken) {
+              await window.electronAPI?.sync.configure({
+                tursoUrl: creds.tursoUrl,
+                tursoAuthToken: creds.tursoToken,
+                autoSync: true,
+                syncInterval: 5,
+              });
+            }
+            if (creds.dropboxAccessToken && creds.dropboxAppKey) {
+              await window.electronAPI?.dropbox?.configure({
+                accessToken: creds.dropboxAccessToken,
+                appKey: creds.dropboxAppKey,
+                remotePath: creds.dropboxRemotePath || '/blog',
+              });
+            }
+          } catch (e) {
+            console.error('Failed to restore sync configuration:', e);
+          }
+        }
+
         // Check sync status
         const syncConfigured = await window.electronAPI?.sync.isConfigured();
         setSyncConfigured(syncConfigured || false);
@@ -136,10 +161,12 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
-      window.electronAPI?.on('sync:failed', () => {
+      window.electronAPI?.on('sync:failed', (errorMsg: unknown) => {
         setSyncStatus('error');
         showToast.dismiss();
-        showToast.error('Sync failed');
+        const message = typeof errorMsg === 'string' && errorMsg ? errorMsg : 'Unknown error';
+        showToast.error(`Sync failed: ${message}`);
+        console.error('Sync failed:', message);
       }) || (() => {})
     );
 

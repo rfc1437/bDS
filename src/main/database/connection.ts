@@ -64,7 +64,21 @@ export class DatabaseConnection {
     return this.localDb;
   }
 
-  async initializeRemote(): Promise<DrizzleDB | null> {
+  async initializeRemote(remoteConfig?: { tursoUrl: string; tursoAuthToken: string }): Promise<DrizzleDB | null> {
+    // Update config if new credentials are provided
+    if (remoteConfig) {
+      // Close existing remote connection if credentials changed
+      if (this.remoteClient &&
+          (this.config.tursoUrl !== remoteConfig.tursoUrl ||
+           this.config.tursoAuthToken !== remoteConfig.tursoAuthToken)) {
+        this.remoteClient.close();
+        this.remoteClient = null;
+        this.remoteDb = null;
+      }
+      this.config.tursoUrl = remoteConfig.tursoUrl;
+      this.config.tursoAuthToken = remoteConfig.tursoAuthToken;
+    }
+
     if (!this.config.tursoUrl || !this.config.tursoAuthToken) {
       return null;
     }
