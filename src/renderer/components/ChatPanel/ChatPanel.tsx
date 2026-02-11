@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Markdown from 'marked-react';
 import type { ChatMessage, ChatConversation, ChatModel } from '../../types/electron';
 import './ChatPanel.css';
 
@@ -242,7 +243,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
               {msg.role === 'user' ? 'You' : 'Assistant'}
             </span>
           </div>
-          <div className="chat-message-text">{msg.content}</div>
+          <div className="chat-message-text">
+            {msg.role === 'assistant' ? (
+              <Markdown gfm>{msg.content}</Markdown>
+            ) : (
+              msg.content
+            )}
+          </div>
         </div>
       </div>
     );
@@ -341,7 +348,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
                 <span className="chat-message-role">Assistant</span>
                 <span className="streaming-indicator">{'\u25CF'}</span>
               </div>
-              <div className="chat-message-text">{streamingContent}</div>
+              <div className="chat-message-text">
+                <Markdown gfm>{streamingContent}</Markdown>
+              </div>
             </div>
           </div>
         )}

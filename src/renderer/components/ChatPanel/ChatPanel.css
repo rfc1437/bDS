@@ -399,3 +399,127 @@
   color: var(--vscode-errorForeground);
   margin-top: 4px;
 }
+
+/* Markdown content styling for AI responses */
+.chat-message.assistant .chat-message-text {
+  white-space: normal;
+}
+
+.chat-message-text p {
+  margin: 0 0 0.5em 0;
+}
+
+.chat-message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-text h1,
+.chat-message-text h2,
+.chat-message-text h3,
+.chat-message-text h4 {
+  margin: 0.75em 0 0.5em 0;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.chat-message-text h1:first-child,
+.chat-message-text h2:first-child,
+.chat-message-text h3:first-child {
+  margin-top: 0;
+}
+
+.chat-message-text h1 { font-size: 1.3em; }
+.chat-message-text h2 { font-size: 1.2em; }
+.chat-message-text h3 { font-size: 1.1em; }
+.chat-message-text h4 { font-size: 1em; }
+
+.chat-message-text ul,
+.chat-message-text ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.chat-message-text li {
+  margin: 0.25em 0;
+}
+
+.chat-message-text code {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  padding: 0.15em 0.4em;
+  background-color: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.2));
+  border-radius: 3px;
+}
+
+.chat-message-text pre {
+  margin: 0.75em 0;
+  padding: 12px;
+  overflow-x: auto;
+  background-color: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.2));
+  border-radius: 6px;
+}
+
+.chat-message-text pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.chat-message-text table {
+  width: 100%;
+  margin: 0.75em 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.chat-message-text th,
+.chat-message-text td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--vscode-editorGroup-border);
+}
+
+.chat-message-text th {
+  font-weight: 600;
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.chat-message-text tr:nth-child(even) {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.chat-message-text blockquote {
+  margin: 0.75em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid var(--vscode-textLink-foreground);
+  background-color: var(--vscode-textBlockQuote-background, rgba(0, 0, 0, 0.1));
+  color: var(--vscode-descriptionForeground);
+}
+
+.chat-message-text blockquote p {
+  margin: 0;
+}
+
+.chat-message-text a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+}
+
+.chat-message-text a:hover {
+  text-decoration: underline;
+}
+
+.chat-message-text hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--vscode-editorGroup-border);
+}
+
+.chat-message-text strong {
+  font-weight: 600;
+}
+
+.chat-message-text em {
+  font-style: italic;
+}
