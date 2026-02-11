@@ -126,55 +126,8 @@ describe('SettingsView Behavior', () => {
     });
   });
 
-  describe('Post Categories (localStorage)', () => {
-    it('should save categories to localStorage', () => {
-      const categories = ['article', 'picture', 'aside', 'page', 'review'];
-
-      localStorage.setItem('bds-categories', JSON.stringify(categories));
-
-      const saved = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      expect(saved).toContain('article');
-      expect(saved).toContain('review');
-    });
-
-    it('should load categories from localStorage', () => {
-      const categories = ['custom1', 'custom2', 'custom3'];
-      localStorage.setItem('bds-categories', JSON.stringify(categories));
-
-      const loaded = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      expect(loaded).toEqual(['custom1', 'custom2', 'custom3']);
-    });
-
-    it('should handle empty categories', () => {
-      const loaded = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      expect(loaded).toEqual([]);
-    });
-
-    it('should add new category', () => {
-      const categories = ['article', 'picture'];
-      localStorage.setItem('bds-categories', JSON.stringify(categories));
-
-      const loaded = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      const updated = [...loaded, 'tutorial'];
-      localStorage.setItem('bds-categories', JSON.stringify(updated));
-
-      const result = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      expect(result).toContain('tutorial');
-    });
-
-    it('should remove category', () => {
-      const categories = ['article', 'picture', 'aside'];
-      localStorage.setItem('bds-categories', JSON.stringify(categories));
-
-      const loaded = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      const updated = loaded.filter((c: string) => c !== 'aside');
-      localStorage.setItem('bds-categories', JSON.stringify(updated));
-
-      const result = JSON.parse(localStorage.getItem('bds-categories') || '[]');
-      expect(result).not.toContain('aside');
-      expect(result).toContain('article');
-    });
-  });
+  // Note: Post categories are now managed via MetaEngine (project-scoped)
+  // and tested in tests/engine/MetaEngine.test.ts
 
   describe('API Integration Patterns', () => {
     beforeEach(() => {

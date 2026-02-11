@@ -96,11 +96,13 @@ export class PostEngine extends EventEmitter {
   /**
    * Update the FTS index for a post.
    * Updates the FTS index for a post.
-   * Stores only the stemmed content (combining title, excerpt, content, tags, categories).
+   * Stores the stemmed content (combining title, excerpt, content, tags, categories).
+   * Includes project_id for project-scoped search.
    * Only the post ID is returned from searches - actual post data comes from DB/files.
    */
   private async updateFTSIndex(post: {
     id: string;
+    projectId: string;
     title: string;
     content: string;
     excerpt?: string;
@@ -124,10 +126,10 @@ export class PostEngine extends EventEmitter {
 
     const stemmedContent = stemText(allText, this.searchLanguage);
 
-    // Insert with only id and stemmed content
+    // Insert with id, project_id, and stemmed content
     await client.execute({
-      sql: 'INSERT INTO posts_fts (id, content) VALUES (?, ?)',
-      args: [post.id, stemmedContent],
+      sql: 'INSERT INTO posts_fts (id, project_id, content) VALUES (?, ?, ?)',
+      args: [post.id, post.projectId, stemmedContent],
     });
   }
 
@@ -670,26 +672,25 @@ export class PostEngine extends EventEmitter {
       // Stem the query for multilingual matching
       const stemmedQuery = stemQuery(query, this.searchLanguage);
       
-      // Search the stemmed content, only return post IDs
+      // Search the stemmed content, filtered by project_id for project isolation
       const result = await client.execute({
-        sql: `SELECT id FROM posts_fts WHERE posts_fts MATCH ? ORDER BY rank LIMIT 50`,
-        args: [stemmedQuery],
+        sql: `SELECT id FROM posts_fts WHERE project_id = ? AND posts_fts MATCH ? ORDER BY rank LIMIT 50`,
+        args: [this.currentProjectId, stemmedQuery],
       });
 
-      // Filter to current project and fetch actual post data
-      const projectPosts = await this.getAllPostsUnpaginated();
-      const projectPostMap = new Map(projectPosts.map(p => [p.id, p]));
-
+      // Fetch actual post data for results
+      const db = getDatabase().getLocal();
       const searchResults: SearchResult[] = [];
+      
       for (const row of result.rows) {
         const postId = row.id as string;
-        const post = projectPostMap.get(postId);
+        const post = await db.select().from(posts).where(eq(posts.id, postId)).get();
         if (post) {
           searchResults.push({
             id: post.id,
             title: post.title,
             slug: post.slug,
-            excerpt: post.excerpt,
+            excerpt: post.excerpt ?? undefined,
           });
         }
       }
