@@ -331,24 +331,6 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     }
   };
 
-  const handleUnpublish = async () => {
-    try {
-      const updated = await window.electronAPI?.posts.unpublish(post.id);
-      if (updated) {
-        updatePost(post.id, updated as Partial<PostData>);
-        showToast.success('Post unpublished');
-      }
-    } catch (error) {
-      console.error('Failed to unpublish post:', error);
-      const err = error as Error;
-      showErrorModal({
-        title: 'Unpublish Failed',
-        message: err.message || 'Failed to unpublish post',
-        stack: err.stack,
-      });
-    }
-  };
-
   const handleDiscard = async () => {
     // If this post has a published version, revert to it
     // If never published, delete the post entirely
@@ -436,12 +418,10 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   useEffect(() => {
     const unsubscribeSave = window.electronAPI?.on('menu:save', handleSave);
     const unsubscribePublish = window.electronAPI?.on('menu:publishSelected', handlePublish);
-    const unsubscribeUnpublish = window.electronAPI?.on('menu:unpublishSelected', handleUnpublish);
 
     return () => {
       unsubscribeSave?.();
       unsubscribePublish?.();
-      unsubscribeUnpublish?.();
     };
   }, [handleSave]);
 
@@ -459,21 +439,13 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
             {post.status}
           </span>
           {isSaving && <span className="auto-save-indicator">Saving...</span>}
-          {post.status === 'draft' ? (
+          {post.status === 'draft' && (
             <button 
               onClick={handlePublish} 
               className="success"
               title="Save and make this post public"
             >
               Publish
-            </button>
-          ) : (
-            <button 
-              onClick={handleUnpublish} 
-              className="secondary" 
-              title="Return to draft status"
-            >
-              Unpublish
             </button>
           )}
           {post.status === 'draft' && (

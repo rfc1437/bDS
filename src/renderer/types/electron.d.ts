@@ -189,7 +189,6 @@ export interface ElectronAPI {
     getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;
     publish: (id: string) => Promise<PostData | null>;
-    unpublish: (id: string) => Promise<PostData | null>;
     discard: (id: string) => Promise<PostData | null>;
     hasPublishedVersion: (id: string) => Promise<boolean>;
     rebuildFromFiles: () => Promise<void>;

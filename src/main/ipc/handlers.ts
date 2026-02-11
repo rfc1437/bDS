@@ -135,11 +135,6 @@ export function registerIpcHandlers(): void {
     return engine.publishPost(id);
   });
 
-  ipcMain.handle('posts:unpublish', async (_, id: string) => {
-    const engine = getPostEngine();
-    return engine.unpublishPost(id);
-  });
-
   ipcMain.handle('posts:discard', async (_, id: string) => {
     const engine = getPostEngine();
     return engine.discardChanges(id);

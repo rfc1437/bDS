@@ -24,7 +24,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: (options?: { limit?: number; offset?: number }) => ipcRenderer.invoke('posts:getAll', options),
     getByStatus: (status: string) => ipcRenderer.invoke('posts:getByStatus', status),
     publish: (id: string) => ipcRenderer.invoke('posts:publish', id),
-    unpublish: (id: string) => ipcRenderer.invoke('posts:unpublish', id),
     discard: (id: string) => ipcRenderer.invoke('posts:discard', id),
     hasPublishedVersion: (id: string) => ipcRenderer.invoke('posts:hasPublishedVersion', id),
     rebuildFromFiles: () => ipcRenderer.invoke('posts:rebuildFromFiles'),
