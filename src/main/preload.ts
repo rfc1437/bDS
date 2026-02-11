@@ -129,6 +129,62 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncFromPosts: () => ipcRenderer.invoke('tags:syncFromPosts'),
   },
 
+  // AI Chat (Copilot SDK integration)
+  chat: {
+    // Authentication
+    checkReady: () => ipcRenderer.invoke('chat:checkReady'),
+    copilotAuthStatus: () => ipcRenderer.invoke('chat:copilotAuthStatus'),
+    copilotLogin: () => ipcRenderer.invoke('chat:copilotLogin'),
+    copilotLogout: () => ipcRenderer.invoke('chat:copilotLogout'),
+    
+    // Settings
+    getAvailableModels: () => ipcRenderer.invoke('chat:getAvailableModels'),
+    setDefaultModel: (modelId: string) => ipcRenderer.invoke('chat:setDefaultModel', modelId),
+    getSystemPrompt: () => ipcRenderer.invoke('chat:getSystemPrompt'),
+    setSystemPrompt: (prompt: string) => ipcRenderer.invoke('chat:setSystemPrompt', prompt),
+    
+    // Conversations
+    getConversations: () => ipcRenderer.invoke('chat:getConversations'),
+    createConversation: (title?: string, model?: string) => ipcRenderer.invoke('chat:createConversation', title, model),
+    getConversation: (id: string) => ipcRenderer.invoke('chat:getConversation', id),
+    updateConversation: (id: string, updates: { title?: string; model?: string }) => ipcRenderer.invoke('chat:updateConversation', id, updates),
+    deleteConversation: (id: string) => ipcRenderer.invoke('chat:deleteConversation', id),
+    
+    // Messaging
+    sendMessage: (conversationId: string, message: string) => ipcRenderer.invoke('chat:sendMessage', conversationId, message),
+    abortMessage: (conversationId: string) => ipcRenderer.invoke('chat:abortMessage', conversationId),
+    getHistory: (conversationId: string) => ipcRenderer.invoke('chat:getHistory', conversationId),
+    clearMessages: (conversationId: string) => ipcRenderer.invoke('chat:clearMessages', conversationId),
+    setConversationModel: (conversationId: string, modelId: string) => ipcRenderer.invoke('chat:setConversationModel', conversationId, modelId),
+    
+    // Event listeners for streaming/progress
+    onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; delta: string }) => callback(data);
+      ipcRenderer.on('chat-stream-delta', subscription);
+      return () => ipcRenderer.removeListener('chat-stream-delta', subscription);
+    },
+    onToolCall: (callback: (data: { conversationId: string; toolCall: unknown }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; toolCall: unknown }) => callback(data);
+      ipcRenderer.on('chat-tool-call', subscription);
+      return () => ipcRenderer.removeListener('chat-tool-call', subscription);
+    },
+    onToolResult: (callback: (data: { conversationId: string; result: unknown }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; result: unknown }) => callback(data);
+      ipcRenderer.on('chat-tool-result', subscription);
+      return () => ipcRenderer.removeListener('chat-tool-result', subscription);
+    },
+    onTitleUpdated: (callback: (data: { conversationId: string; title: string }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; title: string }) => callback(data);
+      ipcRenderer.on('chat-title-updated', subscription);
+      return () => ipcRenderer.removeListener('chat-title-updated', subscription);
+    },
+    onDeviceCode: (callback: (data: { verificationUri: string; userCode: string }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { verificationUri: string; userCode: string }) => callback(data);
+      ipcRenderer.on('copilot-device-code', subscription);
+      return () => ipcRenderer.removeListener('copilot-device-code', subscription);
+    },
+  },
+
   // Event listeners
   on: (channel: string, callback: (...args: unknown[]) => void) => {
     const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args);
@@ -224,6 +280,53 @@ export interface ElectronAPI {
     addCategory: (category: string) => Promise<string[]>;
     removeCategory: (category: string) => Promise<string[]>;
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[] }>;
+  };
+  tags: {
+    getAll: () => Promise<unknown[]>;
+    getWithCounts: () => Promise<unknown[]>;
+    get: (id: string) => Promise<unknown>;
+    getByName: (name: string) => Promise<unknown>;
+    create: (data: { name: string; color?: string }) => Promise<unknown>;
+    update: (id: string, data: { name?: string; color?: string | null }) => Promise<unknown>;
+    delete: (id: string) => Promise<boolean>;
+    merge: (sourceTagIds: string[], targetTagId: string) => Promise<void>;
+    rename: (id: string, newName: string) => Promise<unknown>;
+    getPostsWithTag: (tagId: string) => Promise<unknown[]>;
+    syncFromPosts: () => Promise<void>;
+  };
+  chat: {
+    // Authentication
+    checkReady: () => Promise<{ ready: boolean; authenticated: boolean }>;
+    copilotAuthStatus: () => Promise<{ authenticated: boolean; username?: string }>;
+    copilotLogin: () => Promise<{ success: boolean; error?: string; login?: string }>;
+    copilotLogout: () => Promise<void>;
+    
+    // Settings
+    getAvailableModels: () => Promise<Array<{ id: string; name: string }>>;
+    setDefaultModel: (modelId: string) => Promise<void>;
+    getSystemPrompt: () => Promise<string | null>;
+    setSystemPrompt: (prompt: string) => Promise<void>;
+    
+    // Conversations
+    getConversations: () => Promise<unknown[]>;
+    createConversation: (title?: string, model?: string) => Promise<unknown>;
+    getConversation: (id: string) => Promise<unknown>;
+    updateConversation: (id: string, updates: { title?: string; model?: string }) => Promise<unknown>;
+    deleteConversation: (id: string) => Promise<boolean>;
+    
+    // Messaging
+    sendMessage: (conversationId: string, message: string) => Promise<string>;
+    abortMessage: (conversationId: string) => Promise<void>;
+    getHistory: (conversationId: string) => Promise<unknown[]>;
+    clearMessages: (conversationId: string) => Promise<void>;
+    setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
+    
+    // Event listeners
+    onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => () => void;
+    onToolCall: (callback: (data: { conversationId: string; toolCall: unknown }) => void) => () => void;
+    onToolResult: (callback: (data: { conversationId: string; result: unknown }) => void) => () => void;
+    onTitleUpdated: (callback: (data: { conversationId: string; title: string }) => void) => () => void;
+    onDeviceCode: (callback: (data: { verificationUri: string; userCode: string }) => void) => () => void;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

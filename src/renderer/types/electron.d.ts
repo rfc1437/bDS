@@ -170,6 +170,70 @@ export interface SyncTagsResult {
   added: string[];
 }
 
+// Chat/AI types
+export interface ChatConversation {
+  id: string;
+  projectId: string;
+  title: string;
+  model?: string;
+  copilotSessionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string;
+  toolCallId?: string;
+  toolCalls?: string;
+  createdAt: string;
+}
+
+export interface ChatModel {
+  id: string;
+  name: string;
+}
+
+export interface ChatAuthStatus {
+  authenticated: boolean;
+  username?: string;
+}
+
+export interface ChatReadyStatus {
+  ready: boolean;
+  authenticated: boolean;
+}
+
+export interface ChatStreamDelta {
+  conversationId: string;
+  delta: string;
+}
+
+export interface ChatToolCall {
+  conversationId: string;
+  toolCall: {
+    name: string;
+    arguments: Record<string, unknown>;
+  };
+}
+
+export interface ChatToolResult {
+  conversationId: string;
+  result: unknown;
+}
+
+export interface ChatTitleUpdate {
+  conversationId: string;
+  title: string;
+}
+
+export interface ChatDeviceCode {
+  verificationUri: string;
+  userCode: string;
+}
+
 export interface ElectronAPI {
   projects: {
     create: (data: { name: string; description?: string; slug?: string }) => Promise<ProjectData>;
@@ -273,6 +337,40 @@ export interface ElectronAPI {
     rename: (id: string, newName: string) => Promise<RenameTagResult>;
     getPostsWithTag: (tagId: string) => Promise<string[]>;
     syncFromPosts: () => Promise<SyncTagsResult>;
+  };
+  chat: {
+    // Authentication
+    checkReady: () => Promise<ChatReadyStatus>;
+    copilotAuthStatus: () => Promise<ChatAuthStatus>;
+    copilotLogin: () => Promise<{ success: boolean; error?: string; login?: string }>;
+    copilotLogout: () => Promise<void>;
+    
+    // Settings
+    getAvailableModels: () => Promise<ChatModel[]>;
+    setDefaultModel: (modelId: string) => Promise<void>;
+    getSystemPrompt: () => Promise<string | null>;
+    setSystemPrompt: (prompt: string) => Promise<void>;
+    
+    // Conversations
+    getConversations: () => Promise<ChatConversation[]>;
+    createConversation: (title?: string, model?: string) => Promise<ChatConversation>;
+    getConversation: (id: string) => Promise<ChatConversation | null>;
+    updateConversation: (id: string, updates: { title?: string; model?: string }) => Promise<ChatConversation | null>;
+    deleteConversation: (id: string) => Promise<boolean>;
+    
+    // Messaging
+    sendMessage: (conversationId: string, message: string) => Promise<string>;
+    abortMessage: (conversationId: string) => Promise<void>;
+    getHistory: (conversationId: string) => Promise<ChatMessage[]>;
+    clearMessages: (conversationId: string) => Promise<void>;
+    setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
+    
+    // Event listeners for streaming/progress
+    onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;
+    onToolCall: (callback: (data: ChatToolCall) => void) => () => void;
+    onToolResult: (callback: (data: ChatToolResult) => void) => () => void;
+    onTitleUpdated: (callback: (data: ChatTitleUpdate) => void) => () => void;
+    onDeviceCode: (callback: (data: ChatDeviceCode) => void) => () => void;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

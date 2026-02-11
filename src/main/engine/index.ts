@@ -37,4 +37,16 @@ export {
   type FileDownloadResult,
   type ConflictResolution,
 } from './DropboxSyncEngine';
+export {
+  ChatEngine,
+  type ChatConversationData,
+  type ChatMessageData,
+  type CreateConversationInput,
+} from './ChatEngine';
+export {
+  CopilotManager,
+  type SendMessageOptions,
+  type SendMessageResult,
+} from './CopilotManager';
+
 

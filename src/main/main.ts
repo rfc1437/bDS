@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase } from './database';
-import { registerIpcHandlers } from './ipc';
+import { registerIpcHandlers, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 
@@ -385,6 +385,10 @@ async function initialize(): Promise<void> {
 
   // Register IPC handlers
   registerIpcHandlers();
+  
+  // Initialize and register chat handlers
+  initializeChatHandlers(() => mainWindow);
+  registerChatHandlers();
 }
 
 // App lifecycle
@@ -406,6 +410,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', async () => {
+  // Cleanup chat resources
+  await cleanupChatHandlers();
+  
   const db = getDatabase();
   await db.close();
 });

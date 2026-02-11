@@ -410,6 +410,34 @@ export class DatabaseConnection {
         args: ['default', 'Default Project', 'default', 'Your first blog project', now, now, 1],
       });
     }
+
+    // Create chat_conversations table for AI chat persistence
+    await this.localClient.execute(`
+      CREATE TABLE IF NOT EXISTS chat_conversations (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        model TEXT,
+        copilot_session_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_chat_conversations_updated_at ON chat_conversations(updated_at)');
+
+    // Create chat_messages table for storing conversation messages
+    await this.localClient.execute(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT,
+        tool_call_id TEXT,
+        tool_calls TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+      )
+    `);
+    await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id)');
   }
 
   async close(): Promise<void> {
