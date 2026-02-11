@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import MonacoEditor from '@monaco-editor/react';
 import { useAppStore, PostData, EditorMode, MediaData } from '../../store';
 import { showToast } from '../Toast';
-import { WysiwygEditor } from '../WysiwygEditor';
+import { MilkdownEditor } from '../MilkdownEditor';
 import { Lightbox, useMarkdownImages } from '../Lightbox';
 import { PostLinks } from '../PostLinks';
 import { ErrorModal } from '../ErrorModal';
@@ -579,7 +579,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           </div>
           
           {editorMode === 'wysiwyg' && (
-            <WysiwygEditor
+            <MilkdownEditor
               content={content}
               onChange={setContent}
               placeholder="Start writing..."

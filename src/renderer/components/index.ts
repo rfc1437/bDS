@@ -6,7 +6,7 @@ export { Panel } from './Panel';
 export { TabBar } from './TabBar';
 export { ToastContainer, toast, showToast, type ToastType } from './Toast';
 export { ProjectSelector } from './ProjectSelector';
-export { WysiwygEditor } from './WysiwygEditor';
+export { MilkdownEditor } from './MilkdownEditor';
 export { Lightbox, ImageGallery, useMarkdownImages } from './Lightbox';
 export { TaskPopup } from './TaskPopup';
 export { ResizablePanel } from './ResizablePanel';
