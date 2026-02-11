@@ -1053,30 +1053,30 @@ export const Editor: React.FC = () => {
   // Show settings if settings tab is active or settings view with no tab
   if (showSettings) {
     return (
-      <>
+      <div className="editor">
         <SettingsView />
         {renderErrorModal()}
-      </>
+      </div>
     );
   }
 
   // Show tags if tags tab is active
   if (showTags) {
     return (
-      <>
+      <div className="editor">
         <TagsView />
         {renderErrorModal()}
-      </>
+      </div>
     );
   }
 
   // Show chat if chat tab is active
   if (showChat && activeTabId) {
     return (
-      <>
+      <div className="editor">
         <ChatPanel key={activeTabId} conversationId={activeTabId} />
         {renderErrorModal()}
-      </>
+      </div>
     );
   }
 
@@ -1085,41 +1085,41 @@ export const Editor: React.FC = () => {
     const post = posts.find(p => p.id === activeTabId);
     if (post) {
       return (
-        <>
+        <div className="editor">
           <PostEditor key={post.id} post={post} />
           {renderErrorModal()}
-        </>
+        </div>
       );
     }
     
     // Post not found - show loading or empty state
     return (
-      <>
+      <div className="editor">
         <div className="editor-empty">
           <div className="welcome-content">
             <p className="text-muted">{isLoading ? 'Loading post...' : ''}</p>
           </div>
         </div>
         {renderErrorModal()}
-      </>
+      </div>
     );
   }
 
   // Show media editor if a media tab is active
   if (showMedia && activeTabId) {
     return (
-      <>
+      <div className="editor">
         <MediaEditor key={activeTabId} mediaId={activeTabId} />
         {renderErrorModal()}
-      </>
+      </div>
     );
   }
 
   // No tab active - show dashboard
   return (
-    <>
+    <div className="editor">
       <Dashboard />
       {renderErrorModal()}
-    </>
+    </div>
   );
 };
