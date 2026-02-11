@@ -668,6 +668,81 @@ export class PostEngine extends EventEmitter {
     return Array.from(categories).sort();
   }
 
+  async getTagsWithCounts(): Promise<{ tag: string; count: number }[]> {
+    const db = getDatabase().getLocal();
+    const dbPosts = await db
+      .select({ tags: posts.tags })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    const tagCounts = new Map<string, number>();
+    for (const row of dbPosts) {
+      const parsed: string[] = JSON.parse(row.tags || '[]');
+      for (const tag of parsed) {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      }
+    }
+
+    return Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  async getCategoriesWithCounts(): Promise<{ category: string; count: number }[]> {
+    const db = getDatabase().getLocal();
+    const dbPosts = await db
+      .select({ categories: posts.categories })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    const catCounts = new Map<string, number>();
+    for (const row of dbPosts) {
+      const parsed: string[] = JSON.parse(row.categories || '[]');
+      for (const cat of parsed) {
+        catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+      }
+    }
+
+    return Array.from(catCounts.entries())
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  async getDashboardStats(): Promise<{
+    totalPosts: number;
+    draftCount: number;
+    publishedCount: number;
+    archivedCount: number;
+  }> {
+    const db = getDatabase().getLocal();
+    const dbPosts = await db
+      .select({ status: posts.status })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    let draftCount = 0;
+    let publishedCount = 0;
+    let archivedCount = 0;
+
+    for (const row of dbPosts) {
+      switch (row.status) {
+        case 'draft': draftCount++; break;
+        case 'published': publishedCount++; break;
+        case 'archived': archivedCount++; break;
+      }
+    }
+
+    return {
+      totalPosts: dbPosts.length,
+      draftCount,
+      publishedCount,
+      archivedCount,
+    };
+  }
+
   async getPostsByYearMonth(): Promise<{ year: number; month: number; count: number }[]> {
     const allPosts = await this.getAllPostsUnpaginated();
     const counts = new Map<string, { year: number; month: number; count: number }>();

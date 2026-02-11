@@ -168,6 +168,21 @@ export function registerIpcHandlers(): void {
     return engine.getPostsByYearMonth();
   });
 
+  ipcMain.handle('posts:getTagsWithCounts', async () => {
+    const engine = getPostEngine();
+    return engine.getTagsWithCounts();
+  });
+
+  ipcMain.handle('posts:getCategoriesWithCounts', async () => {
+    const engine = getPostEngine();
+    return engine.getCategoriesWithCounts();
+  });
+
+  ipcMain.handle('posts:getDashboardStats', async () => {
+    const engine = getPostEngine();
+    return engine.getDashboardStats();
+  });
+
   ipcMain.handle('posts:getLinksTo', async (_, id: string) => {
     const engine = getPostEngine();
     return engine.getLinksTo(id);

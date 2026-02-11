@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTags: () => ipcRenderer.invoke('posts:getTags'),
     getCategories: () => ipcRenderer.invoke('posts:getCategories'),
     getByYearMonth: () => ipcRenderer.invoke('posts:getByYearMonth'),
+    getTagsWithCounts: () => ipcRenderer.invoke('posts:getTagsWithCounts'),
+    getCategoriesWithCounts: () => ipcRenderer.invoke('posts:getCategoriesWithCounts'),
+    getDashboardStats: () => ipcRenderer.invoke('posts:getDashboardStats'),
     getLinksTo: (id: string) => ipcRenderer.invoke('posts:getLinksTo', id),
     getLinkedBy: (id: string) => ipcRenderer.invoke('posts:getLinkedBy', id),
     rebuildLinks: () => ipcRenderer.invoke('posts:rebuildLinks'),
@@ -134,6 +137,9 @@ export interface ElectronAPI {
     getTags: () => Promise<string[]>;
     getCategories: () => Promise<string[]>;
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
+    getTagsWithCounts: () => Promise<{ tag: string; count: number }[]>;
+    getCategoriesWithCounts: () => Promise<{ category: string; count: number }[]>;
+    getDashboardStats: () => Promise<{ totalPosts: number; draftCount: number; publishedCount: number; archivedCount: number }>;
     getLinksTo: (id: string) => Promise<{ id: string; title: string; slug: string }[]>;
     getLinkedBy: (id: string) => Promise<{ id: string; title: string; slug: string }[]>;
     rebuildLinks: () => Promise<void>;

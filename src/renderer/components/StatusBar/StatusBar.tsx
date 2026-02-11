@@ -4,14 +4,15 @@ import { ProjectSelector } from '../ProjectSelector';
 import './StatusBar.css';
 
 export const StatusBar: React.FC = () => {
-  const { 
-    syncStatus, 
-    syncConfigured, 
-    pendingChanges, 
-    posts, 
+  const {
+    syncStatus,
+    syncConfigured,
+    pendingChanges,
+    posts,
     media,
     tasks,
     selectedPostId,
+    totalPosts,
   } = useAppStore();
 
   const runningTasks = tasks.filter(t => t.status === 'running');
@@ -61,7 +62,7 @@ export const StatusBar: React.FC = () => {
 
         {/* Stats */}
         <div className="status-bar-item">
-          <span>{posts.length} posts</span>
+          <span>{totalPosts || posts.length} posts</span>
         </div>
         <div className="status-bar-item">
           <span>{media.length} media</span>
