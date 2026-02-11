@@ -268,6 +268,7 @@ export class OpenCodeManager {
       const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
 
       try {
+        console.log('[OpenCodeManager] Sending to provider:', provider, 'model:', modelId);
         if (provider === 'anthropic') {
           const result = await this.sendAnthropicMessage(
             modelId,
@@ -288,7 +289,9 @@ export class OpenCodeManager {
           );
           fullResponse = result.content;
         }
+        console.log('[OpenCodeManager] fullResponse length:', fullResponse.length);
       } catch (error) {
+        console.error('[OpenCodeManager] Request error:', (error as Error).message);
         const isAborted = abortController.signal.aborted || (error as Error).message === 'Request cancelled';
         if (!isAborted) {
           throw error;
@@ -467,7 +470,7 @@ export class OpenCodeManager {
     callbacks: { onDelta?: (delta: string) => void }
   ): Promise<{ content: string }> {
     // Build OpenAI-format messages
-    const messages = [
+    const messages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
       ...dbMessages
         .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -488,93 +491,90 @@ export class OpenCodeManager {
       },
     }));
 
-    const body: Record<string, unknown> = {
-      model: modelId,
-      max_tokens: 4096,
-      messages,
-      tools: openaiTools,
-    };
+    let accumulatedText = '';
+    const MAX_TOOL_ROUNDS = 10;
+    let round = 0;
 
-    const response = await this.httpRequest(ZEN_OPENAI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
+    while (round < MAX_TOOL_ROUNDS) {
+      round++;
 
-    if (response.statusCode >= 400) {
-      const errorMsg = this.parseErrorResponse(response);
-      throw new Error(errorMsg);
-    }
-
-    const data = JSON.parse(response.body);
-    const choice = data.choices?.[0];
-
-    if (!choice?.message) {
-      throw new Error('API response missing expected message content');
-    }
-
-    // Handle tool calls in OpenAI format
-    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
-      // Execute tools and do follow-up call
-      const toolMessages = [
-        ...messages,
-        choice.message,
-      ];
-
-      for (const toolCall of choice.message.tool_calls) {
-        const toolName = toolCall.function.name;
-        const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
-        const result = await this.executeTool(toolName, toolArgs);
-
-        toolMessages.push({
-          role: 'tool',
-          content: JSON.stringify(result),
-          tool_call_id: toolCall.id,
-        } as Record<string, unknown> as typeof messages[0]);
-      }
-
-      // Make follow-up call with tool results
-      const followUpBody: Record<string, unknown> = {
+      const body: Record<string, unknown> = {
         model: modelId,
         max_tokens: 4096,
-        messages: toolMessages,
+        messages,
         tools: openaiTools,
       };
 
-      const followUpResponse = await this.httpRequest(ZEN_OPENAI_URL, {
+      const response = await this.httpRequest(ZEN_OPENAI_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`,
         },
-        body: JSON.stringify(followUpBody),
+        body: JSON.stringify(body),
         signal,
       });
 
-      if (followUpResponse.statusCode >= 400) {
-        throw new Error(this.parseErrorResponse(followUpResponse));
+      if (response.statusCode >= 400) {
+        const errorMsg = this.parseErrorResponse(response);
+        throw new Error(errorMsg);
       }
 
-      const followUpData = JSON.parse(followUpResponse.body);
-      const content = followUpData.choices?.[0]?.message?.content || '';
+      const data = JSON.parse(response.body);
+      const choice = data.choices?.[0];
 
-      if (callbacks.onDelta) {
-        callbacks.onDelta(content);
+      console.log('[OpenCodeManager:OpenAI] Round', round, 'status:', response.statusCode, 'content type:', typeof choice?.message?.content, 'content length:', choice?.message?.content?.length, 'tool_calls:', choice?.message?.tool_calls?.length);
+
+      if (!choice?.message) {
+        throw new Error('API response missing expected message content');
       }
 
-      return { content };
+      // Handle content that might be a string or an array of content parts
+      let textContent = '';
+      const content = choice.message.content;
+      if (typeof content === 'string') {
+        textContent = content;
+      } else if (Array.isArray(content)) {
+        // Handle array of content parts (some models return this format)
+        textContent = content
+          .filter((part: { type?: string; text?: string }) => part.type === 'text' && part.text)
+          .map((part: { text: string }) => part.text)
+          .join('');
+      }
+      
+      if (textContent) {
+        accumulatedText += textContent;
+        if (callbacks.onDelta) {
+          callbacks.onDelta(textContent);
+        }
+      }
+
+      // If no tool calls, we're done
+      if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
+        console.log('[OpenCodeManager:OpenAI] Done. Accumulated text length:', accumulatedText.length);
+        return { content: accumulatedText };
+      }
+
+      // Add assistant message (with tool_calls) to conversation
+      messages.push(choice.message);
+
+      // Execute tool calls and add results
+      for (const toolCall of choice.message.tool_calls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+        const result = await this.executeTool(toolName, toolArgs);
+
+        messages.push({
+          role: 'tool',
+          content: JSON.stringify(result),
+          tool_call_id: toolCall.id,
+        });
+      }
     }
 
-    const content = choice.message.content || '';
-    if (callbacks.onDelta) {
-      callbacks.onDelta(content);
-    }
-
-    return { content };
+    // Hit max rounds
+    const fallbackText = accumulatedText || 'I reached the maximum number of tool calls. Please try again.';
+    return { content: fallbackText };
   }
 
   /**
