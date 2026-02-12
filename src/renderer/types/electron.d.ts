@@ -297,7 +297,7 @@ export interface ElectronAPI {
     unlink: (postId: string, mediaId: string) => Promise<void>;
     getForPost: (postId: string) => Promise<MediaLinkData[]>;
     getForMedia: (mediaId: string) => Promise<MediaLinkData[]>;
-    getMediaDataForPost: (postId: string) => Promise<MediaData[]>;
+    getMediaDataForPost: (postId: string) => Promise<Array<MediaLinkData & { media: MediaData }>>;
     reorder: (postId: string, mediaIds: string[]) => Promise<void>;
     isLinked: (postId: string, mediaId: string) => Promise<boolean>;
     import: (postId: string, filePath: string) => Promise<MediaLinkData>;

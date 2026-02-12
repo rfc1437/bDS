@@ -29,6 +29,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const { media: allMedia } = useAppStore();
 
   // Load linked media for this post
@@ -37,8 +38,9 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
     
     try {
       setIsLoading(true);
-      const mediaData = await window.electronAPI?.postMedia.getMediaDataForPost(postId);
-      setLinkedMedia(mediaData || []);
+      const linkedData = await window.electronAPI?.postMedia.getMediaDataForPost(postId);
+      // Extract media objects from link data
+      setLinkedMedia((linkedData || []).map(link => link.media));
     } catch (error) {
       console.error('Failed to load linked media:', error);
     } finally {
@@ -90,6 +92,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
       await window.electronAPI?.postMedia.link(postId, mediaId);
       showToast.success('Media linked to post');
       setShowMediaPicker(false);
+      setMediaSearchQuery('');
       loadLinkedMedia();
     } catch (error) {
       console.error('Failed to link media:', error);
@@ -149,9 +152,11 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
     return null;
   };
 
-  // Get unlinked media (for picker)
+  // Get unlinked media (for picker), filtered by search
   const unlinkedMedia = allMedia.filter(
     m => !linkedMedia.find(l => l.id === m.id)
+  ).filter(
+    m => !mediaSearchQuery || m.originalName.toLowerCase().includes(mediaSearchQuery.toLowerCase())
   );
 
   if (collapsed) {
@@ -194,7 +199,16 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
         <div className="media-picker">
           <div className="media-picker-header">
             <span>Select media to link</span>
-            <button onClick={() => setShowMediaPicker(false)}>×</button>
+            <button onClick={() => { setShowMediaPicker(false); setMediaSearchQuery(''); }}>×</button>
+          </div>
+          <div className="media-picker-search">
+            <input
+              type="text"
+              placeholder="Search media..."
+              value={mediaSearchQuery}
+              onChange={(e) => setMediaSearchQuery(e.target.value)}
+              autoFocus
+            />
           </div>
           <div className="media-picker-grid">
             {unlinkedMedia.length === 0 ? (
