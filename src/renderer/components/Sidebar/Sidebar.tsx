@@ -188,6 +188,128 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   );
 };
 
+// Media-specific calendar view
+interface MediaCalendarViewProps {
+  onDateSelect: (year: number, month?: number) => void;
+  selectedYear?: number;
+  selectedMonth?: number;
+}
+
+const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, selectedYear, selectedMonth }) => {
+  const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
+  const [expandedYear, setExpandedYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const data = await window.electronAPI?.media.getByYearMonth();
+      if (data) {
+        setYearMonthData(data as { year: number; month: number; count: number }[]);
+      }
+    };
+    loadData();
+  }, []);
+
+  const years = [...new Set(yearMonthData.map(d => d.year))].sort((a, b) => b - a);
+
+  const getYearCount = (year: number) => {
+    return yearMonthData.filter(d => d.year === year).reduce((sum, d) => sum + d.count, 0);
+  };
+
+  const getMonthsForYear = (year: number) => {
+    return yearMonthData.filter(d => d.year === year).sort((a, b) => b.month - a.month);
+  };
+
+  return (
+    <div className="calendar-view">
+      <div className="calendar-header">
+        <span>ARCHIVE</span>
+        {(selectedYear || selectedMonth !== undefined) && (
+          <button className="clear-filter" onClick={() => onDateSelect(0)} title="Clear filter">
+            ✕
+          </button>
+        )}
+      </div>
+      <div className="calendar-years">
+        {years.map(year => (
+          <div key={year} className="calendar-year">
+            <div
+              className={`calendar-year-header ${selectedYear === year && selectedMonth === undefined ? 'selected' : ''}`}
+              onClick={() => {
+                setExpandedYear(expandedYear === year ? null : year);
+                onDateSelect(year);
+              }}
+            >
+              <span className="expand-icon">{expandedYear === year ? '▼' : '▶'}</span>
+              <span className="year-label">{year}</span>
+              <span className="year-count">{getYearCount(year)}</span>
+            </div>
+            {expandedYear === year && (
+              <div className="calendar-months">
+                {getMonthsForYear(year).map(({ month, count }) => (
+                  <div
+                    key={month}
+                    className={`calendar-month ${selectedYear === year && selectedMonth === month ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDateSelect(year, month);
+                    }}
+                  >
+                    <span className="month-label">{MONTH_NAMES[month]}</span>
+                    <span className="month-count">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        {years.length === 0 && (
+          <div className="calendar-empty">No media yet</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Media-specific filter panel
+interface MediaFilterPanelProps {
+  tags: string[];
+  selectedTags: string[];
+  onTagSelect: (tags: string[]) => void;
+}
+
+const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
+  tags,
+  selectedTags,
+  onTagSelect,
+}) => {
+  return (
+    <div className="filter-panel">
+      {tags.length > 0 && (
+        <div className="filter-section">
+          <div className="filter-header">TAGS</div>
+          <div className="filter-chips">
+            {tags.map(tag => (
+              <button
+                key={tag}
+                className={`filter-chip ${selectedTags.includes(tag) ? 'active' : ''}`}
+                onClick={() => {
+                  if (selectedTags.includes(tag)) {
+                    onTagSelect(selectedTags.filter(t => t !== tag));
+                  } else {
+                    onTagSelect([...selectedTags, tag]);
+                  }
+                }}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface SearchBoxProps {
   onSearch: (query: string) => void;
 }
@@ -563,6 +685,94 @@ const PostsList: React.FC = () => {
 const MediaList: React.FC = () => {
   const { media, openTab, activeTabId } = useAppStore();
 
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<MediaData[] | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | undefined>();
+  const [selectedMonth, setSelectedMonth] = useState<number | undefined>();
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filteredMedia, setFilteredMedia] = useState<MediaData[] | null>(null);
+
+  // Load available tags
+  useEffect(() => {
+    const loadTags = async () => {
+      const tags = await window.electronAPI?.media.getTags();
+      if (tags) setAvailableTags(tags as string[]);
+    };
+    loadTags();
+  }, [media]);
+
+  // Handle search
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    try {
+      const results = await window.electronAPI?.media.search(query);
+      if (results) {
+        const mediaIds = (results as { id: string }[]).map(r => r.id);
+        setSearchResults(media.filter(m => mediaIds.includes(m.id)));
+      }
+    } catch (error) {
+      console.error('Search failed:', error);
+      showToast.error('Search failed');
+    }
+  };
+
+  // Handle date selection
+  const handleDateSelect = async (year: number, month?: number) => {
+    if (year === 0) {
+      // Clear filter
+      setSelectedYear(undefined);
+      setSelectedMonth(undefined);
+      setFilteredMedia(null);
+      return;
+    }
+    setSelectedYear(year);
+    setSelectedMonth(month);
+
+    try {
+      const results = await window.electronAPI?.media.filter({
+        year,
+        month,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+      });
+      if (results) {
+        setFilteredMedia(results as MediaData[]);
+      }
+    } catch (error) {
+      console.error('Filter failed:', error);
+    }
+  };
+
+  // Handle tag filter changes
+  useEffect(() => {
+    const applyFilters = async () => {
+      if (!selectedYear && selectedTags.length === 0) {
+        setFilteredMedia(null);
+        return;
+      }
+
+      try {
+        const results = await window.electronAPI?.media.filter({
+          year: selectedYear,
+          month: selectedMonth,
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
+        });
+        if (results) {
+          setFilteredMedia(results as MediaData[]);
+        }
+      } catch (error) {
+        console.error('Filter failed:', error);
+      }
+    };
+    applyFilters();
+  }, [selectedTags]);
+
   const handleImportMedia = async () => {
     try {
       await window.electronAPI?.media.importDialog();
@@ -579,21 +789,74 @@ const MediaList: React.FC = () => {
     openTab({ type: 'media', id: mediaId, isTransient: false });
   };
 
+  // Determine which media to display
+  const filteredDisplayMedia = searchResults ?? filteredMedia ?? media;
+  const hasActiveFilters = searchQuery || selectedYear || selectedTags.length > 0;
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setSearchResults(null);
+    setSelectedYear(undefined);
+    setSelectedMonth(undefined);
+    setSelectedTags([]);
+    setFilteredMedia(null);
+  };
+
   return (
     <div className="sidebar-content">
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span>MEDIA</span>
-          <button className="sidebar-action" onClick={handleImportMedia} title="Import Media">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/>
-            </svg>
-          </button>
+          <div className="sidebar-actions">
+            <button
+              className={`sidebar-action ${showFilters ? 'active' : ''}`}
+              onClick={() => setShowFilters(!showFilters)}
+              title="Toggle Filters"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M6 12v-1h4v1H6zM4 8v-1h8v1H4zm-2-4v-1h12v1H2z"/>
+              </svg>
+            </button>
+            <button className="sidebar-action" onClick={handleImportMedia} title="Import Media">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
+      <SearchBox onSearch={handleSearch} />
+
+      {showFilters && (
+        <>
+          <MediaCalendarView
+            onDateSelect={handleDateSelect}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+          />
+          <MediaFilterPanel
+            tags={availableTags}
+            selectedTags={selectedTags}
+            onTagSelect={setSelectedTags}
+          />
+        </>
+      )}
+
+      {hasActiveFilters && (
+        <div className="filter-status">
+          <span>
+            {filteredDisplayMedia.length} result{filteredDisplayMedia.length !== 1 ? 's' : ''}
+            {searchQuery && ` for "${searchQuery}"`}
+          </span>
+          <button onClick={clearAllFilters} title="Clear all filters">
+            Clear filters
+          </button>
+        </div>
+      )}
+
       <div className="sidebar-list media-grid">
-        {media.map(item => (
+        {filteredDisplayMedia.map(item => (
           <div
             key={item.id}
             className={`media-item ${activeTabId === item.id ? 'selected' : ''}`}
@@ -603,7 +866,7 @@ const MediaList: React.FC = () => {
           >
             {item.mimeType.startsWith('image/') ? (
               <div className="media-thumbnail">
-                <img 
+                <img
                   src={`bds-thumb://${item.id}`}
                   alt={item.alt || item.originalName}
                   onError={(e) => {
@@ -627,7 +890,7 @@ const MediaList: React.FC = () => {
         ))}
       </div>
 
-      {media.length === 0 && (
+      {filteredDisplayMedia.length === 0 && (
         <div className="sidebar-empty">
           <p>No media files</p>
           <button onClick={handleImportMedia}>Import media</button>

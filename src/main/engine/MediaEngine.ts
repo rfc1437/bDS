@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { eq } from 'drizzle-orm';
+import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { media, Media, NewMedia } from '../database/schema';
@@ -47,6 +47,21 @@ export interface MediaMetadata {
   updatedAt: string;
   tags: string[];
   linkedPostIds?: string[]; // Posts this media is linked to (persisted in sidecar)
+}
+
+export interface MediaFilter {
+  tags?: string[];
+  startDate?: Date;
+  endDate?: Date;
+  year?: number;
+  month?: number;
+}
+
+export interface MediaSearchResult {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  createdAt: Date;
 }
 
 export class MediaEngine extends EventEmitter {
@@ -546,8 +561,13 @@ export class MediaEngine extends EventEmitter {
 
   async getAllMedia(): Promise<MediaData[]> {
     const db = getDatabase().getLocal();
-    const dbMediaList = await db.select().from(media).all();
-    
+    const dbMediaList = await db
+      .select()
+      .from(media)
+      .where(eq(media.projectId, this.currentProjectId))
+      .orderBy(desc(media.createdAt))
+      .all();
+
     return dbMediaList.map(dbMedia => ({
       id: dbMedia.id,
       filename: dbMedia.filename,
@@ -562,6 +582,154 @@ export class MediaEngine extends EventEmitter {
       updatedAt: dbMedia.updatedAt,
       tags: JSON.parse(dbMedia.tags || '[]'),
     }));
+  }
+
+  async getMediaFiltered(filter: MediaFilter): Promise<MediaData[]> {
+    const db = getDatabase().getLocal();
+    const conditions = [eq(media.projectId, this.currentProjectId)];
+
+    if (filter.startDate) {
+      conditions.push(gte(media.createdAt, filter.startDate));
+    }
+
+    if (filter.endDate) {
+      conditions.push(lte(media.createdAt, filter.endDate));
+    }
+
+    if (filter.year !== undefined) {
+      const startOfYear = new Date(filter.year, 0, 1);
+      const endOfYear = new Date(filter.year + 1, 0, 1);
+      conditions.push(gte(media.createdAt, startOfYear));
+      conditions.push(lte(media.createdAt, endOfYear));
+    }
+
+    if (filter.month !== undefined && filter.year !== undefined) {
+      const startOfMonth = new Date(filter.year, filter.month, 1);
+      const endOfMonth = new Date(filter.year, filter.month + 1, 1);
+      conditions.push(gte(media.createdAt, startOfMonth));
+      conditions.push(lte(media.createdAt, endOfMonth));
+    }
+
+    const dbMediaList = await db
+      .select()
+      .from(media)
+      .where(and(...conditions))
+      .orderBy(desc(media.createdAt))
+      .all();
+
+    let result: MediaData[] = [];
+
+    for (const dbMedia of dbMediaList) {
+      const mediaData: MediaData = {
+        id: dbMedia.id,
+        filename: dbMedia.filename,
+        originalName: dbMedia.originalName,
+        mimeType: dbMedia.mimeType,
+        size: dbMedia.size,
+        width: dbMedia.width || undefined,
+        height: dbMedia.height || undefined,
+        alt: dbMedia.alt || undefined,
+        caption: dbMedia.caption || undefined,
+        createdAt: dbMedia.createdAt,
+        updatedAt: dbMedia.updatedAt,
+        tags: JSON.parse(dbMedia.tags || '[]'),
+      };
+
+      // Client-side filtering for tags (JSON array)
+      if (filter.tags && filter.tags.length > 0) {
+        const hasAllTags = filter.tags.every(tag => mediaData.tags.includes(tag));
+        if (!hasAllTags) continue;
+      }
+
+      result.push(mediaData);
+    }
+
+    return result;
+  }
+
+  async searchMedia(query: string): Promise<MediaSearchResult[]> {
+    const db = getDatabase().getLocal();
+    const allMedia = await db
+      .select()
+      .from(media)
+      .where(eq(media.projectId, this.currentProjectId))
+      .orderBy(desc(media.createdAt))
+      .all();
+
+    const lowerQuery = query.toLowerCase();
+    const searchResults: MediaSearchResult[] = [];
+
+    for (const item of allMedia) {
+      // Search in originalName, alt, caption, and tags
+      const searchableText = [
+        item.originalName,
+        item.alt || '',
+        item.caption || '',
+        ...(JSON.parse(item.tags || '[]') as string[]),
+      ].join(' ').toLowerCase();
+
+      if (searchableText.includes(lowerQuery)) {
+        searchResults.push({
+          id: item.id,
+          originalName: item.originalName,
+          mimeType: item.mimeType,
+          createdAt: item.createdAt,
+        });
+      }
+    }
+
+    return searchResults;
+  }
+
+  async getMediaByYearMonth(): Promise<{ year: number; month: number; count: number }[]> {
+    const allMedia = await this.getAllMedia();
+    const counts = new Map<string, { year: number; month: number; count: number }>();
+
+    for (const item of allMedia) {
+      const year = item.createdAt.getFullYear();
+      const month = item.createdAt.getMonth();
+      const key = `${year}-${month}`;
+      const current = counts.get(key) || { year, month, count: 0 };
+      current.count++;
+      counts.set(key, current);
+    }
+
+    return Array.from(counts.values()).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+  }
+
+  async getAvailableTags(): Promise<string[]> {
+    const allMedia = await this.getAllMedia();
+    const tags = new Set<string>();
+    for (const item of allMedia) {
+      for (const tag of item.tags) {
+        tags.add(tag);
+      }
+    }
+    return Array.from(tags).sort();
+  }
+
+  async getTagsWithCounts(): Promise<{ tag: string; count: number }[]> {
+    const db = getDatabase().getLocal();
+    const dbMediaList = await db
+      .select({ tags: media.tags })
+      .from(media)
+      .where(eq(media.projectId, this.currentProjectId))
+      .all();
+
+    const tagCounts = new Map<string, number>();
+    for (const row of dbMediaList) {
+      const parsed: string[] = JSON.parse(row.tags || '[]');
+      for (const tag of parsed) {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      }
+    }
+
+    return Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }
 
   getMediaPath(id: string): string {
