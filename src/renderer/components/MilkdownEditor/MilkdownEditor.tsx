@@ -319,6 +319,9 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
       normalizedBaseline.current = null;
       editor.action(replaceAll(content));
       lastExternalContent.current = content;
+    } else if (isInternalChange.current) {
+      // Update ref for internal changes to keep it in sync
+      lastExternalContent.current = content;
     }
     isInternalChange.current = false;
   }, [content, loading, getEditor]);
