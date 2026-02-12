@@ -5,6 +5,7 @@ import { getDatabase } from './database';
 import { registerIpcHandlers, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
+import { getMediaEngine } from './engine/MediaEngine';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -15,6 +16,15 @@ const isDev = process.env.NODE_ENV === 'development';
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'bds-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+  {
+    scheme: 'bds-thumb',
     privileges: {
       standard: true,
       secure: true,
@@ -379,6 +389,39 @@ async function initialize(): Promise<void> {
       return new Response('Media not found', { status: 404 });
     } catch (error) {
       console.error('Error serving media:', error);
+      return new Response('Internal server error', { status: 500 });
+    }
+  });
+
+  // Register custom protocol for serving thumbnail images
+  // URLs like bds-thumb://media-id will serve the small thumbnail webp
+  protocol.handle('bds-thumb', async (request) => {
+    try {
+      const url = new URL(request.url);
+      const mediaId = url.hostname;
+
+      const engine = getMediaEngine();
+      const thumbnails = await engine.getThumbnailPaths(mediaId);
+
+      if (thumbnails.small) {
+        return net.fetch(`file://${thumbnails.small}`);
+      }
+
+      // Fallback to full image if thumbnail doesn't exist
+      const database = getDatabase().getLocal();
+      const mediaItem = await database
+        .select()
+        .from(media)
+        .where(eq(media.id, mediaId))
+        .get();
+
+      if (mediaItem && mediaItem.filePath) {
+        return net.fetch(`file://${mediaItem.filePath}`);
+      }
+
+      return new Response('Thumbnail not found', { status: 404 });
+    } catch (error) {
+      console.error('Error serving thumbnail:', error);
       return new Response('Internal server error', { status: 500 });
     }
   });

@@ -99,6 +99,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDataPaths: () => ipcRenderer.invoke('app:getDataPaths'),
     openFolder: (folderPath: string) => ipcRenderer.invoke('app:openFolder', folderPath),
     showItemInFolder: (itemPath: string) => ipcRenderer.invoke('app:showItemInFolder', itemPath),
+    selectFolder: (title?: string) => ipcRenderer.invoke('app:selectFolder', title),
+    getDefaultProjectPath: (projectId: string) => ipcRenderer.invoke('app:getDefaultProjectPath', projectId),
   },
 
   // Meta (tags, categories, and project metadata)
@@ -112,7 +114,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
     getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
     setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
-    updateProjectMetadata: (updates: { name?: string; description?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
   // Tag Management (advanced tag operations)
@@ -267,6 +269,8 @@ export interface ElectronAPI {
     getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;
     openFolder: (folderPath: string) => Promise<string>;
     showItemInFolder: (itemPath: string) => Promise<void>;
+    selectFolder: (title?: string) => Promise<string | null>;
+    getDefaultProjectPath: (projectId: string) => Promise<string>;
   };
   meta: {
     getTags: () => Promise<string[]>;

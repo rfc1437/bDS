@@ -3,6 +3,7 @@
 export interface ProjectMetadata {
   name: string;
   description?: string;
+  dataPath?: string;
 }
 
 export interface ProjectData {
@@ -10,6 +11,7 @@ export interface ProjectData {
   name: string;
   slug: string;
   description?: string;
+  dataPath?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -312,6 +314,8 @@ export interface ElectronAPI {
     getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;
     openFolder: (folderPath: string) => Promise<string>;
     showItemInFolder: (itemPath: string) => Promise<void>;
+    selectFolder: (title?: string) => Promise<string | null>;
+    getDefaultProjectPath: (projectId: string) => Promise<string>;
   };
   meta: {
     getTags: () => Promise<string[]>;
@@ -323,7 +327,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;

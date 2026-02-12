@@ -47,44 +47,46 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('projects:getActive', async () => {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.getActiveProject();
-    
+
     // Ensure all engines have the correct project context
     if (project) {
+      const baseDir = projectEngine.getProjectBaseDir(project.id, project.dataPath);
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
       const tagEngine = getTagEngine();
-      postEngine.setProjectContext(project.id);
-      mediaEngine.setProjectContext(project.id);
-      metaEngine.setProjectContext(project.id);
-      tagEngine.setProjectContext(project.id);
-      
+      postEngine.setProjectContext(project.id, baseDir);
+      mediaEngine.setProjectContext(project.id, baseDir);
+      metaEngine.setProjectContext(project.id, baseDir);
+      tagEngine.setProjectContext(project.id, baseDir);
+
       // Sync meta on startup
       await metaEngine.syncOnStartup();
     }
-    
+
     return project;
   });
 
   ipcMain.handle('projects:setActive', async (_, id: string) => {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.setActiveProject(id);
-    
+
     // Update all engines to use the new project context
     if (project) {
+      const baseDir = projectEngine.getProjectBaseDir(project.id, project.dataPath);
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
       const tagEngine = getTagEngine();
-      postEngine.setProjectContext(project.id);
-      mediaEngine.setProjectContext(project.id);
-      metaEngine.setProjectContext(project.id);
-      tagEngine.setProjectContext(project.id);
-      
+      postEngine.setProjectContext(project.id, baseDir);
+      mediaEngine.setProjectContext(project.id, baseDir);
+      metaEngine.setProjectContext(project.id, baseDir);
+      tagEngine.setProjectContext(project.id, baseDir);
+
       // Sync meta on project switch
       await metaEngine.syncOnStartup();
     }
-    
+
     return project;
   });
 
@@ -383,7 +385,7 @@ export function registerIpcHandlers(): void {
     const projectEngine = getProjectEngine();
     const activeProject = await projectEngine.getActiveProject();
     const projectId = activeProject?.id || 'default';
-    const paths = projectEngine.getProjectPaths(projectId);
+    const paths = projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
 
     const fullConfig: DropboxSyncConfig = {
       accessToken: config.accessToken,
@@ -480,7 +482,7 @@ export function registerIpcHandlers(): void {
     const projectEngine = getProjectEngine();
     const activeProject = await projectEngine.getActiveProject();
     const projectId = activeProject?.id || 'default';
-    const paths = projectEngine.getProjectPaths(projectId);
+    const paths = projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
     return {
       database: getDatabase().getDataPaths().database,
       posts: paths.posts,
@@ -490,6 +492,22 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('app:openFolder', async (_, folderPath: string) => {
     return shell.openPath(folderPath);
+  });
+
+  ipcMain.handle('app:selectFolder', async (_, title?: string) => {
+    const result = await dialog.showOpenDialog({
+      title: title || 'Select Folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle('app:getDefaultProjectPath', async (_, projectId: string) => {
+    const projectEngine = getProjectEngine();
+    return projectEngine.getDefaultProjectBaseDir(projectId);
   });
 
   ipcMain.handle('app:showItemInFolder', async (_, itemPath: string) => {
@@ -553,7 +571,7 @@ export function registerIpcHandlers(): void {
     return engine.getProjectMetadata();
   });
 
-  ipcMain.handle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string }) => {
+  ipcMain.handle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string }) => {
     const engine = getMetaEngine();
     await engine.updateProjectMetadata(updates);
     return engine.getProjectMetadata();

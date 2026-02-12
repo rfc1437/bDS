@@ -401,6 +401,14 @@ export class DatabaseConnection {
       console.log('Tags table created successfully');
     }
 
+    // Migration: Add data_path column to projects table
+    const dataPathCol = await this.localClient.execute(
+      "SELECT name FROM pragma_table_info('projects') WHERE name = 'data_path'"
+    );
+    if (dataPathCol.rows.length === 0) {
+      await this.localClient.execute("ALTER TABLE projects ADD COLUMN data_path TEXT");
+    }
+
     // Create default project if none exists
     const existingProjects = await this.localClient.execute('SELECT COUNT(*) as count FROM projects');
     if (existingProjects.rows[0] && (existingProjects.rows[0].count as number) === 0) {

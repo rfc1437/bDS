@@ -12,6 +12,7 @@ import { posts, projects } from '../database/schema';
 export interface ProjectMetadata {
   name: string;
   description?: string;
+  dataPath?: string; // Custom path for project data
 }
 
 /**
@@ -31,6 +32,7 @@ export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
  */
 export class MetaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
+  private projectBaseDir: string | null = null;
   private tags: Set<string> = new Set();
   private categories: Set<string> = new Set();
   private projectMetadata: ProjectMetadata | null = null;
@@ -40,13 +42,18 @@ export class MetaEngine extends EventEmitter {
     super();
   }
 
+  private getProjectBaseDir(): string {
+    if (this.projectBaseDir) return this.projectBaseDir;
+    const userDataPath = app.getPath('userData');
+    return path.join(userDataPath, 'projects', this.currentProjectId);
+  }
+
   /**
    * Get the meta directory path for the current project.
-   * Format: {userData}/projects/{projectId}/meta/
+   * Format: {baseDir}/meta/
    */
   getMetaDir(): string {
-    const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'projects', this.currentProjectId, 'meta');
+    return path.join(this.getProjectBaseDir(), 'meta');
   }
 
   private getTagsFilePath(): string {
@@ -61,8 +68,9 @@ export class MetaEngine extends EventEmitter {
     return path.join(this.getMetaDir(), 'project.json');
   }
 
-  setProjectContext(projectId: string): void {
+  setProjectContext(projectId: string, baseDir?: string): void {
     this.currentProjectId = projectId;
+    this.projectBaseDir = baseDir || null;
     // Reset in-memory cache when project changes
     this.tags.clear();
     this.categories.clear();
@@ -334,14 +342,14 @@ export class MetaEngine extends EventEmitter {
   /**
    * Fetch the current project's data from the database.
    */
-  private async fetchProjectFromDatabase(): Promise<{ name: string; description: string | null } | null> {
+  private async fetchProjectFromDatabase(): Promise<{ name: string; description: string | null; dataPath: string | null } | null> {
     const db = getDatabase().getLocal();
     const project = await db
-      .select({ name: projects.name, description: projects.description })
+      .select({ name: projects.name, description: projects.description, dataPath: projects.dataPath })
       .from(projects)
       .where(eq(projects.id, this.currentProjectId))
       .get();
-    
+
     return project || null;
   }
 
@@ -459,6 +467,18 @@ export class MetaEngine extends EventEmitter {
     // Handle project metadata
     if (projectMetadataFileExists) {
       await this.loadProjectMetadata();
+
+      // If project.json has a dataPath, sync it back to the database
+      if (this.projectMetadata?.dataPath !== undefined) {
+        const projectData = await this.fetchProjectFromDatabase();
+        if (projectData && projectData.dataPath !== this.projectMetadata.dataPath) {
+          const db = getDatabase().getLocal();
+          await db.update(projects)
+            .set({ dataPath: this.projectMetadata.dataPath || null })
+            .where(eq(projects.id, this.currentProjectId));
+          console.log(`[MetaEngine] Synced dataPath from project.json to database: ${this.projectMetadata.dataPath || '(default)'}`);
+        }
+      }
     } else {
       // No file exists, fetch project data from database and create file
       const projectData = await this.fetchProjectFromDatabase();
@@ -468,6 +488,7 @@ export class MetaEngine extends EventEmitter {
       this.projectMetadata = {
         name: projectData.name,
         description: projectData.description || undefined,
+        dataPath: projectData.dataPath || undefined,
       };
       await this.saveProjectMetadata();
     }

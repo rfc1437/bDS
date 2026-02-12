@@ -604,7 +604,7 @@ const MediaList: React.FC = () => {
             {item.mimeType.startsWith('image/') ? (
               <div className="media-thumbnail">
                 <img 
-                  src={`bds-media://${item.id}`} 
+                  src={`bds-thumb://${item.id}`}
                   alt={item.alt || item.originalName}
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
