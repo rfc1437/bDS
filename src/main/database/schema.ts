@@ -96,6 +96,19 @@ export const postLinks = sqliteTable('post_links', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Post-Media links - tracks which media files are linked to which posts
+export const postMedia = sqliteTable('post_media', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  postId: text('post_id').notNull(),
+  mediaId: text('media_id').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0), // For ordering media within a post
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  // Composite unique index: a media can only be linked once to a post
+  postMediaIdx: uniqueIndex('post_media_post_media_idx').on(table.postId, table.mediaId),
+}));
+
 // Tags table - stores tag metadata with optional colors
 export const tags = sqliteTable('tags', {
   id: text('id').primaryKey(),
@@ -143,6 +156,8 @@ export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
 export type PostLink = typeof postLinks.$inferSelect;
 export type NewPostLink = typeof postLinks.$inferInsert;
+export type PostMediaLink = typeof postMedia.$inferSelect;
+export type NewPostMediaLink = typeof postMedia.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;
 export type ChatConversation = typeof chatConversations.$inferSelect;

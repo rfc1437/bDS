@@ -5,12 +5,14 @@ import { showToast } from '../Toast';
 import { MilkdownEditor } from '../MilkdownEditor';
 import { Lightbox, useMarkdownImages } from '../Lightbox';
 import { PostLinks } from '../PostLinks';
+import { LinkedMediaPanel } from '../LinkedMediaPanel';
 import { ErrorModal } from '../ErrorModal';
 import { SettingsView } from '../SettingsView';
 import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
 import { AutoSaveManager } from '../../utils';
+import { parseMacros, getMacro } from '../../macros/registry';
 import './Editor.css';
 
 // Module-level AutoSaveManager for idle-time based auto-saving
@@ -103,12 +105,41 @@ const resolveMediaUrls = (content: string, mediaList: MediaData[]): string => {
   });
 };
 
+// Render a macro synchronously for preview
+const renderMacroSync = (name: string, params: Record<string, string>, postId?: string): string => {
+  const macro = getMacro(name);
+  if (!macro) {
+    return `<span class="macro-error">Unknown macro: ${name}</span>`;
+  }
+  try {
+    const result = macro.render(params, { postId, isPreview: true });
+    // If it returns a promise, show loading state (shouldn't happen for gallery)
+    if (result instanceof Promise) {
+      return `<div class="macro-loading">Loading ${name}...</div>`;
+    }
+    return result;
+  } catch (e) {
+    return `<span class="macro-error">Error rendering ${name}</span>`;
+  }
+};
+
 // Simple markdown to HTML converter for preview
-const markdownToHtml = (markdown: string): string => {
-  return markdown
-    // Escape HTML
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+const markdownToHtml = (markdown: string, postId?: string): string => {
+  // First, render macros
+  const macros = parseMacros(markdown);
+  let result = markdown;
+  
+  // Replace macros from end to start to preserve positions
+  for (let i = macros.length - 1; i >= 0; i--) {
+    const macro = macros[i];
+    const rendered = renderMacroSync(macro.name, macro.params, postId);
+    result = result.slice(0, macro.start) + rendered + result.slice(macro.end);
+  }
+  
+  return result
+    // Escape HTML (but not our rendered macros - they're already safe)
+    // We need to be careful here - macro output contains HTML
+    // For safety, we skip escaping since we control the macro output
     // Headers
     .replace(/^### (.*$)/gim, '<h3>$1</h3>')
     .replace(/^## (.*$)/gim, '<h2>$1</h2>')
@@ -131,6 +162,69 @@ const markdownToHtml = (markdown: string): string => {
     .replace(/^---$/gim, '<hr />')
     // Line breaks
     .replace(/\n/g, '<br />');
+};
+
+/**
+ * Hydrate gallery elements in the preview with actual linked media
+ */
+const hydrateGalleries = async (
+  container: HTMLElement,
+  postId: string,
+  onImageClick: (index: number, images: { src: string; alt: string }[]) => void
+) => {
+  const galleries = container.querySelectorAll('.macro-gallery[data-post-id]');
+  
+  for (const gallery of galleries) {
+    const galleryPostId = gallery.getAttribute('data-post-id');
+    if (!galleryPostId || galleryPostId !== postId) continue;
+    
+    const galleryContainer = gallery.querySelector('.gallery-container');
+    if (!galleryContainer) continue;
+    
+    try {
+      // Load linked media for this post
+      const mediaData = await window.electronAPI?.postMedia.getMediaDataForPost(postId);
+      
+      if (!mediaData || mediaData.length === 0) {
+        galleryContainer.innerHTML = '<div class="gallery-empty">No media linked to this post</div>';
+        continue;
+      }
+      
+      // Filter to images only
+      const images = mediaData.filter(m => m.mimeType?.startsWith('image/'));
+      
+      if (images.length === 0) {
+        galleryContainer.innerHTML = '<div class="gallery-empty">No images linked to this post</div>';
+        continue;
+      }
+      
+      // Build gallery grid (column count is handled via CSS class on parent)
+      galleryContainer.innerHTML = images.map((media, index) => `
+        <div class="gallery-item" data-index="${index}">
+          <img 
+            src="bds-media://${media.id}" 
+            alt="${media.alt || media.originalName}" 
+            title="${media.originalName}"
+          />
+        </div>
+      `).join('');
+      
+      // Set up lightbox click handlers
+      const items = galleryContainer.querySelectorAll('.gallery-item');
+      const imageData = images.map(m => ({
+        src: `bds-media://${m.id}`,
+        alt: m.alt || m.originalName,
+      }));
+      
+      items.forEach((item, index) => {
+        item.addEventListener('click', () => onImageClick(index, imageData));
+      });
+      
+    } catch (error) {
+      console.error('Failed to hydrate gallery:', error);
+      galleryContainer.innerHTML = '<div class="gallery-error">Failed to load gallery</div>';
+    }
+  }
 };
 
 interface PostEditorProps {
@@ -159,7 +253,9 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [galleryImages, setGalleryImages] = useState<{ src: string; alt: string }[]>([]);
   const editorRef = useRef<unknown>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const isDirty = checkIsDirty(post.id);
 
@@ -188,6 +284,34 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
 
   // Extract images from resolved content for lightbox
   const images = useMarkdownImages(resolvedContent);
+  
+  // Combine regular images with gallery images for lightbox
+  const allImages = useMemo(() => {
+    // If gallery images are set, use those; otherwise use extracted images
+    return galleryImages.length > 0 ? galleryImages : images;
+  }, [images, galleryImages]);
+
+  // Hydrate galleries when in preview mode
+  useEffect(() => {
+    if (editorMode !== 'preview' || !previewRef.current) return;
+    
+    // Small delay to ensure DOM is updated
+    const timer = setTimeout(() => {
+      if (previewRef.current) {
+        hydrateGalleries(
+          previewRef.current,
+          post.id,
+          (index, imgs) => {
+            setGalleryImages(imgs);
+            setLightboxIndex(index);
+            setLightboxOpen(true);
+          }
+        );
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [editorMode, post.id, resolvedContent]);
 
   // Track latest values for auto-save on unmount/switch
   const pendingChangesRef = useRef<{
@@ -512,6 +636,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
             postId={post.id}
             onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
           />
+          
+          <LinkedMediaPanel postId={post.id} />
         </div>
         
         <div className="editor-body">
@@ -586,10 +712,10 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           )}
           
           {editorMode === 'preview' && (
-            <div className="editor-preview markdown-body">
+            <div className="editor-preview markdown-body" ref={previewRef}>
               <div
                 className="preview-content"
-                dangerouslySetInnerHTML={{ __html: markdownToHtml(resolvedContent) }}
+                dangerouslySetInnerHTML={{ __html: markdownToHtml(resolvedContent, post.id) }}
               />
             </div>
           )}
@@ -597,10 +723,10 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
         
         {/* Lightbox for viewing images in content */}
         <Lightbox
-          images={images}
+          images={allImages}
           initialIndex={lightboxIndex}
           isOpen={lightboxOpen}
-          onClose={() => setLightboxOpen(false)}
+          onClose={() => { setLightboxOpen(false); setGalleryImages([]); }}
         />
       </div>
 
@@ -622,12 +748,71 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
 };
 
 const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
-  const { media, updateMedia, showErrorModal } = useAppStore();
+  const { media, posts, updateMedia, showErrorModal, openTab } = useAppStore();
   const item = media.find(m => m.id === mediaId);
   
   const [alt, setAlt] = useState(item?.alt || '');
   const [caption, setCaption] = useState(item?.caption || '');
   const [tags, setTags] = useState(item?.tags.join(', ') || '');
+  const [linkedPosts, setLinkedPosts] = useState<{ postId: string; sortOrder: number }[]>([]);
+  const [showPostPicker, setShowPostPicker] = useState(false);
+
+  // Load linked posts for this media
+  useEffect(() => {
+    const loadLinkedPosts = async () => {
+      if (!mediaId) return;
+      try {
+        const links = await window.electronAPI?.postMedia.getForMedia(mediaId);
+        if (links) {
+          setLinkedPosts(links.map(l => ({ postId: l.postId, sortOrder: l.sortOrder })));
+        }
+      } catch (error) {
+        console.error('Failed to load linked posts:', error);
+      }
+    };
+    loadLinkedPosts();
+  }, [mediaId]);
+
+  // Get post titles for display
+  const getPostTitle = (postId: string): string => {
+    const post = posts.find(p => p.id === postId);
+    return post?.title || 'Untitled';
+  };
+
+  // Handle linking to a new post
+  const handleLinkToPost = async (postId: string) => {
+    try {
+      await window.electronAPI?.postMedia.link(postId, mediaId);
+      setLinkedPosts([...linkedPosts, { postId, sortOrder: linkedPosts.length }]);
+      setShowPostPicker(false);
+      showToast.success('Linked to post');
+    } catch (error) {
+      console.error('Failed to link to post:', error);
+      showToast.error('Failed to link to post');
+    }
+  };
+
+  // Handle unlinking from a post
+  const handleUnlinkFromPost = async (postId: string) => {
+    try {
+      await window.electronAPI?.postMedia.unlink(postId, mediaId);
+      setLinkedPosts(linkedPosts.filter(l => l.postId !== postId));
+      showToast.success('Unlinked from post');
+    } catch (error) {
+      console.error('Failed to unlink from post:', error);
+      showToast.error('Failed to unlink from post');
+    }
+  };
+
+  // Handle click on a post to navigate to it
+  const handlePostClick = (postId: string) => {
+    openTab({ type: 'post', id: postId, isTransient: true });
+  };
+
+  // Get unlinked posts for picker
+  const unlinkedPosts = posts.filter(
+    p => !linkedPosts.find(l => l.postId === p.id)
+  );
 
   useEffect(() => {
     if (item) {
@@ -767,6 +952,70 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
               onChange={(e) => setTags(e.target.value)}
               placeholder="tag1, tag2, tag3"
             />
+          </div>
+          
+          {/* Linked Posts Section */}
+          <div className="editor-field linked-posts-section">
+            <label>
+              Linked Posts
+              <button 
+                className="add-link-btn" 
+                onClick={() => setShowPostPicker(!showPostPicker)}
+                title="Link to a post"
+              >
+                + Link
+              </button>
+            </label>
+            
+            {showPostPicker && (
+              <div className="post-picker">
+                {unlinkedPosts.length === 0 ? (
+                  <div className="no-posts">No posts available to link</div>
+                ) : (
+                  <div className="post-picker-list">
+                    {unlinkedPosts.slice(0, 10).map(post => (
+                      <div 
+                        key={post.id} 
+                        className="post-picker-item"
+                        onClick={() => handleLinkToPost(post.id)}
+                      >
+                        {post.title || 'Untitled'}
+                      </div>
+                    ))}
+                    {unlinkedPosts.length > 10 && (
+                      <div className="post-picker-more">
+                        +{unlinkedPosts.length - 10} more posts
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {linkedPosts.length === 0 ? (
+              <div className="no-linked-posts">Not linked to any posts</div>
+            ) : (
+              <div className="linked-posts-list">
+                {linkedPosts.map(({ postId }) => (
+                  <div key={postId} className="linked-post-item">
+                    <span 
+                      className="linked-post-title"
+                      onClick={() => handlePostClick(postId)}
+                      title="Open post"
+                    >
+                      📄 {getPostTitle(postId)}
+                    </span>
+                    <button 
+                      className="unlink-btn"
+                      onClick={() => handleUnlinkFromPost(postId)}
+                      title="Unlink from post"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

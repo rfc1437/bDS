@@ -15,5 +15,6 @@ export { SettingsView } from './SettingsView';
 export { TagsView, scrollToTagsSection, type TagsCategory } from './TagsView';
 export { TagInput } from './TagInput';
 export { PostLinks } from './PostLinks';
+export { LinkedMediaPanel } from './LinkedMediaPanel';
 export { ErrorModal, type ErrorDetails } from './ErrorModal';
 export { ChatPanel } from './ChatPanel';

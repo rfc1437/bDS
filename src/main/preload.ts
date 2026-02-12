@@ -59,6 +59,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     regenerateMissingThumbnails: () => ipcRenderer.invoke('media:regenerateMissingThumbnails'),
   },
 
+  // Post-Media Links
+  postMedia: {
+    link: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:link', postId, mediaId),
+    unlink: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:unlink', postId, mediaId),
+    getForPost: (postId: string) => ipcRenderer.invoke('postMedia:getForPost', postId),
+    getForMedia: (mediaId: string) => ipcRenderer.invoke('postMedia:getForMedia', mediaId),
+    getMediaDataForPost: (postId: string) => ipcRenderer.invoke('postMedia:getMediaDataForPost', postId),
+    reorder: (postId: string, mediaIds: string[]) => ipcRenderer.invoke('postMedia:reorder', postId, mediaIds),
+    isLinked: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:isLinked', postId, mediaId),
+    import: (postId: string, filePath: string) => ipcRenderer.invoke('postMedia:import', postId, filePath),
+    rebuild: () => ipcRenderer.invoke('postMedia:rebuild'),
+  },
+
   // Sync
   sync: {
     configure: (config: unknown) => ipcRenderer.invoke('sync:configure', config),
