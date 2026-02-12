@@ -10,9 +10,10 @@ interface PostLinkInfo {
 interface PostLinksProps {
   postId: string;
   onPostClick?: (postId: string) => void;
+  updatedAt?: string; // Trigger reload when post is saved
 }
 
-export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick }) => {
+export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updatedAt }) => {
   const [linksTo, setLinksTo] = useState<PostLinkInfo[]>([]);
   const [linkedBy, setLinkedBy] = useState<PostLinkInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +37,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick }) => 
     };
 
     loadLinks();
-  }, [postId]);
+  }, [postId, updatedAt]); // Reload when post is updated
 
   const totalLinks = linksTo.length + linkedBy.length;
 
