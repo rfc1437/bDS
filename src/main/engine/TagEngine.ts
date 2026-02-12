@@ -110,14 +110,16 @@ function isValidHexColor(color: string): boolean {
  */
 export class TagEngine extends EventEmitter {
   private currentProjectId: string = 'default';
-  private projectBaseDir: string | null = null;
 
   constructor() {
     super();
   }
 
-  private getProjectBaseDir(): string {
-    if (this.projectBaseDir) return this.projectBaseDir;
+  /**
+   * Always returns the internal project directory (in userData).
+   * Tag metadata never lives in an external dataPath.
+   */
+  private getInternalBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
@@ -125,9 +127,8 @@ export class TagEngine extends EventEmitter {
   /**
    * Set the current project context
    */
-  setProjectContext(projectId: string, baseDir?: string): void {
+  setProjectContext(projectId: string): void {
     this.currentProjectId = projectId;
-    this.projectBaseDir = baseDir || null;
   }
 
   /**
@@ -141,7 +142,7 @@ export class TagEngine extends EventEmitter {
    * Get the tags file path for filesystem persistence
    */
   private getTagsFilePath(): string {
-    return path.join(this.getProjectBaseDir(), 'meta', 'tags-metadata.json');
+    return path.join(this.getInternalBaseDir(), 'meta', 'tags-metadata.json');
   }
 
   /**

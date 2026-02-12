@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
-      "Bash(node ./node_modules/typescript/bin/tsc:*)"
+      "Bash(node ./node_modules/typescript/bin/tsc:*)",
+      "Bash(npm run build:main:*)"
     ]
   }
 }

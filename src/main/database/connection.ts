@@ -15,6 +15,7 @@ export class DatabaseConnection {
   private localDb: DrizzleDB | null = null;
   private localClient: Client | null = null;
   private config: DatabaseConfig;
+  private _closing = false;
 
   constructor(config?: Partial<DatabaseConfig>) {
     const userDataPath = app.getPath('userData');
@@ -58,9 +59,15 @@ export class DatabaseConnection {
     return this.localDb;
   }
 
+  get isClosing(): boolean {
+    return this._closing;
+  }
+
   getLocal(): DrizzleDB {
     if (!this.localDb) {
-      throw new Error('Local database not initialized. Call initializeLocal() first.');
+      throw new Error(this._closing
+        ? 'Database is closing'
+        : 'Local database not initialized. Call initializeLocal() first.');
     }
     return this.localDb;
   }
@@ -449,6 +456,7 @@ export class DatabaseConnection {
   }
 
   async close(): Promise<void> {
+    this._closing = true;
     if (this.localClient) {
       this.localClient.close();
       this.localClient = null;

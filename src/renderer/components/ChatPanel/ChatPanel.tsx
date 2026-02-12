@@ -77,9 +77,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     const unsubToolCall = window.electronAPI?.chat.onToolCall((data) => {
       console.log('[ChatPanel] Tool call received:', data);
       if (data.conversationId === conversationId) {
-        const toolCall = data.toolCall as { name: string; args: unknown };
-        toolEventsRef.current.push({ name: toolCall.name, args: toolCall.args });
-        setToolEvents(prev => [...prev, { type: 'call', name: toolCall.name, args: toolCall.args, timestamp: Date.now() }]);
+        const toolCall = data.toolCall as { name: string; arguments: Record<string, unknown> };
+        toolEventsRef.current.push({ name: toolCall.name, args: toolCall.arguments });
+        setToolEvents(prev => [...prev, { type: 'call', name: toolCall.name, args: toolCall.arguments, timestamp: Date.now() }]);
         scrollToBottom();
       }
     });
