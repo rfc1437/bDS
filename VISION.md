@@ -77,11 +77,11 @@ the post to deleted, and filter it out, but will not remove it fully from the da
 pipeline later might need the fact of the deletion as information source to do its thing (update relevant
 files).
 
-So a post starts in "draft" and can go to "published" and from there to "deleted". From "draft" it can only
+So a post starts in "draft" and can go to "published" and from there to "archived". From "draft" it can only
 go back to "published" (via discard) or vanish fully from the database (because drafts for new posts are
 not relevant for the pipeline, as they never were published before).
 
-Posts in draft are automatically saved during edit every 20 seconds and a dot in the tab title gives
+Posts in draft are automatically saved during edit when idle and a dot in the tab title gives
 information about its state as unsaved. The user can force the save with the standard hotkey for that
 purpose or just wait. Switching to another post will also save a draft automatically.
 
@@ -206,16 +206,6 @@ we have all the metadata in our model set up in a similar way as Wordpress handl
 seamless integration. Posts in Wordpress backups are html, but should be interpreted and transformed into
 proper markdown in the import.
 
-We should use UpdraftPlus for backups and loading data into the system from those backups, so that we
-have full data available from the site, including all meta data and uploads.
-
-Additionally we need another importer to traverse a full website and deduct post structure from that website
-and rebuild posts in the database based on such a web traversal. To be able to do that, use the OpenCode Zen
-AI integration so that HTML pages can be directly inspected and turned into actual blog
-posts in proper structure and proper markdown, despite the source being HTML. This is a variant of the
-wordpress importer that directly works on already rendered HTML websites. The importer should only stay
-within the actual site it was handled, not following any off-site links.
-
 In general, HTML elements of the post have to all be transformed into markdown equivalents, and not use
 embedded HTML, for as much as possible. We want clean markdown in the posts after the import, not a mix
 of markdown and HTML.
@@ -317,12 +307,3 @@ the correct styling of the website.
 
 Publishing of files can be configured to be done via FTP or SSH, connection data must be configureable in
 preferences for the website.
-
-## Editing II
-
-I also want an outline-based editor that integrates well with markdown, so that I can edit longer posts and
-pages in an outline, with allowing to fold down sections on same levels to get a better overview of the
-overall story. This is important for bigger stories that require more focus on the overall writing.
-
-The stories still should be stored as markdown, so the outliner should be an alternative editor that can be
-chosen in the same way as the wysiwyg and the raw markdown editor.
