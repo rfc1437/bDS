@@ -32,10 +32,8 @@ automatically reflected to the filesystem in a per-project way. Use a meta/ fold
 for those files.
 
 There should be good cloud-storage based syncing that can be triggered when online again and should use
-asynchronous syncing with auto-resolving of issues. Also there should be support to use git as another way
-to sync blog projects. This also should be on a per-project level and the UI should support the user to
-git init and github auth with device flow properly when setting up git syncing. git syncing should also be
-handled asynchronously when online and should use auto-resolve of merge conflicts.
+asynchronous syncing with auto-resolving of issues. The solution should be end-user friendly and not
+too technical in setup.
 
 The application must be able to support multiple projects (ie web sites), so there must be a way to create
 new projects and select current project. The UI is only showing all data of the current selected project and
