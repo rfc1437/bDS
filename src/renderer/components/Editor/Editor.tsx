@@ -656,26 +656,17 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       </div>
 
       <div className="editor-content">
-        <div className="editor-meta">
-          <div className="editor-field">
-            <label>Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Untitled"
-            />
-          </div>
-          <div className="editor-field">
-            <label>Slug</label>
-            <input
-              type="text"
-              value={post.slug}
-              disabled
-              className="disabled"
-            />
-          </div>
-          <div className="editor-field-row">
+        <div className="editor-header-row">
+          <div className="editor-meta">
+            <div className="editor-field">
+              <label>Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Untitled"
+              />
+            </div>
             <div className="editor-field">
               <label>Tags</label>
               <TagInput
@@ -684,25 +675,38 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
                 placeholder="Add tags..."
               />
             </div>
-            <div className="editor-field">
-              <label>Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                {availableCategories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+            <div className="editor-field-row">
+              <div className="editor-field">
+                <label>Slug</label>
+                <input
+                  type="text"
+                  value={post.slug}
+                  disabled
+                  className="disabled"
+                />
+              </div>
+              <div className="editor-field">
+                <label>Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {availableCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+            
+            <PostLinks 
+              postId={post.id}
+              onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
+            />
           </div>
           
-          <PostLinks 
-            postId={post.id}
-            onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
-          />
-          
-          <LinkedMediaPanel postId={post.id} />
+          <div className="editor-media-panel">
+            <LinkedMediaPanel postId={post.id} />
+          </div>
         </div>
         
         <div className="editor-body">
