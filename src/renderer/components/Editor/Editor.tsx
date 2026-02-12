@@ -13,7 +13,15 @@ import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
 import { AutoSaveManager } from '../../utils';
 import { parseMacros, getMacro } from '../../macros/registry';
+import { PostSearchModal } from '../PostSearchModal';
 import './Editor.css';
+
+interface SearchResult {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt?: string;
+}
 
 // Module-level AutoSaveManager for idle-time based auto-saving
 const autoSaveManager = new AutoSaveManager({
@@ -254,6 +262,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [galleryImages, setGalleryImages] = useState<{ src: string; alt: string }[]>([]);
+  const [showPostSearch, setShowPostSearch] = useState(false);
   const editorRef = useRef<unknown>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -522,9 +531,44 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   };
 
   // Handle Monaco editor mount
-  const handleEditorDidMount = (editor: unknown) => {
+  const handleEditorDidMount = (editor: unknown, monaco: Monaco) => {
     editorRef.current = editor;
+    const ed = editor as any;
+
+    // Add keyboard shortcut and command for inserting post links
+    ed.addAction({
+      id: 'editor.action.insertPostLink',
+      label: 'Insert Link to Post',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
+      run: () => {
+        setShowPostSearch(true);
+      }
+    });
   };
+
+  // Handle post selection from search modal
+  const handlePostSelected = useCallback((post: SearchResult) => {
+    const editor = editorRef.current as any;
+    if (!editor) return;
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    const selection = editor.getSelection();
+    const selectedText = selection ? model.getValueInRange(selection) : '';
+
+    const linkText = selectedText || post.title;
+    const linkUrl = `/posts/${post.slug}`;
+    const linkMarkdown = `[${linkText}](${linkUrl})`;
+
+    editor.executeEdits('insert-post-link', [{
+      range: selection || editor.getSelection(),
+      text: linkMarkdown,
+      forceMoveMarkers: true
+    }]);
+
+    setShowPostSearch(false);
+  }, []);
 
   // Configure Monaco before mount to add macro syntax highlighting
   const handleEditorWillMount = (monaco: Monaco) => {
@@ -698,8 +742,9 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               </div>
             </div>
             
-            <PostLinks 
+            <PostLinks
               postId={post.id}
+              updatedAt={post.updatedAt}
               onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
             />
           </div>
@@ -736,12 +781,21 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
               </button>
             </div>
             {images.length > 0 && (
-              <button 
+              <button
                 className="gallery-button"
                 onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
                 title={`View ${images.length} image(s)`}
               >
                 📷 {images.length}
+              </button>
+            )}
+            {editorMode === 'markdown' && (
+              <button
+                className="insert-post-link-button"
+                onClick={() => setShowPostSearch(true)}
+                title="Link to post (Ctrl+K)"
+              >
+                📝
               </button>
             )}
           </div>
@@ -813,6 +867,13 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           </span>
         )}
       </div>
+
+      {showPostSearch && (
+        <PostSearchModal
+          onSelect={handlePostSelected}
+          onClose={() => setShowPostSearch(false)}
+        />
+      )}
     </div>
   );
 };

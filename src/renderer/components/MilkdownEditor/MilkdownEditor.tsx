@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Editor, defaultValueCtx, editorViewCtx, rootCtx, remarkStringifyOptionsCtx, remarkPluginsCtx } from '@milkdown/kit/core';
 import { commonmark, toggleStrongCommand, toggleEmphasisCommand, wrapInBlockquoteCommand, wrapInBulletListCommand, wrapInOrderedListCommand, insertHrCommand, toggleInlineCodeCommand, insertImageCommand, toggleLinkCommand } from '@milkdown/kit/preset/commonmark';
 import { gfm, toggleStrikethroughCommand } from '@milkdown/kit/preset/gfm';
@@ -20,6 +20,7 @@ import { macroPlugin } from '../../plugins/macroPlugin';
 // Import macros module to register all macro definitions
 import '../../macros';
 import './MilkdownEditor.css';
+import { PostSearchModal } from '../PostSearchModal';
 
 /**
  * Unescape brackets that Milkdown/remark escapes.
@@ -53,6 +54,13 @@ const remarkTightLists: RemarkPlugin = {
   options: {},
 };
 
+interface SearchResult {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt?: string;
+}
+
 interface MilkdownEditorProps {
   content: string;
   onChange: (markdown: string) => void;
@@ -62,6 +70,7 @@ interface MilkdownEditorProps {
 // Toolbar component that uses the editor instance
 const EditorToolbar: React.FC = () => {
   const [loading, getEditor] = useInstance();
+  const [showPostSearch, setShowPostSearch] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,54 +121,111 @@ const EditorToolbar: React.FC = () => {
     runCommand(insertImageCommand.key, { src: url, alt });
   }, [runCommand]);
 
+  const insertPostLink = useCallback(() => {
+    setShowPostSearch(true);
+  }, []);
+
+  // Add keyboard shortcut listener for Ctrl/Cmd+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowPostSearch(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handlePostSelected = useCallback((post: SearchResult) => {
+    const editor = getEditor();
+    if (!editor) return;
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const { state, dispatch } = view;
+      const { selection, schema } = state;
+      const selectedText = selection.empty ? '' : state.doc.textBetween(selection.from, selection.to);
+
+      const linkText = selectedText || post.title;
+      const linkUrl = `/posts/${post.slug}`;
+
+      if (selection.empty) {
+        // No selection - create text node with link mark and insert it
+        const linkMark = schema.marks.link.create({ href: linkUrl });
+        const textNode = schema.text(linkText, [linkMark]);
+        const tr = state.tr.replaceSelectionWith(textNode, false);
+        dispatch(tr);
+      } else {
+        // Has selection - toggle link mark on selection
+        const linkMark = schema.marks.link.create({ href: linkUrl });
+        const tr = state.tr.addMark(selection.from, selection.to, linkMark);
+        dispatch(tr);
+      }
+    });
+
+    setShowPostSearch(false);
+  }, [getEditor]);
+
   if (loading) return null;
 
   return (
-    <div className="milkdown-toolbar">
-      <div className="toolbar-group">
-        <button onClick={() => insertHeading(1)} title="Heading 1">H1</button>
-        <button onClick={() => insertHeading(2)} title="Heading 2">H2</button>
-        <button onClick={() => insertHeading(3)} title="Heading 3">H3</button>
+    <>
+      <div className="milkdown-toolbar">
+        <div className="toolbar-group">
+          <button onClick={() => insertHeading(1)} title="Heading 1">H1</button>
+          <button onClick={() => insertHeading(2)} title="Heading 2">H2</button>
+          <button onClick={() => insertHeading(3)} title="Heading 3">H3</button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button onClick={() => runCommand(toggleStrongCommand.key)} title="Bold (Ctrl+B)">
+            <strong>B</strong>
+          </button>
+          <button onClick={() => runCommand(toggleEmphasisCommand.key)} title="Italic (Ctrl+I)">
+            <em>I</em>
+          </button>
+          <button onClick={() => runCommand(toggleStrikethroughCommand.key)} title="Strikethrough">
+            <s>S</s>
+          </button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button onClick={() => runCommand(wrapInBulletListCommand.key)} title="Bullet List">•</button>
+          <button onClick={() => runCommand(wrapInOrderedListCommand.key)} title="Numbered List">1.</button>
+          <button onClick={() => runCommand(wrapInBlockquoteCommand.key)} title="Quote">❝</button>
+          <button onClick={() => runCommand(toggleInlineCodeCommand.key)} title="Code">{'{}'}</button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button onClick={insertLink} title="Insert Link">🔗</button>
+          <button onClick={insertPostLink} title="Link to Post (Ctrl+K)">📝</button>
+          <button onClick={insertImage} title="Insert Image">🖼</button>
+          <button onClick={() => runCommand(insertHrCommand.key)} title="Horizontal Rule">―</button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button onClick={() => runCommand(undoCommand.key)} title="Undo (Ctrl+Z)">↶</button>
+          <button onClick={() => runCommand(redoCommand.key)} title="Redo (Ctrl+Y)">↷</button>
+        </div>
       </div>
 
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <button onClick={() => runCommand(toggleStrongCommand.key)} title="Bold (Ctrl+B)">
-          <strong>B</strong>
-        </button>
-        <button onClick={() => runCommand(toggleEmphasisCommand.key)} title="Italic (Ctrl+I)">
-          <em>I</em>
-        </button>
-        <button onClick={() => runCommand(toggleStrikethroughCommand.key)} title="Strikethrough">
-          <s>S</s>
-        </button>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <button onClick={() => runCommand(wrapInBulletListCommand.key)} title="Bullet List">•</button>
-        <button onClick={() => runCommand(wrapInOrderedListCommand.key)} title="Numbered List">1.</button>
-        <button onClick={() => runCommand(wrapInBlockquoteCommand.key)} title="Quote">❝</button>
-        <button onClick={() => runCommand(toggleInlineCodeCommand.key)} title="Code">{'{}'}</button>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <button onClick={insertLink} title="Insert Link">🔗</button>
-        <button onClick={insertImage} title="Insert Image">🖼</button>
-        <button onClick={() => runCommand(insertHrCommand.key)} title="Horizontal Rule">―</button>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <button onClick={() => runCommand(undoCommand.key)} title="Undo (Ctrl+Z)">↶</button>
-        <button onClick={() => runCommand(redoCommand.key)} title="Redo (Ctrl+Y)">↷</button>
-      </div>
-    </div>
+      {showPostSearch && (
+        <PostSearchModal
+          onSelect={handlePostSelected}
+          onClose={() => setShowPostSearch(false)}
+        />
+      )}
+    </>
   );
 };
 
