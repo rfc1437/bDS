@@ -360,14 +360,15 @@ const PostsList: React.FC = () => {
   };
 
   // Determine which posts to display
-  const displayPosts = searchResults ?? filteredPosts ?? posts;
-  const isFiltered = searchResults !== null || filteredPosts !== null;
+  // Filters only apply to published/archived posts — drafts are always shown unfiltered
+  const filteredDisplayPosts = searchResults ?? filteredPosts ?? null;
+  const isFiltered = filteredDisplayPosts !== null;
   const hasActiveFilters = searchQuery || selectedYear || selectedTags.length > 0 || selectedCategories.length > 0;
 
   const groupedPosts = {
-    draft: displayPosts.filter(p => p.status === 'draft'),
-    published: displayPosts.filter(p => p.status === 'published'),
-    archived: displayPosts.filter(p => p.status === 'archived'),
+    draft: posts.filter(p => p.status === 'draft'),
+    published: (filteredDisplayPosts ?? posts).filter(p => p.status === 'published'),
+    archived: (filteredDisplayPosts ?? posts).filter(p => p.status === 'archived'),
   };
 
   const clearAllFilters = () => {
@@ -436,7 +437,7 @@ const PostsList: React.FC = () => {
       {hasActiveFilters && (
         <div className="filter-status">
           <span>
-            {displayPosts.length} result{displayPosts.length !== 1 ? 's' : ''}
+            {groupedPosts.published.length + groupedPosts.archived.length} result{groupedPosts.published.length + groupedPosts.archived.length !== 1 ? 's' : ''}
             {searchQuery && ` for "${searchQuery}"`}
           </span>
           <button onClick={clearAllFilters} title="Clear all filters">
@@ -529,14 +530,14 @@ const PostsList: React.FC = () => {
         </div>
       )}
 
-      {displayPosts.length === 0 && !isFiltered && (
+      {posts.length === 0 && !isFiltered && (
         <div className="sidebar-empty">
           <p>No posts yet</p>
           <button onClick={handleCreatePost}>Create your first post</button>
         </div>
       )}
 
-      {displayPosts.length === 0 && isFiltered && (
+      {groupedPosts.published.length === 0 && groupedPosts.archived.length === 0 && isFiltered && (
         <div className="sidebar-empty">
           <p>No matching posts</p>
           <button onClick={clearAllFilters}>Clear filters</button>
