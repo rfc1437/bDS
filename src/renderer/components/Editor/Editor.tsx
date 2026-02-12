@@ -536,21 +536,17 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       defaultToken: '',
       tokenPostfix: '.md',
 
-      // Macros are the key addition
-      macroOpen: /\[\[/,
-      macroClose: /\]\]/,
-
       tokenizer: {
         root: [
           // Macro syntax: [[macroName param="value"]]
           [/\[\[[a-zA-Z][\w-]*/, { token: 'keyword.macro', next: '@macroParams' }],
           
           // Headers
-          [/^(\s{0,3})(#+)((?:[^\\#]|@escapes)+)((?:#+)?)/, ['white', 'keyword.header', 'variable', 'keyword.header']],
+          [/^#{1,6}\s.*$/, 'keyword.header'],
           
           // Block elements
           [/^\s*>+/, 'string.quote'],
-          [/^\s*[\-+*]\s/, 'keyword'],
+          [/^\s*[-+*]\s/, 'keyword'],
           [/^\s*\d+\.\s/, 'keyword'],
           [/^\s*```\w*/, { token: 'string.code', next: '@codeblock' }],
           
@@ -826,6 +822,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const [tags, setTags] = useState(item?.tags.join(', ') || '');
   const [linkedPosts, setLinkedPosts] = useState<{ postId: string; sortOrder: number }[]>([]);
   const [showPostPicker, setShowPostPicker] = useState(false);
+  const [postSearchQuery, setPostSearchQuery] = useState('');
 
   // Load linked posts for this media
   useEffect(() => {
@@ -855,6 +852,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       await window.electronAPI?.postMedia.link(postId, mediaId);
       setLinkedPosts([...linkedPosts, { postId, sortOrder: linkedPosts.length }]);
       setShowPostPicker(false);
+      setPostSearchQuery('');
       showToast.success('Linked to post');
     } catch (error) {
       console.error('Failed to link to post:', error);
@@ -879,9 +877,11 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     openTab({ type: 'post', id: postId, isTransient: true });
   };
 
-  // Get unlinked posts for picker
+  // Get unlinked posts for picker, filtered by search
   const unlinkedPosts = posts.filter(
     p => !linkedPosts.find(l => l.postId === p.id)
+  ).filter(
+    p => !postSearchQuery || (p.title || 'Untitled').toLowerCase().includes(postSearchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -1039,8 +1039,17 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
             
             {showPostPicker && (
               <div className="post-picker">
+                <div className="post-picker-search">
+                  <input
+                    type="text"
+                    placeholder="Search posts..."
+                    value={postSearchQuery}
+                    onChange={(e) => setPostSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                </div>
                 {unlinkedPosts.length === 0 ? (
-                  <div className="no-posts">No posts available to link</div>
+                  <div className="no-posts">{postSearchQuery ? 'No matching posts' : 'No posts available to link'}</div>
                 ) : (
                   <div className="post-picker-list">
                     {unlinkedPosts.slice(0, 10).map(post => (
