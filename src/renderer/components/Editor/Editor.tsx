@@ -1028,13 +1028,20 @@ export const Editor: React.FC = () => {
     }
   }, [activeView, selectedMediaId, media, isLoading, setSelectedMedia]);
 
-  // Close tab if the item doesn't exist anymore
+  // Close tab if the item doesn't exist anymore, or fetch it if not yet loaded
   useEffect(() => {
     if (activeTab && !isLoading) {
       if (activeTab.type === 'post') {
         const postExists = posts.some(p => p.id === activeTab.id);
         if (!postExists) {
-          closeTab(activeTab.id);
+          // Post might not be loaded yet (pagination / filtered view) — try fetching it
+          window.electronAPI?.posts.get(activeTab.id).then((post) => {
+            if (post) {
+              useAppStore.getState().addPost(post as PostData);
+            } else {
+              closeTab(activeTab.id);
+            }
+          });
         }
       } else if (activeTab.type === 'media') {
         const mediaExists = media.some(m => m.id === activeTab.id);
