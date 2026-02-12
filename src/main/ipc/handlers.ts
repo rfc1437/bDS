@@ -271,7 +271,16 @@ export function registerIpcHandlers(): void {
       return [];
     }
 
+    // Ensure project context is current before importing
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
     const engine = getMediaEngine();
+    if (project) {
+      const internalDir = projectEngine.getInternalBaseDir(project.id);
+      const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+      engine.setProjectContext(project.id, dataDir, internalDir);
+    }
+
     const imported: MediaData[] = [];
 
     for (const filePath of result.filePaths) {
