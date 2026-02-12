@@ -182,6 +182,15 @@ export class DatabaseConnection {
         created_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS post_media (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        media_id TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);
       CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
       CREATE INDEX IF NOT EXISTS idx_posts_sync_status ON posts(sync_status);
@@ -190,6 +199,9 @@ export class DatabaseConnection {
       CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
       CREATE INDEX IF NOT EXISTS idx_post_links_source ON post_links(source_post_id);
       CREATE INDEX IF NOT EXISTS idx_post_links_target ON post_links(target_post_id);
+      CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id);
+      CREATE INDEX IF NOT EXISTS idx_post_media_media ON post_media(media_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS post_media_post_media_idx ON post_media(post_id, media_id);
       CREATE UNIQUE INDEX IF NOT EXISTS posts_project_slug_idx ON posts(project_id, slug);
 
       CREATE TABLE IF NOT EXISTS tags (

@@ -7,6 +7,7 @@ import { getDropboxSyncEngine, DropboxSyncConfig, ConflictResolution } from '../
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
 import { getTagEngine } from '../engine/TagEngine';
+import { getPostMediaEngine } from '../engine/PostMediaEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
@@ -77,6 +78,8 @@ export function registerIpcHandlers(): void {
       mediaEngine.setProjectContext(project.id, dataDir, internalDir);
       metaEngine.setProjectContext(project.id);
       tagEngine.setProjectContext(project.id);
+      const postMediaEngine = getPostMediaEngine();
+      postMediaEngine.setProjectContext(project.id);
 
       // Sync meta on startup
       await metaEngine.syncOnStartup();
@@ -101,6 +104,8 @@ export function registerIpcHandlers(): void {
       mediaEngine.setProjectContext(project.id, dataDir, internalDir);
       metaEngine.setProjectContext(project.id);
       tagEngine.setProjectContext(project.id);
+      const postMediaEngine = getPostMediaEngine();
+      postMediaEngine.setProjectContext(project.id);
 
       // Sync meta on project switch
       await metaEngine.syncOnStartup();
@@ -668,6 +673,53 @@ export function registerIpcHandlers(): void {
     return engine.syncTagsFromPosts();
   });
 
+  // ============ Post-Media Link Handlers ============
+
+  safeHandle('postMedia:link', async (_, postId: string, mediaId: string) => {
+    const engine = getPostMediaEngine();
+    return engine.linkMediaToPost(postId, mediaId);
+  });
+
+  safeHandle('postMedia:unlink', async (_, postId: string, mediaId: string) => {
+    const engine = getPostMediaEngine();
+    return engine.unlinkMediaFromPost(postId, mediaId);
+  });
+
+  safeHandle('postMedia:getForPost', async (_, postId: string) => {
+    const engine = getPostMediaEngine();
+    return engine.getLinkedMediaForPost(postId);
+  });
+
+  safeHandle('postMedia:getForMedia', async (_, mediaId: string) => {
+    const engine = getPostMediaEngine();
+    return engine.getLinkedPostsForMedia(mediaId);
+  });
+
+  safeHandle('postMedia:getMediaDataForPost', async (_, postId: string) => {
+    const engine = getPostMediaEngine();
+    return engine.getLinkedMediaDataForPost(postId);
+  });
+
+  safeHandle('postMedia:reorder', async (_, postId: string, mediaIds: string[]) => {
+    const engine = getPostMediaEngine();
+    return engine.reorderMediaForPost(postId, mediaIds);
+  });
+
+  safeHandle('postMedia:isLinked', async (_, postId: string, mediaId: string) => {
+    const engine = getPostMediaEngine();
+    return engine.isMediaLinkedToPost(postId, mediaId);
+  });
+
+  safeHandle('postMedia:import', async (_, postId: string, filePath: string) => {
+    const engine = getPostMediaEngine();
+    return engine.importMediaForPost(postId, filePath);
+  });
+
+  safeHandle('postMedia:rebuild', async () => {
+    const engine = getPostMediaEngine();
+    return engine.rebuildFromSidecars();
+  });
+
   // ============ Event Forwarding ============
   
   // Forward engine events to renderer
@@ -677,6 +729,7 @@ export function registerIpcHandlers(): void {
   const projectEngine = getProjectEngine();
   const metaEngine = getMetaEngine();
   const tagEngine = getTagEngine();
+  const postMediaEngine = getPostMediaEngine();
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -712,6 +765,11 @@ export function registerIpcHandlers(): void {
   tagEngine.on('tagRenamed', forwardEvent('tag:renamed'));
   tagEngine.on('tagsMerged', forwardEvent('tags:merged'));
   tagEngine.on('tagsSynced', forwardEvent('tags:synced'));
+
+  postMediaEngine.on('mediaLinked', forwardEvent('postMedia:linked'));
+  postMediaEngine.on('mediaUnlinked', forwardEvent('postMedia:unlinked'));
+  postMediaEngine.on('mediaReordered', forwardEvent('postMedia:reordered'));
+  postMediaEngine.on('rebuilt', forwardEvent('postMedia:rebuilt'));
 
   syncEngine.on('syncStarted', forwardEvent('sync:started'));
   syncEngine.on('syncCompleted', forwardEvent('sync:completed'));

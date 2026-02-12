@@ -31,6 +31,7 @@ export interface MediaData {
   createdAt: Date;
   updatedAt: Date;
   tags: string[];
+  linkedPostIds?: string[]; // Posts this media is linked to
 }
 
 export interface MediaMetadata {
@@ -45,6 +46,7 @@ export interface MediaMetadata {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  linkedPostIds?: string[]; // Posts this media is linked to (persisted in sidecar)
 }
 
 export class MediaEngine extends EventEmitter {
@@ -227,6 +229,7 @@ export class MediaEngine extends EventEmitter {
       createdAt: mediaData.createdAt.toISOString(),
       updatedAt: mediaData.updatedAt.toISOString(),
       tags: mediaData.tags,
+      linkedPostIds: mediaData.linkedPostIds,
     };
 
     // Write YAML-like format consistent with posts
@@ -246,6 +249,9 @@ export class MediaEngine extends EventEmitter {
     lines.push(`createdAt: ${metadata.createdAt}`);
     lines.push(`updatedAt: ${metadata.updatedAt}`);
     lines.push(`tags: [${metadata.tags.map(t => `"${t}"`).join(', ')}]`);
+    if (metadata.linkedPostIds && metadata.linkedPostIds.length > 0) {
+      lines.push(`linkedPostIds: [${metadata.linkedPostIds.map(id => `"${id}"`).join(', ')}]`);
+    }
     lines.push('---');
 
     await fs.writeFile(sidecarPath, lines.join('\n'), 'utf-8');
@@ -267,6 +273,7 @@ export class MediaEngine extends EventEmitter {
       
       const metadata: Partial<MediaMetadata> = {
         tags: [],
+        linkedPostIds: [],
       };
 
       for (const line of lines) {
@@ -316,12 +323,22 @@ export class MediaEngine extends EventEmitter {
             break;
           case 'tags':
             // Parse array format: ["tag1", "tag2"]
-            const match = value.match(/\[(.*)\]/);
-            if (match) {
-              metadata.tags = match[1]
+            const tagsMatch = value.match(/\[(.*)\]/);
+            if (tagsMatch) {
+              metadata.tags = tagsMatch[1]
                 .split(',')
                 .map(t => t.trim().replace(/"/g, ''))
                 .filter(t => t.length > 0);
+            }
+            break;
+          case 'linkedPostIds':
+            // Parse array format: ["postId1", "postId2"]
+            const postIdsMatch = value.match(/\[(.*)\]/);
+            if (postIdsMatch) {
+              metadata.linkedPostIds = postIdsMatch[1]
+                .split(',')
+                .map(id => id.trim().replace(/"/g, ''))
+                .filter(id => id.length > 0);
             }
             break;
         }

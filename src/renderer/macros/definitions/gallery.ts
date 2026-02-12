@@ -1,12 +1,16 @@
 /**
  * Gallery Macro
  * 
- * Renders an image gallery from a linked media file or folder.
+ * Renders an image gallery from linked media files for a post.
+ * Uses the post-media linking system to display media attached to the current post.
+ * Images are clickable to open in a lightbox.
  * 
- * Usage: [[gallery link="media/photos" columns="3" caption="My Photos"]]
+ * Usage: 
+ *   [[gallery]]                       - Shows all linked media for current post
+ *   [[gallery columns="4"]]           - Custom column count
+ *   [[gallery caption="My Photos"]]   - With caption
  * 
  * Parameters:
- * - link (required): Path to media file or folder
  * - columns: Number of columns (default: 3)
  * - caption: Gallery caption
  */
@@ -16,12 +20,9 @@ import type { MacroDefinition, MacroParams, MacroRenderContext } from '../types'
 
 const galleryMacro: MacroDefinition = {
   name: 'gallery',
-  description: 'Renders an image gallery from linked media',
+  description: 'Renders an image gallery from linked media files with lightbox support',
 
   validate(params: MacroParams): string | undefined {
-    if (!params.link) {
-      return 'Gallery macro requires a "link" parameter';
-    }
     if (params.columns) {
       const cols = parseInt(params.columns, 10);
       if (isNaN(cols) || cols < 1 || cols > 6) {
@@ -32,41 +33,37 @@ const galleryMacro: MacroDefinition = {
   },
 
   editorPreview(params: MacroParams): string {
-    const link = params.link || '?';
-    return `📷 Gallery: ${link}`;
+    const cols = params.columns || '3';
+    return `📷 Gallery (${cols} cols)`;
   },
 
   render(params: MacroParams, context: MacroRenderContext): string {
-    const { link, columns = '3', caption } = params;
+    const { columns = '3', caption } = params;
     const colCount = parseInt(columns, 10) || 3;
     
-    // Build the gallery HTML
+    // Build the gallery HTML with lightbox support
     const classes = ['macro-gallery', `gallery-cols-${colCount}`];
-    if (context.isPreview) {
-      classes.push('gallery-preview');
+    
+    // Data attributes for hydration - JS will load linked media and populate
+    const dataAttrs = [
+      `data-columns="${colCount}"`,
+      `data-lightbox="true"`,
+    ];
+    if (context.postId) {
+      dataAttrs.push(`data-post-id="${context.postId}"`);
     }
     
-    let html = `<div class="${classes.join(' ')}" data-link="${link}">`;
+    let html = `<div class="${classes.join(' ')}" ${dataAttrs.join(' ')}>`;
     
-    // In preview mode, show a placeholder
-    // In production, this would load actual images
-    if (context.isPreview) {
-      html += `<div class="gallery-placeholder">`;
-      html += `<span class="gallery-icon">🖼️</span>`;
-      html += `<span class="gallery-info">Gallery: ${link}</span>`;
-      if (caption) {
-        html += `<span class="gallery-caption">${caption}</span>`;
-      }
-      html += `</div>`;
-    } else {
-      // Production render would load images here
-      // For now, create a placeholder that frontend JS can hydrate
-      html += `<div class="gallery-container" data-columns="${colCount}">`;
-      html += `<!-- Gallery images loaded dynamically from: ${link} -->`;
-      html += `</div>`;
-      if (caption) {
-        html += `<figcaption class="gallery-caption">${caption}</figcaption>`;
-      }
+    // Gallery container that will be populated by hydration script
+    // The hydration script uses: window.electronAPI.postMedia.getMediaDataForPost(postId)
+    // and renders images with bds-media:// protocol
+    html += `<div class="gallery-container gallery-lightbox">`;
+    html += `<div class="gallery-loading">Loading gallery...</div>`;
+    html += `</div>`;
+    
+    if (caption) {
+      html += `<figcaption class="gallery-caption">${caption}</figcaption>`;
     }
     
     html += `</div>`;

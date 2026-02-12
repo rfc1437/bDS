@@ -172,6 +172,16 @@ export interface SyncTagsResult {
   added: string[];
 }
 
+// Post-Media Link types
+export interface MediaLinkData {
+  id: string;
+  projectId: string;
+  postId: string;
+  mediaId: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 // Chat/AI types
 export interface ChatConversation {
   id: string;
@@ -281,6 +291,17 @@ export interface ElectronAPI {
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => Promise<string | null>;
     regenerateThumbnails: (id: string) => Promise<Record<string, string> | null>;
     regenerateMissingThumbnails: () => Promise<{ processed: number; generated: number; failed: number }>;
+  };
+  postMedia: {
+    link: (postId: string, mediaId: string) => Promise<MediaLinkData>;
+    unlink: (postId: string, mediaId: string) => Promise<void>;
+    getForPost: (postId: string) => Promise<MediaLinkData[]>;
+    getForMedia: (mediaId: string) => Promise<MediaLinkData[]>;
+    getMediaDataForPost: (postId: string) => Promise<MediaData[]>;
+    reorder: (postId: string, mediaIds: string[]) => Promise<void>;
+    isLinked: (postId: string, mediaId: string) => Promise<boolean>;
+    import: (postId: string, filePath: string) => Promise<MediaLinkData>;
+    rebuild: () => Promise<void>;
   };
   sync: {
     configure: (config: SyncConfig) => Promise<void>;
