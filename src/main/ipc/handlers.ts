@@ -332,6 +332,31 @@ export function registerIpcHandlers(): void {
     return engine.getAllMedia();
   });
 
+  safeHandle('media:filter', async (_, filter: import('../engine/MediaEngine').MediaFilter) => {
+    const engine = getMediaEngine();
+    return engine.getMediaFiltered(filter);
+  });
+
+  safeHandle('media:search', async (_, query: string) => {
+    const engine = getMediaEngine();
+    return engine.searchMedia(query);
+  });
+
+  safeHandle('media:getByYearMonth', async () => {
+    const engine = getMediaEngine();
+    return engine.getMediaByYearMonth();
+  });
+
+  safeHandle('media:getTags', async () => {
+    const engine = getMediaEngine();
+    return engine.getAvailableTags();
+  });
+
+  safeHandle('media:getTagsWithCounts', async () => {
+    const engine = getMediaEngine();
+    return engine.getTagsWithCounts();
+  });
+
   safeHandle('media:rebuildFromFiles', async () => {
     // Ensure project context is current before rebuilding
     const projectEngine = getProjectEngine();
