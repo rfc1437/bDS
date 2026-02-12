@@ -12,6 +12,7 @@ export interface ProjectData {
   name: string;
   slug: string;
   description?: string;
+  dataPath?: string; // Custom path for project data (undefined = default)
   createdAt: Date;
   updatedAt: Date;
   isActive: boolean;
@@ -29,18 +30,41 @@ export class ProjectEngine extends EventEmitter {
       .replace(/^-|-$/g, '');
   }
 
-  private async ensureProjectDirectories(projectId: string): Promise<void> {
+  /**
+   * Get the base directory for a project's data.
+   * If the project has a custom dataPath, use that; otherwise use the default.
+   */
+  getProjectBaseDir(projectId: string, dataPath?: string | null): string {
+    if (dataPath) {
+      return dataPath;
+    }
     const userDataPath = app.getPath('userData');
-    const projectDir = path.join(userDataPath, 'projects', projectId);
+    return path.join(userDataPath, 'projects', projectId);
+  }
+
+  /**
+   * Get the default base directory (in userData) for a project.
+   */
+  getDefaultProjectBaseDir(projectId: string): string {
+    const userDataPath = app.getPath('userData');
+    return path.join(userDataPath, 'projects', projectId);
+  }
+
+  private async ensureProjectDirectories(projectId: string, dataPath?: string | null): Promise<void> {
+    const projectDir = this.getProjectBaseDir(projectId, dataPath);
     const postsDir = path.join(projectDir, 'posts');
     const mediaDir = path.join(projectDir, 'media');
+    const thumbnailsDir = path.join(projectDir, 'thumbnails');
+    const metaDir = path.join(projectDir, 'meta');
 
     await fs.mkdir(projectDir, { recursive: true });
     await fs.mkdir(postsDir, { recursive: true });
     await fs.mkdir(mediaDir, { recursive: true });
+    await fs.mkdir(thumbnailsDir, { recursive: true });
+    await fs.mkdir(metaDir, { recursive: true });
   }
 
-  async createProject(data: { name: string; description?: string; slug?: string }): Promise<ProjectData> {
+  async createProject(data: { name: string; description?: string; slug?: string; dataPath?: string }): Promise<ProjectData> {
     const db = getDatabase().getLocal();
     const now = new Date();
     const id = uuidv4();
@@ -61,13 +85,14 @@ export class ProjectEngine extends EventEmitter {
       name: data.name,
       slug: finalSlug,
       description: data.description,
+      dataPath: data.dataPath,
       createdAt: now,
       updatedAt: now,
       isActive: false,
     };
 
     // Create directories using project ID (not slug)
-    await this.ensureProjectDirectories(id);
+    await this.ensureProjectDirectories(id, data.dataPath);
 
     // Insert into database
     const dbProject: NewProject = {
@@ -75,6 +100,7 @@ export class ProjectEngine extends EventEmitter {
       name: project.name,
       slug: project.slug,
       description: project.description,
+      dataPath: project.dataPath,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
       isActive: project.isActive,
@@ -106,6 +132,7 @@ export class ProjectEngine extends EventEmitter {
         name: updated.name,
         slug: updated.slug,
         description: updated.description,
+        dataPath: updated.dataPath,
         updatedAt: updated.updatedAt,
         isActive: updated.isActive,
       })
@@ -116,6 +143,7 @@ export class ProjectEngine extends EventEmitter {
       name: updated.name,
       slug: updated.slug,
       description: updated.description || undefined,
+      dataPath: updated.dataPath || undefined,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
       isActive: updated.isActive ?? false,
@@ -196,6 +224,7 @@ export class ProjectEngine extends EventEmitter {
       name: dbProject.name,
       slug: dbProject.slug,
       description: dbProject.description || undefined,
+      dataPath: dbProject.dataPath || undefined,
       createdAt: dbProject.createdAt,
       updatedAt: dbProject.updatedAt,
       isActive: dbProject.isActive ?? false,
@@ -211,6 +240,7 @@ export class ProjectEngine extends EventEmitter {
       name: p.name,
       slug: p.slug,
       description: p.description || undefined,
+      dataPath: p.dataPath || undefined,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       isActive: p.isActive ?? false,
@@ -231,6 +261,7 @@ export class ProjectEngine extends EventEmitter {
       name: dbProject.name,
       slug: dbProject.slug,
       description: dbProject.description || undefined,
+      dataPath: dbProject.dataPath || undefined,
       createdAt: dbProject.createdAt,
       updatedAt: dbProject.updatedAt,
       isActive: dbProject.isActive ?? false,
@@ -255,12 +286,20 @@ export class ProjectEngine extends EventEmitter {
     return project;
   }
 
-  getProjectPaths(projectId: string): { posts: string; media: string } {
-    const userDataPath = app.getPath('userData');
+  getProjectPaths(projectId: string, dataPath?: string | null): { posts: string; media: string } {
+    const baseDir = this.getProjectBaseDir(projectId, dataPath);
     return {
-      posts: path.join(userDataPath, 'projects', projectId, 'posts'),
-      media: path.join(userDataPath, 'projects', projectId, 'media'),
+      posts: path.join(baseDir, 'posts'),
+      media: path.join(baseDir, 'media'),
     };
+  }
+
+  /**
+   * Get project paths by looking up the project's dataPath from the database.
+   */
+  async getProjectPathsResolved(projectId: string): Promise<{ posts: string; media: string }> {
+    const project = await this.getProject(projectId);
+    return this.getProjectPaths(projectId, project?.dataPath);
   }
 }
 

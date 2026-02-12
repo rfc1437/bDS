@@ -24,6 +24,7 @@ export interface ProjectData {
   name: string;
   slug: string;
   description?: string;
+  dataPath?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -322,7 +323,10 @@ export const useAppStore = create<AppState>()(
           hasMorePosts: hasMore,
         };
       }),
-      addPost: (post) => set((state) => ({ posts: [post, ...state.posts], totalPosts: state.totalPosts + 1 })),
+      addPost: (post) => set((state) => {
+        if (state.posts.some(p => p.id === post.id)) return state;
+        return { posts: [post, ...state.posts], totalPosts: state.totalPosts + 1 };
+      }),
       updatePost: (id, updatedPost) => set((state) => ({
         posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedPost } : p)),
       })),

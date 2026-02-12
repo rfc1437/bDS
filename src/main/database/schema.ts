@@ -6,6 +6,7 @@ export const projects = sqliteTable('projects', {
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   description: text('description'),
+  dataPath: text('data_path'), // Custom path for project data (null = default userData/projects/{id})
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),

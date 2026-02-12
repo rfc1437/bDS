@@ -49,14 +49,20 @@ export interface MediaMetadata {
 
 export class MediaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
+  private projectBaseDir: string | null = null;
 
   constructor() {
     super();
   }
 
-  private getMediaBaseDir(): string {
+  private getProjectBaseDir(): string {
+    if (this.projectBaseDir) return this.projectBaseDir;
     const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'projects', this.currentProjectId, 'media');
+    return path.join(userDataPath, 'projects', this.currentProjectId);
+  }
+
+  private getMediaBaseDir(): string {
+    return path.join(this.getProjectBaseDir(), 'media');
   }
 
   private getMediaDir(): string {
@@ -85,8 +91,9 @@ export class MediaEngine extends EventEmitter {
     return path.join(dir, `${id}${extension}`);
   }
 
-  setProjectContext(projectId: string): void {
+  setProjectContext(projectId: string, baseDir?: string): void {
     this.currentProjectId = projectId;
+    this.projectBaseDir = baseDir || null;
   }
 
   getProjectContext(): string {
@@ -101,8 +108,7 @@ export class MediaEngine extends EventEmitter {
    * Get the thumbnails directory for the current project
    */
   private getThumbnailsDir(): string {
-    const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'projects', this.currentProjectId, 'thumbnails');
+    return path.join(this.getProjectBaseDir(), 'thumbnails');
   }
 
   /**

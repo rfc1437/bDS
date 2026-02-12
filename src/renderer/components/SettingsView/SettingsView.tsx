@@ -108,6 +108,8 @@ export const SettingsView: React.FC = () => {
   // Project settings
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
+  const [projectDataPath, setProjectDataPath] = useState('');
+  const [defaultProjectPath, setDefaultProjectPath] = useState('');
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -135,6 +137,12 @@ export const SettingsView: React.FC = () => {
     if (activeProject) {
       setProjectName(activeProject.name);
       setProjectDescription(activeProject.description || '');
+      setProjectDataPath(activeProject.dataPath || '');
+
+      // Load the default path for reference
+      window.electronAPI?.app.getDefaultProjectPath(activeProject.id).then(path => {
+        setDefaultProjectPath(path);
+      });
     }
   }, [activeProject]);
 
@@ -285,10 +293,18 @@ export const SettingsView: React.FC = () => {
       const updated = await window.electronAPI?.projects.update(activeProject.id, {
         name: projectName.trim() || activeProject.name,
         description: projectDescription.trim(),
+        dataPath: projectDataPath.trim() || undefined,
       });
       if (updated) {
         setActiveProject(updated as any);
         useAppStore.getState().updateProject(activeProject.id, updated as any);
+
+        // Also update project.json to keep dataPath in sync
+        await window.electronAPI?.meta.updateProjectMetadata({
+          name: projectName.trim() || activeProject.name,
+          description: projectDescription.trim(),
+          dataPath: projectDataPath.trim() || undefined,
+        } as any);
       }
       showToast.success('Project settings saved');
     } catch (error) {
@@ -297,8 +313,19 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleBrowseDataPath = async () => {
+    const selected = await window.electronAPI?.app.selectFolder('Select Project Data Folder');
+    if (selected) {
+      setProjectDataPath(selected);
+    }
+  };
+
+  const handleResetDataPath = () => {
+    setProjectDataPath('');
+  };
+
   // Keywords for each section for search filtering
-  const projectKeywords = ['project', 'name', 'description', 'blog', 'site'];
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
@@ -339,6 +366,30 @@ export const SettingsView: React.FC = () => {
           onChange={(e) => setProjectDescription(e.target.value)}
           rows={3}
         />
+      </SettingRow>
+
+      <SettingRow
+        id="project-datapath"
+        label="Project Data Path"
+        description={`Custom folder for storing posts, media, and metadata. Leave empty to use the default location: ${defaultProjectPath}`}
+      >
+        <div className="setting-input-group">
+          <input
+            id="project-datapath"
+            type="text"
+            placeholder={defaultProjectPath || 'Default location'}
+            value={projectDataPath}
+            onChange={(e) => setProjectDataPath(e.target.value)}
+          />
+          <button className="secondary" onClick={handleBrowseDataPath} title="Browse...">
+            Browse
+          </button>
+          {projectDataPath && (
+            <button className="secondary" onClick={handleResetDataPath} title="Reset to default">
+              Reset
+            </button>
+          )}
+        </div>
       </SettingRow>
 
       <div className="setting-actions">
