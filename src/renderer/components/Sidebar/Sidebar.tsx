@@ -383,9 +383,15 @@ const PostsList: React.FC = () => {
     try {
       const results = await window.electronAPI?.posts.search(query);
       if (results) {
-        // Map search results to PostData (search returns SearchResult with score)
-        const postIds = (results as { id: string }[]).map(r => r.id);
-        setSearchResults(posts.filter(p => postIds.includes(p.id)));
+        // Fetch full PostData for each search result
+        const fullPosts: PostData[] = [];
+        for (const result of results as { id: string }[]) {
+          const post = await window.electronAPI?.posts.get(result.id);
+          if (post) {
+            fullPosts.push(post as PostData);
+          }
+        }
+        setSearchResults(fullPosts);
       }
     } catch (error) {
       console.error('Search failed:', error);
