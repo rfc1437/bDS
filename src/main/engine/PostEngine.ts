@@ -142,16 +142,16 @@ export class PostEngine extends EventEmitter {
     await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
   }
 
-  private projectBaseDir: string | null = null;
+  private dataDir: string | null = null;
 
-  private getProjectBaseDir(): string {
-    if (this.projectBaseDir) return this.projectBaseDir;
+  private getDataDir(): string {
+    if (this.dataDir) return this.dataDir;
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
 
   private getPostsBaseDir(): string {
-    return path.join(this.getProjectBaseDir(), 'posts');
+    return path.join(this.getDataDir(), 'posts');
   }
 
   private getPostsDir(): string {
@@ -179,9 +179,9 @@ export class PostEngine extends EventEmitter {
     return path.join(dir, `${slug}.md`);
   }
 
-  setProjectContext(projectId: string, baseDir?: string): void {
+  setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
-    this.projectBaseDir = baseDir || null;
+    this.dataDir = dataDir || null;
   }
 
   getProjectContext(): string {

@@ -31,37 +31,42 @@ export class ProjectEngine extends EventEmitter {
   }
 
   /**
-   * Get the base directory for a project's data.
-   * If the project has a custom dataPath, use that; otherwise use the default.
+   * Get the internal base directory for a project (always in userData).
+   * This is where meta, thumbnails, tags, and project.json live.
    */
-  getProjectBaseDir(projectId: string, dataPath?: string | null): string {
-    if (dataPath) {
-      return dataPath;
-    }
+  getInternalBaseDir(projectId: string): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', projectId);
   }
 
   /**
-   * Get the default base directory (in userData) for a project.
+   * Get the data directory for posts and media.
+   * If a custom dataPath is set, posts/media live there; otherwise in the internal dir.
+   */
+  getDataDir(projectId: string, dataPath?: string | null): string {
+    if (dataPath) {
+      return dataPath;
+    }
+    return this.getInternalBaseDir(projectId);
+  }
+
+  /**
+   * Alias kept for backward compatibility — returns the internal base dir.
    */
   getDefaultProjectBaseDir(projectId: string): string {
-    const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'projects', projectId);
+    return this.getInternalBaseDir(projectId);
   }
 
   private async ensureProjectDirectories(projectId: string, dataPath?: string | null): Promise<void> {
-    const projectDir = this.getProjectBaseDir(projectId, dataPath);
-    const postsDir = path.join(projectDir, 'posts');
-    const mediaDir = path.join(projectDir, 'media');
-    const thumbnailsDir = path.join(projectDir, 'thumbnails');
-    const metaDir = path.join(projectDir, 'meta');
+    // Internal directories (always in userData)
+    const internalDir = this.getInternalBaseDir(projectId);
+    await fs.mkdir(path.join(internalDir, 'thumbnails'), { recursive: true });
+    await fs.mkdir(path.join(internalDir, 'meta'), { recursive: true });
 
-    await fs.mkdir(projectDir, { recursive: true });
-    await fs.mkdir(postsDir, { recursive: true });
-    await fs.mkdir(mediaDir, { recursive: true });
-    await fs.mkdir(thumbnailsDir, { recursive: true });
-    await fs.mkdir(metaDir, { recursive: true });
+    // Data directories (may be external)
+    const dataDir = this.getDataDir(projectId, dataPath);
+    await fs.mkdir(path.join(dataDir, 'posts'), { recursive: true });
+    await fs.mkdir(path.join(dataDir, 'media'), { recursive: true });
   }
 
   async createProject(data: { name: string; description?: string; slug?: string; dataPath?: string }): Promise<ProjectData> {
@@ -194,14 +199,13 @@ export class ProjectEngine extends EventEmitter {
     // Delete associated media from database
     await db.delete(media).where(eq(media.projectId, id));
 
-    // Delete project files and directories
-    const paths = this.getProjectPaths(id);
+    // Delete the internal project directory (meta, thumbnails, and posts/media if stored internally).
+    // If a custom dataPath is set, external posts/media are NOT deleted — the user manages that storage.
+    const internalDir = this.getInternalBaseDir(id);
     try {
-      // Delete posts directory
-      await fs.rm(path.dirname(paths.posts), { recursive: true, force: true });
+      await fs.rm(internalDir, { recursive: true, force: true });
     } catch (error) {
-      // Directory may not exist, that's okay
-      console.warn(`Could not delete project directory for ${id}:`, error);
+      console.warn(`Could not delete internal project directory for ${id}:`, error);
     }
 
     // Delete project from database
@@ -287,10 +291,10 @@ export class ProjectEngine extends EventEmitter {
   }
 
   getProjectPaths(projectId: string, dataPath?: string | null): { posts: string; media: string } {
-    const baseDir = this.getProjectBaseDir(projectId, dataPath);
+    const dataDir = this.getDataDir(projectId, dataPath);
     return {
-      posts: path.join(baseDir, 'posts'),
-      media: path.join(baseDir, 'media'),
+      posts: path.join(dataDir, 'posts'),
+      media: path.join(dataDir, 'media'),
     };
   }
 

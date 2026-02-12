@@ -381,14 +381,20 @@ async function initialize(): Promise<void> {
       }
       
       if (mediaItem && mediaItem.filePath) {
+        // Check if file exists before attempting to fetch
+        if (!fs.existsSync(mediaItem.filePath)) {
+          console.error(`[bds-media] File not found at path: ${mediaItem.filePath} (media id: ${mediaIdentifier})`);
+          return new Response(`Media file not found at: ${mediaItem.filePath}`, { status: 404 });
+        }
         // Use net.fetch to get the file - this handles the file protocol properly
         return net.fetch(`file://${mediaItem.filePath}`);
       }
       
       // Return a 404 response if media not found
-      return new Response('Media not found', { status: 404 });
+      console.error(`[bds-media] No media record found for identifier: ${mediaIdentifier}`);
+      return new Response('Media not found in database', { status: 404 });
     } catch (error) {
-      console.error('Error serving media:', error);
+      console.error('[bds-media] Error serving media:', error);
       return new Response('Internal server error', { status: 500 });
     }
   });
@@ -404,7 +410,13 @@ async function initialize(): Promise<void> {
       const thumbnails = await engine.getThumbnailPaths(mediaId);
 
       if (thumbnails.small) {
-        return net.fetch(`file://${thumbnails.small}`);
+        // Check if thumbnail file exists
+        if (!fs.existsSync(thumbnails.small)) {
+          console.error(`[bds-thumb] Thumbnail not found at path: ${thumbnails.small} (media id: ${mediaId})`);
+          // Fall through to try full image
+        } else {
+          return net.fetch(`file://${thumbnails.small}`);
+        }
       }
 
       // Fallback to full image if thumbnail doesn't exist
@@ -416,12 +428,18 @@ async function initialize(): Promise<void> {
         .get();
 
       if (mediaItem && mediaItem.filePath) {
+        // Check if file exists before attempting to fetch
+        if (!fs.existsSync(mediaItem.filePath)) {
+          console.error(`[bds-thumb] Media file not found at path: ${mediaItem.filePath} (media id: ${mediaId})`);
+          return new Response(`Media file not found at: ${mediaItem.filePath}`, { status: 404 });
+        }
         return net.fetch(`file://${mediaItem.filePath}`);
       }
 
+      console.error(`[bds-thumb] No media record found for id: ${mediaId}`);
       return new Response('Thumbnail not found', { status: 404 });
     } catch (error) {
-      console.error('Error serving thumbnail:', error);
+      console.error('[bds-thumb] Error serving thumbnail:', error);
       return new Response('Internal server error', { status: 500 });
     }
   });
@@ -455,7 +473,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async () => {
   // Cleanup chat resources
   await cleanupChatHandlers();
-  
+
   const db = getDatabase();
   await db.close();
 });

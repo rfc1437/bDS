@@ -32,7 +32,6 @@ export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
  */
 export class MetaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
-  private projectBaseDir: string | null = null;
   private tags: Set<string> = new Set();
   private categories: Set<string> = new Set();
   private projectMetadata: ProjectMetadata | null = null;
@@ -42,18 +41,21 @@ export class MetaEngine extends EventEmitter {
     super();
   }
 
-  private getProjectBaseDir(): string {
-    if (this.projectBaseDir) return this.projectBaseDir;
+  /**
+   * Always returns the internal project directory (in userData).
+   * Meta files never live in an external dataPath.
+   */
+  private getInternalBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
 
   /**
    * Get the meta directory path for the current project.
-   * Format: {baseDir}/meta/
+   * Always in the internal directory (userData), never external.
    */
   getMetaDir(): string {
-    return path.join(this.getProjectBaseDir(), 'meta');
+    return path.join(this.getInternalBaseDir(), 'meta');
   }
 
   private getTagsFilePath(): string {
@@ -68,9 +70,8 @@ export class MetaEngine extends EventEmitter {
     return path.join(this.getMetaDir(), 'project.json');
   }
 
-  setProjectContext(projectId: string, baseDir?: string): void {
+  setProjectContext(projectId: string): void {
     this.currentProjectId = projectId;
-    this.projectBaseDir = baseDir || null;
     // Reset in-memory cache when project changes
     this.tags.clear();
     this.categories.clear();

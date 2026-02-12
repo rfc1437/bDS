@@ -49,20 +49,28 @@ export interface MediaMetadata {
 
 export class MediaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
-  private projectBaseDir: string | null = null;
+  private dataDir: string | null = null;      // For media files (may be external)
+  private internalDir: string | null = null;   // For thumbnails (always local)
 
   constructor() {
     super();
   }
 
-  private getProjectBaseDir(): string {
-    if (this.projectBaseDir) return this.projectBaseDir;
+  private getDefaultBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
 
+  private getDataDir(): string {
+    return this.dataDir || this.getDefaultBaseDir();
+  }
+
+  private getInternalDir(): string {
+    return this.internalDir || this.getDefaultBaseDir();
+  }
+
   private getMediaBaseDir(): string {
-    return path.join(this.getProjectBaseDir(), 'media');
+    return path.join(this.getDataDir(), 'media');
   }
 
   private getMediaDir(): string {
@@ -91,9 +99,11 @@ export class MediaEngine extends EventEmitter {
     return path.join(dir, `${id}${extension}`);
   }
 
-  setProjectContext(projectId: string, baseDir?: string): void {
+  setProjectContext(projectId: string, dataDir?: string, internalDir?: string): void {
     this.currentProjectId = projectId;
-    this.projectBaseDir = baseDir || null;
+    this.dataDir = dataDir || null;
+    this.internalDir = internalDir || null;
+    console.log(`[MediaEngine] setProjectContext: projectId=${projectId}, dataDir=${this.dataDir}, internalDir=${this.internalDir}`);
   }
 
   getProjectContext(): string {
@@ -108,7 +118,7 @@ export class MediaEngine extends EventEmitter {
    * Get the thumbnails directory for the current project
    */
   private getThumbnailsDir(): string {
-    return path.join(this.getProjectBaseDir(), 'thumbnails');
+    return path.join(this.getInternalDir(), 'thumbnails');
   }
 
   /**
@@ -543,6 +553,7 @@ export class MediaEngine extends EventEmitter {
 
   async rebuildDatabaseFromFiles(): Promise<void> {
     const mediaBaseDir = this.getMediaBaseDir();
+    console.log(`[MediaEngine] rebuildDatabaseFromFiles: scanning mediaBaseDir=${mediaBaseDir}`);
     const task: Task<void> = {
       id: uuidv4(),
       name: 'Rebuild database from media files',
