@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import MonacoEditor from '@monaco-editor/react';
+import MonacoEditor, { Monaco } from '@monaco-editor/react';
 import { useAppStore, PostData, EditorMode, MediaData } from '../../store';
 import { showToast } from '../Toast';
 import { MilkdownEditor } from '../MilkdownEditor';
@@ -183,15 +183,15 @@ const hydrateGalleries = async (
     
     try {
       // Load linked media for this post
-      const mediaData = await window.electronAPI?.postMedia.getMediaDataForPost(postId);
+      const linkedData = await window.electronAPI?.postMedia.getMediaDataForPost(postId);
       
-      if (!mediaData || mediaData.length === 0) {
+      if (!linkedData || linkedData.length === 0) {
         galleryContainer.innerHTML = '<div class="gallery-empty">No media linked to this post</div>';
         continue;
       }
       
-      // Filter to images only
-      const images = mediaData.filter(m => m.mimeType?.startsWith('image/'));
+      // Filter to images only (media is nested in the link object)
+      const images = linkedData.filter(link => link.media?.mimeType?.startsWith('image/'));
       
       if (images.length === 0) {
         galleryContainer.innerHTML = '<div class="gallery-empty">No images linked to this post</div>';
@@ -199,21 +199,21 @@ const hydrateGalleries = async (
       }
       
       // Build gallery grid (column count is handled via CSS class on parent)
-      galleryContainer.innerHTML = images.map((media, index) => `
+      galleryContainer.innerHTML = images.map((link, index) => `
         <div class="gallery-item" data-index="${index}">
           <img 
-            src="bds-media://${media.id}" 
-            alt="${media.alt || media.originalName}" 
-            title="${media.originalName}"
+            src="bds-media://${link.media.id}" 
+            alt="${link.media.alt || link.media.originalName}" 
+            title="${link.media.originalName}"
           />
         </div>
       `).join('');
       
       // Set up lightbox click handlers
       const items = galleryContainer.querySelectorAll('.gallery-item');
-      const imageData = images.map(m => ({
-        src: `bds-media://${m.id}`,
-        alt: m.alt || m.originalName,
+      const imageData = images.map(link => ({
+        src: `bds-media://${link.media.id}`,
+        alt: link.media.alt || link.media.originalName,
       }));
       
       items.forEach((item, index) => {
@@ -526,6 +526,75 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     editorRef.current = editor;
   };
 
+  // Configure Monaco before mount to add macro syntax highlighting
+  const handleEditorWillMount = (monaco: Monaco) => {
+    // Register a custom language that extends markdown with macro support
+    monaco.languages.register({ id: 'markdown-with-macros' });
+    
+    // Define custom tokenization that highlights [[macro]] syntax
+    monaco.languages.setMonarchTokensProvider('markdown-with-macros', {
+      defaultToken: '',
+      tokenPostfix: '.md',
+
+      // Macros are the key addition
+      macroOpen: /\[\[/,
+      macroClose: /\]\]/,
+
+      tokenizer: {
+        root: [
+          // Macro syntax: [[macroName param="value"]]
+          [/\[\[[a-zA-Z][\w-]*/, { token: 'keyword.macro', next: '@macroParams' }],
+          
+          // Headers
+          [/^(\s{0,3})(#+)((?:[^\\#]|@escapes)+)((?:#+)?)/, ['white', 'keyword.header', 'variable', 'keyword.header']],
+          
+          // Block elements
+          [/^\s*>+/, 'string.quote'],
+          [/^\s*[\-+*]\s/, 'keyword'],
+          [/^\s*\d+\.\s/, 'keyword'],
+          [/^\s*```\w*/, { token: 'string.code', next: '@codeblock' }],
+          
+          // Inline elements  
+          [/\*\*[^*]+\*\*/, 'strong'],
+          [/\*[^*]+\*/, 'emphasis'],
+          [/__[^_]+__/, 'strong'],
+          [/_[^_]+_/, 'emphasis'],
+          [/`[^`]+`/, 'variable'],
+          
+          // Links and images
+          [/!?\[[^\]]*\]\([^)]*\)/, 'string.link'],
+          [/!?\[[^\]]*\]\[[^\]]*\]/, 'string.link'],
+        ],
+
+        macroParams: [
+          [/\]\]/, { token: 'keyword.macro', next: '@root' }],
+          [/[a-zA-Z][\w-]*(?=\s*=)/, 'attribute.name'],
+          [/=/, 'delimiter'],
+          [/"[^"]*"/, 'string'],
+          [/\s+/, 'white'],
+          [/[^\]"=\s]+/, 'attribute.value'],
+        ],
+
+        codeblock: [
+          [/^\s*```\s*$/, { token: 'string.code', next: '@root' }],
+          [/.*$/, 'variable.source'],
+        ],
+      },
+    });
+
+    // Define theme colors for macros
+    monaco.editor.defineTheme('vs-dark-macros', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'keyword.macro', foreground: 'C586C0', fontStyle: 'bold' },
+        { token: 'attribute.name', foreground: '9CDCFE' },
+        { token: 'attribute.value', foreground: 'CE9178' },
+      ],
+      colors: {},
+    });
+  };
+
   // Save on Ctrl+S
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -688,11 +757,12 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           {editorMode === 'markdown' && (
             <MonacoEditor
               height="100%"
-              defaultLanguage="markdown"
+              language="markdown-with-macros"
               value={content}
               onChange={(value) => setContent(value || '')}
               onMount={handleEditorDidMount}
-              theme="vs-dark"
+              beforeMount={handleEditorWillMount}
+              theme="vs-dark-macros"
               options={{
                 minimap: { enabled: false },
                 wordWrap: 'on',

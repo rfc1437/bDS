@@ -21,6 +21,15 @@ import { macroPlugin } from '../../plugins/macroPlugin';
 import '../../macros';
 import './MilkdownEditor.css';
 
+/**
+ * Unescape brackets that Milkdown/remark escapes.
+ * This preserves macro syntax like [[gallery]] instead of \[\[gallery\]\]
+ */
+const unescapeBrackets = (markdown: string): string => {
+  // Unescape \[ and \] back to [ and ]
+  return markdown.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+};
+
 // Remark plugin to force tight lists (no blank lines between list items)
 const remarkTightListsPlugin: Plugin<[Record<string, unknown>], Root> = () => {
   return (tree: Root) => {
@@ -201,19 +210,23 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
         // Add custom remark plugin to force tight lists
         ctx.set(remarkPluginsCtx, [remarkTightLists]);
         ctx.get(listenerCtx).markdownUpdated((_ctx: Ctx, markdown: string, prevMarkdown: string) => {
-          if (markdown !== prevMarkdown) {
+          // Unescape brackets to preserve macro syntax like [[gallery]]
+          const unescaped = unescapeBrackets(markdown);
+          const prevUnescaped = unescapeBrackets(prevMarkdown);
+          
+          if (unescaped !== prevUnescaped) {
             // On first update after load, store the normalized baseline
             // This captures Milkdown's round-trip formatting
             if (normalizedBaseline.current === null) {
-              normalizedBaseline.current = markdown;
+              normalizedBaseline.current = unescaped;
               return; // Don't trigger onChange for initial normalization
             }
             // Only trigger onChange if content differs from the baseline
             // (meaning the user actually edited something)
-            if (markdown !== normalizedBaseline.current) {
+            if (unescaped !== normalizedBaseline.current) {
               isInternalChange.current = true;
-              normalizedBaseline.current = markdown; // Update baseline
-              onChangeRef.current(markdown);
+              normalizedBaseline.current = unescaped; // Update baseline
+              onChangeRef.current(unescaped);
             }
           }
         });
