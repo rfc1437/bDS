@@ -300,9 +300,10 @@ export class OpenCodeManager {
             systemPrompt,
             dbMessages,
             abortController.signal,
-            { onDelta }
+            { onDelta, onToolCall, onToolResult }
           );
           fullResponse = result.content;
+          toolCallsCollected.push(...result.toolCalls);
         }
         console.log('[OpenCodeManager] fullResponse length:', fullResponse.length);
       } catch (error) {
@@ -517,8 +518,12 @@ export class OpenCodeManager {
     systemPrompt: string,
     dbMessages: Array<{ role: string; content?: string }>,
     signal: AbortSignal,
-    callbacks: { onDelta?: (delta: string) => void }
-  ): Promise<{ content: string }> {
+    callbacks: {
+      onDelta?: (delta: string) => void;
+      onToolCall?: (toolCall: { name: string; args: unknown }) => void;
+      onToolResult?: (result: { name: string; result: unknown }) => void;
+    }
+  ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     // Build OpenAI-format messages
     const messages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
@@ -542,6 +547,7 @@ export class OpenCodeManager {
     }));
 
     let accumulatedText = '';
+    const allToolCalls: Array<{ name: string; args: unknown }> = [];
     const MAX_TOOL_ROUNDS = 10;
     let round = 0;
 
@@ -614,7 +620,7 @@ export class OpenCodeManager {
       // If no tool calls, we're done
       if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
         console.log('[OpenCodeManager:OpenAI] Done. Accumulated text length:', accumulatedText.length);
-        return { content: accumulatedText };
+        return { content: accumulatedText, toolCalls: allToolCalls };
       }
 
       // Add assistant message (with tool_calls) to conversation
@@ -624,7 +630,17 @@ export class OpenCodeManager {
       for (const toolCall of choice.message.tool_calls) {
         const toolName = toolCall.function.name;
         const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+        allToolCalls.push({ name: toolName, args: toolArgs });
+        if (callbacks.onToolCall) {
+          callbacks.onToolCall({ name: toolName, args: toolArgs });
+        }
+
         const result = await this.executeTool(toolName, toolArgs);
+
+        if (callbacks.onToolResult) {
+          callbacks.onToolResult({ name: toolName, result });
+        }
 
         messages.push({
           role: 'tool',
@@ -636,7 +652,7 @@ export class OpenCodeManager {
 
     // Hit max rounds
     const fallbackText = accumulatedText || 'I reached the maximum number of tool calls. Please try again.';
-    return { content: fallbackText };
+    return { content: fallbackText, toolCalls: allToolCalls };
   }
 
   /**
