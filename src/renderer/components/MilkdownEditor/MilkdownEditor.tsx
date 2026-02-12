@@ -16,6 +16,9 @@ import type { RemarkPlugin } from '@milkdown/kit/transformer';
 import type { Root, List, ListItem } from 'mdast';
 import type { Plugin } from 'unified';
 import { visit } from 'unist-util-visit';
+import { macroPlugin } from '../../plugins/macroPlugin';
+// Import macros module to register all macro definitions
+import '../../macros';
 import './MilkdownEditor.css';
 
 // Remark plugin to force tight lists (no blank lines between list items)
@@ -217,6 +220,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
       })
       .use(commonmark)
       .use(gfm)
+      .use(macroPlugin)
       .use(history)
       .use(listener)
       .use(clipboard)
