@@ -13,6 +13,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [toolEvents, setToolEvents] = useState<Array<{ type: 'call' | 'result'; name: string; args?: unknown; timestamp: number }>>([]);
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [needsApiKey, setNeedsApiKey] = useState(false);
@@ -22,6 +23,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamingRef = useRef('');
+  const toolEventsRef = useRef<Array<{ name: string; args?: unknown }>>([]);
 
   // Scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
@@ -72,6 +74,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       }
     });
 
+    const unsubToolCall = window.electronAPI?.chat.onToolCall((data) => {
+      console.log('[ChatPanel] Tool call received:', data);
+      if (data.conversationId === conversationId) {
+        const toolCall = data.toolCall as { name: string; args: unknown };
+        toolEventsRef.current.push({ name: toolCall.name, args: toolCall.args });
+        setToolEvents(prev => [...prev, { type: 'call', name: toolCall.name, args: toolCall.args, timestamp: Date.now() }]);
+        scrollToBottom();
+      }
+    });
+
+    const unsubToolResult = window.electronAPI?.chat.onToolResult((data) => {
+      console.log('[ChatPanel] Tool result received:', data);
+      if (data.conversationId === conversationId) {
+        const result = data.result as { name: string; result: unknown };
+        setToolEvents(prev => [...prev, { type: 'result', name: result.name, timestamp: Date.now() }]);
+        scrollToBottom();
+      }
+    });
+
     const unsubTitle = window.electronAPI?.chat.onTitleUpdated((data) => {
       if (data.conversationId === conversationId) {
         setConversation(prev => prev ? { ...prev, title: data.title } : null);
@@ -80,6 +101,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
 
     return () => {
       unsubDelta?.();
+      unsubToolCall?.();
+      unsubToolResult?.();
       unsubTitle?.();
     };
   }, [conversationId, loadData, scrollToBottom, checkReady]);
@@ -120,6 +143,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     setIsStreaming(true);
     streamingRef.current = '';
     setStreamingContent('');
+    setToolEvents([]);
+    toolEventsRef.current = [];
 
     // Add user message optimistically
     const userMessage: ChatMessage = {
@@ -145,6 +170,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           conversationId,
           role: 'assistant',
           content: assistantContent,
+          toolCalls: toolEventsRef.current.length > 0 ? JSON.stringify(toolEventsRef.current) : undefined,
           createdAt: new Date().toISOString()
         };
         setMessages(prev => [...prev, assistantMessage]);
@@ -229,8 +255,61 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     }
   };
 
+  const renderToolMarkers = (events: Array<{ type: 'call' | 'result'; name: string; args?: unknown; timestamp: number }>) => {
+    if (events.length === 0) return null;
+
+    // Group into pairs: call + result for each tool invocation
+    const markers: Array<{ name: string; args?: unknown; completed: boolean }> = [];
+    const pendingCalls = new Map<string, number>();
+
+    for (const event of events) {
+      if (event.type === 'call') {
+        markers.push({ name: event.name, args: event.args, completed: false });
+        const count = pendingCalls.get(event.name) || 0;
+        pendingCalls.set(event.name, count + 1);
+      } else if (event.type === 'result') {
+        // Find the last uncompleted marker for this tool
+        for (let i = markers.length - 1; i >= 0; i--) {
+          if (markers[i].name === event.name && !markers[i].completed) {
+            markers[i].completed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    return (
+      <div className="tool-markers">
+        {markers.map((marker, i) => {
+          const argsPreview = marker.args
+            ? Object.entries(marker.args as Record<string, unknown>)
+                .map(([k, v]) => `${k}: ${typeof v === 'string' ? `"${v.length > 30 ? v.slice(0, 30) + '...' : v}"` : JSON.stringify(v)}`)
+                .join(', ')
+            : '';
+
+          return (
+            <div key={i} className={`tool-marker ${marker.completed ? 'completed' : 'pending'}`}>
+              <span className="tool-marker-icon">{marker.completed ? '\u2713' : '\u25CF'}</span>
+              <span className="tool-marker-name">{marker.name}</span>
+              {argsPreview && <span className="tool-marker-args">({argsPreview})</span>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderMessage = (msg: ChatMessage) => {
     if (msg.role === 'system' || msg.role === 'tool') return null;
+
+    // Parse tool calls from stored message data
+    const storedToolCalls: Array<{ name: string; args?: unknown; completed: boolean }> = [];
+    if (msg.role === 'assistant' && msg.toolCalls) {
+      try {
+        const calls = JSON.parse(msg.toolCalls) as Array<{ name: string; args?: unknown }>;
+        calls.forEach(c => storedToolCalls.push({ name: c.name, args: c.args, completed: true }));
+      } catch { /* ignore parse errors */ }
+    }
 
     return (
       <div key={msg.id} className={`chat-message ${msg.role}`}>
@@ -243,6 +322,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
               {msg.role === 'user' ? 'You' : 'Assistant'}
             </span>
           </div>
+          {storedToolCalls.length > 0 && (
+            <div className="tool-markers">
+              {storedToolCalls.map((marker, i) => {
+                const argsPreview = marker.args
+                  ? Object.entries(marker.args as Record<string, unknown>)
+                      .map(([k, v]) => `${k}: ${typeof v === 'string' ? `"${v.length > 30 ? v.slice(0, 30) + '...' : v}"` : JSON.stringify(v)}`)
+                      .join(', ')
+                  : '';
+                return (
+                  <div key={i} className="tool-marker completed">
+                    <span className="tool-marker-icon">{'\u2713'}</span>
+                    <span className="tool-marker-name">{marker.name}</span>
+                    {argsPreview && <span className="tool-marker-args">({argsPreview})</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="chat-message-text">
             {msg.role === 'assistant' ? (
               <Markdown gfm>{msg.content}</Markdown>
@@ -340,7 +437,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
 
         {messages.map(renderMessage)}
 
-        {isStreaming && streamingContent && (
+        {isStreaming && (streamingContent || toolEvents.length > 0) && (
           <div className="chat-message assistant streaming">
             <div className="chat-message-avatar">{'\u{1F916}'}</div>
             <div className="chat-message-content">
@@ -348,14 +445,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
                 <span className="chat-message-role">Assistant</span>
                 <span className="streaming-indicator">{'\u25CF'}</span>
               </div>
-              <div className="chat-message-text">
-                <Markdown gfm>{streamingContent}</Markdown>
-              </div>
+              {renderToolMarkers(toolEvents)}
+              {streamingContent && (
+                <div className="chat-message-text">
+                  <Markdown gfm>{streamingContent}</Markdown>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {isStreaming && !streamingContent && (
+        {isStreaming && !streamingContent && toolEvents.length === 0 && (
           <div className="chat-message assistant thinking">
             <div className="chat-message-avatar">{'\u{1F916}'}</div>
             <div className="chat-message-content">

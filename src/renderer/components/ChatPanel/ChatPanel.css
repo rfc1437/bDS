@@ -523,3 +523,54 @@
 .chat-message-text em {
   font-style: italic;
 }
+
+/* Tool usage markers */
+.tool-markers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background-color: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.1));
+  border-left: 3px solid var(--vscode-textLink-foreground, #3794ff);
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+}
+
+.tool-marker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.4;
+}
+
+.tool-marker.pending .tool-marker-icon {
+  color: var(--vscode-charts-yellow, #cca700);
+  animation: tool-pulse 1.2s ease-in-out infinite;
+}
+
+.tool-marker.completed .tool-marker-icon {
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.tool-marker-name {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.tool-marker-args {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+@keyframes tool-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
