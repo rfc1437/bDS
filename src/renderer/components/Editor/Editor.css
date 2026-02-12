@@ -633,8 +633,31 @@
   border: 1px solid var(--vscode-dropdown-border);
   border-radius: 4px;
   margin-top: 8px;
-  max-height: 200px;
+  max-height: 250px;
   overflow-y: auto;
+}
+
+.post-picker-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--vscode-dropdown-border);
+  position: sticky;
+  top: 0;
+  background: var(--vscode-dropdown-background);
+}
+
+.post-picker-search input {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 3px;
+  color: var(--vscode-input-foreground);
+  font-size: 12px;
+}
+
+.post-picker-search input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
 }
 
 .post-picker-list {
