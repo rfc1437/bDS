@@ -314,10 +314,14 @@ export const useAppStore = create<AppState>()(
       
       // Post Actions
       setPosts: (posts, hasMore = false, total = 0) => set({ posts, hasMorePosts: hasMore, totalPosts: total }),
-      appendPosts: (newPosts, hasMore) => set((state) => ({
-        posts: [...state.posts, ...newPosts],
-        hasMorePosts: hasMore,
-      })),
+      appendPosts: (newPosts, hasMore) => set((state) => {
+        const existingIds = new Set(state.posts.map(p => p.id));
+        const uniqueNewPosts = newPosts.filter(p => !existingIds.has(p.id));
+        return {
+          posts: [...state.posts, ...uniqueNewPosts],
+          hasMorePosts: hasMore,
+        };
+      }),
       addPost: (post) => set((state) => ({ posts: [post, ...state.posts], totalPosts: state.totalPosts + 1 })),
       updatePost: (id, updatedPost) => set((state) => ({
         posts: state.posts.map((p) => (p.id === id ? { ...p, ...updatedPost } : p)),
