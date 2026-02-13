@@ -11,16 +11,31 @@ import { getMacroConfigMap, type MacroConfig } from '../config/macroConfig';
 export type PostAnalysisStatus = 'new' | 'update' | 'conflict' | 'content-duplicate';
 export type MediaAnalysisStatus = 'new' | 'update' | 'conflict' | 'content-duplicate' | 'missing';
 
+/** How to resolve a slug conflict during import */
+export type ImportConflictResolution = 'ignore' | 'overwrite' | 'import';
+
 export interface AnalyzedPost {
   wxrPost: WxrPost;
   status: PostAnalysisStatus;
   contentHash: string;
   markdownPreview: string;
+  /** How to resolve conflict (only relevant when status is 'conflict'). Default is 'ignore'. */
+  conflictResolution?: ImportConflictResolution;
   existingPost?: {
     id: string;
     title: string;
     slug: string;
     checksum: string | null;
+    /** Date the existing post was created/published */
+    pubDate: string | null;
+    /** Excerpt from existing post */
+    excerpt: string | null;
+    /** Author of the existing post */
+    author: string | null;
+    /** Tags of the existing post */
+    tags: string[];
+    /** Categories of the existing post */
+    categories: string[];
   };
 }
 
@@ -205,6 +220,13 @@ export class ImportAnalysisEngine {
         slug: posts.slug,
         title: posts.title,
         checksum: posts.checksum,
+        excerpt: posts.excerpt,
+        author: posts.author,
+        publishedAt: posts.publishedAt,
+        createdAt: posts.createdAt,
+        status: posts.status,
+        tags: posts.tags,
+        categories: posts.categories,
       })
       .from(posts)
       .where(eq(posts.projectId, this.currentProjectId))
@@ -261,9 +283,9 @@ export class ImportAnalysisEngine {
     
     // Analyze posts
     const analyzedPosts = this.analyzePostItems(wxrData.posts, slugToPost, checksumToPost);
-    
+
     this.onProgress?.('Analyzing pages...', `${wxrData.pages.length} pages to analyze`);
-    
+
     const analyzedPages = this.analyzePostItems(wxrData.pages, slugToPost, checksumToPost);
 
     this.onProgress?.('Analyzing media files...', `${wxrData.media.length} media files to analyze`);
@@ -307,8 +329,8 @@ export class ImportAnalysisEngine {
 
   private analyzePostItems(
     wxrPosts: WxrPost[],
-    slugToPost: Map<string, { id: string; slug: string; title: string; checksum: string | null }>,
-    checksumToPost: Map<string, { id: string; slug: string; title: string; checksum: string | null }>,
+    slugToPost: Map<string, { id: string; slug: string; title: string; checksum: string | null; excerpt: string | null; author: string | null; publishedAt: Date | null; createdAt: Date; status: string; tags: string | null; categories: string | null }>,
+    checksumToPost: Map<string, { id: string; slug: string; title: string; checksum: string | null; excerpt: string | null; author: string | null; publishedAt: Date | null; createdAt: Date; status: string; tags: string | null; categories: string | null }>,
   ): AnalyzedPost[] {
     return wxrPosts.map(wxrPost => {
       const markdown = this.convertToMarkdown(wxrPost.content);
@@ -327,25 +349,44 @@ export class ImportAnalysisEngine {
         } else {
           status = 'conflict';
         }
+        const existingDate = existingBySlug.publishedAt || existingBySlug.createdAt;
+        const existingTags = existingBySlug.tags ? JSON.parse(existingBySlug.tags) : [];
+        const existingCategories = existingBySlug.categories ? JSON.parse(existingBySlug.categories) : [];
         existingPost = {
           id: existingBySlug.id,
           title: existingBySlug.title,
           slug: existingBySlug.slug,
           checksum: existingBySlug.checksum,
+          pubDate: existingDate ? existingDate.toISOString() : null,
+          excerpt: existingBySlug.excerpt,
+          author: existingBySlug.author,
+          tags: existingTags,
+          categories: existingCategories,
         };
       } else if (existingByHash) {
         status = 'content-duplicate';
+        const existingDate = existingByHash.publishedAt || existingByHash.createdAt;
+        const existingTagsByHash = existingByHash.tags ? JSON.parse(existingByHash.tags) : [];
+        const existingCategoriesByHash = existingByHash.categories ? JSON.parse(existingByHash.categories) : [];
         existingPost = {
           id: existingByHash.id,
           title: existingByHash.title,
           slug: existingByHash.slug,
           checksum: existingByHash.checksum,
+          pubDate: existingDate ? existingDate.toISOString() : null,
+          excerpt: existingByHash.excerpt,
+          author: existingByHash.author,
+          tags: existingTagsByHash,
+          categories: existingCategoriesByHash,
         };
       } else {
         status = 'new';
       }
 
-      return { wxrPost, status, contentHash, markdownPreview, existingPost };
+      // For conflicts, default resolution is 'ignore'
+      const conflictResolution = status === 'conflict' ? 'ignore' as const : undefined;
+
+      return { wxrPost, status, contentHash, markdownPreview, existingPost, conflictResolution };
     });
   }
 

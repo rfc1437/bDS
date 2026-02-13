@@ -10,6 +10,7 @@ import { getDatabase } from '../database';
 import { posts, Post, NewPost, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
+import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
 
 export interface PostData {
   id: string;
@@ -275,38 +276,13 @@ export class PostEngine extends EventEmitter {
   }
 
   private async readPostFile(filePath: string): Promise<PostData | null> {
-    try {
-      // Check if file exists first to avoid noisy errors
-      try {
-        await fs.access(filePath);
-      } catch {
-        // File doesn't exist - this is expected when DB has stale paths
-        return null;
-      }
-
-      const content = await fs.readFile(filePath, 'utf-8');
-      const { data, content: body } = matter(content);
-      const metadata = data as PostMetadata;
-
-      return {
-        id: metadata.id,
-        projectId: metadata.projectId || this.currentProjectId,
-        title: metadata.title,
-        slug: metadata.slug,
-        excerpt: metadata.excerpt,
-        content: body,
-        status: metadata.status,
-        author: metadata.author,
-        createdAt: new Date(metadata.createdAt),
-        updatedAt: new Date(metadata.updatedAt),
-        publishedAt: metadata.publishedAt ? new Date(metadata.publishedAt) : undefined,
-        tags: metadata.tags || [],
-        categories: metadata.categories || [],
-      };
-    } catch (error) {
-      console.error(`Failed to parse post file: ${filePath}`, error);
-      return null;
-    }
+    const data = await readPostFileShared(filePath);
+    if (!data) return null;
+    
+    return {
+      ...data,
+      projectId: data.projectId || this.currentProjectId,
+    };
   }
 
   async createPost(data: Partial<PostData>): Promise<PostData> {
