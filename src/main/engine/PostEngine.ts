@@ -542,14 +542,12 @@ export class PostEngine extends EventEmitter {
       .offset(offset)
       .all();
     
-    const items: PostData[] = [];
-    
-    for (const dbPost of dbPosts) {
-      const postData = await this.getPost(dbPost.id);
-      if (postData) {
-        items.push(postData);
-      }
-    }
+    // For listing, we don't need to load content from filesystem.
+    // Use DB content for drafts, empty string for published posts.
+    // This avoids expensive filesystem reads for each post.
+    const items: PostData[] = dbPosts.map(dbPost => 
+      this.dbRowToPostData(dbPost, dbPost.content || '')
+    );
 
     return {
       items,
@@ -571,16 +569,9 @@ export class PostEngine extends EventEmitter {
       .orderBy(desc(posts.createdAt))
       .all();
     
-    const result: PostData[] = [];
-    
-    for (const dbPost of dbPosts) {
-      const postData = await this.getPost(dbPost.id);
-      if (postData) {
-        result.push(postData);
-      }
-    }
-
-    return result;
+    // Use DB content for drafts, empty string for published posts.
+    // This avoids expensive filesystem reads.
+    return dbPosts.map(dbPost => this.dbRowToPostData(dbPost, dbPost.content || ''));
   }
 
   async getPostsByStatus(status: 'draft' | 'published' | 'archived'): Promise<PostData[]> {
@@ -595,16 +586,9 @@ export class PostEngine extends EventEmitter {
       .orderBy(desc(posts.createdAt))
       .all();
     
-    const result: PostData[] = [];
-    
-    for (const dbPost of dbPosts) {
-      const postData = await this.getPost(dbPost.id);
-      if (postData) {
-        result.push(postData);
-      }
-    }
-
-    return result;
+    // Use DB content for drafts, empty string for published posts.
+    // This avoids expensive filesystem reads.
+    return dbPosts.map(dbPost => this.dbRowToPostData(dbPost, dbPost.content || ''));
   }
 
   async getPostsFiltered(filter: PostFilter): Promise<PostData[]> {
@@ -647,21 +631,21 @@ export class PostEngine extends EventEmitter {
     let result: PostData[] = [];
 
     for (const dbPost of dbPosts) {
-      const postData = await this.getPost(dbPost.id);
-      if (postData) {
-        // Client-side filtering for tags/categories (JSON array)
-        if (filter.tags && filter.tags.length > 0) {
-          const hasAllTags = filter.tags.every(tag => postData.tags.includes(tag));
-          if (!hasAllTags) continue;
-        }
-
-        if (filter.categories && filter.categories.length > 0) {
-          const hasAnyCategory = filter.categories.some(cat => postData.categories.includes(cat));
-          if (!hasAnyCategory) continue;
-        }
-
-        result.push(postData);
+      // Use DB data directly instead of reading from filesystem
+      const postData = this.dbRowToPostData(dbPost, dbPost.content || '');
+      
+      // Client-side filtering for tags/categories (JSON array)
+      if (filter.tags && filter.tags.length > 0) {
+        const hasAllTags = filter.tags.every(tag => postData.tags.includes(tag));
+        if (!hasAllTags) continue;
       }
+
+      if (filter.categories && filter.categories.length > 0) {
+        const hasAnyCategory = filter.categories.some(cat => postData.categories.includes(cat));
+        if (!hasAnyCategory) continue;
+      }
+
+      result.push(postData);
     }
 
     return result;

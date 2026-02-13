@@ -110,6 +110,7 @@ export const SettingsView: React.FC = () => {
   const [projectDescription, setProjectDescription] = useState('');
   const [projectDataPath, setProjectDataPath] = useState('');
   const [defaultProjectPath, setDefaultProjectPath] = useState('');
+  const [projectMainLanguage, setProjectMainLanguage] = useState('en');
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -142,6 +143,13 @@ export const SettingsView: React.FC = () => {
       // Load the default path for reference
       window.electronAPI?.app.getDefaultProjectPath(activeProject.id).then(path => {
         setDefaultProjectPath(path);
+      });
+
+      // Load project metadata (includes mainLanguage)
+      window.electronAPI?.meta.getProjectMetadata().then(metadata => {
+        if (metadata?.mainLanguage) {
+          setProjectMainLanguage(metadata.mainLanguage);
+        }
       });
     }
   }, [activeProject]);
@@ -299,12 +307,13 @@ export const SettingsView: React.FC = () => {
         setActiveProject(updated as any);
         useAppStore.getState().updateProject(activeProject.id, updated as any);
 
-        // Also update project.json to keep dataPath in sync
+        // Also update project.json to keep dataPath and mainLanguage in sync
         await window.electronAPI?.meta.updateProjectMetadata({
           name: projectName.trim() || activeProject.name,
           description: projectDescription.trim(),
           dataPath: projectDataPath.trim() || undefined,
-        } as any);
+          mainLanguage: projectMainLanguage,
+        });
       }
       showToast.success('Project settings saved');
     } catch (error) {
@@ -325,7 +334,7 @@ export const SettingsView: React.FC = () => {
   };
 
   // Keywords for each section for search filtering
-  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data'];
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data', 'language'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
@@ -390,6 +399,39 @@ export const SettingsView: React.FC = () => {
             </button>
           )}
         </div>
+      </SettingRow>
+
+      <SettingRow
+        id="project-language"
+        label="Main Language"
+        description="The primary language for your blog content. AI-generated alt text and captions will use this language."
+      >
+        <select
+          id="project-language"
+          value={projectMainLanguage}
+          onChange={(e) => setProjectMainLanguage(e.target.value)}
+        >
+          <option value="en">English</option>
+          <option value="de">German (Deutsch)</option>
+          <option value="es">Spanish (Español)</option>
+          <option value="fr">French (Français)</option>
+          <option value="it">Italian (Italiano)</option>
+          <option value="pt">Portuguese (Português)</option>
+          <option value="nl">Dutch (Nederlands)</option>
+          <option value="pl">Polish (Polski)</option>
+          <option value="ru">Russian (Русский)</option>
+          <option value="ja">Japanese (日本語)</option>
+          <option value="zh">Chinese (中文)</option>
+          <option value="ko">Korean (한국어)</option>
+          <option value="ar">Arabic (العربية)</option>
+          <option value="hi">Hindi (हिन्दी)</option>
+          <option value="tr">Turkish (Türkçe)</option>
+          <option value="sv">Swedish (Svenska)</option>
+          <option value="da">Danish (Dansk)</option>
+          <option value="no">Norwegian (Norsk)</option>
+          <option value="fi">Finnish (Suomi)</option>
+          <option value="cs">Czech (Čeština)</option>
+        </select>
       </SettingRow>
 
       <div className="setting-actions">

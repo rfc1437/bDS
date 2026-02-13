@@ -1330,6 +1330,135 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     }
   }
 
+  /**
+   * Analyze a media image and generate alt text and caption using AI
+   * This is a one-shot request that looks at the image and suggests metadata
+   */
+  async analyzeMediaImage(mediaId: string, language: string = 'en'): Promise<{
+    success: boolean;
+    alt?: string;
+    caption?: string;
+    error?: string;
+  }> {
+    if (!this.apiKey) {
+      return { success: false, error: 'API key not configured. Please set your OpenCode API key in Settings.' };
+    }
+
+    // Get media metadata
+    const mediaItem = await this.mediaEngine.getMedia(mediaId);
+    if (!mediaItem) {
+      return { success: false, error: 'Media item not found' };
+    }
+
+    // Verify it's an image
+    if (!mediaItem.mimeType.startsWith('image/')) {
+      return { success: false, error: `Cannot analyze this file type: ${mediaItem.mimeType}. Only images are supported.` };
+    }
+
+    // Get the large thumbnail for better quality analysis (or medium as fallback)
+    let dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'large');
+    if (!dataUrl) {
+      dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'medium');
+    }
+    if (!dataUrl) {
+      return { success: false, error: 'Image thumbnail not available. Try regenerating thumbnails from Settings.' };
+    }
+
+    // Extract base64 data (remove data:image/webp;base64, prefix)
+    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+    // Map language code to full name for clearer instructions
+    const languageNames: Record<string, string> = {
+      en: 'English', de: 'German', es: 'Spanish', fr: 'French', it: 'Italian',
+      pt: 'Portuguese', nl: 'Dutch', pl: 'Polish', ru: 'Russian', ja: 'Japanese',
+      zh: 'Chinese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish',
+      sv: 'Swedish', da: 'Danish', no: 'Norwegian', fi: 'Finnish', cs: 'Czech',
+    };
+    const languageName = languageNames[language] || language;
+
+    const systemPrompt = `Generate concise alt text and caption for this image in ${languageName}.
+
+ALT: Brief, objective description for screen readers (5-15 words). No "Image of" prefix.
+CAPTION: Short, engaging blog caption (5-20 words).
+
+Respond with JSON only: {"alt": "...", "caption": "..."}`;
+
+    try {
+      // Using Claude Sonnet 4.5 for best image analysis
+      const modelId = 'claude-sonnet-4-5';
+      
+      const body = {
+        model: modelId,
+        max_tokens: 200,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/webp',
+                  data: base64Data,
+                },
+              },
+              {
+                type: 'text',
+                text: 'Analyze and respond with JSON.',
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'Authorization': `Bearer ${this.apiKey}`,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.statusCode !== 200) {
+        console.error('[OpenCodeManager] Image analysis failed:', response.body);
+        const errorMsg = this.parseErrorResponse(response);
+        return { success: false, error: errorMsg };
+      }
+
+      const data = JSON.parse(response.body);
+      
+      // Extract text from Anthropic response
+      let responseText = '';
+      for (const block of data.content || []) {
+        if (block.type === 'text') {
+          responseText += block.text;
+        }
+      }
+
+      // Parse the JSON response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error('[OpenCodeManager] No JSON found in image analysis response:', responseText);
+        return { success: false, error: 'Invalid response format from AI' };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      
+      return {
+        success: true,
+        alt: result.alt || undefined,
+        caption: result.caption || undefined,
+      };
+    } catch (error) {
+      console.error('[OpenCodeManager] Error analyzing media image:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
   private httpRequest(
     urlStr: string,
     options: {

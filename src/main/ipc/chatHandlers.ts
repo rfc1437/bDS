@@ -330,6 +330,19 @@ export function registerChatHandlers(): void {
       return { success: false, error: (error as Error).message };
     }
   });
+
+  // ============ Media Analysis ============
+
+  // Analyze a media image and generate alt text and caption
+  ipcMain.handle('chat:analyzeMediaImage', async (_, mediaId: string, language?: string) => {
+    try {
+      const manager = getOpenCodeManager();
+      return await manager.analyzeMediaImage(mediaId, language || 'en');
+    } catch (error) {
+      console.error('[Chat IPC] Error analyzing media image:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
 }
 
 /**
