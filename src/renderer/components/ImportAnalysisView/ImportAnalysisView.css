@@ -235,6 +235,11 @@
   color: #73c991;
 }
 
+.import-stat-tag.stat-mapped {
+  background: rgba(78, 201, 176, 0.15);
+  color: #4ec9b0;
+}
+
 .import-stat-tag.stat-update {
   background: rgba(117, 190, 255, 0.15);
   color: #75beff;

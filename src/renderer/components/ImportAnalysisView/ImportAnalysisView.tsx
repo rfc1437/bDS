@@ -379,8 +379,11 @@ const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => (
         {report.categories.filter(c => c.existsInProject).length > 0 && (
           <span className="import-stat-tag stat-update">{report.categories.filter(c => c.existsInProject).length} existing</span>
         )}
-        {report.categories.filter(c => !c.existsInProject).length > 0 && (
-          <span className="import-stat-tag stat-new">{report.categories.filter(c => !c.existsInProject).length} new</span>
+        {report.categories.filter(c => !c.existsInProject && c.mappedTo).length > 0 && (
+          <span className="import-stat-tag stat-mapped">{report.categories.filter(c => !c.existsInProject && c.mappedTo).length} mapped</span>
+        )}
+        {report.categories.filter(c => !c.existsInProject && !c.mappedTo).length > 0 && (
+          <span className="import-stat-tag stat-new">{report.categories.filter(c => !c.existsInProject && !c.mappedTo).length} new</span>
         )}
       </div>
     </div>
@@ -392,8 +395,11 @@ const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => (
         {report.tags.filter(t => t.existsInProject).length > 0 && (
           <span className="import-stat-tag stat-update">{report.tags.filter(t => t.existsInProject).length} existing</span>
         )}
-        {report.tags.filter(t => !t.existsInProject).length > 0 && (
-          <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject).length} new</span>
+        {report.tags.filter(t => !t.existsInProject && t.mappedTo).length > 0 && (
+          <span className="import-stat-tag stat-mapped">{report.tags.filter(t => !t.existsInProject && t.mappedTo).length} mapped</span>
+        )}
+        {report.tags.filter(t => !t.existsInProject && !t.mappedTo).length > 0 && (
+          <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject && !t.mappedTo).length} new</span>
         )}
       </div>
     </div>
