@@ -20,6 +20,28 @@
   color: var(--vscode-foreground);
 }
 
+.import-definition-name {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  padding: 2px 6px;
+  margin: -2px -6px;
+  width: calc(100% + 12px);
+  outline: none;
+}
+
+.import-definition-name:hover {
+  border-color: var(--vscode-input-border, #3c3c3c);
+}
+
+.import-definition-name:focus {
+  border-color: var(--vscode-focusBorder, #007fd4);
+  background: var(--vscode-input-background, #1e1e1e);
+}
+
 .import-analysis-header p {
   margin: 0;
   font-size: 12px;

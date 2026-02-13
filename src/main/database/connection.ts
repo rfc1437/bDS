@@ -465,6 +465,21 @@ export class DatabaseConnection {
       )
     `);
     await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id)');
+
+    // Create import_definitions table for WXR import configurations
+    await this.localClient.execute(`
+      CREATE TABLE IF NOT EXISTS import_definitions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        wxr_file_path TEXT,
+        uploads_folder_path TEXT,
+        last_analysis_result TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    await this.localClient.execute('CREATE INDEX IF NOT EXISTS idx_import_definitions_project_id ON import_definitions(project_id)');
   }
 
   async close(): Promise<void> {

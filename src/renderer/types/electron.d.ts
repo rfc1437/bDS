@@ -1,5 +1,16 @@
 // Type definitions for the Electron API exposed via preload
 
+export interface ImportDefinitionData {
+  id: string;
+  projectId: string;
+  name: string;
+  wxrFilePath: string | null;
+  uploadsFolderPath: string | null;
+  lastAnalysisResult: unknown | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectMetadata {
   name: string;
   description?: string;
@@ -385,6 +396,13 @@ export interface ElectronAPI {
     selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
     analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
     selectUploadsFolder: () => Promise<string | null>;
+  };
+  importDefinitions: {
+    create: (name?: string) => Promise<ImportDefinitionData>;
+    get: (id: string) => Promise<ImportDefinitionData | null>;
+    getAll: () => Promise<ImportDefinitionData[]>;
+    update: (id: string, updates: Partial<Pick<ImportDefinitionData, 'name' | 'wxrFilePath' | 'uploadsFolderPath' | 'lastAnalysisResult'>>) => Promise<ImportDefinitionData | null>;
+    delete: (id: string) => Promise<boolean>;
   };
   chat: {
     // API Key Management

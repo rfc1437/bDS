@@ -111,6 +111,13 @@ Object.defineProperty(globalThis, 'window', {
         analyzeFile: vi.fn(),
         selectUploadsFolder: vi.fn(),
       },
+      importDefinitions: {
+        create: vi.fn(),
+        get: vi.fn(),
+        getAll: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
       on: vi.fn(() => () => {}),
     },
   },

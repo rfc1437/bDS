@@ -66,8 +66,8 @@ export const ActivityBar: React.FC = () => {
   // Check if chat sidebar is active (activeView === 'chat' and sidebar is visible)
   const isChatActive = activeView === 'chat' && sidebarVisible;
 
-  // Check if import tab is currently active
-  const isImportTabActive = tabs.some(t => t.type === 'import' && t.id === activeTabId);
+  // Check if import sidebar is active
+  const isImportActive = activeView === 'import' && sidebarVisible;
 
   // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
   const handleViewClick = (view: 'posts' | 'media' | 'chat') => {
@@ -106,8 +106,14 @@ export const ActivityBar: React.FC = () => {
   };
 
   const handleImportClick = () => {
-    // Open import as a dedicated (non-transient) tab
-    openTab({ type: 'import', id: 'import', isTransient: false });
+    if (activeView === 'import' && sidebarVisible) {
+      toggleSidebar();
+    } else {
+      setActiveView('import');
+      if (!sidebarVisible) {
+        toggleSidebar();
+      }
+    }
   };
 
   return (
@@ -142,9 +148,9 @@ export const ActivityBar: React.FC = () => {
           <ChatIcon />
         </button>
         <button
-          className={`activity-bar-item ${isImportTabActive ? 'active' : ''}`}
+          className={`activity-bar-item ${isImportActive ? 'active' : ''}`}
           onClick={handleImportClick}
-          title="Import Analysis"
+          title="Import (click again to toggle sidebar)"
         >
           <ImportIcon />
         </button>

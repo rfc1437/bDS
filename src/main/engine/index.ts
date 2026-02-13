@@ -69,3 +69,7 @@ export {
   type PostAnalysisStatus,
   type MediaAnalysisStatus,
 } from './ImportAnalysisEngine';
+export {
+  ImportDefinitionEngine,
+  type ImportDefinitionData,
+} from './ImportDefinitionEngine';

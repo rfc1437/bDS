@@ -143,6 +143,18 @@ export const chatMessages = sqliteTable('chat_messages', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Import definitions table - stores WXR import configurations
+export const importDefinitions = sqliteTable('import_definitions', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  name: text('name').notNull(),
+  wxrFilePath: text('wxr_file_path'),
+  uploadsFolderPath: text('uploads_folder_path'),
+  lastAnalysisResult: text('last_analysis_result'), // JSON text of ImportAnalysisReport
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -164,3 +176,5 @@ export type ChatConversation = typeof chatConversations.$inferSelect;
 export type NewChatConversation = typeof chatConversations.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
+export type ImportDefinition = typeof importDefinitions.$inferSelect;
+export type NewImportDefinition = typeof importDefinitions.$inferInsert;

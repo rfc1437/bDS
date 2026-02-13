@@ -1,5 +1,4 @@
-import React, { useState, useCallback } from 'react';
-import { useAppStore } from '../../store';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import './ImportAnalysisView.css';
 
 interface AnalysisReport {
@@ -53,43 +52,107 @@ interface TaxonomyItem {
   existsInProject: boolean;
 }
 
-export const ImportAnalysisView: React.FC = () => {
-  const { importAnalysis, importAnalysisLoading, setImportAnalysis, setImportAnalysisLoading } = useAppStore();
-  const [uploadsFolder, setUploadsFolder] = useState<string | null>(null);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+interface ImportAnalysisViewProps {
+  definitionId: string;
+}
 
-  const report = importAnalysis as AnalysisReport | null;
+export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definitionId }) => {
+  const [name, setName] = useState('Untitled Import');
+  const [uploadsFolder, setUploadsFolder] = useState<string | null>(null);
+  const [wxrFilePath, setWxrFilePath] = useState<string | null>(null);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingDefinition, setIsLoadingDefinition] = useState(true);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Load definition on mount
+  useEffect(() => {
+    const load = async () => {
+      setIsLoadingDefinition(true);
+      try {
+        const def = await window.electronAPI?.importDefinitions.get(definitionId);
+        if (def) {
+          setName(def.name);
+          if (def.uploadsFolderPath) setUploadsFolder(def.uploadsFolderPath);
+          if (def.wxrFilePath) setWxrFilePath(def.wxrFilePath);
+          if (def.lastAnalysisResult) {
+            const parsed = typeof def.lastAnalysisResult === 'string'
+              ? JSON.parse(def.lastAnalysisResult)
+              : def.lastAnalysisResult;
+            setReport(parsed as AnalysisReport);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load import definition:', error);
+      } finally {
+        setIsLoadingDefinition(false);
+      }
+    };
+    load();
+  }, [definitionId]);
+
+  const handleNameBlur = useCallback(async () => {
+    const trimmed = name.trim() || 'Untitled Import';
+    setName(trimmed);
+    await window.electronAPI?.importDefinitions.update(definitionId, { name: trimmed });
+  }, [definitionId, name]);
 
   const handleSelectUploadsFolder = useCallback(async () => {
     const folder = await window.electronAPI?.import.selectUploadsFolder();
     if (folder) {
       setUploadsFolder(folder);
+      await window.electronAPI?.importDefinitions.update(definitionId, { uploadsFolderPath: folder });
     }
-  }, []);
+  }, [definitionId]);
 
   const handleSelectAndAnalyze = useCallback(async () => {
-    setImportAnalysisLoading(true);
-    setImportAnalysis(null);
+    setIsLoading(true);
+    setReport(null);
     try {
-      const result = await window.electronAPI?.import.selectAndAnalyze(uploadsFolder || undefined);
+      const result = await window.electronAPI?.import.selectAndAnalyze(uploadsFolder || undefined) as AnalysisReport | null;
       if (result) {
-        setImportAnalysis(result);
+        setReport(result);
+        setWxrFilePath(result.sourceFile);
+        await window.electronAPI?.importDefinitions.update(definitionId, {
+          lastAnalysisResult: JSON.stringify(result),
+          wxrFilePath: result.sourceFile,
+        });
       }
     } catch (error) {
       console.error('Import analysis failed:', error);
     } finally {
-      setImportAnalysisLoading(false);
+      setIsLoading(false);
     }
-  }, [uploadsFolder, setImportAnalysis, setImportAnalysisLoading]);
+  }, [definitionId, uploadsFolder]);
 
   const toggleSection = useCallback((section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   }, []);
 
+  if (isLoadingDefinition) {
+    return (
+      <div className="import-analysis">
+        <div className="import-loading">
+          <div className="import-spinner" />
+          Loading import definition...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="import-analysis">
       <div className="import-analysis-header">
-        <h2>Import Analysis</h2>
+        <input
+          ref={nameInputRef}
+          className="import-definition-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={handleNameBlur}
+          onKeyDown={(e) => { if (e.key === 'Enter') nameInputRef.current?.blur(); }}
+          placeholder="Import name..."
+        />
         <p>Select a WordPress export file (WXR) and an uploads folder to analyze what would be imported.</p>
       </div>
 
@@ -103,27 +166,27 @@ export const ImportAnalysisView: React.FC = () => {
         </div>
         <div className="import-file-row">
           <label>WXR File</label>
-          <div className={`import-file-path ${!report ? 'placeholder' : ''}`}>
-            {report?.sourceFile || 'Select a file to analyze'}
+          <div className={`import-file-path ${!wxrFilePath ? 'placeholder' : ''}`}>
+            {wxrFilePath || report?.sourceFile || 'Select a file to analyze'}
           </div>
           <button
             className="import-analyze-btn"
             onClick={handleSelectAndAnalyze}
-            disabled={importAnalysisLoading}
+            disabled={isLoading}
           >
-            {importAnalysisLoading ? 'Analyzing...' : 'Select & Analyze'}
+            {isLoading ? 'Analyzing...' : 'Select & Analyze'}
           </button>
         </div>
       </div>
 
-      {importAnalysisLoading && (
+      {isLoading && (
         <div className="import-loading">
           <div className="import-spinner" />
           Analyzing WXR file...
         </div>
       )}
 
-      {!report && !importAnalysisLoading && (
+      {!report && !isLoading && (
         <div className="import-empty-state">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
@@ -132,7 +195,7 @@ export const ImportAnalysisView: React.FC = () => {
         </div>
       )}
 
-      {report && !importAnalysisLoading && (
+      {report && !isLoading && (
         <>
           <SiteInfoCard site={report.site} sourceFile={report.sourceFile} />
           <StatCards report={report} />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
-import type { ChatConversation } from '../../types/electron';
+import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import './Sidebar.css';
 
 // Tag data with color information
@@ -1268,6 +1268,127 @@ const ChatList: React.FC = () => {
   );
 };
 
+const ImportList: React.FC = () => {
+  const { openTab, closeTab } = useAppStore();
+  const [definitions, setDefinitions] = useState<ImportDefinitionData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadDefinitions = useCallback(async () => {
+    try {
+      const defs = await window.electronAPI?.importDefinitions.getAll();
+      if (defs) {
+        setDefinitions(defs);
+      }
+    } catch (error) {
+      console.error('Failed to load import definitions:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      setIsLoading(true);
+      await loadDefinitions();
+      setIsLoading(false);
+    };
+    init();
+  }, [loadDefinitions]);
+
+  const handleNewDefinition = async () => {
+    try {
+      const def = await window.electronAPI?.importDefinitions.create();
+      if (def) {
+        setDefinitions(prev => [def, ...prev]);
+        openTab({ type: 'import', id: def.id, isTransient: false });
+      }
+    } catch (error) {
+      console.error('Failed to create import definition:', error);
+      showToast.error('Failed to create import definition');
+    }
+  };
+
+  const handleOpenDefinition = (definitionId: string) => {
+    openTab({ type: 'import', id: definitionId, isTransient: false });
+  };
+
+  const handleDeleteDefinition = async (e: React.MouseEvent, definitionId: string) => {
+    e.stopPropagation();
+    try {
+      await window.electronAPI?.importDefinitions.delete(definitionId);
+      setDefinitions(prev => prev.filter(d => d.id !== definitionId));
+      closeTab(definitionId);
+    } catch (error) {
+      console.error('Failed to delete import definition:', error);
+      showToast.error('Failed to delete import definition');
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="chat-list">
+        <div className="chat-list-header">
+          <span>IMPORTS</span>
+        </div>
+        <div className="chat-loading">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-list">
+      <div className="chat-list-header">
+        <span>IMPORTS</span>
+        <button className="chat-new-button" onClick={handleNewDefinition} title="New Import Definition">
+          +
+        </button>
+      </div>
+      <div className="chat-list-items">
+        {definitions.length === 0 ? (
+          <div className="chat-empty">
+            <p>No import definitions yet</p>
+            <button className="chat-start-button" onClick={handleNewDefinition}>
+              Create an import definition
+            </button>
+          </div>
+        ) : (
+          definitions.map(def => (
+            <div
+              key={def.id}
+              className="chat-list-item"
+              onClick={() => handleOpenDefinition(def.id)}
+            >
+              <div className="chat-item-content">
+                <div className="chat-item-title">{def.name}</div>
+                <div className="chat-item-date">{formatDate(def.updatedAt)}</div>
+              </div>
+              <button
+                className="chat-item-delete"
+                onClick={(e) => handleDeleteDefinition(e, def.id)}
+                title="Delete import definition"
+              >
+                ×
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const Sidebar: React.FC = () => {
   const { activeView, sidebarVisible } = useAppStore();
 
@@ -1282,6 +1403,7 @@ export const Sidebar: React.FC = () => {
       {activeView === 'settings' && <SettingsNav />}
       {activeView === 'tags' && <TagsNav />}
       {activeView === 'chat' && <ChatList />}
+      {activeView === 'import' && <ImportList />}
     </div>
   );
 };
