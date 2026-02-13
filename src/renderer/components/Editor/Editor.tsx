@@ -237,6 +237,161 @@ const hydrateGalleries = async (
   }
 };
 
+const FULL_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+/**
+ * Hydrate photo_archive elements in the preview with actual media from the given year/month.
+ * Also links the discovered media to the post.
+ */
+const hydratePhotoArchive = async (
+  container: HTMLElement,
+  postId: string,
+  onImageClick: (index: number, images: { src: string; alt: string }[]) => void
+) => {
+  const archives = container.querySelectorAll('.macro-photo-archive[data-year]');
+  
+  for (const archive of archives) {
+    const year = parseInt(archive.getAttribute('data-year') || '0', 10);
+    const monthStr = archive.getAttribute('data-month');
+    const month = monthStr ? parseInt(monthStr, 10) : undefined;
+    
+    if (!year) continue;
+    
+    const archiveContainer = archive.querySelector('.photo-archive-container');
+    if (!archiveContainer) continue;
+    
+    try {
+      let html = '';
+      
+      if (month !== undefined) {
+        // Single month view
+        const mediaItems = await window.electronAPI?.media.filter({
+          year,
+          month: month - 1, // API uses 0-based month
+        });
+        
+        const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
+        
+        if (images.length === 0) {
+          archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${FULL_MONTH_NAMES[month - 1]} ${year}</div>`;
+          continue;
+        }
+        
+        // Link images to the post
+        for (const img of images) {
+          const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
+          if (!isLinked) {
+            await window.electronAPI?.postMedia.link(postId, img.id);
+          }
+        }
+        
+        html = buildMonthGallery(month, year, images, onImageClick);
+      } else {
+        // Full year view - show each month that has images
+        const monthsWithMedia: { month: number; images: { id: string; originalName: string; alt?: string; mimeType: string }[] }[] = [];
+        
+        for (let m = 0; m < 12; m++) {
+          const mediaItems = await window.electronAPI?.media.filter({
+            year,
+            month: m, // API uses 0-based month
+          });
+          
+          const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
+          if (images.length > 0) {
+            monthsWithMedia.push({ month: m + 1, images }); // Store as 1-based month
+            
+            // Link images to the post
+            for (const img of images) {
+              const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
+              if (!isLinked) {
+                await window.electronAPI?.postMedia.link(postId, img.id);
+              }
+            }
+          }
+        }
+        
+        if (monthsWithMedia.length === 0) {
+          archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${year}</div>`;
+          continue;
+        }
+        
+        html = monthsWithMedia.map(({ month, images }) => 
+          `<div class="photo-archive-month-wrapper">${buildMonthGallery(month, year, images, onImageClick)}</div>`
+        ).join('');
+      }
+      
+      archiveContainer.innerHTML = html;
+      
+      // Set up click handlers for all images
+      setupPhotoArchiveClickHandlers(archiveContainer, onImageClick);
+      
+    } catch (error) {
+      console.error('Failed to hydrate photo archive:', error);
+      archiveContainer.innerHTML = '<div class="photo-archive-error">Failed to load photo archive</div>';
+    }
+  }
+};
+
+/**
+ * Build HTML for a single month's gallery with rotated month label
+ */
+function buildMonthGallery(
+  month: number,
+  year: number,
+  images: { id: string; originalName: string; alt?: string }[],
+  _onImageClick: (index: number, images: { src: string; alt: string }[]) => void
+): string {
+  const monthName = FULL_MONTH_NAMES[month - 1];
+  
+  return `
+    <div class="photo-archive-month" data-month="${month}" data-year="${year}">
+      <div class="photo-archive-month-label">
+        <span>${monthName}</span>
+      </div>
+      <div class="photo-archive-gallery gallery-lightbox">
+        ${images.map((img, index) => `
+          <div class="photo-archive-item" data-index="${index}" data-media-id="${img.id}">
+            <img 
+              src="bds-media://${img.id}" 
+              alt="${img.alt || img.originalName}" 
+              title="${img.originalName}"
+            />
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Set up click handlers for photo archive gallery items
+ */
+function setupPhotoArchiveClickHandlers(
+  container: Element,
+  onImageClick: (index: number, images: { src: string; alt: string }[]) => void
+) {
+  // Find all month galleries
+  const monthGalleries = container.querySelectorAll('.photo-archive-month');
+  
+  monthGalleries.forEach(monthGallery => {
+    const items = monthGallery.querySelectorAll('.photo-archive-item');
+    const imageData = Array.from(items).map(item => {
+      const img = item.querySelector('img');
+      return {
+        src: img?.getAttribute('src') || '',
+        alt: img?.getAttribute('alt') || '',
+      };
+    });
+    
+    items.forEach((item, index) => {
+      item.addEventListener('click', () => onImageClick(index, imageData));
+    });
+  });
+}
+
 interface PostEditorProps {
   post: PostData;
 }
@@ -303,22 +458,21 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     return galleryImages.length > 0 ? galleryImages : images;
   }, [images, galleryImages]);
 
-  // Hydrate galleries when in preview mode
+  // Hydrate galleries and photo archives when in preview mode
   useEffect(() => {
     if (editorMode !== 'preview' || !previewRef.current) return;
     
     // Small delay to ensure DOM is updated
     const timer = setTimeout(() => {
       if (previewRef.current) {
-        hydrateGalleries(
-          previewRef.current,
-          post.id,
-          (index, imgs) => {
-            setGalleryImages(imgs);
-            setLightboxIndex(index);
-            setLightboxOpen(true);
-          }
-        );
+        const lightboxHandler = (index: number, imgs: { src: string; alt: string }[]) => {
+          setGalleryImages(imgs);
+          setLightboxIndex(index);
+          setLightboxOpen(true);
+        };
+        
+        hydrateGalleries(previewRef.current, post.id, lightboxHandler);
+        hydratePhotoArchive(previewRef.current, post.id, lightboxHandler);
       }
     }, 100);
     

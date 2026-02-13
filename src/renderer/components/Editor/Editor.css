@@ -834,3 +834,119 @@
   color: var(--vscode-descriptionForeground);
   font-style: italic;
 }
+
+/* Photo Archive Macro Styles */
+.macro-photo-archive {
+  margin: 16px 0;
+}
+
+.photo-archive-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.photo-archive-month-wrapper {
+  border-bottom: 1px solid var(--vscode-panel-border);
+  padding-bottom: 24px;
+}
+
+.photo-archive-month-wrapper:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.photo-archive-month {
+  display: flex;
+  gap: 16px;
+}
+
+.photo-archive-month-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  background: var(--vscode-button-secondaryBackground);
+  border-radius: 4px;
+  padding: 8px 0;
+}
+
+.photo-archive-month-label span {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--vscode-button-secondaryForeground);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.photo-archive-gallery {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.photo-archive-item {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--vscode-input-background);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.photo-archive-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.photo-archive-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-archive-loading,
+.photo-archive-empty,
+.photo-archive-error {
+  padding: 24px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  background: var(--vscode-input-background);
+  border-radius: 4px;
+}
+
+.photo-archive-error {
+  color: var(--vscode-errorForeground);
+}
+
+/* Single month view - slightly different layout */
+.photo-archive-single-month .photo-archive-gallery {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* Responsive adjustments */
+@media (max-width: 800px) {
+  .photo-archive-gallery {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .photo-archive-single-month .photo-archive-gallery {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .photo-archive-gallery {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .photo-archive-single-month .photo-archive-gallery {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
