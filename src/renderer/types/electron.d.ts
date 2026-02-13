@@ -396,6 +396,7 @@ export interface ElectronAPI {
     selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
     analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
     selectUploadsFolder: () => Promise<string | null>;
+    onProgress: (callback: (data: { step: string; detail?: string }) => void) => () => void;
   };
   importDefinitions: {
     create: (name?: string) => Promise<ImportDefinitionData>;

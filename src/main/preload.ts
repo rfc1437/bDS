@@ -155,6 +155,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectAndAnalyze: (uploadsFolder?: string) => ipcRenderer.invoke('import:selectAndAnalyze', uploadsFolder),
     analyzeFile: (filePath: string, uploadsFolder?: string) => ipcRenderer.invoke('import:analyzeFile', filePath, uploadsFolder),
     selectUploadsFolder: () => ipcRenderer.invoke('import:selectUploadsFolder'),
+    onProgress: (callback: (data: { step: string; detail?: string }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { step: string; detail?: string }) => callback(data);
+      ipcRenderer.on('import:progress', subscription);
+      return () => ipcRenderer.removeListener('import:progress', subscription);
+    },
   },
 
   // Import Definition CRUD
@@ -340,6 +345,7 @@ export interface ElectronAPI {
     selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
     analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
     selectUploadsFolder: () => Promise<string | null>;
+    onProgress: (callback: (data: { step: string; detail?: string }) => void) => () => void;
   };
   importDefinitions: {
     create: (name?: string) => Promise<unknown>;

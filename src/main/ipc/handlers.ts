@@ -747,7 +747,14 @@ export function registerIpcHandlers(): void {
 
   // ============ Import Analysis Handlers ============
 
+  // Helper to emit progress events
+  const emitImportProgress = (step: string, detail?: string) => {
+    ipcMain.emit('forward-to-renderer', 'import:progress', { step, detail });
+  };
+
   safeHandle('import:selectAndAnalyze', async (_, uploadsFolder?: string) => {
+    emitImportProgress('Selecting file...');
+    
     const result = await dialog.showOpenDialog({
       title: 'Select WordPress Export File (WXR)',
       filters: [
@@ -762,11 +769,17 @@ export function registerIpcHandlers(): void {
     }
 
     const filePath = result.filePaths[0];
+    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    
+    emitImportProgress('Parsing WXR file...', fileName);
+    
     const { WxrParser } = await import('../engine/WxrParser');
     const { ImportAnalysisEngine } = await import('../engine/ImportAnalysisEngine');
 
     const parser = new WxrParser();
     const wxrData = await parser.parseFile(filePath);
+
+    emitImportProgress('Loading project data...', `Found ${wxrData.posts.length} posts, ${wxrData.media.length} media`);
 
     const analysisEngine = new ImportAnalysisEngine();
     const projectEngine = getProjectEngine();
@@ -775,15 +788,32 @@ export function registerIpcHandlers(): void {
       analysisEngine.setProjectContext(activeProject.id);
     }
 
-    return analysisEngine.analyzeWxr(wxrData, filePath, uploadsFolder || undefined);
+    emitImportProgress('Analyzing posts...', `${wxrData.posts.length} posts`);
+    
+    // Add progress callback to engine
+    analysisEngine.onProgress = (step: string, detail?: string) => {
+      emitImportProgress(step, detail);
+    };
+
+    const report = await analysisEngine.analyzeWxr(wxrData, filePath, uploadsFolder || undefined);
+    
+    emitImportProgress('Analysis complete');
+    
+    return report;
   });
 
   safeHandle('import:analyzeFile', async (_, filePath: string, uploadsFolder?: string) => {
+    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    
+    emitImportProgress('Parsing WXR file...', fileName);
+    
     const { WxrParser } = await import('../engine/WxrParser');
     const { ImportAnalysisEngine } = await import('../engine/ImportAnalysisEngine');
 
     const parser = new WxrParser();
     const wxrData = await parser.parseFile(filePath);
+
+    emitImportProgress('Loading project data...', `Found ${wxrData.posts.length} posts, ${wxrData.media.length} media`);
 
     const analysisEngine = new ImportAnalysisEngine();
     const projectEngine = getProjectEngine();
@@ -792,7 +822,18 @@ export function registerIpcHandlers(): void {
       analysisEngine.setProjectContext(activeProject.id);
     }
 
-    return analysisEngine.analyzeWxr(wxrData, filePath, uploadsFolder || undefined);
+    emitImportProgress('Analyzing posts...');
+    
+    // Add progress callback to engine
+    analysisEngine.onProgress = (step: string, detail?: string) => {
+      emitImportProgress(step, detail);
+    };
+
+    const report = await analysisEngine.analyzeWxr(wxrData, filePath, uploadsFolder || undefined);
+    
+    emitImportProgress('Analysis complete');
+    
+    return report;
   });
 
   safeHandle('import:selectUploadsFolder', async () => {

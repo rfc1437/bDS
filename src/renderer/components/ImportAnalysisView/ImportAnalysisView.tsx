@@ -33,7 +33,18 @@ interface MediaSection {
 }
 
 interface AnalyzedPostItem {
-  wxrPost: { wpId: number; title: string; slug: string; status: string };
+  wxrPost: {
+    wpId: number;
+    title: string;
+    slug: string;
+    status: string;
+    excerpt: string;
+    pubDate: string | null;
+    creator: string;
+    postType: string;
+    categories: string[];
+    tags: string[];
+  };
   status: string;
   contentHash: string;
   markdownPreview: string;
@@ -41,7 +52,17 @@ interface AnalyzedPostItem {
 }
 
 interface AnalyzedMediaItem {
-  wxrMedia: { wpId: number; title: string; filename: string; url: string; relativePath: string };
+  wxrMedia: {
+    wpId: number;
+    title: string;
+    filename: string;
+    url: string;
+    relativePath: string;
+    pubDate: string | null;
+    parentId: number;
+    mimeType: string;
+    description: string;
+  };
   status: string;
   fileHash: string | null;
   existingMedia?: { id: string; originalName: string };
@@ -66,7 +87,18 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingDefinition, setIsLoadingDefinition] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [progressStep, setProgressStep] = useState<string>('');
+  const [progressDetail, setProgressDetail] = useState<string>('');
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Subscribe to progress events
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.import.onProgress(({ step, detail }) => {
+      setProgressStep(step);
+      setProgressDetail(detail || '');
+    });
+    return () => unsubscribe?.();
+  }, []);
 
   // Save the current report to the definition
   const persistReport = useCallback(async (updatedReport: AnalysisReport) => {
@@ -167,6 +199,8 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
   const handleSelectAndAnalyze = useCallback(async () => {
     setIsLoading(true);
     setReport(null);
+    setProgressStep('');
+    setProgressDetail('');
     try {
       const result = await window.electronAPI?.import.selectAndAnalyze(uploadsFolder || undefined) as AnalysisReport | null;
       if (result) {
@@ -181,6 +215,8 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
       console.error('Import analysis failed:', error);
     } finally {
       setIsLoading(false);
+      setProgressStep('');
+      setProgressDetail('');
     }
   }, [definitionId, uploadsFolder]);
 
@@ -240,7 +276,10 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
       {isLoading && (
         <div className="import-loading">
           <div className="import-spinner" />
-          Analyzing WXR file...
+          <div className="import-progress">
+            <div className="import-progress-step">{progressStep || 'Analyzing WXR file...'}</div>
+            {progressDetail && <div className="import-progress-detail">{progressDetail}</div>}
+          </div>
         </div>
       )}
 
@@ -276,12 +315,32 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
             />
           )}
 
-          <PostDetailSection
-            title={`Posts (${report.posts.total})`}
-            items={report.posts.items}
-            expanded={expandedSections['posts'] ?? false}
-            onToggle={() => toggleSection('posts')}
-          />
+          {/* Posts section - only items with postType 'post' */}
+          {(() => {
+            const postsOnly = report.posts.items.filter(i => i.wxrPost.postType === 'post');
+            return postsOnly.length > 0 && (
+              <PostDetailSection
+                title={`Posts (${postsOnly.length})`}
+                items={postsOnly}
+                expanded={expandedSections['posts'] ?? false}
+                onToggle={() => toggleSection('posts')}
+              />
+            );
+          })()}
+
+          {/* Other post types section */}
+          {(() => {
+            const otherPosts = report.posts.items.filter(i => i.wxrPost.postType !== 'post');
+            return otherPosts.length > 0 && (
+              <PostDetailSection
+                title={`Other (${otherPosts.length})`}
+                items={otherPosts}
+                expanded={expandedSections['other'] ?? false}
+                onToggle={() => toggleSection('other')}
+                showType
+              />
+            );
+          })()}
 
           {report.pages.total > 0 && (
             <PostDetailSection
@@ -336,75 +395,155 @@ const SiteInfoCard: React.FC<{ site: AnalysisReport['site']; sourceFile: string 
   </div>
 );
 
-const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => (
-  <div className="import-stat-cards">
-    <div className="import-stat-card">
-      <h3>Posts</h3>
-      <div className="import-stat-number">{report.posts.total}</div>
-      <div className="import-stat-breakdown">
-        {report.posts.new > 0 && <span className="import-stat-tag stat-new">{report.posts.new} new</span>}
-        {report.posts.updates > 0 && <span className="import-stat-tag stat-update">{report.posts.updates} update</span>}
-        {report.posts.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.posts.conflicts} conflict</span>}
-        {report.posts.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.posts.contentDuplicates} duplicate</span>}
-      </div>
-    </div>
+const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => {
+  // Split posts by type
+  const postsOnly = report.posts.items.filter(i => i.wxrPost.postType === 'post');
+  const otherPosts = report.posts.items.filter(i => i.wxrPost.postType !== 'post');
+  
+  const postsStats = {
+    total: postsOnly.length,
+    new: postsOnly.filter(i => i.status === 'new').length,
+    updates: postsOnly.filter(i => i.status === 'update').length,
+    conflicts: postsOnly.filter(i => i.status === 'conflict').length,
+    contentDuplicates: postsOnly.filter(i => i.status === 'content-duplicate').length,
+  };
+  
+  const otherStats = {
+    total: otherPosts.length,
+    new: otherPosts.filter(i => i.status === 'new').length,
+    updates: otherPosts.filter(i => i.status === 'update').length,
+    conflicts: otherPosts.filter(i => i.status === 'conflict').length,
+    contentDuplicates: otherPosts.filter(i => i.status === 'content-duplicate').length,
+  };
+  
+  // Get unique other post types for display
+  const otherTypes = [...new Set(otherPosts.map(i => i.wxrPost.postType))].join(', ');
 
-    <div className="import-stat-card">
-      <h3>Pages</h3>
-      <div className="import-stat-number">{report.pages.total}</div>
-      <div className="import-stat-breakdown">
-        {report.pages.new > 0 && <span className="import-stat-tag stat-new">{report.pages.new} new</span>}
-        {report.pages.updates > 0 && <span className="import-stat-tag stat-update">{report.pages.updates} update</span>}
-        {report.pages.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.pages.conflicts} conflict</span>}
-        {report.pages.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.pages.contentDuplicates} duplicate</span>}
+  return (
+    <div className="import-stat-cards">
+      <div className="import-stat-card">
+        <h3>Posts</h3>
+        <div className="import-stat-number">{postsStats.total}</div>
+        <div className="import-stat-breakdown">
+          {postsStats.new > 0 && <span className="import-stat-tag stat-new">{postsStats.new} new</span>}
+          {postsStats.updates > 0 && <span className="import-stat-tag stat-update">{postsStats.updates} update</span>}
+          {postsStats.conflicts > 0 && <span className="import-stat-tag stat-conflict">{postsStats.conflicts} conflict</span>}
+          {postsStats.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{postsStats.contentDuplicates} duplicate</span>}
+        </div>
       </div>
-    </div>
 
-    <div className="import-stat-card">
-      <h3>Media</h3>
-      <div className="import-stat-number">{report.media.total}</div>
-      <div className="import-stat-breakdown">
-        {report.media.new > 0 && <span className="import-stat-tag stat-new">{report.media.new} new</span>}
-        {report.media.updates > 0 && <span className="import-stat-tag stat-update">{report.media.updates} update</span>}
-        {report.media.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.media.conflicts} conflict</span>}
-        {report.media.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.media.contentDuplicates} duplicate</span>}
-        {report.media.missing > 0 && <span className="import-stat-tag stat-missing">{report.media.missing} missing</span>}
-      </div>
-    </div>
+      {otherStats.total > 0 && (
+        <div className="import-stat-card">
+          <h3 title={otherTypes}>Other</h3>
+          <div className="import-stat-number">{otherStats.total}</div>
+          <div className="import-stat-breakdown">
+            {otherStats.new > 0 && <span className="import-stat-tag stat-new">{otherStats.new} new</span>}
+            {otherStats.updates > 0 && <span className="import-stat-tag stat-update">{otherStats.updates} update</span>}
+            {otherStats.conflicts > 0 && <span className="import-stat-tag stat-conflict">{otherStats.conflicts} conflict</span>}
+            {otherStats.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{otherStats.contentDuplicates} duplicate</span>}
+          </div>
+        </div>
+      )}
 
-    <div className="import-stat-card">
-      <h3>Categories</h3>
-      <div className="import-stat-number">{report.categories.length}</div>
-      <div className="import-stat-breakdown">
-        {report.categories.filter(c => c.existsInProject).length > 0 && (
-          <span className="import-stat-tag stat-update">{report.categories.filter(c => c.existsInProject).length} existing</span>
-        )}
-        {report.categories.filter(c => !c.existsInProject && c.mappedTo).length > 0 && (
-          <span className="import-stat-tag stat-mapped">{report.categories.filter(c => !c.existsInProject && c.mappedTo).length} mapped</span>
-        )}
-        {report.categories.filter(c => !c.existsInProject && !c.mappedTo).length > 0 && (
-          <span className="import-stat-tag stat-new">{report.categories.filter(c => !c.existsInProject && !c.mappedTo).length} new</span>
-        )}
+      <div className="import-stat-card">
+        <h3>Pages</h3>
+        <div className="import-stat-number">{report.pages.total}</div>
+        <div className="import-stat-breakdown">
+          {report.pages.new > 0 && <span className="import-stat-tag stat-new">{report.pages.new} new</span>}
+          {report.pages.updates > 0 && <span className="import-stat-tag stat-update">{report.pages.updates} update</span>}
+          {report.pages.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.pages.conflicts} conflict</span>}
+          {report.pages.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.pages.contentDuplicates} duplicate</span>}
+        </div>
       </div>
-    </div>
 
-    <div className="import-stat-card">
-      <h3>Tags</h3>
-      <div className="import-stat-number">{report.tags.length}</div>
-      <div className="import-stat-breakdown">
-        {report.tags.filter(t => t.existsInProject).length > 0 && (
-          <span className="import-stat-tag stat-update">{report.tags.filter(t => t.existsInProject).length} existing</span>
-        )}
-        {report.tags.filter(t => !t.existsInProject && t.mappedTo).length > 0 && (
-          <span className="import-stat-tag stat-mapped">{report.tags.filter(t => !t.existsInProject && t.mappedTo).length} mapped</span>
-        )}
-        {report.tags.filter(t => !t.existsInProject && !t.mappedTo).length > 0 && (
-          <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject && !t.mappedTo).length} new</span>
-        )}
+      <div className="import-stat-card">
+        <h3>Media</h3>
+        <div className="import-stat-number">{report.media.total}</div>
+        <div className="import-stat-breakdown">
+          {report.media.new > 0 && <span className="import-stat-tag stat-new">{report.media.new} new</span>}
+          {report.media.updates > 0 && <span className="import-stat-tag stat-update">{report.media.updates} update</span>}
+          {report.media.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.media.conflicts} conflict</span>}
+          {report.media.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.media.contentDuplicates} duplicate</span>}
+          {report.media.missing > 0 && <span className="import-stat-tag stat-missing">{report.media.missing} missing</span>}
+        </div>
+      </div>
+
+      <div className="import-stat-card">
+        <h3>Categories</h3>
+        <div className="import-stat-number">{report.categories.length}</div>
+        <div className="import-stat-breakdown">
+          {report.categories.filter(c => c.existsInProject).length > 0 && (
+            <span className="import-stat-tag stat-update">{report.categories.filter(c => c.existsInProject).length} existing</span>
+          )}
+          {report.categories.filter(c => !c.existsInProject && c.mappedTo).length > 0 && (
+            <span className="import-stat-tag stat-mapped">{report.categories.filter(c => !c.existsInProject && c.mappedTo).length} mapped</span>
+          )}
+          {report.categories.filter(c => !c.existsInProject && !c.mappedTo).length > 0 && (
+            <span className="import-stat-tag stat-new">{report.categories.filter(c => !c.existsInProject && !c.mappedTo).length} new</span>
+          )}
+        </div>
+      </div>
+
+      <div className="import-stat-card">
+        <h3>Tags</h3>
+        <div className="import-stat-number">{report.tags.length}</div>
+        <div className="import-stat-breakdown">
+          {report.tags.filter(t => t.existsInProject).length > 0 && (
+            <span className="import-stat-tag stat-update">{report.tags.filter(t => t.existsInProject).length} existing</span>
+          )}
+          {report.tags.filter(t => !t.existsInProject && t.mappedTo).length > 0 && (
+            <span className="import-stat-tag stat-mapped">{report.tags.filter(t => !t.existsInProject && t.mappedTo).length} mapped</span>
+          )}
+          {report.tags.filter(t => !t.existsInProject && !t.mappedTo).length > 0 && (
+            <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject && !t.mappedTo).length} new</span>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
+
+// Helper function to format post metadata for tooltip
+function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost']): string {
+  const lines: string[] = [];
+  lines.push(`WordPress ID: ${wxrPost.wpId}`);
+  lines.push(`Type: ${wxrPost.postType}`);
+  lines.push(`Author: ${wxrPost.creator || 'Unknown'}`);
+  if (wxrPost.pubDate) {
+    lines.push(`Published: ${new Date(wxrPost.pubDate).toLocaleDateString()}`);
+  }
+  if (wxrPost.excerpt) {
+    const shortExcerpt = wxrPost.excerpt.length > 100 
+      ? wxrPost.excerpt.substring(0, 100) + '...'
+      : wxrPost.excerpt;
+    lines.push(`Excerpt: ${shortExcerpt}`);
+  }
+  if (wxrPost.tags.length > 0) {
+    lines.push(`Tags: ${wxrPost.tags.join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+// Helper function to format media metadata for tooltip
+function formatMediaTooltip(wxrMedia: AnalyzedMediaItem['wxrMedia']): string {
+  const lines: string[] = [];
+  lines.push(`WordPress ID: ${wxrMedia.wpId}`);
+  lines.push(`MIME Type: ${wxrMedia.mimeType || 'Unknown'}`);
+  if (wxrMedia.pubDate) {
+    lines.push(`Uploaded: ${new Date(wxrMedia.pubDate).toLocaleDateString()}`);
+  }
+  if (wxrMedia.parentId) {
+    lines.push(`Parent Post ID: ${wxrMedia.parentId}`);
+  }
+  lines.push(`URL: ${wxrMedia.url}`);
+  if (wxrMedia.description) {
+    const shortDesc = wxrMedia.description.length > 100
+      ? wxrMedia.description.substring(0, 100) + '...'
+      : wxrMedia.description;
+    lines.push(`Description: ${shortDesc}`);
+  }
+  return lines.join('\n');
+}
 
 const ConflictsSection: React.FC<{
   title: string;
@@ -423,14 +562,20 @@ const ConflictsSection: React.FC<{
           <tr>
             <th>Slug</th>
             <th>WXR Title</th>
+            <th>Categories</th>
             <th>Existing Title</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={idx}>
+            <tr key={idx} className="post-row-with-tooltip" title={formatPostTooltip(item.wxrPost)}>
               <td className="slug-cell">{item.wxrPost.slug}</td>
               <td>{item.wxrPost.title}</td>
+              <td className="categories-cell">
+                {item.wxrPost.categories.length > 0 
+                  ? item.wxrPost.categories.join(', ')
+                  : '--'}
+              </td>
               <td className="existing-match">{item.existingPost?.title || '--'}</td>
             </tr>
           ))}
@@ -445,7 +590,8 @@ const PostDetailSection: React.FC<{
   items: AnalyzedPostItem[];
   expanded: boolean;
   onToggle: () => void;
-}> = ({ title, items, expanded, onToggle }) => (
+  showType?: boolean;
+}> = ({ title, items, expanded, onToggle, showType }) => (
   <div className="import-detail-section">
     <h3 onClick={onToggle}>
       <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
@@ -456,18 +602,26 @@ const PostDetailSection: React.FC<{
         <thead>
           <tr>
             <th>Status</th>
+            {showType && <th>Type</th>}
             <th>Title</th>
             <th>Slug</th>
+            <th>Categories</th>
             <th>WP Status</th>
             <th>Existing Match</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={idx}>
+            <tr key={idx} className="post-row-with-tooltip" title={formatPostTooltip(item.wxrPost)}>
               <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
+              {showType && <td className="post-type-cell">{item.wxrPost.postType}</td>}
               <td>{item.wxrPost.title}</td>
               <td className="slug-cell">{item.wxrPost.slug}</td>
+              <td className="categories-cell">
+                {item.wxrPost.categories.length > 0
+                  ? item.wxrPost.categories.join(', ')
+                  : '--'}
+              </td>
               <td>{item.wxrPost.status}</td>
               <td className="existing-match">{item.existingPost?.title || '--'}</td>
             </tr>
@@ -495,15 +649,17 @@ const MediaDetailSection: React.FC<{
           <tr>
             <th>Status</th>
             <th>Filename</th>
+            <th>Type</th>
             <th>Path</th>
             <th>Existing Match</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={idx}>
+            <tr key={idx} className="media-row-with-tooltip" title={formatMediaTooltip(item.wxrMedia)}>
               <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
               <td>{item.wxrMedia.filename}</td>
+              <td className="mime-type-cell">{item.wxrMedia.mimeType || '--'}</td>
               <td className="slug-cell">{item.wxrMedia.relativePath}</td>
               <td className="existing-match">{item.existingMedia?.originalName || '--'}</td>
             </tr>
