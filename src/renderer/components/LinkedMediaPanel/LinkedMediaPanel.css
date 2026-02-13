@@ -64,24 +64,25 @@
   overflow-y: auto;
 }
 
-/* Media Grid */
-.linked-media-panel .media-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
+/* Media List - single column layout */
+.linked-media-panel .media-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .linked-media-panel .media-item {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
   background: var(--color-bg-tertiary, #1e1e1e);
   border-radius: 4px;
-  overflow: hidden;
-  transition: transform 0.1s, box-shadow 0.1s;
+  transition: background 0.1s;
 }
 
 .linked-media-panel .media-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: var(--color-bg-hover, #2a2d2e);
 }
 
 .linked-media-panel .media-item.drag-over {
@@ -96,13 +97,24 @@
   cursor: grabbing;
 }
 
+.linked-media-panel .media-order {
+  font-size: 10px;
+  color: var(--color-text-secondary, #8b8b8b);
+  min-width: 14px;
+  text-align: center;
+}
+
 .linked-media-panel .media-thumbnail {
-  aspect-ratio: 1;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-bg-secondary, #252526);
+  border-radius: 3px;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .linked-media-panel .media-thumbnail img {
@@ -112,56 +124,33 @@
 }
 
 .linked-media-panel .media-thumbnail .media-icon {
-  font-size: 24px;
+  font-size: 16px;
   opacity: 0.7;
 }
 
-.linked-media-panel .media-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 6px;
-  gap: 4px;
-}
-
 .linked-media-panel .media-name {
-  font-size: 10px;
-  color: var(--color-text-secondary, #8b8b8b);
+  flex: 1;
+  font-size: 12px;
+  color: var(--color-text-primary, #ccc);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
 }
 
 .linked-media-panel .unlink-btn {
   background: none;
   border: none;
-  color: var(--color-text-secondary, #8b8b8b);
+  color: var(--color-error, #f14c4c);
   cursor: pointer;
-  padding: 0 2px;
-  font-size: 12px;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-.linked-media-panel .media-item:hover .unlink-btn {
-  opacity: 1;
+  padding: 2px 6px;
+  font-size: 14px;
+  font-weight: bold;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .linked-media-panel .unlink-btn:hover {
-  color: var(--color-error, #f14c4c);
-}
-
-.linked-media-panel .media-order {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  font-size: 10px;
-  padding: 1px 4px;
-  border-radius: 2px;
-  pointer-events: none;
+  background: rgba(241, 76, 76, 0.15);
 }
 
 /* Empty State */
