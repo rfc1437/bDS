@@ -37,6 +37,12 @@ const ChatIcon = () => (
   </svg>
 );
 
+const ImportIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+  </svg>
+);
+
 const SyncIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
@@ -59,6 +65,9 @@ export const ActivityBar: React.FC = () => {
 
   // Check if chat sidebar is active (activeView === 'chat' and sidebar is visible)
   const isChatActive = activeView === 'chat' && sidebarVisible;
+
+  // Check if import tab is currently active
+  const isImportTabActive = tabs.some(t => t.type === 'import' && t.id === activeTabId);
 
   // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
   const handleViewClick = (view: 'posts' | 'media' | 'chat') => {
@@ -96,6 +105,11 @@ export const ActivityBar: React.FC = () => {
     openTab({ type: 'tags', id: 'tags', isTransient: false });
   };
 
+  const handleImportClick = () => {
+    // Open import as a dedicated (non-transient) tab
+    openTab({ type: 'import', id: 'import', isTransient: false });
+  };
+
   return (
     <div className="activity-bar">
       <div className="activity-bar-top">
@@ -126,6 +140,13 @@ export const ActivityBar: React.FC = () => {
           title="AI Assistant (click again to toggle sidebar)"
         >
           <ChatIcon />
+        </button>
+        <button
+          className={`activity-bar-item ${isImportTabActive ? 'active' : ''}`}
+          onClick={handleImportClick}
+          title="Import Analysis"
+        >
+          <ImportIcon />
         </button>
       </div>
       

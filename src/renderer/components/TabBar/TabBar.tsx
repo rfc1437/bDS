@@ -32,13 +32,17 @@ const getTabTitle = (
     const title = chatTitles.get(tab.id);
     if (title && title !== 'New Chat') {
       // Truncate long titles for display
-      return title.length > MAX_CHAT_TITLE_LENGTH 
+      return title.length > MAX_CHAT_TITLE_LENGTH
         ? title.substring(0, MAX_CHAT_TITLE_LENGTH) + '…'
         : title;
     }
     return 'New Chat';
   }
-  
+
+  if (tab.type === 'import') {
+    return 'Import Analysis';
+  }
+
   return 'Unknown';
 };
 
@@ -72,6 +76,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M14 1H2a1 1 0 00-1 1v10a1 1 0 001 1h3v2.5l4-2.5h5a1 1 0 001-1V2a1 1 0 00-1-1zm0 11H8.5L5 14v-2H2V2h12v10z"/>
+        </svg>
+      );
+    case 'import':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
         </svg>
       );
     default:

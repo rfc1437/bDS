@@ -745,6 +745,68 @@ export function registerIpcHandlers(): void {
     return engine.rebuildFromSidecars();
   });
 
+  // ============ Import Analysis Handlers ============
+
+  safeHandle('import:selectAndAnalyze', async (_, uploadsFolder?: string) => {
+    const result = await dialog.showOpenDialog({
+      title: 'Select WordPress Export File (WXR)',
+      filters: [
+        { name: 'WordPress Export', extensions: ['xml'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    const filePath = result.filePaths[0];
+    const { WxrParser } = await import('../engine/WxrParser');
+    const { ImportAnalysisEngine } = await import('../engine/ImportAnalysisEngine');
+
+    const parser = new WxrParser();
+    const wxrData = await parser.parseFile(filePath);
+
+    const analysisEngine = new ImportAnalysisEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      analysisEngine.setProjectContext(activeProject.id);
+    }
+
+    return analysisEngine.analyzeWxr(wxrData, filePath, uploadsFolder || undefined);
+  });
+
+  safeHandle('import:analyzeFile', async (_, filePath: string, uploadsFolder?: string) => {
+    const { WxrParser } = await import('../engine/WxrParser');
+    const { ImportAnalysisEngine } = await import('../engine/ImportAnalysisEngine');
+
+    const parser = new WxrParser();
+    const wxrData = await parser.parseFile(filePath);
+
+    const analysisEngine = new ImportAnalysisEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      analysisEngine.setProjectContext(activeProject.id);
+    }
+
+    return analysisEngine.analyzeWxr(wxrData, filePath, uploadsFolder || undefined);
+  });
+
+  safeHandle('import:selectUploadsFolder', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Select WordPress Uploads Folder',
+      properties: ['openDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
+  });
+
   // ============ Event Forwarding ============
   
   // Forward engine events to renderer

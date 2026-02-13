@@ -150,6 +150,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncFromPosts: () => ipcRenderer.invoke('tags:syncFromPosts'),
   },
 
+  // Import Analysis
+  import: {
+    selectAndAnalyze: (uploadsFolder?: string) => ipcRenderer.invoke('import:selectAndAnalyze', uploadsFolder),
+    analyzeFile: (filePath: string, uploadsFolder?: string) => ipcRenderer.invoke('import:analyzeFile', filePath, uploadsFolder),
+    selectUploadsFolder: () => ipcRenderer.invoke('import:selectUploadsFolder'),
+  },
+
   // AI Chat (OpenCode Zen API integration)
   chat: {
     // API Key Management
@@ -311,6 +318,11 @@ export interface ElectronAPI {
     rename: (id: string, newName: string) => Promise<unknown>;
     getPostsWithTag: (tagId: string) => Promise<unknown[]>;
     syncFromPosts: () => Promise<void>;
+  };
+  import: {
+    selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
+    analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
+    selectUploadsFolder: () => Promise<string | null>;
   };
   chat: {
     // API Key Management
