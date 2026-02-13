@@ -545,7 +545,7 @@
   font-size: 11px;
   border-radius: 12px;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: background-color 0.15s, opacity 0.15s;
 }
 
 .filter-chip:hover {
@@ -555,6 +555,19 @@
 .filter-chip.active {
   background-color: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
+}
+
+/* Colored filter chips (tags with assigned colors) */
+.filter-chip.has-color {
+  border: 1px solid transparent;
+}
+
+.filter-chip.has-color:hover {
+  opacity: 0.85;
+}
+
+.filter-chip.has-color.active {
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder, #007fd4);
 }
 
 /* Filter Status */

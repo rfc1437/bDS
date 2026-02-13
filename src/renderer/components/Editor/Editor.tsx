@@ -1278,26 +1278,60 @@ interface CategoryCount {
   count: number;
 }
 
+interface TagDataWithColor {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+// Get contrasting text color for background
+const getContrastColor = (hex: string): string => {
+  const color = hex.replace('#', '');
+  let r: number, g: number, b: number;
+  if (color.length === 3) {
+    r = parseInt(color[0] + color[0], 16);
+    g = parseInt(color[1] + color[1], 16);
+    b = parseInt(color[2] + color[2], 16);
+  } else {
+    r = parseInt(color.substring(0, 2), 16);
+    g = parseInt(color.substring(2, 4), 16);
+    b = parseInt(color.substring(4, 6), 16);
+  }
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#000000' : '#ffffff';
+};
+
 const Dashboard: React.FC = () => {
   const { posts, media } = useAppStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
+  const [tagColors, setTagColors] = useState<Map<string, string>>(new Map());
   const [categoryCounts, setCategoryCounts] = useState<CategoryCount[]>([]);
 
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [ds, ym, tc, cc] = await Promise.all([
+        const [ds, ym, tc, cc, allTagsData] = await Promise.all([
           window.electronAPI?.posts.getDashboardStats(),
           window.electronAPI?.posts.getByYearMonth(),
           window.electronAPI?.posts.getTagsWithCounts(),
           window.electronAPI?.posts.getCategoriesWithCounts(),
+          window.electronAPI?.tags.getAll(),
         ]);
         if (ds) setStats(ds);
         if (ym) setYearMonthData(ym);
         if (tc) setTagCounts(tc);
         if (cc) setCategoryCounts(cc);
+        if (allTagsData) {
+          const colorMap = new Map<string, string>();
+          for (const tag of allTagsData as TagDataWithColor[]) {
+            if (tag.color) {
+              colorMap.set(tag.name, tag.color);
+            }
+          }
+          setTagColors(colorMap);
+        }
       } catch (e) {
         console.error('Failed to load dashboard stats:', e);
       }
@@ -1333,8 +1367,9 @@ const Dashboard: React.FC = () => {
     return items.map(t => ({
       ...t,
       fontSize: 11 + ((t.count - minTagCount) / range) * 11,
+      color: tagColors.get(t.tag),
     })).sort((a, b) => a.tag.localeCompare(b.tag)); // alphabetical for cloud layout
-  }, [tagCounts]);
+  }, [tagCounts, tagColors]);
 
   const displayTotalPosts = stats?.totalPosts ?? posts.length;
   const displayDraftCount = stats?.draftCount ?? 0;
@@ -1394,16 +1429,26 @@ const Dashboard: React.FC = () => {
           <div className="dashboard-section">
             <h4>Tags</h4>
             <div className="tag-cloud">
-              {tagCloudItems.map(item => (
-                <span
-                  key={item.tag}
-                  className="dashboard-tag"
-                  style={{ fontSize: `${item.fontSize}px` }}
-                  title={`${item.count} post${item.count !== 1 ? 's' : ''}`}
-                >
-                  {item.tag}
-                </span>
-              ))}
+              {tagCloudItems.map(item => {
+                const hasColor = !!item.color;
+                const style: React.CSSProperties = hasColor
+                  ? {
+                      fontSize: `${item.fontSize}px`,
+                      backgroundColor: item.color,
+                      color: getContrastColor(item.color!),
+                    }
+                  : { fontSize: `${item.fontSize}px` };
+                return (
+                  <span
+                    key={item.tag}
+                    className={`dashboard-tag ${hasColor ? 'has-color' : ''}`}
+                    style={style}
+                    title={`${item.count} post${item.count !== 1 ? 's' : ''}`}
+                  >
+                    {item.tag}
+                  </span>
+                );
+              })}
               {tagCounts.length > 40 && <span className="text-muted tag-cloud-more">+{tagCounts.length - 40} more</span>}
             </div>
           </div>
