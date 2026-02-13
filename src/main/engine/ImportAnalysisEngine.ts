@@ -84,6 +84,9 @@ export interface ImportAnalysisReport {
 export class ImportAnalysisEngine {
   private currentProjectId: string = '';
   private turndown: TurndownService;
+  
+  // Progress callback for reporting analysis steps
+  onProgress?: (step: string, detail?: string) => void;
 
   constructor() {
     this.turndown = new TurndownService({
@@ -100,6 +103,8 @@ export class ImportAnalysisEngine {
   async analyzeWxr(wxrData: WxrData, sourceFile: string, uploadsFolder?: string): Promise<ImportAnalysisReport> {
     const db = getDatabase().getLocal();
 
+    this.onProgress?.('Loading existing posts...');
+    
     // Fetch existing posts for this project
     const existingPosts = await db
       .select({
@@ -112,6 +117,8 @@ export class ImportAnalysisEngine {
       .where(eq(posts.projectId, this.currentProjectId))
       .all();
 
+    this.onProgress?.('Loading existing media...', `${existingPosts.length} posts in project`);
+    
     // Fetch existing media for this project
     const existingMedia = await db
       .select({
@@ -123,6 +130,8 @@ export class ImportAnalysisEngine {
       .where(eq(media.projectId, this.currentProjectId))
       .all();
 
+    this.onProgress?.('Loading existing tags...', `${existingMedia.length} media in project`);
+    
     // Fetch existing tags for this project
     const existingTags = await db
       .select({
@@ -155,13 +164,22 @@ export class ImportAnalysisEngine {
     // Build tag set
     const existingTagNames = new Set(existingTags.map(t => t.name.toLowerCase()));
 
+    this.onProgress?.('Analyzing posts...', `${wxrData.posts.length} posts to analyze`);
+    
     // Analyze posts
     const analyzedPosts = this.analyzePostItems(wxrData.posts, slugToPost, checksumToPost);
+    
+    this.onProgress?.('Analyzing pages...', `${wxrData.pages.length} pages to analyze`);
+    
     const analyzedPages = this.analyzePostItems(wxrData.pages, slugToPost, checksumToPost);
 
+    this.onProgress?.('Analyzing media files...', `${wxrData.media.length} media files to analyze`);
+    
     // Analyze media
     const analyzedMedia = await this.analyzeMediaItems(wxrData.media, nameToMedia, checksumToMedia, uploadsFolder);
 
+    this.onProgress?.('Processing categories and tags...');
+    
     // Analyze categories
     const analyzedCategories: AnalyzedCategory[] = wxrData.categories.map(cat => ({
       name: cat.name,

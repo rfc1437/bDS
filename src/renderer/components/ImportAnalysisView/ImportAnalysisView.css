@@ -145,6 +145,23 @@
   border-top-color: var(--vscode-button-background);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.import-progress-step {
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.import-progress-detail {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
 }
 
 @keyframes spin {
@@ -592,6 +609,42 @@
   background: rgba(115, 201, 145, 0.2);
   color: #73c991;
   margin-left: 8px;
+}
+
+/* Post and Media rows with tooltip - enhanced hover state */
+.import-detail-table tr.post-row-with-tooltip,
+.import-detail-table tr.media-row-with-tooltip {
+  cursor: help;
+  transition: background-color 0.15s ease;
+}
+
+.import-detail-table tr.post-row-with-tooltip:hover,
+.import-detail-table tr.media-row-with-tooltip:hover {
+  background-color: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
+}
+
+/* Categories column styling */
+.import-detail-table .categories-cell {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* MIME type column styling */
+.import-detail-table .mime-type-cell {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+/* Post type column styling */
+.import-detail-table .post-type-cell {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, monospace);
 }
 
 /* Empty state */
