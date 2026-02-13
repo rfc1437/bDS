@@ -7,6 +7,7 @@ import { Lightbox, useMarkdownImages } from '../Lightbox';
 import { PostLinks } from '../PostLinks';
 import { LinkedMediaPanel } from '../LinkedMediaPanel';
 import { ErrorModal } from '../ErrorModal';
+import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 import { SettingsView } from '../SettingsView';
 import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
@@ -240,14 +241,15 @@ interface PostEditorProps {
 }
 
 const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
-  const { 
-    updatePost, 
-    markDirty, 
-    markClean, 
+  const {
+    updatePost,
+    markDirty,
+    markClean,
     isDirty: checkIsDirty,
     preferredEditorMode,
     setPreferredEditorMode,
     showErrorModal,
+    showConfirmDeleteModal,
     media,
   } = useAppStore();
   
@@ -510,23 +512,69 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this post?')) {
-      try {
-        await window.electronAPI?.posts.delete(post.id);
-        // Clear pending ref to prevent auto-save on unmount from resurrecting the post
-        pendingChangesRef.current = null;
-        useAppStore.getState().removePost(post.id);
-        useAppStore.getState().setSelectedPost(null);
-        showToast.success('Post deleted');
-      } catch (error) {
-        console.error('Failed to delete post:', error);
-        const err = error as Error;
-        showErrorModal({
-          title: 'Delete Failed',
-          message: err.message || 'Failed to delete post',
-          stack: err.stack,
+    try {
+      // Fetch references to this post
+      const [linkedBy, linkedMedia] = await Promise.all([
+        window.electronAPI?.posts.getLinkedBy(post.id),
+        window.electronAPI?.postMedia.getForPost(post.id),
+      ]);
+
+      // Build references array
+      const references: Array<{ id: string; title: string; type: 'post' | 'media' | 'link' }> = [];
+
+      // Add posts that link to this post
+      if (linkedBy && linkedBy.length > 0) {
+        linkedBy.forEach((p: { id: string; title: string }) => {
+          references.push({ id: p.id, title: p.title, type: 'link' });
         });
       }
+
+      // Add linked media
+      if (linkedMedia && linkedMedia.length > 0) {
+        linkedMedia.forEach((m: { mediaId: string }) => {
+          const mediaItem = media.find(item => item.id === m.mediaId);
+          if (mediaItem) {
+            references.push({
+              id: mediaItem.id,
+              title: mediaItem.originalName,
+              type: 'media',
+            });
+          }
+        });
+      }
+
+      // Show confirmation modal
+      showConfirmDeleteModal({
+        itemType: 'post',
+        itemTitle: post.title || 'Untitled',
+        references,
+        onConfirm: async () => {
+          try {
+            await window.electronAPI?.posts.delete(post.id);
+            // Clear pending ref to prevent auto-save on unmount from resurrecting the post
+            pendingChangesRef.current = null;
+            useAppStore.getState().removePost(post.id);
+            useAppStore.getState().setSelectedPost(null);
+            showToast.success('Post deleted');
+          } catch (error) {
+            console.error('Failed to delete post:', error);
+            const err = error as Error;
+            showErrorModal({
+              title: 'Delete Failed',
+              message: err.message || 'Failed to delete post',
+              stack: err.stack,
+            });
+          }
+        },
+      });
+    } catch (error) {
+      console.error('Failed to fetch post references:', error);
+      const err = error as Error;
+      showErrorModal({
+        title: 'Error',
+        message: err.message || 'Failed to fetch post references',
+        stack: err.stack,
+      });
     }
   };
 
@@ -879,7 +927,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
 };
 
 const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
-  const { media, posts, updateMedia, showErrorModal, openTab } = useAppStore();
+  const { media, posts, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
   const item = media.find(m => m.id === mediaId);
   
   const [alt, setAlt] = useState(item?.alt || '');
@@ -984,20 +1032,56 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this media file?')) {
-      try {
-        await window.electronAPI?.media.delete(item.id);
-        useAppStore.getState().removeMedia(item.id);
-        showToast.success('Media deleted');
-      } catch (error) {
-        console.error('Failed to delete media:', error);
-        const err = error as Error;
-        showErrorModal({
-          title: 'Delete Failed',
-          message: err.message || 'Failed to delete media',
-          stack: err.stack,
+    try {
+      // Fetch posts that link to this media
+      const linkedPostsList = await window.electronAPI?.postMedia.getForMedia(mediaId);
+
+      // Build references array
+      const references: Array<{ id: string; title: string; type: 'post' | 'media' | 'link' }> = [];
+
+      // Add posts that use this media
+      if (linkedPostsList && linkedPostsList.length > 0) {
+        linkedPostsList.forEach((link: { postId: string }) => {
+          const post = posts.find(p => p.id === link.postId);
+          if (post) {
+            references.push({
+              id: post.id,
+              title: post.title || 'Untitled',
+              type: 'post',
+            });
+          }
         });
       }
+
+      // Show confirmation modal
+      showConfirmDeleteModal({
+        itemType: 'media',
+        itemTitle: item.originalName,
+        references,
+        onConfirm: async () => {
+          try {
+            await window.electronAPI?.media.delete(item.id);
+            useAppStore.getState().removeMedia(item.id);
+            showToast.success('Media deleted');
+          } catch (error) {
+            console.error('Failed to delete media:', error);
+            const err = error as Error;
+            showErrorModal({
+              title: 'Delete Failed',
+              message: err.message || 'Failed to delete media',
+              stack: err.stack,
+            });
+          }
+        },
+      });
+    } catch (error) {
+      console.error('Failed to fetch media references:', error);
+      const err = error as Error;
+      showErrorModal({
+        title: 'Error',
+        message: err.message || 'Failed to fetch media references',
+        stack: err.stack,
+      });
     }
   };
 
@@ -1375,16 +1459,18 @@ const Dashboard: React.FC = () => {
 };
 
 export const Editor: React.FC = () => {
-  const { 
-    activeView, 
-    selectedPostId, 
+  const {
+    activeView,
+    selectedPostId,
     selectedMediaId,
     tabs,
     activeTabId,
-    posts, 
+    posts,
     media,
     errorModal,
     hideErrorModal,
+    confirmDeleteModal,
+    hideConfirmDeleteModal,
     isLoading,
     setSelectedPost,
     setSelectedMedia,
@@ -1450,12 +1536,18 @@ export const Editor: React.FC = () => {
     <ErrorModal error={errorModal} onClose={hideErrorModal} />
   );
 
+  // Show confirm delete modal if present
+  const renderConfirmDeleteModal = () => (
+    <ConfirmDeleteModal details={confirmDeleteModal} onClose={hideConfirmDeleteModal} />
+  );
+
   // Show settings if settings tab is active or settings view with no tab
   if (showSettings) {
     return (
       <div className="editor">
         <SettingsView />
         {renderErrorModal()}
+        {renderConfirmDeleteModal()}
       </div>
     );
   }
@@ -1466,6 +1558,7 @@ export const Editor: React.FC = () => {
       <div className="editor">
         <TagsView />
         {renderErrorModal()}
+        {renderConfirmDeleteModal()}
       </div>
     );
   }
@@ -1476,6 +1569,7 @@ export const Editor: React.FC = () => {
       <div className="editor">
         <ChatPanel key={activeTabId} conversationId={activeTabId} />
         {renderErrorModal()}
+        {renderConfirmDeleteModal()}
       </div>
     );
   }
@@ -1488,10 +1582,11 @@ export const Editor: React.FC = () => {
         <div className="editor">
           <PostEditor key={post.id} post={post} />
           {renderErrorModal()}
+          {renderConfirmDeleteModal()}
         </div>
       );
     }
-    
+
     // Post not found - show loading or empty state
     return (
       <div className="editor">
@@ -1501,6 +1596,7 @@ export const Editor: React.FC = () => {
           </div>
         </div>
         {renderErrorModal()}
+        {renderConfirmDeleteModal()}
       </div>
     );
   }
@@ -1511,6 +1607,7 @@ export const Editor: React.FC = () => {
       <div className="editor">
         <MediaEditor key={activeTabId} mediaId={activeTabId} />
         {renderErrorModal()}
+        {renderConfirmDeleteModal()}
       </div>
     );
   }
@@ -1520,6 +1617,7 @@ export const Editor: React.FC = () => {
     <div className="editor">
       <Dashboard />
       {renderErrorModal()}
+      {renderConfirmDeleteModal()}
     </div>
   );
 };

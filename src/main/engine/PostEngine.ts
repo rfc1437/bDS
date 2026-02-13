@@ -451,7 +451,7 @@ export class PostEngine extends EventEmitter {
     const db = getDatabase().getLocal();
     const client = getDatabase().getLocalClient();
     const existing = await db.select().from(posts).where(eq(posts.id, id)).get();
-    
+
     if (!existing) {
       return false;
     }
@@ -468,6 +468,25 @@ export class PostEngine extends EventEmitter {
     // Delete post links
     await db.delete(postLinks).where(eq(postLinks.sourcePostId, id));
     await db.delete(postLinks).where(eq(postLinks.targetPostId, id));
+
+    // Delete post-media links and update media sidecars
+    const { postMedia } = await import('../database/schema');
+    const { getMediaEngine } = await import('./MediaEngine');
+    const linkedMediaResult = await db.select().from(postMedia).where(eq(postMedia.postId, id));
+    const linkedMedia = Array.isArray(linkedMediaResult) ? linkedMediaResult : [];
+
+    // Remove this post from each linked media's sidecar
+    const mediaEngine = getMediaEngine();
+    for (const link of linkedMedia) {
+      const media = await mediaEngine.getMedia(link.mediaId);
+      if (media && media.linkedPostIds) {
+        const updatedLinkedPostIds = media.linkedPostIds.filter(pid => pid !== id);
+        await mediaEngine.updateMedia(link.mediaId, { linkedPostIds: updatedLinkedPostIds });
+      }
+    }
+
+    // Delete post-media junction entries
+    await db.delete(postMedia).where(eq(postMedia.postId, id));
 
     // Delete from database
     await db.delete(posts).where(eq(posts.id, id));

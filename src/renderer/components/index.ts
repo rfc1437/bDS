@@ -17,4 +17,5 @@ export { TagInput } from './TagInput';
 export { PostLinks } from './PostLinks';
 export { LinkedMediaPanel } from './LinkedMediaPanel';
 export { ErrorModal, type ErrorDetails } from './ErrorModal';
+export { ConfirmDeleteModal, type ConfirmDeleteDetails, type DeleteReference } from './ConfirmDeleteModal';
 export { ChatPanel } from './ChatPanel';
