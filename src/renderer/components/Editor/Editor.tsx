@@ -525,10 +525,10 @@ function setupPhotoArchiveClickHandlers(
 }
 
 interface PostEditorProps {
-  post: PostData;
+  postId: string;
 }
 
-const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
+const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const {
     updatePost,
     markDirty,
@@ -539,12 +539,38 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     showErrorModal,
     showConfirmDeleteModal,
     media,
+    closeTab,
   } = useAppStore();
   
-  const [title, setTitle] = useState(post.title);
-  const [content, setContent] = useState(post.content);
-  const [tags, setTags] = useState<string[]>(post.tags);
-  const [category, setCategory] = useState(post.categories[0] || 'article');
+  // Fetch full post data from backend
+  const [post, setPost] = useState<PostData | null>(null);
+  const [isLoadingPost, setIsLoadingPost] = useState(true);
+  // Track whether form state has been initialized from post data
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingPost(true);
+    setIsInitialized(false);
+    window.electronAPI?.posts.get(postId).then((fetchedPost) => {
+      if (cancelled) return;
+      if (fetchedPost) {
+        setPost(fetchedPost as PostData);
+        // Also update the store so other components have the full data
+        useAppStore.getState().updatePost(postId, fetchedPost as Partial<PostData>);
+      } else {
+        // Post doesn't exist, close the tab
+        closeTab(postId);
+      }
+      setIsLoadingPost(false);
+    });
+    return () => { cancelled = true; };
+  }, [postId, closeTab]);
+
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [category, setCategory] = useState('article');
   const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
@@ -556,12 +582,12 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
   const editorRef = useRef<unknown>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  const isDirty = checkIsDirty(post.id);
+  const isDirty = checkIsDirty(postId);
 
   // Check if post has a published version for discard functionality
   useEffect(() => {
-    window.electronAPI?.posts.hasPublishedVersion(post.id).then(setHasPublishedVersion);
-  }, [post.id]);
+    window.electronAPI?.posts.hasPublishedVersion(postId).then(setHasPublishedVersion);
+  }, [postId]);
 
   // Load available categories from backend (project-scoped)
   useEffect(() => {
@@ -603,13 +629,13 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
           setLightboxOpen(true);
         };
         
-        hydrateGalleries(previewRef.current, post.id, lightboxHandler);
-        hydratePhotoArchive(previewRef.current, post.id, lightboxHandler);
+        hydrateGalleries(previewRef.current, postId, lightboxHandler);
+        hydratePhotoArchive(previewRef.current, postId, lightboxHandler);
       }
     }, 100);
     
     return () => clearTimeout(timer);
-  }, [editorMode, post.id, resolvedContent]);
+  }, [editorMode, postId, resolvedContent]);
 
   // Track latest values for auto-save on unmount/switch
   const pendingChangesRef = useRef<{
@@ -628,23 +654,21 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       content,
       tags,
       category,
-      postId: post.id,
+      postId,
       isDirty,
     };
-  }, [title, content, tags, category, post.id, isDirty]);
+  }, [title, content, tags, category, postId, isDirty]);
 
   // Auto-save when switching away from a post or unmounting
   useEffect(() => {
-    const prevPostId = post.id;
-    
     return () => {
       // Cancel any pending auto-save timer - we'll save immediately
-      autoSaveManager.cancel(prevPostId);
+      autoSaveManager.cancel(postId);
       
       const pending = pendingChangesRef.current;
       // Only auto-save if the post still exists in the store (not deleted/discarded)
-      const postStillExists = useAppStore.getState().posts.some(p => p.id === prevPostId);
-      if (pending && pending.postId === prevPostId && pending.isDirty && postStillExists) {
+      const postStillExists = useAppStore.getState().posts.some(p => p.id === postId);
+      if (pending && pending.postId === postId && pending.isDirty && postStillExists) {
         // Fire and forget auto-save
         window.electronAPI?.posts.update(pending.postId, {
           title: pending.title,
@@ -661,19 +685,25 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
         });
       }
     };
-  }, [post.id]);
+  }, [postId]);
 
-  // Reset when post changes (after auto-save cleanup runs)
+  // Reset when post data is loaded or changes
   useEffect(() => {
-    setTitle(post.title);
-    setContent(post.content);
-    setTags(post.tags);
-    setCategory(post.categories[0] || 'article');
-    markClean(post.id);
-  }, [post.id, post.title, post.content, post.tags, post.categories, markClean]);
+    if (post) {
+      setTitle(post.title);
+      setContent(post.content);
+      setTags(post.tags);
+      setCategory(post.categories[0] || 'article');
+      markClean(postId);
+      // Mark as initialized AFTER setting local state
+      setIsInitialized(true);
+    }
+  }, [post, postId, markClean]);
 
   // Track changes and notify auto-save manager
+  // Only run after form has been initialized from post data
   useEffect(() => {
+    if (!post || !isInitialized) return;
     const currentCategory = post.categories[0] || 'article';
     const tagsChanged = JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort());
     const hasChanges = 
@@ -683,19 +713,19 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       category !== currentCategory;
     
     if (hasChanges) {
-      markDirty(post.id);
+      markDirty(postId);
       // Notify auto-save manager with accumulated changes
       // Convert tags array to comma-separated string for auto-save compatibility
-      autoSaveManager.notifyChange(post.id, {
+      autoSaveManager.notifyChange(postId, {
         title,
         content,
         tags: tags.join(', '),
         category,
       });
     } else {
-      markClean(post.id);
+      markClean(postId);
     }
-  }, [title, content, tags, category, post, markDirty, markClean]);
+  }, [title, content, tags, category, post, postId, isInitialized, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -707,11 +737,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     if (!isDirty || isSaving) return;
 
     // Cancel any pending auto-save since we're saving manually
-    autoSaveManager.cancel(post.id);
+    autoSaveManager.cancel(postId);
     
     setIsSaving(true);
     try {
-      const updated = await window.electronAPI?.posts.update(post.id, {
+      const updated = await window.electronAPI?.posts.update(postId, {
         title,
         content,
         tags,
@@ -719,8 +749,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       });
       
       if (updated) {
-        updatePost(post.id, updated as Partial<PostData>);
-        markClean(post.id);
+        updatePost(postId, updated as Partial<PostData>);
+        markClean(postId);
       }
     } catch (error) {
       console.error('Failed to save post:', error);
@@ -733,14 +763,14 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [post.id, title, content, tags, category, isDirty, isSaving, updatePost, markClean, showErrorModal]);
+  }, [postId, title, content, tags, category, isDirty, isSaving, updatePost, markClean, showErrorModal]);
 
   const handlePublish = async () => {
     await handleSave();
     try {
-      const updated = await window.electronAPI?.posts.publish(post.id);
+      const updated = await window.electronAPI?.posts.publish(postId);
       if (updated) {
-        updatePost(post.id, updated as Partial<PostData>);
+        updatePost(postId, updated as Partial<PostData>);
         showToast.success('Post published');
       }
     } catch (error) {
@@ -768,22 +798,22 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     try {
       if (hasPublishedVersion) {
         // Revert to published version
-        const reverted = await window.electronAPI?.posts.discard(post.id);
+        const reverted = await window.electronAPI?.posts.discard(postId);
         if (reverted) {
           setTitle(reverted.title);
           setContent(reverted.content);
           setTags(reverted.tags);
           setCategory(reverted.categories[0] || 'article');
-          updatePost(post.id, reverted as Partial<PostData>);
-          markClean(post.id);
+          updatePost(postId, reverted as Partial<PostData>);
+          markClean(postId);
           showToast.success('Reverted to last published version');
         }
       } else {
         // Never published - delete the post entirely
-        await window.electronAPI?.posts.delete(post.id);
+        await window.electronAPI?.posts.delete(postId);
         // Clear pending ref to prevent auto-save on unmount from resurrecting the post
         pendingChangesRef.current = null;
-        useAppStore.getState().removePost(post.id);
+        useAppStore.getState().removePost(postId);
         useAppStore.getState().setSelectedPost(null);
         showToast.success('Draft deleted');
       }
@@ -802,8 +832,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     try {
       // Fetch references to this post
       const [linkedBy, linkedMedia] = await Promise.all([
-        window.electronAPI?.posts.getLinkedBy(post.id),
-        window.electronAPI?.postMedia.getForPost(post.id),
+        window.electronAPI?.posts.getLinkedBy(postId),
+        window.electronAPI?.postMedia.getForPost(postId),
       ]);
 
       // Build references array
@@ -833,14 +863,14 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
       // Show confirmation modal
       showConfirmDeleteModal({
         itemType: 'post',
-        itemTitle: post.title || 'Untitled',
+        itemTitle: title || 'Untitled',
         references,
         onConfirm: async () => {
           try {
-            await window.electronAPI?.posts.delete(post.id);
+            await window.electronAPI?.posts.delete(postId);
             // Clear pending ref to prevent auto-save on unmount from resurrecting the post
             pendingChangesRef.current = null;
-            useAppStore.getState().removePost(post.id);
+            useAppStore.getState().removePost(postId);
             useAppStore.getState().setSelectedPost(null);
             showToast.success('Post deleted');
           } catch (error) {
@@ -994,6 +1024,19 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
     };
   }, [handleSave]);
 
+  // Show loading state while fetching post data
+  if (isLoadingPost || !post) {
+    return (
+      <div className="editor">
+        <div className="editor-empty">
+          <div className="welcome-content">
+            <p className="text-muted">Loading post...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="editor">
       <div className="editor-header">
@@ -1078,14 +1121,14 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
             </div>
             
             <PostLinks
-              postId={post.id}
+              postId={postId}
               updatedAt={post.updatedAt}
               onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
             />
           </div>
           
           <div className="editor-media-panel">
-            <LinkedMediaPanel postId={post.id} />
+            <LinkedMediaPanel postId={postId} />
           </div>
         </div>
         
@@ -1174,7 +1217,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ post }) => {
             <div className="editor-preview markdown-body" ref={previewRef}>
               <div
                 className="preview-content"
-                dangerouslySetInnerHTML={{ __html: markdownToHtml(resolvedContent, post.id) }}
+                dangerouslySetInnerHTML={{ __html: markdownToHtml(resolvedContent, postId) }}
               />
             </div>
           )}
@@ -1927,22 +1970,10 @@ export const Editor: React.FC = () => {
     }
   }, [activeView, selectedMediaId, media, isLoading, setSelectedMedia]);
 
-  // Close tab if the item doesn't exist anymore, or fetch it if not yet loaded
+  // Close media tab if the media doesn't exist anymore
   useEffect(() => {
     if (activeTab && !isLoading) {
-      if (activeTab.type === 'post') {
-        const postExists = posts.some(p => p.id === activeTab.id);
-        if (!postExists) {
-          // Post might not be loaded yet (pagination / filtered view) — try fetching it
-          window.electronAPI?.posts.get(activeTab.id).then((post) => {
-            if (post) {
-              useAppStore.getState().addPost(post as PostData);
-            } else {
-              closeTab(activeTab.id);
-            }
-          });
-        }
-      } else if (activeTab.type === 'media') {
+      if (activeTab.type === 'media') {
         const mediaExists = media.some(m => m.id === activeTab.id);
         if (!mediaExists) {
           closeTab(activeTab.id);
@@ -2007,25 +2038,9 @@ export const Editor: React.FC = () => {
 
   // Show post editor if a post tab is active
   if (showPost && activeTabId) {
-    const post = posts.find(p => p.id === activeTabId);
-    if (post) {
-      return (
-        <div className="editor">
-          <PostEditor key={post.id} post={post} />
-          {renderErrorModal()}
-          {renderConfirmDeleteModal()}
-        </div>
-      );
-    }
-
-    // Post not found - show loading or empty state
     return (
       <div className="editor">
-        <div className="editor-empty">
-          <div className="welcome-content">
-            <p className="text-muted">{isLoading ? 'Loading post...' : ''}</p>
-          </div>
-        </div>
+        <PostEditor key={activeTabId} postId={activeTabId} />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>
