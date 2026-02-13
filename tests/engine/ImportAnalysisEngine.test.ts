@@ -709,6 +709,42 @@ describe('ImportAnalysisEngine', () => {
       expect(youtubeMacro?.usages[0].params.id).toBe('singlequoted');
     });
 
+    it('should handle shortcodes with unquoted parameters', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[youtube id=abc123def4g autoplay=true][gallery columns=4]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      expect(youtubeMacro?.usages[0].params.id).toBe('abc123def4g');
+      expect(youtubeMacro?.usages[0].params.autoplay).toBe('true');
+
+      const galleryMacro = report.macros.discovered.find(m => m.name === 'gallery');
+      expect(galleryMacro?.usages[0].params.columns).toBe('4');
+    });
+
+    it('should handle mixed quoted and unquoted parameters', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[video src="http://example.com/video.mp4" autoplay=true width=640]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const videoMacro = report.macros.discovered.find(m => m.name === 'video');
+      expect(videoMacro?.usages[0].params.src).toBe('http://example.com/video.mp4');
+      expect(videoMacro?.usages[0].params.autoplay).toBe('true');
+      expect(videoMacro?.usages[0].params.width).toBe('640');
+    });
+
     it('should not detect our internal macro format as WordPress shortcodes', async () => {
       setupDbReturns([], [], []);
 
