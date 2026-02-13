@@ -1293,6 +1293,23 @@ const ImportList: React.FC = () => {
     init();
   }, [loadDefinitions]);
 
+  // Listen for import definition name updates
+  useEffect(() => {
+    const unsub = window.electronAPI?.importDefinitions.onNameUpdated((data) => {
+      setDefinitions(prev => 
+        prev.map(def => 
+          def.id === data.definitionId 
+            ? { ...def, name: data.name }
+            : def
+        )
+      );
+    });
+
+    return () => {
+      unsub?.();
+    };
+  }, []);
+
   const handleNewDefinition = async () => {
     try {
       const def = await window.electronAPI?.importDefinitions.create();

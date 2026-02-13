@@ -842,7 +842,7 @@ export function registerIpcHandlers(): void {
     return engine.getAllForProject();
   });
 
-  safeHandle('importDefinitions:update', async (_, id: string, updates: any) => {
+  safeHandle('importDefinitions:update', async (event, id: string, updates: any) => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
     const projectEngine = getProjectEngine();
@@ -850,7 +850,12 @@ export function registerIpcHandlers(): void {
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
     }
-    return engine.updateDefinition(id, updates);
+    const result = await engine.updateDefinition(id, updates);
+    // Notify renderer of name changes for sidebar/tab updates
+    if (result && updates.name !== undefined) {
+      event.sender.send('importDefinition-name-updated', { definitionId: id, name: result.name });
+    }
+    return result;
   });
 
   safeHandle('importDefinitions:delete', async (_, id: string) => {
