@@ -4,6 +4,30 @@ import { showToast } from '../Toast';
 import type { ChatConversation } from '../../types/electron';
 import './Sidebar.css';
 
+// Tag data with color information
+interface TagData {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+// Get contrasting text color for background
+const getContrastColor = (hex: string): string => {
+  const color = hex.replace('#', '');
+  let r: number, g: number, b: number;
+  if (color.length === 3) {
+    r = parseInt(color[0] + color[0], 16);
+    g = parseInt(color[1] + color[1], 16);
+    b = parseInt(color[2] + color[2], 16);
+  } else {
+    r = parseInt(color.substring(0, 2), 16);
+    g = parseInt(color.substring(2, 4), 16);
+    b = parseInt(color.substring(4, 6), 16);
+  }
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#000000' : '#ffffff';
+};
+
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -123,6 +147,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear,
 
 interface FilterPanelProps {
   tags: string[];
+  tagColors: Map<string, string>;
   categories: string[];
   selectedTags: string[];
   selectedCategories: string[];
@@ -132,6 +157,7 @@ interface FilterPanelProps {
 
 const FilterPanel: React.FC<FilterPanelProps> = ({
   tags,
+  tagColors,
   categories,
   selectedTags,
   selectedCategories,
@@ -144,21 +170,33 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         <div className="filter-section">
           <div className="filter-header">TAGS</div>
           <div className="filter-chips">
-            {tags.map(tag => (
-              <button
-                key={tag}
-                className={`filter-chip ${selectedTags.includes(tag) ? 'active' : ''}`}
-                onClick={() => {
-                  if (selectedTags.includes(tag)) {
-                    onTagSelect(selectedTags.filter(t => t !== tag));
-                  } else {
-                    onTagSelect([...selectedTags, tag]);
+            {tags.map(tag => {
+              const color = tagColors.get(tag);
+              const hasColor = !!color;
+              const style: React.CSSProperties = hasColor
+                ? {
+                    backgroundColor: color,
+                    color: getContrastColor(color!),
+                    borderColor: color,
                   }
-                }}
-              >
-                {tag}
-              </button>
-            ))}
+                : {};
+              return (
+                <button
+                  key={tag}
+                  className={`filter-chip ${selectedTags.includes(tag) ? 'active' : ''} ${hasColor ? 'has-color' : ''}`}
+                  style={style}
+                  onClick={() => {
+                    if (selectedTags.includes(tag)) {
+                      onTagSelect(selectedTags.filter(t => t !== tag));
+                    } else {
+                      onTagSelect([...selectedTags, tag]);
+                    }
+                  }}
+                >
+                  {tag}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -273,12 +311,14 @@ const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, sel
 // Media-specific filter panel
 interface MediaFilterPanelProps {
   tags: string[];
+  tagColors: Map<string, string>;
   selectedTags: string[];
   onTagSelect: (tags: string[]) => void;
 }
 
 const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
   tags,
+  tagColors,
   selectedTags,
   onTagSelect,
 }) => {
@@ -288,21 +328,33 @@ const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
         <div className="filter-section">
           <div className="filter-header">TAGS</div>
           <div className="filter-chips">
-            {tags.map(tag => (
-              <button
-                key={tag}
-                className={`filter-chip ${selectedTags.includes(tag) ? 'active' : ''}`}
-                onClick={() => {
-                  if (selectedTags.includes(tag)) {
-                    onTagSelect(selectedTags.filter(t => t !== tag));
-                  } else {
-                    onTagSelect([...selectedTags, tag]);
+            {tags.map(tag => {
+              const color = tagColors.get(tag);
+              const hasColor = !!color;
+              const style: React.CSSProperties = hasColor
+                ? {
+                    backgroundColor: color,
+                    color: getContrastColor(color!),
+                    borderColor: color,
                   }
-                }}
-              >
-                {tag}
-              </button>
-            ))}
+                : {};
+              return (
+                <button
+                  key={tag}
+                  className={`filter-chip ${selectedTags.includes(tag) ? 'active' : ''} ${hasColor ? 'has-color' : ''}`}
+                  style={style}
+                  onClick={() => {
+                    if (selectedTags.includes(tag)) {
+                      onTagSelect(selectedTags.filter(t => t !== tag));
+                    } else {
+                      onTagSelect([...selectedTags, tag]);
+                    }
+                  }}
+                >
+                  {tag}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -355,20 +407,31 @@ const PostsList: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [tagColors, setTagColors] = useState<Map<string, string>>(new Map());
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [filteredPosts, setFilteredPosts] = useState<PostData[] | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Load available tags and categories
+  // Load available tags with colors and categories
   useEffect(() => {
     const loadFilters = async () => {
-      const [tags, categories] = await Promise.all([
+      const [tags, categories, allTagsData] = await Promise.all([
         window.electronAPI?.posts.getTags(),
         window.electronAPI?.posts.getCategories(),
+        window.electronAPI?.tags.getAll(),
       ]);
       if (tags) setAvailableTags(tags as string[]);
       if (categories) setAvailableCategories(categories as string[]);
+      if (allTagsData) {
+        const colorMap = new Map<string, string>();
+        for (const tag of allTagsData as TagData[]) {
+          if (tag.color) {
+            colorMap.set(tag.name, tag.color);
+          }
+        }
+        setTagColors(colorMap);
+      }
     };
     loadFilters();
   }, [posts]);
@@ -553,6 +616,7 @@ const PostsList: React.FC = () => {
           />
           <FilterPanel
             tags={availableTags}
+            tagColors={tagColors}
             categories={availableCategories}
             selectedTags={selectedTags}
             selectedCategories={selectedCategories}
@@ -698,14 +762,27 @@ const MediaList: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [tagColors, setTagColors] = useState<Map<string, string>>(new Map());
   const [showFilters, setShowFilters] = useState(false);
   const [filteredMedia, setFilteredMedia] = useState<MediaData[] | null>(null);
 
-  // Load available tags
+  // Load available tags with colors
   useEffect(() => {
     const loadTags = async () => {
-      const tags = await window.electronAPI?.media.getTags();
+      const [tags, allTagsData] = await Promise.all([
+        window.electronAPI?.media.getTags(),
+        window.electronAPI?.tags.getAll(),
+      ]);
       if (tags) setAvailableTags(tags as string[]);
+      if (allTagsData) {
+        const colorMap = new Map<string, string>();
+        for (const tag of allTagsData as TagData[]) {
+          if (tag.color) {
+            colorMap.set(tag.name, tag.color);
+          }
+        }
+        setTagColors(colorMap);
+      }
     };
     loadTags();
   }, [media]);
@@ -843,6 +920,7 @@ const MediaList: React.FC = () => {
           />
           <MediaFilterPanel
             tags={availableTags}
+            tagColors={tagColors}
             selectedTags={selectedTags}
             onTagSelect={setSelectedTags}
           />
