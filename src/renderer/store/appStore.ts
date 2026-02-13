@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { DeleteReference, ConfirmDeleteDetails } from '../components/ConfirmDeleteModal';
 
 // Storage key for persisted state
 const STORAGE_KEY = 'bds-app-state';
@@ -76,6 +77,9 @@ export interface ErrorDetails {
   stack?: string;
 }
 
+// Re-export types from ConfirmDeleteModal for convenience
+export type { DeleteReference, ConfirmDeleteDetails };
+
 export type EditorMode = 'wysiwyg' | 'markdown' | 'preview';
 
 // App State Store
@@ -110,7 +114,10 @@ interface AppState {
   
   // Error modal
   errorModal: ErrorDetails | null;
-  
+
+  // Confirm delete modal
+  confirmDeleteModal: ConfirmDeleteDetails | null;
+
   // Sync
   syncStatus: 'idle' | 'syncing' | 'error';
   syncConfigured: boolean;
@@ -158,7 +165,11 @@ interface AppState {
   // Error modal actions
   showErrorModal: (error: ErrorDetails) => void;
   hideErrorModal: () => void;
-  
+
+  // Confirm delete modal actions
+  showConfirmDeleteModal: (details: ConfirmDeleteDetails) => void;
+  hideConfirmDeleteModal: () => void;
+
   setMedia: (media: MediaData[]) => void;
   addMedia: (media: MediaData) => void;
   updateMedia: (id: string, media: Partial<MediaData>) => void;
@@ -208,7 +219,10 @@ export const useAppStore = create<AppState>()(
       
       // Error modal
       errorModal: null,
-      
+
+      // Confirm delete modal
+      confirmDeleteModal: null,
+
       // Initial Sync State
       syncStatus: 'idle',
       syncConfigured: false,
@@ -356,7 +370,11 @@ export const useAppStore = create<AppState>()(
       // Error modal actions
       showErrorModal: (error) => set({ errorModal: error }),
       hideErrorModal: () => set({ errorModal: null }),
-      
+
+      // Confirm delete modal actions
+      showConfirmDeleteModal: (details) => set({ confirmDeleteModal: details }),
+      hideConfirmDeleteModal: () => set({ confirmDeleteModal: null }),
+
       // Media Actions
       setMedia: (media) => set({ media }),
       addMedia: (media) => set((state) => ({ media: [...state.media, media] })),

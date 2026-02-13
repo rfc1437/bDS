@@ -507,7 +507,7 @@ export class MediaEngine extends EventEmitter {
   async deleteMedia(id: string): Promise<boolean> {
     const db = getDatabase().getLocal();
     const existing = await db.select().from(media).where(eq(media.id, id)).get();
-    
+
     if (!existing) {
       return false;
     }
@@ -528,6 +528,10 @@ export class MediaEngine extends EventEmitter {
 
     // Delete thumbnails
     await this.deleteThumbnails(id);
+
+    // Delete post-media links (cascade cleanup)
+    const { postMedia } = await import('../database/schema');
+    await db.delete(postMedia).where(eq(postMedia.mediaId, id));
 
     await db.delete(media).where(eq(media.id, id));
 

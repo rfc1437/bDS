@@ -25,7 +25,7 @@ metadata can always be reconstructed from posts. Do the same with images, keepin
 user local path, in that case storing the image file sand for each image file a properties sidecar file that
 uses the same header structure as for posts.
 
-The application must be offline-first, everything must work in airplane mode (except exporting of course).
+The application must be offline-first, everything must work in airplane mode (except exporting / AI of course).
 It must be fully self-contained during editing and previewing and managing content. Every internal structure
 must have reflections in the filesystem, so available tags, available categories, all those things must be
 automatically reflected to the filesystem in a per-project way. Use a meta/ folder under the project folder

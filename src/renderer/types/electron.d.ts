@@ -66,6 +66,19 @@ export interface MediaData {
   tags: string[];
 }
 
+export interface MediaFilter {
+  tags?: string[];
+  year?: number;
+  month?: number;
+}
+
+export interface MediaSearchResult {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  createdAt: string;
+}
+
 export interface TaskProgress {
   taskId: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -291,6 +304,11 @@ export interface ElectronAPI {
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => Promise<string | null>;
     regenerateThumbnails: (id: string) => Promise<Record<string, string> | null>;
     regenerateMissingThumbnails: () => Promise<{ processed: number; generated: number; failed: number }>;
+    filter: (filter: MediaFilter) => Promise<MediaData[]>;
+    search: (query: string) => Promise<MediaSearchResult[]>;
+    getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
+    getTags: () => Promise<string[]>;
+    getTagsWithCounts: () => Promise<TagCount[]>;
   };
   postMedia: {
     link: (postId: string, mediaId: string) => Promise<MediaLinkData>;

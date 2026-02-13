@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAppStore, PostData } from '../../store';
+import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
 import type { ChatConversation } from '../../types/electron';
 import './Sidebar.css';
