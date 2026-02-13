@@ -432,6 +432,9 @@ export interface ElectronAPI {
     clearMessages: (conversationId: string) => Promise<void>;
     setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
 
+    // Taxonomy Analysis
+    analyzeTaxonomy: (categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => Promise<{ success: boolean; categoryMappings?: Record<string, string>; tagMappings?: Record<string, string>; error?: string }>;
+
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;
     onToolCall: (callback: (data: ChatToolCall) => void) => () => void;

@@ -1147,6 +1147,149 @@ export class OpenCodeManager {
     return errorMsg;
   }
 
+  /**
+   * Analyze taxonomy items (tags and categories) and suggest mappings
+   * This is a one-shot request without conversation context
+   */
+  async analyzeTaxonomy(
+    categories: Array<{ name: string; slug: string; existsInProject: boolean }>,
+    tags: Array<{ name: string; slug: string; existsInProject: boolean }>,
+    modelId: string
+  ): Promise<{
+    success: boolean;
+    categoryMappings?: Record<string, string>;
+    tagMappings?: Record<string, string>;
+    error?: string;
+  }> {
+    if (!this.apiKey) {
+      return { success: false, error: 'API key not set' };
+    }
+
+    const provider = this.detectProvider(modelId);
+    
+    // Build the prompt for taxonomy analysis
+    const existingCategories = categories.filter(c => c.existsInProject).map(c => c.name);
+    const newCategories = categories.filter(c => !c.existsInProject).map(c => c.name);
+    const existingTags = tags.filter(t => t.existsInProject).map(t => t.name);
+    const newTags = tags.filter(t => !t.existsInProject).map(t => t.name);
+
+    const systemPrompt = `You are an expert at analyzing and consolidating taxonomy terms (tags and categories) for a blog import system.
+
+Your task is to analyze imported categories and tags and suggest mappings to reduce duplicates and inconsistencies.
+
+RULES:
+1. Only suggest mappings for items that are genuinely similar or duplicates
+2. Consider variations like: singular/plural, different casing, synonyms, abbreviations, hyphenation
+3. Map to existing items when there's a clear match
+4. Map multiple similar new items to a single canonical form
+5. Only suggest mappings where it makes sense - not every item needs a mapping
+
+RESPONSE FORMAT:
+You MUST respond with valid JSON only, no other text. Use this exact structure:
+{
+  "categoryMappings": { "Source Category": "Target Category", ... },
+  "tagMappings": { "Source Tag": "Target Tag", ... }
+}
+
+If there are no sensible mappings to suggest, return empty objects.`;
+
+    const userPrompt = `Analyze these taxonomy items from a WordPress import and suggest mappings:
+
+EXISTING CATEGORIES IN PROJECT:
+${existingCategories.length > 0 ? existingCategories.join(', ') : '(none)'}
+
+NEW CATEGORIES FROM IMPORT:
+${newCategories.length > 0 ? newCategories.join(', ') : '(none)'}
+
+EXISTING TAGS IN PROJECT:
+${existingTags.length > 0 ? existingTags.join(', ') : '(none)'}
+
+NEW TAGS FROM IMPORT:
+${newTags.length > 0 ? newTags.join(', ') : '(none)'}
+
+Suggest mappings to consolidate similar items. Response must be valid JSON only.`;
+
+    try {
+      let responseText = '';
+
+      if (provider === 'anthropic') {
+        const body = {
+          model: modelId,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        };
+
+        const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (response.statusCode !== 200) {
+          console.error('[OpenCodeManager] Taxonomy analysis failed:', response.body);
+          return { success: false, error: `API request failed: ${response.statusCode}` };
+        }
+
+        const data = JSON.parse(response.body);
+        // Extract text from Anthropic response
+        for (const block of data.content || []) {
+          if (block.type === 'text') {
+            responseText += block.text;
+          }
+        }
+      } else {
+        // OpenAI-compatible
+        const body = {
+          model: modelId,
+          max_tokens: 4096,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        };
+
+        const response = await this.httpRequest(ZEN_OPENAI_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (response.statusCode !== 200) {
+          console.error('[OpenCodeManager] Taxonomy analysis failed:', response.body);
+          return { success: false, error: `API request failed: ${response.statusCode}` };
+        }
+
+        const data = JSON.parse(response.body);
+        responseText = data.choices?.[0]?.message?.content || '';
+      }
+
+      // Parse the JSON response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error('[OpenCodeManager] No JSON found in response:', responseText);
+        return { success: false, error: 'Invalid response format from AI' };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      return {
+        success: true,
+        categoryMappings: result.categoryMappings || {},
+        tagMappings: result.tagMappings || {},
+      };
+    } catch (error) {
+      console.error('[OpenCodeManager] Error analyzing taxonomy:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
   private httpRequest(
     urlStr: string,
     options: {

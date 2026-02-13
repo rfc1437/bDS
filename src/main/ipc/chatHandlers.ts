@@ -317,6 +317,19 @@ export function registerChatHandlers(): void {
       return { success: false, error: (error as Error).message };
     }
   });
+
+  // ============ Taxonomy Analysis ============
+
+  // Analyze taxonomy items (tags/categories) and suggest mappings
+  ipcMain.handle('chat:analyzeTaxonomy', async (_, categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => {
+    try {
+      const manager = getOpenCodeManager();
+      return await manager.analyzeTaxonomy(categories, tags, modelId);
+    } catch (error) {
+      console.error('[Chat IPC] Error analyzing taxonomy:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
 }
 
 /**

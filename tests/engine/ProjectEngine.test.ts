@@ -75,6 +75,7 @@ vi.mock('fs/promises', () => ({
   unlink: vi.fn(async () => {}),
   mkdir: vi.fn(async () => {}),
   readdir: vi.fn(async () => []),
+  rm: vi.fn(async () => {}),
   stat: vi.fn(async () => ({
     isFile: () => false,
     isDirectory: () => true,

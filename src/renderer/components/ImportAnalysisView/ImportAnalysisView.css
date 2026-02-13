@@ -382,6 +382,213 @@
   color: #75beff;
 }
 
+/* Mapped taxonomy items - green background */
+.import-taxonomy-pill.mapped {
+  background: rgba(115, 201, 145, 0.25);
+  color: #73c991;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.import-taxonomy-pill .pill-arrow {
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+.import-taxonomy-pill .pill-mapped-to {
+  font-weight: 600;
+}
+
+.import-taxonomy-pill .pill-clear-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.import-taxonomy-pill .pill-clear-btn:hover {
+  opacity: 1;
+}
+
+/* Editable taxonomy pills */
+.import-taxonomy-pill:not(.editing):not(.exists):not(.mapped) {
+  cursor: pointer;
+}
+
+.import-taxonomy-pill:not(.editing):hover {
+  filter: brightness(1.1);
+}
+
+.import-taxonomy-pill.editing {
+  background: var(--vscode-input-background);
+  padding: 0 4px 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.import-taxonomy-pill.editing .pill-name {
+  color: var(--vscode-foreground);
+}
+
+.import-taxonomy-pill .pill-edit-input {
+  background: transparent;
+  border: none;
+  color: #73c991;
+  font-size: 11px;
+  padding: 2px 4px;
+  width: 100px;
+  outline: none;
+}
+
+.import-taxonomy-pill .pill-edit-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+/* Pill edit container for autocomplete */
+.pill-edit-container {
+  position: relative;
+  display: inline-block;
+}
+
+.pill-suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 150px;
+  max-width: 250px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--vscode-dropdown-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+.pill-suggestion-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 11px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill-suggestion-item:hover,
+.pill-suggestion-item.selected {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.pill-suggestion-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* Taxonomy analyze row */
+.taxonomy-analyze-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.06));
+}
+
+.taxonomy-analyze-dropdown {
+  position: relative;
+}
+
+.taxonomy-analyze-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  white-space: nowrap;
+}
+
+.taxonomy-analyze-btn:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.taxonomy-analyze-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.taxonomy-analyze-btn .import-spinner.small {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.taxonomy-model-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--vscode-dropdown-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  min-width: 180px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.taxonomy-model-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.taxonomy-model-option:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.taxonomy-analyze-hint {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+.taxonomy-mapped-count {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(115, 201, 145, 0.2);
+  color: #73c991;
+  margin-left: 8px;
+}
+
 /* Empty state */
 .import-empty-state {
   display: flex;

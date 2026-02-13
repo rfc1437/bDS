@@ -38,12 +38,14 @@ export interface AnalyzedCategory {
   name: string;
   slug: string;
   existsInProject: boolean;
+  mappedTo?: string; // When set, indicates this item should be mapped to the given name on import
 }
 
 export interface AnalyzedTag {
   name: string;
   slug: string;
   existsInProject: boolean;
+  mappedTo?: string; // When set, indicates this item should be mapped to the given name on import
 }
 
 export interface ImportAnalysisReport {

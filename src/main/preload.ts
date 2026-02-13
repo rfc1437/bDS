@@ -199,6 +199,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearMessages: (conversationId: string) => ipcRenderer.invoke('chat:clearMessages', conversationId),
     setConversationModel: (conversationId: string, modelId: string) => ipcRenderer.invoke('chat:setConversationModel', conversationId, modelId),
 
+    // Taxonomy Analysis
+    analyzeTaxonomy: (categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => ipcRenderer.invoke('chat:analyzeTaxonomy', categories, tags, modelId),
+
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {
       const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; delta: string }) => callback(data);
