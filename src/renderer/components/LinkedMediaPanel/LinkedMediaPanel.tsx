@@ -268,7 +268,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
             <button onClick={handleImportMedia}>Import Media</button>
           </div>
         ) : (
-          <div className="media-grid">
+          <div className="media-list">
             {linkedMedia.map((media, index) => (
               <div
                 key={media.id}
@@ -279,6 +279,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, index)}
               >
+                <div className="media-order">{index + 1}</div>
                 <div 
                   className="media-thumbnail"
                   onClick={() => handleMediaClick(media.id)}
@@ -289,19 +290,16 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
                     <div className="media-icon">📄</div>
                   )}
                 </div>
-                <div className="media-info">
-                  <span className="media-name" title={media.originalName}>
-                    {media.originalName}
-                  </span>
-                  <button
-                    className="unlink-btn"
-                    onClick={(e) => { e.stopPropagation(); handleUnlink(media.id); }}
-                    title="Unlink from post"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="media-order">{index + 1}</div>
+                <span className="media-name" title={media.originalName}>
+                  {media.originalName}
+                </span>
+                <button
+                  className="unlink-btn"
+                  onClick={(e) => { e.stopPropagation(); handleUnlink(media.id); }}
+                  title="Unlink from post"
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
