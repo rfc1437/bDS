@@ -52,6 +52,31 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
     loadLinkedMedia();
   }, [loadLinkedMedia]);
 
+  // Listen for media link/unlink events to refresh the panel
+  useEffect(() => {
+    const handleLinked = (...args: unknown[]) => {
+      const data = args[0] as { postId: string } | undefined;
+      if (data?.postId === postId) {
+        loadLinkedMedia();
+      }
+    };
+    
+    const handleUnlinked = (...args: unknown[]) => {
+      const data = args[0] as { postId: string } | undefined;
+      if (data?.postId === postId) {
+        loadLinkedMedia();
+      }
+    };
+    
+    const unsubLinked = window.electronAPI?.on('postMedia:linked', handleLinked);
+    const unsubUnlinked = window.electronAPI?.on('postMedia:unlinked', handleUnlinked);
+    
+    return () => {
+      unsubLinked?.();
+      unsubUnlinked?.();
+    };
+  }, [postId, loadLinkedMedia]);
+
   // Handle importing new media with auto-link
   const handleImportMedia = async () => {
     try {

@@ -242,9 +242,46 @@ const FULL_MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+// Track photo_archive hydration state to prevent duplicate runs
+const photoArchiveHydratingCache = new Map<string, boolean>();
+
+/**
+ * Get the storage key for photo_archive linked media IDs for a post
+ */
+function getPhotoArchiveLinkedKey(postId: string): string {
+  return `photoArchive:${postId}:linkedIds`;
+}
+
+/**
+ * Load previously linked media IDs from localStorage
+ */
+function loadPreviouslyLinkedIds(postId: string): Set<string> {
+  try {
+    const stored = localStorage.getItem(getPhotoArchiveLinkedKey(postId));
+    if (stored) {
+      const ids = JSON.parse(stored) as string[];
+      return new Set(ids);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return new Set();
+}
+
+/**
+ * Save currently linked media IDs to localStorage
+ */
+function saveLinkedIds(postId: string, ids: Set<string>): void {
+  try {
+    localStorage.setItem(getPhotoArchiveLinkedKey(postId), JSON.stringify([...ids]));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 /**
  * Hydrate photo_archive elements in the preview with actual media from the given year/month.
- * Also links the discovered media to the post.
+ * Also manages linking/unlinking of media based on what the macros cover.
  */
 const hydratePhotoArchive = async (
   container: HTMLElement,
@@ -253,6 +290,58 @@ const hydratePhotoArchive = async (
 ) => {
   const archives = container.querySelectorAll('.macro-photo-archive[data-year]');
   
+  if (archives.length === 0) {
+    // No photo_archive macros - unlink any previously linked and clear state
+    const previouslyLinked = loadPreviouslyLinkedIds(postId);
+    if (previouslyLinked.size > 0) {
+      console.log(`[photo_archive] No macros found, unlinking ${previouslyLinked.size} previously linked media`);
+      for (const mediaId of previouslyLinked) {
+        await window.electronAPI?.postMedia.unlink(postId, mediaId);
+      }
+      localStorage.removeItem(getPhotoArchiveLinkedKey(postId));
+    }
+    return;
+  }
+  
+  // Check if we're already hydrating (prevent duplicate runs)
+  if (photoArchiveHydratingCache.get(postId)) {
+    console.log(`[photo_archive] Skipping duplicate hydration for ${postId}`);
+    return;
+  }
+  photoArchiveHydratingCache.set(postId, true);
+  
+  try {
+    await doHydratePhotoArchive(container, postId, onImageClick, archives);
+  } finally {
+    // Clear the hydrating flag after a delay to allow for content changes
+    setTimeout(() => photoArchiveHydratingCache.delete(postId), 500);
+  }
+};
+
+/**
+ * Internal implementation of photo_archive hydration
+ */
+const doHydratePhotoArchive = async (
+  _container: HTMLElement,
+  postId: string,
+  onImageClick: (index: number, images: { src: string; alt: string }[]) => void,
+  archives: NodeListOf<Element>
+) => {
+  // Load previously linked IDs to detect what needs unlinking
+  const previouslyLinkedIds = loadPreviouslyLinkedIds(postId);
+  
+  // Phase 1: Collect all media IDs that should be linked based on current macros
+  const shouldBeLinkedIds = new Set<string>();
+  const archiveData: Array<{
+    element: Element;
+    year: number;
+    month?: number;
+    images?: Array<{ id: string; originalName: string; alt?: string; mimeType: string }>;
+    monthlyImages?: Map<number, Array<{ id: string; originalName: string; alt?: string; mimeType: string }>>;
+  }> = [];
+  
+  console.log(`[photo_archive] Processing ${archives.length} archive macro(s), previously linked: ${previouslyLinkedIds.size} IDs`);
+  
   for (const archive of archives) {
     const year = parseInt(archive.getAttribute('data-year') || '0', 10);
     const monthStr = archive.getAttribute('data-month');
@@ -260,26 +349,73 @@ const hydratePhotoArchive = async (
     
     if (!year) continue;
     
-    const archiveContainer = archive.querySelector('.photo-archive-container');
+    if (month !== undefined) {
+      // Single month view
+      const mediaItems = await window.electronAPI?.media.filter({
+        year,
+        month: month - 1, // API uses 0-based month
+      });
+      const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
+      
+      // Add to the set of IDs that should be linked
+      for (const img of images) {
+        shouldBeLinkedIds.add(img.id);
+      }
+      
+      archiveData.push({ element: archive, year, month, images });
+      console.log(`[photo_archive] Year ${year} month ${month}: ${images.length} images`);
+    } else {
+      // Full year view - collect all months, tracking which month each image belongs to
+      const monthlyImages = new Map<number, Array<{ id: string; originalName: string; alt?: string; mimeType: string }>>();
+      
+      for (let m = 0; m < 12; m++) {
+        const mediaItems = await window.electronAPI?.media.filter({
+          year,
+          month: m,
+        });
+        const images = (mediaItems || []).filter(item => item.mimeType?.startsWith('image/'));
+        
+        if (images.length > 0) {
+          monthlyImages.set(m + 1, images); // Store with 1-based month key
+          
+          // Add to the set of IDs that should be linked
+          for (const img of images) {
+            shouldBeLinkedIds.add(img.id);
+          }
+        }
+      }
+      
+      const totalImages = Array.from(monthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
+      archiveData.push({ element: archive, year, month: undefined, monthlyImages });
+      console.log(`[photo_archive] Year ${year}: ${totalImages} images across ${monthlyImages.size} months`);
+    }
+  }
+  
+  console.log(`[photo_archive] Should link ${shouldBeLinkedIds.size} media IDs`);
+  
+  // Phase 2: Unlink media that was previously linked but is no longer needed
+  // Simple set difference: previouslyLinkedIds - shouldBeLinkedIds
+  for (const mediaId of previouslyLinkedIds) {
+    if (!shouldBeLinkedIds.has(mediaId)) {
+      console.log(`[photo_archive] Unlinking ${mediaId} - no longer in range`);
+      await window.electronAPI?.postMedia.unlink(postId, mediaId);
+    }
+  }
+  
+  // Save current linked IDs for next hydration
+  saveLinkedIds(postId, shouldBeLinkedIds);
+  
+  // Phase 3: Link new media and render
+  for (const { element, year, month, images, monthlyImages } of archiveData) {
+    const archiveContainer = element.querySelector('.photo-archive-container');
     if (!archiveContainer) continue;
     
     try {
+      // Render the gallery
       let html = '';
       
-      if (month !== undefined) {
+      if (month !== undefined && images) {
         // Single month view
-        const mediaItems = await window.electronAPI?.media.filter({
-          year,
-          month: month - 1, // API uses 0-based month
-        });
-        
-        const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
-        
-        if (images.length === 0) {
-          archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${FULL_MONTH_NAMES[month - 1]} ${year}</div>`;
-          continue;
-        }
-        
         // Link images to the post
         for (const img of images) {
           const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
@@ -288,38 +424,32 @@ const hydratePhotoArchive = async (
           }
         }
         
+        if (images.length === 0) {
+          archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${FULL_MONTH_NAMES[month - 1]} ${year}</div>`;
+          continue;
+        }
         html = buildMonthGallery(month, year, images, onImageClick);
-      } else {
-        // Full year view - show each month that has images
-        const monthsWithMedia: { month: number; images: { id: string; originalName: string; alt?: string; mimeType: string }[] }[] = [];
-        
-        for (let m = 0; m < 12; m++) {
-          const mediaItems = await window.electronAPI?.media.filter({
-            year,
-            month: m, // API uses 0-based month
-          });
-          
-          const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
-          if (images.length > 0) {
-            monthsWithMedia.push({ month: m + 1, images }); // Store as 1-based month
-            
-            // Link images to the post
-            for (const img of images) {
-              const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
-              if (!isLinked) {
-                await window.electronAPI?.postMedia.link(postId, img.id);
-              }
+      } else if (monthlyImages) {
+        // Full year view - already grouped by month
+        // Link all images to the post
+        for (const imgs of monthlyImages.values()) {
+          for (const img of imgs) {
+            const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
+            if (!isLinked) {
+              await window.electronAPI?.postMedia.link(postId, img.id);
             }
           }
         }
         
-        if (monthsWithMedia.length === 0) {
+        if (monthlyImages.size === 0) {
           archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${year}</div>`;
           continue;
         }
         
-        html = monthsWithMedia.map(({ month, images }) => 
-          `<div class="photo-archive-month-wrapper">${buildMonthGallery(month, year, images, onImageClick)}</div>`
+        // Sort months and build gallery
+        const sortedMonths = Array.from(monthlyImages.entries()).sort((a, b) => a[0] - b[0]);
+        html = sortedMonths.map(([m, imgs]) => 
+          `<div class="photo-archive-month-wrapper">${buildMonthGallery(m, year, imgs, onImageClick)}</div>`
         ).join('');
       }
       
@@ -333,6 +463,8 @@ const hydratePhotoArchive = async (
       archiveContainer.innerHTML = '<div class="photo-archive-error">Failed to load photo archive</div>';
     }
   }
+  
+  console.log(`[photo_archive] Hydration complete. ${shouldBeLinkedIds.size} images should be linked.`);
 };
 
 /**
