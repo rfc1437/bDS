@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { eq, and, gte, lte, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, desc } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { media, Media, NewMedia } from '../database/schema';
@@ -592,6 +592,8 @@ export class MediaEngine extends EventEmitter {
     const db = getDatabase().getLocal();
     const conditions = [eq(media.projectId, this.currentProjectId)];
 
+    console.log(`[MediaEngine] getMediaFiltered called with filter:`, JSON.stringify(filter));
+
     if (filter.startDate) {
       conditions.push(gte(media.createdAt, filter.startDate));
     }
@@ -601,17 +603,21 @@ export class MediaEngine extends EventEmitter {
     }
 
     if (filter.year !== undefined) {
-      const startOfYear = new Date(filter.year, 0, 1);
-      const endOfYear = new Date(filter.year + 1, 0, 1);
+      // Use UTC dates to avoid timezone issues
+      const startOfYear = new Date(Date.UTC(filter.year, 0, 1));
+      const endOfYear = new Date(Date.UTC(filter.year + 1, 0, 1));
+      console.log(`[MediaEngine] Year filter: ${startOfYear.toISOString()} to ${endOfYear.toISOString()}`);
       conditions.push(gte(media.createdAt, startOfYear));
-      conditions.push(lte(media.createdAt, endOfYear));
+      conditions.push(lt(media.createdAt, endOfYear));
     }
 
     if (filter.month !== undefined && filter.year !== undefined) {
-      const startOfMonth = new Date(filter.year, filter.month, 1);
-      const endOfMonth = new Date(filter.year, filter.month + 1, 1);
+      // Use UTC dates to avoid timezone issues
+      const startOfMonth = new Date(Date.UTC(filter.year, filter.month, 1));
+      const endOfMonth = new Date(Date.UTC(filter.year, filter.month + 1, 1));
+      console.log(`[MediaEngine] Month filter: ${startOfMonth.toISOString()} to ${endOfMonth.toISOString()}`);
       conditions.push(gte(media.createdAt, startOfMonth));
-      conditions.push(lte(media.createdAt, endOfMonth));
+      conditions.push(lt(media.createdAt, endOfMonth));
     }
 
     const dbMediaList = await db
@@ -620,6 +626,8 @@ export class MediaEngine extends EventEmitter {
       .where(and(...conditions))
       .orderBy(desc(media.createdAt))
       .all();
+
+    console.log(`[MediaEngine] Query returned ${dbMediaList.length} media items`);
 
     let result: MediaData[] = [];
 

@@ -21,15 +21,7 @@ import { macroPlugin } from '../../plugins/macroPlugin';
 import '../../macros';
 import './MilkdownEditor.css';
 import { PostSearchModal } from '../PostSearchModal';
-
-/**
- * Unescape brackets that Milkdown/remark escapes.
- * This preserves macro syntax like [[gallery]] instead of \[\[gallery\]\]
- */
-const unescapeBrackets = (markdown: string): string => {
-  // Unescape \[ and \] back to [ and ]
-  return markdown.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
-};
+import { unescapeMacroSyntax } from '../../utils/markdownEscape';
 
 // Remark plugin to force tight lists (no blank lines between list items)
 const remarkTightListsPlugin: Plugin<[Record<string, unknown>], Root> = () => {
@@ -276,9 +268,9 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
         // Add custom remark plugin to force tight lists
         ctx.set(remarkPluginsCtx, [remarkTightLists]);
         ctx.get(listenerCtx).markdownUpdated((_ctx: Ctx, markdown: string, prevMarkdown: string) => {
-          // Unescape brackets to preserve macro syntax like [[gallery]]
-          const unescaped = unescapeBrackets(markdown);
-          const prevUnescaped = unescapeBrackets(prevMarkdown);
+          // Unescape brackets and underscores to preserve macro syntax like [[photo_gallery]]
+          const unescaped = unescapeMacroSyntax(markdown);
+          const prevUnescaped = unescapeMacroSyntax(prevMarkdown);
           
           if (unescaped !== prevUnescaped) {
             // On first update after load, store the normalized baseline
