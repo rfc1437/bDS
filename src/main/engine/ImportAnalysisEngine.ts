@@ -146,7 +146,8 @@ export class ImportAnalysisEngine {
   private static readonly SHORTCODE_REGEX = /(?<!\[)\[(\w+)([^\]]*?)(?:\s*\/)?\](?!\])/g;
   
   // Regex to extract individual parameters from shortcode
-  private static readonly PARAM_REGEX = /(\w+)=["']([^"']*?)["']/g;
+  // Supports: key="value", key='value', and key=value (unquoted)
+  private static readonly PARAM_REGEX = /(\w+)=(?:"([^"]*)"|'([^']*)'|([^\s\]"']+))/g;
 
   constructor() {
     this.turndown = new TurndownService({
@@ -574,6 +575,7 @@ export class ImportAnalysisEngine {
 
   /**
    * Parse parameters from a shortcode parameter string.
+   * Supports: key="value", key='value', and key=value (unquoted)
    */
   private parseShortcodeParams(paramString: string): Record<string, string> {
     const params: Record<string, string> = {};
@@ -583,7 +585,10 @@ export class ImportAnalysisEngine {
     
     let match;
     while ((match = ImportAnalysisEngine.PARAM_REGEX.exec(paramString)) !== null) {
-      params[match[1]] = match[2];
+      const key = match[1];
+      // Value is in group 2 (double-quoted), 3 (single-quoted), or 4 (unquoted)
+      const value = match[2] ?? match[3] ?? match[4] ?? '';
+      params[key] = value;
     }
     
     return params;
