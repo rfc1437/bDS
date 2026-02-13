@@ -19,3 +19,4 @@ export { LinkedMediaPanel } from './LinkedMediaPanel';
 export { ErrorModal, type ErrorDetails } from './ErrorModal';
 export { ConfirmDeleteModal, type ConfirmDeleteDetails, type DeleteReference } from './ConfirmDeleteModal';
 export { ChatPanel } from './ChatPanel';
+export { ImportAnalysisView } from './ImportAnalysisView';

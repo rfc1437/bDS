@@ -1,0 +1,381 @@
+.import-analysis {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  gap: 20px;
+}
+
+.import-analysis-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-analysis-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.import-analysis-header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* File selection area */
+.import-file-selectors {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--vscode-sideBar-background);
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.import-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.import-file-row label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.import-file-path {
+  flex: 1;
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-file-path.placeholder {
+  color: var(--vscode-input-placeholderForeground);
+  font-style: italic;
+}
+
+.import-file-row button {
+  padding: 6px 12px;
+  font-size: 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.import-file-row button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.import-analyze-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  align-self: flex-start;
+}
+
+.import-analyze-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.import-analyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading state */
+.import-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--vscode-descriptionForeground);
+  border-top-color: var(--vscode-button-background);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Site info card */
+.import-site-info {
+  display: flex;
+  gap: 20px;
+  background: var(--vscode-sideBar-background);
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.import-site-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.import-site-info-item .info-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-site-info-item .info-value {
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+/* Stat cards grid */
+.import-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.import-stat-card {
+  background: var(--vscode-sideBar-background);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.import-stat-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-stat-number {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--vscode-foreground);
+}
+
+.import-stat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-stat-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.import-stat-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.import-stat-tag.stat-new {
+  background: rgba(115, 201, 145, 0.15);
+  color: #73c991;
+}
+
+.import-stat-tag.stat-update {
+  background: rgba(117, 190, 255, 0.15);
+  color: #75beff;
+}
+
+.import-stat-tag.stat-conflict {
+  background: rgba(244, 135, 113, 0.15);
+  color: #f48771;
+}
+
+.import-stat-tag.stat-duplicate {
+  background: rgba(204, 167, 0, 0.15);
+  color: #cca700;
+}
+
+.import-stat-tag.stat-missing {
+  background: rgba(150, 150, 150, 0.15);
+  color: #969696;
+}
+
+/* Detail sections */
+.import-detail-section {
+  background: var(--vscode-sideBar-background);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.import-detail-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.import-detail-section h3 .toggle-icon {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.import-detail-section h3 .toggle-icon.open {
+  transform: rotate(90deg);
+}
+
+/* Detail tables */
+.import-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.import-detail-table th {
+  text-align: left;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.1));
+}
+
+.import-detail-table td {
+  padding: 6px 10px;
+  color: var(--vscode-foreground);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.06));
+}
+
+.import-detail-table tr:last-child td {
+  border-bottom: none;
+}
+
+.import-detail-table .status-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.import-detail-table .status-badge.new {
+  background: rgba(115, 201, 145, 0.15);
+  color: #73c991;
+}
+
+.import-detail-table .status-badge.update {
+  background: rgba(117, 190, 255, 0.15);
+  color: #75beff;
+}
+
+.import-detail-table .status-badge.conflict {
+  background: rgba(244, 135, 113, 0.15);
+  color: #f48771;
+}
+
+.import-detail-table .status-badge.content-duplicate {
+  background: rgba(204, 167, 0, 0.15);
+  color: #cca700;
+}
+
+.import-detail-table .status-badge.missing {
+  background: rgba(150, 150, 150, 0.15);
+  color: #969696;
+}
+
+.import-detail-table .slug-cell {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-detail-table .existing-match {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Tag/category pills */
+.import-taxonomy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.import-taxonomy-pill {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.import-taxonomy-pill.exists {
+  background: rgba(115, 201, 145, 0.15);
+  color: #73c991;
+}
+
+.import-taxonomy-pill.new-tax {
+  background: rgba(117, 190, 255, 0.15);
+  color: #75beff;
+}
+
+/* Empty state */
+.import-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-empty-state svg {
+  opacity: 0.3;
+}
+
+.import-empty-state p {
+  margin: 0;
+  font-size: 13px;
+}

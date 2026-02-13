@@ -381,6 +381,11 @@ export interface ElectronAPI {
     getPostsWithTag: (tagId: string) => Promise<string[]>;
     syncFromPosts: () => Promise<SyncTagsResult>;
   };
+  import: {
+    selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
+    analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
+    selectUploadsFolder: () => Promise<string | null>;
+  };
   chat: {
     // API Key Management
     checkReady: () => Promise<ChatReadyStatus>;

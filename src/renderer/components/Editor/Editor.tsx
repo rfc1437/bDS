@@ -12,6 +12,7 @@ import { SettingsView } from '../SettingsView';
 import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
+import { ImportAnalysisView } from '../ImportAnalysisView';
 import { AutoSaveManager } from '../../utils';
 import { parseMacros, getMacro } from '../../macros/registry';
 import { PostSearchModal } from '../PostSearchModal';
@@ -1531,6 +1532,7 @@ export const Editor: React.FC = () => {
   const showSettings = activeTab?.type === 'settings' || (activeView === 'settings' && !activeTab);
   const showTags = activeTab?.type === 'tags' || (activeView === 'tags' && !activeTab);
   const showChat = activeTab?.type === 'chat';
+  const showImport = activeTab?.type === 'import';
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
@@ -1613,6 +1615,17 @@ export const Editor: React.FC = () => {
     return (
       <div className="editor">
         <ChatPanel key={activeTabId} conversationId={activeTabId} />
+        {renderErrorModal()}
+        {renderConfirmDeleteModal()}
+      </div>
+    );
+  }
+
+  // Show import analysis if import tab is active
+  if (showImport) {
+    return (
+      <div className="editor">
+        <ImportAnalysisView />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

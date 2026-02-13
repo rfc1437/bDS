@@ -50,5 +50,22 @@ export {
   type SendMessageResult,
   type ModelInfo,
 } from './OpenCodeManager';
-
-
+export {
+  WxrParser,
+  type WxrData,
+  type WxrPost,
+  type WxrMedia,
+  type WxrSiteInfo,
+  type WxrCategory,
+  type WxrTag,
+} from './WxrParser';
+export {
+  ImportAnalysisEngine,
+  type ImportAnalysisReport,
+  type AnalyzedPost,
+  type AnalyzedMedia,
+  type AnalyzedCategory,
+  type AnalyzedTag,
+  type PostAnalysisStatus,
+  type MediaAnalysisStatus,
+} from './ImportAnalysisEngine';
