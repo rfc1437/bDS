@@ -506,6 +506,226 @@ describe('ImportAnalysisEngine', () => {
       expect(report.posts.contentDuplicates).toBe(0);
     });
   });
+
+  describe('analyzeWxr - macro discovery', () => {
+    it('should discover macros from post content using WordPress shortcode format', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '<p>Hello world</p>[youtube id="dQw4w9WgXcQ"]<p>More text</p>',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      expect(report.macros).toBeDefined();
+      expect(report.macros.discovered).toContainEqual(
+        expect.objectContaining({ name: 'youtube' })
+      );
+    });
+
+    it('should discover macros with multiple parameters', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[gallery columns="4" caption="My Photos"]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const galleryMacro = report.macros.discovered.find(m => m.name === 'gallery');
+      expect(galleryMacro).toBeDefined();
+      expect(galleryMacro!.usages).toContainEqual(
+        expect.objectContaining({
+          params: { columns: '4', caption: 'My Photos' },
+        })
+      );
+    });
+
+    it('should aggregate different usages of the same macro', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [
+          createWxrPost({
+            slug: 'post-1',
+            content: '[youtube id="video1"][youtube id="video2" title="My Video"]',
+          }),
+          createWxrPost({
+            slug: 'post-2',
+            content: '[youtube id="video1"]', // Same as first usage in post-1
+          }),
+        ],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      expect(youtubeMacro).toBeDefined();
+      // Should have 2 unique usages (video1 and video2)
+      expect(youtubeMacro!.usages.length).toBe(2);
+      expect(youtubeMacro!.totalCount).toBe(3); // 3 total occurrences
+    });
+
+    it('should discover macros from pages as well as posts', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({ content: '[gallery columns="3"]' })],
+        pages: [createWxrPost({ postType: 'page', content: '[youtube id="abc123def4g"]' })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const macroNames = report.macros.discovered.map(m => m.name);
+      expect(macroNames).toContain('gallery');
+      expect(macroNames).toContain('youtube');
+    });
+
+    it('should mark macro as mapped when internal definition exists', async () => {
+      setupDbReturns([], [], []);
+
+      // Register a mock macro for testing
+      const mockMacros = new Map<string, { name: string; validate?: (params: Record<string, string>) => string | undefined }>();
+      mockMacros.set('youtube', {
+        name: 'youtube',
+        validate: (params) => params.id ? undefined : 'Missing id parameter',
+      });
+      mockMacros.set('gallery', { name: 'gallery' });
+      engine.setMacroDefinitions(mockMacros);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[youtube id="test123test"][unknown_macro param="val"]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      const unknownMacro = report.macros.discovered.find(m => m.name === 'unknown_macro');
+
+      expect(youtubeMacro?.mapped).toBe(true);
+      expect(unknownMacro?.mapped).toBe(false);
+    });
+
+    it('should validate macro parameters against definitions', async () => {
+      setupDbReturns([], [], []);
+
+      const mockMacros = new Map<string, { name: string; validate?: (params: Record<string, string>) => string | undefined }>();
+      mockMacros.set('youtube', {
+        name: 'youtube',
+        validate: (params) => params.id ? undefined : 'Missing id parameter',
+      });
+      engine.setMacroDefinitions(mockMacros);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[youtube id="validid1234"][youtube]', // One valid, one invalid
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      expect(youtubeMacro).toBeDefined();
+      
+      const validUsage = youtubeMacro!.usages.find(u => u.params.id === 'validid1234');
+      const invalidUsage = youtubeMacro!.usages.find(u => Object.keys(u.params).length === 0);
+      
+      expect(validUsage?.validationStatus).toBe('valid');
+      expect(invalidUsage?.validationStatus).toBe('invalid');
+      expect(invalidUsage?.validationError).toBe('Missing id parameter');
+    });
+
+    it('should provide summary counts for macros', async () => {
+      setupDbReturns([], [], []);
+
+      const mockMacros = new Map<string, { name: string; validate?: (params: Record<string, string>) => string | undefined }>();
+      mockMacros.set('youtube', { name: 'youtube' });
+      engine.setMacroDefinitions(mockMacros);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[youtube id="vid1"][gallery][custom_macro]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      expect(report.macros.total).toBe(3);
+      expect(report.macros.mappedCount).toBe(1); // Only youtube is mapped
+      expect(report.macros.unmappedCount).toBe(2); // gallery and custom_macro not mapped
+    });
+
+    it('should track which posts contain each macro', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [
+          createWxrPost({ slug: 'post-a', title: 'Post A', content: '[youtube id="vid1"]' }),
+          createWxrPost({ slug: 'post-b', title: 'Post B', content: '[youtube id="vid2"]' }),
+          createWxrPost({ slug: 'post-c', title: 'Post C', content: '[gallery]' }),
+        ],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      expect(youtubeMacro?.postSlugs).toContain('post-a');
+      expect(youtubeMacro?.postSlugs).toContain('post-b');
+      expect(youtubeMacro?.postSlugs).not.toContain('post-c');
+    });
+
+    it('should handle self-closing shortcodes', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[gallery /][youtube id="test" /]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      expect(report.macros.discovered.length).toBe(2);
+    });
+
+    it('should handle shortcodes with single-quoted parameters', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: "[youtube id='singlequoted']",
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      expect(youtubeMacro?.usages[0].params.id).toBe('singlequoted');
+    });
+
+    it('should not detect our internal macro format as WordPress shortcodes', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '[[youtube id="internal"]] and [youtube id="wordpress"]',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      // Should only find the WordPress shortcode, not our internal one
+      expect(report.macros.discovered.length).toBe(1);
+      const youtubeMacro = report.macros.discovered.find(m => m.name === 'youtube');
+      expect(youtubeMacro?.usages[0].params.id).toBe('wordpress');
+    });
+  });
 });
 
 /**

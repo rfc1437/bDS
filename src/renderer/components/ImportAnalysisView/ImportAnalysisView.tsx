@@ -11,6 +11,7 @@ interface AnalysisReport {
   media: MediaSection;
   categories: TaxonomyItem[];
   tags: TaxonomyItem[];
+  macros: MacroAnalysisSummary;
 }
 
 interface ItemSection {
@@ -73,6 +74,35 @@ interface TaxonomyItem {
   slug: string;
   existsInProject: boolean;
   mappedTo?: string; // When set, indicates this item should be mapped to the given name on import
+}
+
+/** Validation status for a macro usage */
+type MacroValidationStatus = 'valid' | 'invalid' | 'unknown';
+
+/** A single unique usage pattern of a macro */
+interface MacroUsage {
+  params: Record<string, string>;
+  count: number;
+  validationStatus: MacroValidationStatus;
+  validationError?: string;
+  paramsKey: string;
+}
+
+/** A discovered macro from the import content */
+interface DiscoveredMacro {
+  name: string;
+  mapped: boolean;
+  totalCount: number;
+  usages: MacroUsage[];
+  postSlugs: string[];
+}
+
+/** Summary of macro analysis */
+interface MacroAnalysisSummary {
+  total: number;
+  mappedCount: number;
+  unmappedCount: number;
+  discovered: DiscoveredMacro[];
 }
 
 interface ImportAnalysisViewProps {
@@ -366,6 +396,14 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
               onToggle={() => toggleSection('taxonomy')}
               onMappingsAnalyzed={handleTaxonomyMappingsUpdated}
               onMappingUpdated={handleSingleMappingUpdated}
+            />
+          )}
+
+          {report.macros && report.macros.total > 0 && (
+            <MacrosSection
+              macros={report.macros}
+              expanded={expandedSections['macros'] ?? false}
+              onToggle={() => toggleSection('macros')}
             />
           )}
         </>
@@ -1015,3 +1053,104 @@ const TaxonomyPill: React.FC<{
     </span>
   );
 };
+
+/**
+ * MacrosSection - Shows discovered macros from import content
+ * Displays macro names, their different usages (parameters), and validation status
+ */
+const MacrosSection: React.FC<{
+  macros: MacroAnalysisSummary;
+  expanded: boolean;
+  onToggle: () => void;
+}> = ({ macros, expanded, onToggle }) => {
+  const [expandedMacros, setExpandedMacros] = useState<Set<string>>(new Set());
+
+  const toggleMacro = (name: string) => {
+    setExpandedMacros(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="import-detail-section">
+      <h3 onClick={onToggle}>
+        <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
+        Macros ({macros.total})
+        <span className="macro-summary-counts">
+          <span className="mapped-count">{macros.mappedCount} mapped</span>
+          {macros.unmappedCount > 0 && (
+            <span className="unmapped-count">{macros.unmappedCount} unmapped</span>
+          )}
+        </span>
+      </h3>
+      {expanded && (
+        <div className="macros-list">
+          {macros.discovered.map(macro => (
+            <div key={macro.name} className={`macro-item ${macro.mapped ? 'mapped' : 'unmapped'}`}>
+              <div className="macro-header" onClick={() => toggleMacro(macro.name)}>
+                <span className={`toggle-icon small ${expandedMacros.has(macro.name) ? 'open' : ''}`}>&#9654;</span>
+                <span className="macro-name">[{macro.name}]</span>
+                <span className={`macro-status-badge ${macro.mapped ? 'mapped' : 'unmapped'}`}>
+                  {macro.mapped ? 'Mapped' : 'Unknown'}
+                </span>
+                <span className="macro-count">{macro.totalCount} uses</span>
+              </div>
+              
+              {expandedMacros.has(macro.name) && (
+                <div className="macro-usages">
+                  <div className="macro-usages-header">
+                    <span className="macro-posts-label">Used in: {macro.postSlugs.slice(0, 5).join(', ')}{macro.postSlugs.length > 5 ? `, +${macro.postSlugs.length - 5} more` : ''}</span>
+                  </div>
+                  
+                  <div className="macro-usages-list">
+                    {macro.usages.map((usage, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`macro-usage ${getValidationClass(usage.validationStatus)}`}
+                        title={usage.validationError || ''}
+                      >
+                        <div className="macro-usage-params">
+                          {Object.keys(usage.params).length === 0 ? (
+                            <span className="no-params">(no parameters)</span>
+                          ) : (
+                            Object.entries(usage.params).map(([key, value]) => (
+                              <span key={key} className="macro-param">
+                                <span className="param-key">{key}</span>=<span className="param-value">"{value}"</span>
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        <div className="macro-usage-meta">
+                          <span className={`validation-badge ${usage.validationStatus}`}>
+                            {usage.validationStatus === 'valid' && '✓'}
+                            {usage.validationStatus === 'invalid' && '✗'}
+                            {usage.validationStatus === 'unknown' && '?'}
+                          </span>
+                          <span className="usage-count">×{usage.count}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+function getValidationClass(status: MacroValidationStatus): string {
+  switch (status) {
+    case 'valid': return 'valid';
+    case 'invalid': return 'invalid';
+    case 'unknown': return 'unknown';
+  }
+}
