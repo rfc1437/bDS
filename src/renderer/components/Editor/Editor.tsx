@@ -1622,10 +1622,10 @@ export const Editor: React.FC = () => {
   }
 
   // Show import analysis if import tab is active
-  if (showImport) {
+  if (showImport && activeTabId) {
     return (
       <div className="editor">
-        <ImportAnalysisView />
+        <ImportAnalysisView key={activeTabId} definitionId={activeTabId} />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

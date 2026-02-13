@@ -8,7 +8,8 @@ const getTabTitle = (
   tab: Tab,
   posts: { id: string; title: string }[],
   media: { id: string; originalName: string }[],
-  chatTitles: Map<string, string>
+  chatTitles: Map<string, string>,
+  importDefTitles: Map<string, string>
 ): string => {
   if (tab.type === 'settings') {
     return 'Settings';
@@ -40,7 +41,7 @@ const getTabTitle = (
   }
 
   if (tab.type === 'import') {
-    return 'Import Analysis';
+    return importDefTitles.get(tab.id) || 'Import';
   }
 
   return 'Unknown';
@@ -129,6 +130,7 @@ export const TabBar: React.FC = () => {
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [chatTitles, setChatTitles] = useState<Map<string, string>>(new Map());
+  const [importDefTitles, setImportDefTitles] = useState<Map<string, string>>(new Map());
 
   // Fetch chat titles for chat tabs
   useEffect(() => {
@@ -174,6 +176,33 @@ export const TabBar: React.FC = () => {
       unsub?.();
     };
   }, []);
+
+  // Fetch import definition titles for import tabs
+  useEffect(() => {
+    const importTabs = tabs.filter(t => t.type === 'import');
+    if (importTabs.length === 0) return;
+
+    const fetchTitles = async () => {
+      const newTitles = new Map(importDefTitles);
+      for (const tab of importTabs) {
+        if (!importDefTitles.has(tab.id)) {
+          try {
+            const def = await window.electronAPI?.importDefinitions.get(tab.id);
+            if (def) {
+              newTitles.set(tab.id, def.name);
+            }
+          } catch (error) {
+            console.error('Failed to fetch import definition title:', error);
+          }
+        }
+      }
+      if (newTitles.size !== importDefTitles.size) {
+        setImportDefTitles(newTitles);
+      }
+    };
+
+    fetchTitles();
+  }, [tabs]); // Note: intentionally not including importDefTitles to avoid infinite loops
 
   // Check if arrows are needed based on scroll position
   const updateArrowVisibility = useCallback(() => {
@@ -305,7 +334,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, posts, media, chatTitles);
+          const title = getTabTitle(tab, posts, media, chatTitles, importDefTitles);
           const icon = getTabIcon(tab);
           
           return (

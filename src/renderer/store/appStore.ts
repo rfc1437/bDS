@@ -127,10 +127,6 @@ interface AppState {
   isLoading: boolean;
   error: string | null;
 
-  // Import Analysis
-  importAnalysis: unknown | null;
-  importAnalysisLoading: boolean;
-
   // Project Actions
   setProjects: (projects: ProjectData[]) => void;
   setActiveProject: (project: ProjectData | null) => void;
@@ -188,10 +184,6 @@ interface AppState {
   
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-
-  // Import Analysis Actions
-  setImportAnalysis: (report: unknown | null) => void;
-  setImportAnalysisLoading: (loading: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -239,10 +231,6 @@ export const useAppStore = create<AppState>()(
       // Initial Loading State
       isLoading: false,
       error: null,
-
-      // Import Analysis State
-      importAnalysis: null,
-      importAnalysisLoading: false,
 
       // Project Actions
       setProjects: (projects) => set({ projects }),
@@ -417,10 +405,6 @@ export const useAppStore = create<AppState>()(
       // Loading Actions
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
-
-      // Import Analysis Actions
-      setImportAnalysis: (importAnalysis) => set({ importAnalysis }),
-      setImportAnalysisLoading: (importAnalysisLoading) => set({ importAnalysisLoading }),
     }),
     {
       name: STORAGE_KEY,

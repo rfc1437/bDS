@@ -157,6 +157,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectUploadsFolder: () => ipcRenderer.invoke('import:selectUploadsFolder'),
   },
 
+  // Import Definition CRUD
+  importDefinitions: {
+    create: (name?: string) => ipcRenderer.invoke('importDefinitions:create', name),
+    get: (id: string) => ipcRenderer.invoke('importDefinitions:get', id),
+    getAll: () => ipcRenderer.invoke('importDefinitions:getAll'),
+    update: (id: string, updates: unknown) => ipcRenderer.invoke('importDefinitions:update', id, updates),
+    delete: (id: string) => ipcRenderer.invoke('importDefinitions:delete', id),
+  },
+
   // AI Chat (OpenCode Zen API integration)
   chat: {
     // API Key Management
@@ -323,6 +332,13 @@ export interface ElectronAPI {
     selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
     analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
     selectUploadsFolder: () => Promise<string | null>;
+  };
+  importDefinitions: {
+    create: (name?: string) => Promise<unknown>;
+    get: (id: string) => Promise<unknown>;
+    getAll: () => Promise<unknown[]>;
+    update: (id: string, updates: unknown) => Promise<unknown>;
+    delete: (id: string) => Promise<boolean>;
   };
   chat: {
     // API Key Management

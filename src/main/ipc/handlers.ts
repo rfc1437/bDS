@@ -807,6 +807,63 @@ export function registerIpcHandlers(): void {
     return result.filePaths[0];
   });
 
+  // ============ Import Definition CRUD Handlers ============
+
+  safeHandle('importDefinitions:create', async (_, name?: string) => {
+    const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
+    const engine = new ImportDefinitionEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      engine.setProjectContext(activeProject.id);
+    }
+    return engine.createDefinition(name || undefined);
+  });
+
+  safeHandle('importDefinitions:get', async (_, id: string) => {
+    const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
+    const engine = new ImportDefinitionEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      engine.setProjectContext(activeProject.id);
+    }
+    return engine.getDefinition(id);
+  });
+
+  safeHandle('importDefinitions:getAll', async () => {
+    const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
+    const engine = new ImportDefinitionEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      engine.setProjectContext(activeProject.id);
+    }
+    return engine.getAllForProject();
+  });
+
+  safeHandle('importDefinitions:update', async (_, id: string, updates: any) => {
+    const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
+    const engine = new ImportDefinitionEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      engine.setProjectContext(activeProject.id);
+    }
+    return engine.updateDefinition(id, updates);
+  });
+
+  safeHandle('importDefinitions:delete', async (_, id: string) => {
+    const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
+    const engine = new ImportDefinitionEngine();
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (activeProject) {
+      engine.setProjectContext(activeProject.id);
+    }
+    return engine.deleteDefinition(id);
+  });
+
   // ============ Event Forwarding ============
   
   // Forward engine events to renderer
