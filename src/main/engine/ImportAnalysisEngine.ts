@@ -6,6 +6,7 @@ import { getDatabase } from '../database';
 import { posts, media, tags } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import type { WxrData, WxrPost, WxrMedia, WxrSiteInfo, WxrCategory, WxrTag } from './WxrParser';
+import { getMacroConfigMap, type MacroConfig } from '../config/macroConfig';
 
 export type PostAnalysisStatus = 'new' | 'update' | 'conflict' | 'content-duplicate';
 export type MediaAnalysisStatus = 'new' | 'update' | 'conflict' | 'content-duplicate' | 'missing';
@@ -48,6 +49,55 @@ export interface AnalyzedTag {
   mappedTo?: string; // When set, indicates this item should be mapped to the given name on import
 }
 
+/** Validation status for a macro usage */
+export type MacroValidationStatus = 'valid' | 'invalid' | 'unknown';
+
+/** A single unique usage pattern of a macro */
+export interface MacroUsage {
+  /** The parameters used in this particular usage */
+  params: Record<string, string>;
+  /** How many times this exact parameter combination was used */
+  count: number;
+  /** Whether this usage is valid according to our macro definition */
+  validationStatus: MacroValidationStatus;
+  /** Error message if validation failed */
+  validationError?: string;
+  /** Serialized params for deduplication */
+  paramsKey: string;
+}
+
+/** A discovered macro from the import content */
+export interface DiscoveredMacro {
+  /** The macro name (lowercase) */
+  name: string;
+  /** Whether this macro maps to an internal definition */
+  mapped: boolean;
+  /** Total number of times this macro appears across all content */
+  totalCount: number;
+  /** Unique usages with different parameters */
+  usages: MacroUsage[];
+  /** Slugs of posts/pages where this macro is used */
+  postSlugs: string[];
+}
+
+/** Summary of macro analysis */
+export interface MacroAnalysisSummary {
+  /** Total unique macros discovered */
+  total: number;
+  /** Number of macros that map to internal definitions */
+  mappedCount: number;
+  /** Number of macros that don't map to internal definitions */
+  unmappedCount: number;
+  /** All discovered macros with their usages */
+  discovered: DiscoveredMacro[];
+}
+
+/** Minimal interface for macro definition validation */
+export interface MacroDefinitionLike {
+  name: string;
+  validate?: (params: Record<string, string>) => string | undefined;
+}
+
 export interface ImportAnalysisReport {
   sourceFile: string;
   site: WxrSiteInfo;
@@ -79,14 +129,24 @@ export interface ImportAnalysisReport {
   };
   categories: AnalyzedCategory[];
   tags: AnalyzedTag[];
+  macros: MacroAnalysisSummary;
 }
 
 export class ImportAnalysisEngine {
   private currentProjectId: string = '';
   private turndown: TurndownService;
+  private macroDefinitions: Map<string, MacroDefinitionLike> = new Map();
   
   // Progress callback for reporting analysis steps
   onProgress?: (step: string, detail?: string) => void;
+
+  // Regex to match WordPress shortcodes: [macroname param="val" param2='val2']
+  // This matches single brackets (NOT double brackets like our internal format)
+  // Uses negative lookbehind (?<!\[) and negative lookahead (?!\]) to exclude [[...]]
+  private static readonly SHORTCODE_REGEX = /(?<!\[)\[(\w+)([^\]]*?)(?:\s*\/)?\](?!\])/g;
+  
+  // Regex to extract individual parameters from shortcode
+  private static readonly PARAM_REGEX = /(\w+)=["']([^"']*?)["']/g;
 
   constructor() {
     this.turndown = new TurndownService({
@@ -94,10 +154,42 @@ export class ImportAnalysisEngine {
       codeBlockStyle: 'fenced',
       bulletListMarker: '-',
     });
+    
+    // Load macro definitions from shared config
+    this.loadMacroConfigsFromShared();
+  }
+
+  /**
+   * Load macro definitions from the shared macro config.
+   * Called automatically in constructor.
+   */
+  private loadMacroConfigsFromShared(): void {
+    try {
+      const configs = getMacroConfigMap();
+      // Convert MacroConfig to MacroDefinitionLike
+      for (const [name, config] of configs) {
+        this.macroDefinitions.set(name, {
+          name: config.name,
+          validate: config.validate,
+        });
+      }
+    } catch (error) {
+      // Config not available - macros will be marked as unmapped
+      console.warn('Could not load macro configs:', error);
+    }
   }
 
   setProjectContext(projectId: string): void {
     this.currentProjectId = projectId;
+  }
+
+  /**
+   * Set macro definitions for mapping and validation.
+   * This overrides the auto-loaded shared config. Useful for testing.
+   * @param definitions Map of macro name (lowercase) to definition
+   */
+  setMacroDefinitions(definitions: Map<string, MacroDefinitionLike>): void {
+    this.macroDefinitions = definitions;
   }
 
   async analyzeWxr(wxrData: WxrData, sourceFile: string, uploadsFolder?: string): Promise<ImportAnalysisReport> {
@@ -194,6 +286,11 @@ export class ImportAnalysisEngine {
       existsInProject: existingTagNames.has(tag.name.toLowerCase()),
     }));
 
+    this.onProgress?.('Discovering macros...');
+    
+    // Analyze macros from posts and pages content
+    const macroAnalysis = this.analyzeMacros([...wxrData.posts, ...wxrData.pages]);
+
     return {
       sourceFile,
       site: wxrData.site,
@@ -203,6 +300,7 @@ export class ImportAnalysisEngine {
       media: this.summarizeMediaAnalysis(analyzedMedia),
       categories: analyzedCategories,
       tags: analyzedTags,
+      macros: macroAnalysis,
     };
   }
 
@@ -347,5 +445,155 @@ export class ImportAnalysisEngine {
 
   private calculateChecksum(content: string): string {
     return crypto.createHash('md5').update(content).digest('hex');
+  }
+
+  /**
+   * Analyze macros (WordPress shortcodes) from post/page content.
+   * Discovers all shortcodes, aggregates their usages, and validates against definitions.
+   */
+  private analyzeMacros(posts: WxrPost[]): MacroAnalysisSummary {
+    // Map of macro name -> discovered macro data
+    const macroMap = new Map<string, {
+      name: string;
+      totalCount: number;
+      usages: Map<string, { params: Record<string, string>; count: number }>;
+      postSlugs: Set<string>;
+    }>();
+
+    // Process each post/page
+    for (const post of posts) {
+      if (!post.content) continue;
+      
+      const shortcodes = this.parseShortcodes(post.content);
+      
+      for (const shortcode of shortcodes) {
+        const name = shortcode.name.toLowerCase();
+        
+        let macroData = macroMap.get(name);
+        if (!macroData) {
+          macroData = {
+            name,
+            totalCount: 0,
+            usages: new Map(),
+            postSlugs: new Set(),
+          };
+          macroMap.set(name, macroData);
+        }
+        
+        macroData.totalCount++;
+        macroData.postSlugs.add(post.slug);
+        
+        // Create a key for this parameter combination
+        const paramsKey = this.serializeParams(shortcode.params);
+        const existingUsage = macroData.usages.get(paramsKey);
+        if (existingUsage) {
+          existingUsage.count++;
+        } else {
+          macroData.usages.set(paramsKey, { params: shortcode.params, count: 1 });
+        }
+      }
+    }
+
+    // Convert to final format with validation
+    const discovered: DiscoveredMacro[] = [];
+    
+    for (const macroData of macroMap.values()) {
+      const definition = this.macroDefinitions.get(macroData.name);
+      const mapped = definition !== undefined;
+      
+      const usages: MacroUsage[] = [];
+      for (const [paramsKey, usage] of macroData.usages) {
+        let validationStatus: MacroValidationStatus = 'unknown';
+        let validationError: string | undefined;
+        
+        if (mapped && definition) {
+          if (definition.validate) {
+            const error = definition.validate(usage.params);
+            if (error) {
+              validationStatus = 'invalid';
+              validationError = error;
+            } else {
+              validationStatus = 'valid';
+            }
+          } else {
+            // Macro is mapped but has no validation - consider valid
+            validationStatus = 'valid';
+          }
+        }
+        
+        usages.push({
+          params: usage.params,
+          count: usage.count,
+          validationStatus,
+          validationError,
+          paramsKey,
+        });
+      }
+      
+      discovered.push({
+        name: macroData.name,
+        mapped,
+        totalCount: macroData.totalCount,
+        usages,
+        postSlugs: Array.from(macroData.postSlugs),
+      });
+    }
+
+    // Sort discovered macros by name
+    discovered.sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      total: discovered.length,
+      mappedCount: discovered.filter(m => m.mapped).length,
+      unmappedCount: discovered.filter(m => !m.mapped).length,
+      discovered,
+    };
+  }
+
+  /**
+   * Parse WordPress shortcodes from content.
+   * Returns array of { name, params } for each shortcode found.
+   */
+  private parseShortcodes(content: string): Array<{ name: string; params: Record<string, string> }> {
+    const shortcodes: Array<{ name: string; params: Record<string, string> }> = [];
+    
+    // Reset regex lastIndex
+    ImportAnalysisEngine.SHORTCODE_REGEX.lastIndex = 0;
+    
+    let match;
+    while ((match = ImportAnalysisEngine.SHORTCODE_REGEX.exec(content)) !== null) {
+      const name = match[1];
+      const paramString = match[2] || '';
+      const params = this.parseShortcodeParams(paramString);
+      
+      shortcodes.push({ name, params });
+    }
+    
+    return shortcodes;
+  }
+
+  /**
+   * Parse parameters from a shortcode parameter string.
+   */
+  private parseShortcodeParams(paramString: string): Record<string, string> {
+    const params: Record<string, string> = {};
+    
+    // Reset regex lastIndex
+    ImportAnalysisEngine.PARAM_REGEX.lastIndex = 0;
+    
+    let match;
+    while ((match = ImportAnalysisEngine.PARAM_REGEX.exec(paramString)) !== null) {
+      params[match[1]] = match[2];
+    }
+    
+    return params;
+  }
+
+  /**
+   * Serialize params to a stable string for deduplication.
+   */
+  private serializeParams(params: Record<string, string>): string {
+    const sorted = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
+    return JSON.stringify(sorted);
   }
 }

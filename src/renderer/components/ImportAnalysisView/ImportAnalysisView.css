@@ -666,3 +666,208 @@
   margin: 0;
   font-size: 13px;
 }
+
+/* =================================
+   MACROS SECTION STYLES
+   ================================= */
+
+.macro-summary-counts {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: normal;
+}
+
+.macro-summary-counts .mapped-count {
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.macro-summary-counts .unmapped-count {
+  color: var(--vscode-charts-orange, #cca700);
+}
+
+.macros-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.macro-item {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.macro-item.mapped {
+  border-left: 3px solid var(--vscode-charts-green, #89d185);
+}
+
+.macro-item.unmapped {
+  border-left: 3px solid var(--vscode-charts-orange, #cca700);
+}
+
+.macro-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.macro-header:hover {
+  background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
+}
+
+.toggle-icon.small {
+  font-size: 8px;
+  width: 10px;
+}
+
+.macro-name {
+  font-weight: 600;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-foreground);
+}
+
+.macro-status-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.macro-status-badge.mapped {
+  background: rgba(137, 209, 133, 0.15);
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.macro-status-badge.unmapped {
+  background: rgba(204, 167, 0, 0.15);
+  color: var(--vscode-charts-orange, #cca700);
+}
+
+.macro-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.macro-usages {
+  padding: 0 12px 12px 30px;
+}
+
+.macro-usages-header {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--vscode-input-border, rgba(255, 255, 255, 0.1));
+}
+
+.macro-posts-label {
+  font-style: italic;
+}
+
+.macro-usages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.macro-usage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border-left: 3px solid transparent;
+  background: var(--vscode-sideBar-background);
+}
+
+.macro-usage.valid {
+  border-left-color: var(--vscode-charts-green, #89d185);
+}
+
+.macro-usage.invalid {
+  border-left-color: var(--vscode-errorForeground, #f85149);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.macro-usage.unknown {
+  border-left-color: var(--vscode-descriptionForeground);
+}
+
+.macro-usage-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+}
+
+.no-params {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  font-family: inherit;
+}
+
+.macro-param {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.param-key {
+  color: var(--vscode-symbolIcon-propertyForeground, #9cdcfe);
+}
+
+.param-value {
+  color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+}
+
+.macro-usage-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.validation-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.validation-badge.valid {
+  background: rgba(137, 209, 133, 0.2);
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.validation-badge.invalid {
+  background: rgba(248, 81, 73, 0.2);
+  color: var(--vscode-errorForeground, #f85149);
+}
+
+.validation-badge.unknown {
+  background: rgba(128, 128, 128, 0.2);
+  color: var(--vscode-descriptionForeground);
+}
+
+.usage-count {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  min-width: 24px;
+  text-align: right;
+}
