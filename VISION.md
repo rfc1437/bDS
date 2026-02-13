@@ -220,12 +220,6 @@ Another thing the AI importing agent must do is create summaries of posts to put
 on posts in the database, so that those can be used in overview pages if needed (usually that is the
 case for article-type posts).
 
-Import runs get an ID that has a generated name based on a sequence of two random words (like session plans
-of claude code) based on random adjective and animal name and a date. This identifier is then used as a tag
-(ravenous-wombat-2026-02-20 for example), so posts and media from one import can be recognized easily.
-There must be a mass-delete for such tags, so that the tag and all content related to that tag is deleted
-again, so that imports can be reverted and redone in case of problems.
-
 Imports must be able to recognize duplicates of posts to some degree, so that we don't create additional
 posts from new import runs if the original posts are already there. In the case of recognized duplicates,
 the original post will just be linked to the same tag of the new import, so that the user can see it was
@@ -258,6 +252,17 @@ that the summary is filled in based on AI summarization to help speed up the blo
 AI can be used to generate a good slurl that is not just generically from the title and even the title
 can be AI-generated from the text. That way the user can focus on writing the core text and if all matches,
 just accept AI summary and title and post it.
+
+## Previewing
+
+There should be an integrated web server that can be opened from the file menu in a browser (menu item
+"open in browser" starts the default browser with the localhost URL) too look at what the site would look
+after publishing. The preview should just run live through what the exporter would do to each page that
+is sent to the server. This gives a proper preview of things to come.
+
+Preview should include draft content, so that even before publishing the user can see what will be there
+after publishing. Also this will allow background-publishing to automatically happen when new content
+is put into publish state, if we want that later.
 
 ## Publishing
 
