@@ -132,7 +132,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
     getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
     setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
   // Tag Management (advanced tag operations)
@@ -206,6 +206,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Taxonomy Analysis
     analyzeTaxonomy: (categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => ipcRenderer.invoke('chat:analyzeTaxonomy', categories, tags, modelId),
+
+    // Media Analysis
+    analyzeMediaImage: (mediaId: string, language?: string) => ipcRenderer.invoke('chat:analyzeMediaImage', mediaId, language),
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {

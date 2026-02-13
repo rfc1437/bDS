@@ -13,6 +13,7 @@ export interface ProjectMetadata {
   name: string;
   description?: string;
   dataPath?: string; // Custom path for project data
+  mainLanguage?: string; // Main language for AI-generated content (ISO code, e.g., 'en', 'de', 'es')
 }
 
 /**

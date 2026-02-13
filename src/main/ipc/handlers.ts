@@ -635,7 +635,7 @@ export function registerIpcHandlers(): void {
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string }) => {
     const engine = getMetaEngine();
     await engine.updateProjectMetadata(updates);
     return engine.getProjectMetadata();

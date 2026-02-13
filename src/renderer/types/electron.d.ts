@@ -15,6 +15,7 @@ export interface ProjectMetadata {
   name: string;
   description?: string;
   dataPath?: string;
+  mainLanguage?: string;
 }
 
 export interface ProjectData {
@@ -377,7 +378,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;
@@ -435,6 +436,9 @@ export interface ElectronAPI {
 
     // Taxonomy Analysis
     analyzeTaxonomy: (categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => Promise<{ success: boolean; categoryMappings?: Record<string, string>; tagMappings?: Record<string, string>; error?: string }>;
+
+    // Media Analysis
+    analyzeMediaImage: (mediaId: string, language?: string) => Promise<{ success: boolean; alt?: string; caption?: string; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

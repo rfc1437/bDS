@@ -1223,6 +1223,65 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const [linkedPosts, setLinkedPosts] = useState<{ postId: string; sortOrder: number }[]>([]);
   const [showPostPicker, setShowPostPicker] = useState(false);
   const [postSearchQuery, setPostSearchQuery] = useState('');
+  
+  // Quick action menu state
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [projectLanguage, setProjectLanguage] = useState('en');
+  const quickActionsRef = useRef<HTMLDivElement>(null);
+
+  // Load project language setting
+  useEffect(() => {
+    window.electronAPI?.meta.getProjectMetadata().then(metadata => {
+      if (metadata?.mainLanguage) {
+        setProjectLanguage(metadata.mainLanguage);
+      }
+    });
+  }, []);
+
+  // Close quick actions menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (quickActionsRef.current && !quickActionsRef.current.contains(event.target as Node)) {
+        setShowQuickActions(false);
+      }
+    };
+    if (showQuickActions) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showQuickActions]);
+
+  // Handle AI image analysis for alt text and caption
+  const handleAIAnalysis = async () => {
+    if (!item || isAnalyzing) return;
+    
+    setShowQuickActions(false);
+    setIsAnalyzing(true);
+    
+    try {
+      const result = await window.electronAPI?.chat.analyzeMediaImage(item.id, projectLanguage);
+      
+      if (result?.success) {
+        if (result.alt) setAlt(result.alt);
+        if (result.caption) setCaption(result.caption);
+        showToast.success('AI analysis complete');
+      } else {
+        showErrorModal({
+          title: 'AI Analysis Failed',
+          message: result?.error || 'Failed to analyze image',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to analyze image:', error);
+      showErrorModal({
+        title: 'AI Analysis Error',
+        message: (error as Error).message || 'Failed to analyze image',
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   // Load linked posts for this media
   useEffect(() => {
@@ -1381,6 +1440,34 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           </div>
         </div>
         <div className="editor-actions">
+          {/* Quick Actions Dropdown */}
+          {item.mimeType.startsWith('image/') && (
+            <div className="quick-actions-wrapper" ref={quickActionsRef}>
+              <button 
+                className="secondary quick-actions-btn"
+                onClick={() => setShowQuickActions(!showQuickActions)}
+                disabled={isAnalyzing}
+                title="Quick Actions"
+              >
+                {isAnalyzing ? '⏳ Analyzing...' : '⚡ Quick Actions'}
+              </button>
+              {showQuickActions && (
+                <div className="quick-actions-menu">
+                  <button 
+                    className="quick-action-item" 
+                    onClick={handleAIAnalysis}
+                    disabled={isAnalyzing}
+                  >
+                    <span className="quick-action-icon">🤖</span>
+                    <span className="quick-action-text">
+                      <strong>AI: Generate Alt & Caption</strong>
+                      <small>Uses Claude Sonnet 4.5 to analyze the image</small>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={handleSave}>Save</button>
           <button onClick={handleDelete} className="secondary danger">Delete</button>
         </div>
