@@ -164,6 +164,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: () => ipcRenderer.invoke('importDefinitions:getAll'),
     update: (id: string, updates: unknown) => ipcRenderer.invoke('importDefinitions:update', id, updates),
     delete: (id: string) => ipcRenderer.invoke('importDefinitions:delete', id),
+    onNameUpdated: (callback: (data: { definitionId: string; name: string }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { definitionId: string; name: string }) => callback(data);
+      ipcRenderer.on('importDefinition-name-updated', subscription);
+      return () => ipcRenderer.removeListener('importDefinition-name-updated', subscription);
+    },
   },
 
   // AI Chat (OpenCode Zen API integration)

@@ -204,6 +204,21 @@ export const TabBar: React.FC = () => {
     fetchTitles();
   }, [tabs]); // Note: intentionally not including importDefTitles to avoid infinite loops
 
+  // Listen for import definition name updates
+  useEffect(() => {
+    const unsub = window.electronAPI?.importDefinitions.onNameUpdated((data) => {
+      setImportDefTitles(prev => {
+        const newTitles = new Map(prev);
+        newTitles.set(data.definitionId, data.name);
+        return newTitles;
+      });
+    });
+
+    return () => {
+      unsub?.();
+    };
+  }, []);
+
   // Check if arrows are needed based on scroll position
   const updateArrowVisibility = useCallback(() => {
     const container = tabsContainerRef.current;

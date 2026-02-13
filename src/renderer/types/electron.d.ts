@@ -403,6 +403,7 @@ export interface ElectronAPI {
     getAll: () => Promise<ImportDefinitionData[]>;
     update: (id: string, updates: Partial<Pick<ImportDefinitionData, 'name' | 'wxrFilePath' | 'uploadsFolderPath' | 'lastAnalysisResult'>>) => Promise<ImportDefinitionData | null>;
     delete: (id: string) => Promise<boolean>;
+    onNameUpdated: (callback: (data: { definitionId: string; name: string }) => void) => () => void;
   };
   chat: {
     // API Key Management
