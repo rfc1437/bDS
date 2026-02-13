@@ -2,6 +2,9 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChatModel } from '../../types/electron';
 import './ImportAnalysisView.css';
 
+/** How to resolve a slug conflict during import */
+type ImportConflictResolution = 'ignore' | 'overwrite' | 'import';
+
 interface AnalysisReport {
   sourceFile: string;
   site: { title: string; link: string; description: string; language: string };
@@ -49,7 +52,23 @@ interface AnalyzedPostItem {
   status: string;
   contentHash: string;
   markdownPreview: string;
-  existingPost?: { id: string; title: string; slug: string };
+  /** How to resolve conflict (only relevant when status is 'conflict'). Default is 'ignore'. */
+  conflictResolution?: ImportConflictResolution;
+  existingPost?: {
+    id: string;
+    title: string;
+    slug: string;
+    /** Date the existing post was created/published */
+    pubDate?: string | null;
+    /** Excerpt from existing post */
+    excerpt?: string | null;
+    /** Author of the existing post */
+    author?: string | null;
+    /** Tags of the existing post */
+    tags?: string[];
+    /** Categories of the existing post */
+    categories?: string[];
+  };
 }
 
 interface AnalyzedMediaItem {
@@ -180,6 +199,30 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
             tag.name === itemName ? { ...tag, mappedTo } : tag
           )
         : report.tags,
+    };
+    
+    setReport(updatedReport);
+    await persistReport(updatedReport);
+  }, [report, persistReport]);
+
+  // Handler for updating conflict resolution for a specific post/page
+  const handleConflictResolutionChange = useCallback(async (
+    section: 'posts' | 'pages',
+    slug: string,
+    resolution: ImportConflictResolution
+  ) => {
+    if (!report) return;
+    
+    const updatedReport: AnalysisReport = {
+      ...report,
+      [section]: {
+        ...report[section],
+        items: report[section].items.map(item =>
+          item.wxrPost.slug === slug && item.status === 'conflict'
+            ? { ...item, conflictResolution: resolution }
+            : item
+        ),
+      },
     };
     
     setReport(updatedReport);
@@ -333,6 +376,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
               items={report.posts.items.filter(i => i.status === 'conflict')}
               expanded={expandedSections['post-conflicts'] ?? true}
               onToggle={() => toggleSection('post-conflicts')}
+              onResolutionChange={(slug, resolution) => handleConflictResolutionChange('posts', slug, resolution)}
             />
           )}
 
@@ -342,6 +386,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
               items={report.pages.items.filter(i => i.status === 'conflict')}
               expanded={expandedSections['page-conflicts'] ?? true}
               onToggle={() => toggleSection('page-conflicts')}
+              onResolutionChange={(slug, resolution) => handleConflictResolutionChange('pages', slug, resolution)}
             />
           )}
 
@@ -541,7 +586,7 @@ const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => {
   );
 };
 
-// Helper function to format post metadata for tooltip
+// Helper function to format post metadata for tooltip (new post from WXR)
 function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost']): string {
   const lines: string[] = [];
   lines.push(`WordPress ID: ${wxrPost.wpId}`);
@@ -560,6 +605,115 @@ function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost']): string {
     lines.push(`Tags: ${wxrPost.tags.join(', ')}`);
   }
   return lines.join('\n');
+}
+
+// Hover card component for post previews (both new WXR entries and existing posts)
+function PostHoverCard({ children, className, metadata, contentPreview, onHover }: {
+  children: React.ReactNode;
+  className?: string;
+  metadata: { title: string; author?: string | null; pubDate?: string | null; categories?: string[]; tags?: string[]; excerpt?: string | null };
+  contentPreview?: string | null;
+  onHover?: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLSpanElement>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const cardWidth = 420;
+      const cardHeight = 250;
+      let top = rect.bottom + 4;
+      let left = rect.left;
+      // Keep card inside viewport
+      if (left + cardWidth > window.innerWidth) {
+        left = window.innerWidth - cardWidth - 8;
+      }
+      if (left < 8) left = 8;
+      if (top + cardHeight > window.innerHeight) {
+        top = rect.top - cardHeight - 4;
+      }
+      if (top < 8) top = 8;
+      setPos({ top, left });
+    }
+    setVisible(true);
+    onHover?.();
+  }, [onHover]);
+
+  return (
+    <span
+      ref={triggerRef}
+      className={className}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {children}
+      {visible && (
+        <div className="post-hover-card" style={{ position: 'fixed', top: pos.top, left: pos.left }}>
+          <div className="post-hover-title">{metadata.title}</div>
+          <div className="post-hover-meta">
+            {metadata.author && <span>Author: {metadata.author}</span>}
+            {metadata.pubDate && <span>Published: {new Date(metadata.pubDate).toLocaleDateString()}</span>}
+            {metadata.categories && metadata.categories.length > 0 && <span>Categories: {metadata.categories.join(', ')}</span>}
+            {metadata.tags && metadata.tags.length > 0 && <span>Tags: {metadata.tags.join(', ')}</span>}
+            {metadata.excerpt && <span>Excerpt: {metadata.excerpt.length > 100 ? metadata.excerpt.substring(0, 100) + '...' : metadata.excerpt}</span>}
+          </div>
+          {contentPreview !== undefined && (
+            <div className="post-hover-content">
+              <div className="post-hover-content-label">Content</div>
+              <div className="post-hover-content-text">
+                {contentPreview ? (contentPreview.substring(0, 200) + (contentPreview.length > 200 ? '...' : '')) : 'Loading...'}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </span>
+  );
+}
+
+// Hover card for existing posts — loads everything from DB on hover
+function ExistingPostHoverCard({ children, className, postId }: {
+  children: React.ReactNode;
+  className?: string;
+  postId: string;
+}) {
+  const [postData, setPostData] = useState<{
+    title: string; content: string; author?: string; pubDate?: string;
+    tags: string[]; categories: string[]; excerpt?: string;
+  } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const handleHover = useCallback(async () => {
+    if (!loaded) {
+      const post = await window.electronAPI?.posts.get(postId);
+      if (post) {
+        const date = post.publishedAt || post.createdAt;
+        setPostData({
+          title: post.title,
+          content: post.content?.trim().substring(0, 200) || '',
+          author: post.author,
+          pubDate: date ? new Date(date).toISOString() : undefined,
+          tags: post.tags || [],
+          categories: post.categories || [],
+          excerpt: post.excerpt,
+        });
+      }
+      setLoaded(true);
+    }
+  }, [postId, loaded]);
+
+  return (
+    <PostHoverCard
+      className={className}
+      metadata={postData || { title: 'Loading...' }}
+      contentPreview={loaded ? (postData?.content || null) : undefined}
+      onHover={handleHover}
+    >
+      {children}
+    </PostHoverCard>
+  );
 }
 
 // Helper function to format media metadata for tooltip
@@ -588,33 +742,64 @@ const ConflictsSection: React.FC<{
   items: AnalyzedPostItem[];
   expanded: boolean;
   onToggle: () => void;
-}> = ({ title, items, expanded, onToggle }) => (
-  <div className="import-detail-section">
+  onResolutionChange: (slug: string, resolution: ImportConflictResolution) => void;
+}> = ({ title, items, expanded, onToggle, onResolutionChange }) => (
+  <div className="import-detail-section conflicts-section">
     <h3 onClick={onToggle}>
       <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
       {title} ({items.length})
     </h3>
     {expanded && (
-      <table className="import-detail-table">
+      <table className="import-detail-table conflicts-table">
         <thead>
           <tr>
             <th>Slug</th>
-            <th>WXR Title</th>
-            <th>Categories</th>
-            <th>Existing Title</th>
+            <th>New Entry (WXR)</th>
+            <th>Existing Entry</th>
+            <th>Resolution</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={idx} className="post-row-with-tooltip" title={formatPostTooltip(item.wxrPost)}>
+            <tr key={idx} className="conflict-row">
               <td className="slug-cell">{item.wxrPost.slug}</td>
-              <td>{item.wxrPost.title}</td>
-              <td className="categories-cell">
-                {item.wxrPost.categories.length > 0 
-                  ? item.wxrPost.categories.join(', ')
-                  : '--'}
+              <td className="new-entry-cell">
+                <PostHoverCard
+                  className="entry-title tooltip-target"
+                  metadata={{ title: item.wxrPost.title, author: item.wxrPost.creator, pubDate: item.wxrPost.pubDate, categories: item.wxrPost.categories, tags: item.wxrPost.tags }}
+                  contentPreview={item.markdownPreview}
+                >
+                  {item.wxrPost.title}
+                </PostHoverCard>
+                {item.wxrPost.categories.length > 0 && (
+                  <span className="entry-categories">
+                    {item.wxrPost.categories.join(', ')}
+                  </span>
+                )}
               </td>
-              <td className="existing-match">{item.existingPost?.title || '--'}</td>
+              <td className="existing-entry-cell">
+                {item.existingPost ? (
+                  <ExistingPostHoverCard
+                    className="entry-title tooltip-target"
+                    postId={item.existingPost.id}
+                  >
+                    {item.existingPost.title}
+                  </ExistingPostHoverCard>
+                ) : (
+                  <span className="entry-title">--</span>
+                )}
+              </td>
+              <td className="resolution-cell">
+                <select
+                  className="resolution-select"
+                  value={item.conflictResolution || 'ignore'}
+                  onChange={(e) => onResolutionChange(item.wxrPost.slug, e.target.value as ImportConflictResolution)}
+                >
+                  <option value="ignore">Ignore</option>
+                  <option value="overwrite">Overwrite</option>
+                  <option value="import">Import (new slug)</option>
+                </select>
+              </td>
             </tr>
           ))}
         </tbody>

@@ -68,8 +68,12 @@ export {
   type AnalyzedTag,
   type PostAnalysisStatus,
   type MediaAnalysisStatus,
+  type ImportConflictResolution,
 } from './ImportAnalysisEngine';
 export {
   ImportDefinitionEngine,
   type ImportDefinitionData,
-} from './ImportDefinitionEngine';
+} from './ImportDefinitionEngine';export {
+  readPostFile,
+  type PostFileData,
+} from './postFileUtils';
