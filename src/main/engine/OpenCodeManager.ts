@@ -1173,41 +1173,54 @@ export class OpenCodeManager {
     const existingTags = tags.filter(t => t.existsInProject).map(t => t.name);
     const newTags = tags.filter(t => !t.existsInProject).map(t => t.name);
 
-    const systemPrompt = `You are an expert at analyzing and consolidating taxonomy terms (tags and categories) for a blog import system.
+    const systemPrompt = `You are an expert at analyzing taxonomy terms (tags and categories) for a blog import system.
 
-Your task is to analyze imported categories and tags and suggest mappings to reduce duplicates and inconsistencies.
+Your task is to identify NEW tags/categories from an import that should be mapped to EXISTING tags/categories in the project to avoid creating duplicates.
 
-RULES:
-1. Only suggest mappings for items that are genuinely similar or duplicates
-2. Consider variations like: singular/plural, different casing, synonyms, abbreviations, hyphenation
-3. Map to existing items when there's a clear match
-4. Map multiple similar new items to a single canonical form
-5. Only suggest mappings where it makes sense - not every item needs a mapping
+CRITICAL RULES:
+1. ONLY map NEW items to EXISTING items - never map new to new
+2. The goal is to prevent duplicate creation, NOT to reduce the number of new items
+3. A new item should only map to an existing item if they represent the same concept
+4. Consider language differences: a new tag can match an existing tag in a different language (e.g., "Photography" should map to "Fotografie" if that exists)
+5. Consider variations like: different casing, singular/plural, abbreviations, hyphenation, synonyms
+6. Only suggest mappings where there is a clear semantic match - not every new item needs a mapping
+
+EXAMPLES OF VALID MAPPINGS (new → existing):
+- "Photos" → "Photography" (if Photography exists)
+- "Fotografie" → "Photography" (language variation, if Photography exists)  
+- "tech" → "Technology" (abbreviation, if Technology exists)
+- "Web Dev" → "Web Development" (abbreviation, if Web Development exists)
+
+DO NOT:
+- Map a new item to another new item
+- Suggest mappings just because items are in the same topic area
+- Create mappings for items that are distinct concepts
 
 RESPONSE FORMAT:
 You MUST respond with valid JSON only, no other text. Use this exact structure:
 {
-  "categoryMappings": { "Source Category": "Target Category", ... },
-  "tagMappings": { "Source Tag": "Target Tag", ... }
+  "categoryMappings": { "New Category": "Existing Category", ... },
+  "tagMappings": { "New Tag": "Existing Tag", ... }
 }
 
+The source (key) MUST be from the NEW items list, and the target (value) MUST be from the EXISTING items list.
 If there are no sensible mappings to suggest, return empty objects.`;
 
-    const userPrompt = `Analyze these taxonomy items from a WordPress import and suggest mappings:
+    const userPrompt = `Analyze these taxonomy items from a WordPress import. Identify NEW items that should be mapped to EXISTING items to avoid duplicates.
 
-EXISTING CATEGORIES IN PROJECT:
+EXISTING CATEGORIES IN PROJECT (map TO these):
 ${existingCategories.length > 0 ? existingCategories.join(', ') : '(none)'}
 
-NEW CATEGORIES FROM IMPORT:
+NEW CATEGORIES FROM IMPORT (map FROM these):
 ${newCategories.length > 0 ? newCategories.join(', ') : '(none)'}
 
-EXISTING TAGS IN PROJECT:
+EXISTING TAGS IN PROJECT (map TO these):
 ${existingTags.length > 0 ? existingTags.join(', ') : '(none)'}
 
-NEW TAGS FROM IMPORT:
+NEW TAGS FROM IMPORT (map FROM these):
 ${newTags.length > 0 ? newTags.join(', ') : '(none)'}
 
-Suggest mappings to consolidate similar items. Response must be valid JSON only.`;
+Remember: Only suggest mappings from NEW items to EXISTING items. Consider language differences (e.g., German/English equivalents). Response must be valid JSON only.`;
 
     try {
       let responseText = '';
@@ -1279,10 +1292,37 @@ Suggest mappings to consolidate similar items. Response must be valid JSON only.
       }
 
       const result = JSON.parse(jsonMatch[0]);
+      
+      // Validate and filter mappings to ensure they follow the new→existing rule
+      const validatedCategoryMappings: Record<string, string> = {};
+      const validatedTagMappings: Record<string, string> = {};
+      
+      // Filter category mappings: source must be new, target must be existing
+      const newCatSet = new Set(newCategories);
+      const existingCatSet = new Set(existingCategories);
+      for (const [source, target] of Object.entries(result.categoryMappings || {})) {
+        if (newCatSet.has(source) && existingCatSet.has(target as string)) {
+          validatedCategoryMappings[source] = target as string;
+        } else {
+          console.log(`[OpenCodeManager] Filtered out invalid category mapping: "${source}" → "${target}"`);
+        }
+      }
+      
+      // Filter tag mappings: source must be new, target must be existing
+      const newTagSet = new Set(newTags);
+      const existingTagSet = new Set(existingTags);
+      for (const [source, target] of Object.entries(result.tagMappings || {})) {
+        if (newTagSet.has(source) && existingTagSet.has(target as string)) {
+          validatedTagMappings[source] = target as string;
+        } else {
+          console.log(`[OpenCodeManager] Filtered out invalid tag mapping: "${source}" → "${target}"`);
+        }
+      }
+      
       return {
         success: true,
-        categoryMappings: result.categoryMappings || {},
-        tagMappings: result.tagMappings || {},
+        categoryMappings: validatedCategoryMappings,
+        tagMappings: validatedTagMappings,
       };
     } catch (error) {
       console.error('[OpenCodeManager] Error analyzing taxonomy:', error);

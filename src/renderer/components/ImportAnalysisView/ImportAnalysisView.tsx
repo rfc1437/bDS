@@ -854,7 +854,7 @@ const TaxonomySection: React.FC<{
               )}
             </div>
             <span className="taxonomy-analyze-hint">
-              AI will suggest mappings to consolidate similar tags and categories
+              AI will suggest mappings from new to existing items to avoid duplicates
             </span>
           </div>
           
