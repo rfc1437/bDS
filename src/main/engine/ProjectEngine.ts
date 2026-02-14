@@ -58,15 +58,16 @@ export class ProjectEngine extends EventEmitter {
   }
 
   private async ensureProjectDirectories(projectId: string, dataPath?: string | null): Promise<void> {
-    // Internal directories (always in userData)
-    const internalDir = this.getInternalBaseDir(projectId);
-    await fs.mkdir(path.join(internalDir, 'thumbnails'), { recursive: true });
-    await fs.mkdir(path.join(internalDir, 'meta'), { recursive: true });
-
-    // Data directories (may be external)
+    // Determine base directory for all project data:
+    // - If custom dataPath is provided, all project data lives there (allows cloud storage backup)
+    // - If no dataPath (default project), use internal userData storage
     const dataDir = this.getDataDir(projectId, dataPath);
+    
+    // Create all project directories in the data directory
     await fs.mkdir(path.join(dataDir, 'posts'), { recursive: true });
     await fs.mkdir(path.join(dataDir, 'media'), { recursive: true });
+    await fs.mkdir(path.join(dataDir, 'meta'), { recursive: true });
+    await fs.mkdir(path.join(dataDir, 'thumbnails'), { recursive: true });
   }
 
   async createProject(data: { name: string; description?: string; slug?: string; dataPath?: string }): Promise<ProjectData> {

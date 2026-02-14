@@ -167,24 +167,12 @@ describe('MetaEngine', () => {
       expect(tags).toContain('vue');
     });
 
-    it('should persist tags to filesystem', async () => {
+    it('should keep tags in memory only (TagEngine handles persistence)', async () => {
       await metaEngine.addTag('node');
-      await metaEngine.saveTags();
       
-      const metaDir = metaEngine.getMetaDir();
-      const tagsPath = normalizePath(`${metaDir}/tags.json`);
-      expect(mockFiles.has(tagsPath)).toBe(true);
-    });
-
-    it('should load tags from filesystem', async () => {
-      const metaDir = metaEngine.getMetaDir();
-      const tagsPath = normalizePath(`${metaDir}/tags.json`);
-      mockFiles.set(tagsPath, JSON.stringify(['saved-tag-1', 'saved-tag-2']));
-      
-      await metaEngine.loadTags();
+      // Tags are now kept in memory only - TagEngine handles file persistence
       const tags = await metaEngine.getTags();
-      expect(tags).toContain('saved-tag-1');
-      expect(tags).toContain('saved-tag-2');
+      expect(tags).toContain('node');
     });
   });
 
@@ -267,21 +255,18 @@ describe('MetaEngine', () => {
       expect(categories).toContain('cat3');
     });
 
-    it('should merge file tags with database tags', async () => {
-      // File has some tags
-      const metaDir = metaEngine.getMetaDir();
-      mockFiles.set(normalizePath(`${metaDir}/tags.json`), JSON.stringify(['file-tag']));
-      
-      // Posts have different tags
+    it('should populate tags from database posts only', async () => {
+      // Tags are now populated from posts only, no file merging
+      // (TagEngine handles tag persistence with colors)
       mockPosts = [
-        { tags: JSON.stringify(['db-tag']) },
+        { tags: JSON.stringify(['db-tag-1', 'db-tag-2']) },
       ];
       
       await metaEngine.syncOnStartup();
       
       const tags = await metaEngine.getTags();
-      expect(tags).toContain('file-tag');
-      expect(tags).toContain('db-tag');
+      expect(tags).toContain('db-tag-1');
+      expect(tags).toContain('db-tag-2');
     });
 
     it('should merge file categories with database categories', async () => {
@@ -307,13 +292,14 @@ describe('MetaEngine', () => {
       expect(fs.mkdir).toHaveBeenCalled();
     });
 
-    it('should save merged results back to file', async () => {
+    it('should save category changes back to file', async () => {
       const metaDir = metaEngine.getMetaDir();
-      mockFiles.set(normalizePath(`${metaDir}/tags.json`), JSON.stringify(['existing']));
-      mockPosts = [{ tags: JSON.stringify(['new-from-db']), categories: JSON.stringify([]) }];
+      mockFiles.set(normalizePath(`${metaDir}/categories.json`), JSON.stringify(['existing-cat']));
+      mockPosts = [{ tags: JSON.stringify([]), categories: JSON.stringify(['new-cat-from-db']) }];
       
       await metaEngine.syncOnStartup();
       
+      // Categories are saved to file, tags are not (handled by TagEngine)
       expect(fs.writeFile).toHaveBeenCalled();
     });
   });
