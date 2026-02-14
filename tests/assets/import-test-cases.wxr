@@ -45,6 +45,11 @@
   6. PAGE IMPORT
      - Page ID 501: Standard page → becomes post with "page" category
      - Page ID 502: Page with HTML content for conversion test
+     
+  7. OTHER POST TYPES (should be analyzed but NOT imported)
+     - Post ID 601: nav_menu_item → analyzed but skipped
+     - Post ID 602: revision → analyzed but skipped
+     - Post ID 603: wp_template → analyzed but skipped
 -->
 <rss version="2.0"
   xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
@@ -601,6 +606,67 @@ with multiple lines</pre>]]></content:encoded>
       <wp:post_name>contact</wp:post_name>
       <wp:status>publish</wp:status>
       <wp:post_type>page</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- ======================================== -->
+    <!-- SECTION 7: OTHER POST TYPES             -->
+    <!-- (Analyzed but NOT imported by executor) -->
+    <!-- ======================================== -->
+    
+    <!-- Post 601: Navigation menu item -->
+    <item>
+      <title>Home Menu Link</title>
+      <link>https://testblog.example.com/home-menu/</link>
+      <pubDate>Mon, 01 Jan 2024 00:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <wp:post_id>601</wp:post_id>
+      <wp:post_date>2024-01-01 00:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-01 00:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-01 00:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-01 00:00:00</wp:post_modified_gmt>
+      <wp:post_name>home-menu-link</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>nav_menu_item</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 602: Post revision -->
+    <item>
+      <title>HTML Formatting Test: Basic Text Styles (Revision)</title>
+      <link>https://testblog.example.com/?p=602</link>
+      <pubDate>Mon, 01 Jan 2024 09:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <content:encoded><![CDATA[<p>Old revision content that should be ignored.</p>]]></content:encoded>
+      <wp:post_id>602</wp:post_id>
+      <wp:post_date>2024-01-01 09:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-01 09:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-01 09:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-01 09:00:00</wp:post_modified_gmt>
+      <wp:post_name>101-revision-v1</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_type>revision</wp:post_type>
+      <wp:post_parent>101</wp:post_parent>
+    </item>
+    
+    <!-- Post 603: Block template -->
+    <item>
+      <title>Single Post Template</title>
+      <link>https://testblog.example.com/wp_template/single/</link>
+      <pubDate>Tue, 02 Jan 2024 00:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[<!-- wp:template-part {"slug":"header"} /-->
+<!-- wp:post-content /-->
+<!-- wp:template-part {"slug":"footer"} /-->]]></content:encoded>
+      <wp:post_id>603</wp:post_id>
+      <wp:post_date>2024-01-02 00:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-02 00:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-02 00:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-02 00:00:00</wp:post_modified_gmt>
+      <wp:post_name>single</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>wp_template</wp:post_type>
       <wp:post_parent>0</wp:post_parent>
     </item>
     

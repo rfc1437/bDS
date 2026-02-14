@@ -267,10 +267,16 @@ export class ImportExecutionEngine extends EventEmitter {
     options: ImportExecutionOptions,
     progress: (phase: string, current: number, total: number, detail?: string) => void
   ): Promise<void> {
-    const total = report.posts.items.length;
+    // Filter to only actual posts (postType === 'post'), skip nav_menu_item, revision, etc.
+    const postsToImport = report.posts.items.filter(item => item.wxrPost.postType === 'post');
+    const total = postsToImport.length;
 
-    for (let i = 0; i < report.posts.items.length; i++) {
-      const analyzed = report.posts.items[i];
+    // Count skipped "other" post types
+    const skippedOther = report.posts.items.length - postsToImport.length;
+    result.posts.skipped += skippedOther;
+
+    for (let i = 0; i < postsToImport.length; i++) {
+      const analyzed = postsToImport[i];
       progress('posts', i + 1, total, `Processing: ${analyzed.wxrPost.title}`);
 
       try {
