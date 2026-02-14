@@ -741,4 +741,636 @@ linkedPostIds: ["post-a", "post-b", "post-c"]`;
       expect(results).toEqual([]);
     });
   });
+
+  describe('getMedia', () => {
+    it('should return null for non-existent media', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMedia('non-existent-id');
+      expect(result).toBeNull();
+    });
+
+    it('should return media by ID', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath: '/mock/media/test.jpg',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMedia('media-id');
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('media-id');
+      expect(result?.originalName).toBe('test.jpg');
+    });
+  });
+
+  describe('updateMedia', () => {
+    it('should return null for non-existent media', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.updateMedia('non-existent-id', { caption: 'New caption' });
+      expect(result).toBeNull();
+    });
+
+    it('should update media caption', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath: '/mock/media/test.jpg',
+            caption: 'Old caption',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.updateMedia('media-id', { caption: 'New caption' });
+
+      expect(result).not.toBeNull();
+      expect(result?.caption).toBe('New caption');
+    });
+
+    it('should update media alt text', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath: '/mock/media/test.jpg',
+            alt: '',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.updateMedia('media-id', { alt: 'Descriptive alt text' });
+
+      expect(result).not.toBeNull();
+      expect(result?.alt).toBe('Descriptive alt text');
+    });
+
+    it('should emit mediaUpdated event', async () => {
+      const handler = vi.fn();
+      mediaEngine.on('mediaUpdated', handler);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'event-media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath: '/mock/media/test.jpg',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      await mediaEngine.updateMedia('event-media-id', { caption: 'Updated' });
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'event-media-id' })
+      );
+    });
+
+    it('should update sidecar file', async () => {
+      const fs = await import('fs/promises');
+      const filePath = '/mock/media/test.jpg';
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'sidecar-media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.writeFile).mockClear();
+      await mediaEngine.updateMedia('sidecar-media-id', { caption: 'Test' });
+
+      // Should write to sidecar file (with optional encoding parameter)
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        `${filePath}.meta`,
+        expect.any(String),
+        expect.anything()
+      );
+    });
+
+    it('should update FTS index', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'fts-media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath: '/mock/media/test.jpg',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      ftsExecuteCalls = [];
+      await mediaEngine.updateMedia('fts-media-id', { caption: 'Searchable caption' });
+
+      const ftsUpdate = ftsExecuteCalls.find(c => c.sql.includes('media_fts'));
+      expect(ftsUpdate).toBeDefined();
+    });
+  });
+
+  describe('deleteMedia', () => {
+    it('should return false for non-existent media', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.deleteMedia('non-existent-id');
+      expect(result).toBe(false);
+    });
+
+    it('should delete media file from filesystem', async () => {
+      const fs = await import('fs/promises');
+      const filePath = '/mock/media/delete-me.jpg';
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'delete-media-id',
+            filePath,
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockClear();
+      await mediaEngine.deleteMedia('delete-media-id');
+
+      expect(fs.unlink).toHaveBeenCalledWith(filePath);
+    });
+
+    it('should delete sidecar file', async () => {
+      const fs = await import('fs/promises');
+      const filePath = '/mock/media/delete-me.jpg';
+      const sidecarPath = `${filePath}.meta`;
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'delete-media-id',
+            filePath,
+            sidecarPath,
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockClear();
+      await mediaEngine.deleteMedia('delete-media-id');
+
+      expect(fs.unlink).toHaveBeenCalledWith(sidecarPath);
+    });
+
+    it('should delete from database', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'db-delete-id',
+            filePath: '/mock/media/test.jpg',
+          }),
+        });
+        return chain;
+      });
+
+      await mediaEngine.deleteMedia('db-delete-id');
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+    });
+
+    it('should emit mediaDeleted event', async () => {
+      const handler = vi.fn();
+      mediaEngine.on('mediaDeleted', handler);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'event-delete-id',
+            filePath: '/mock/media/test.jpg',
+          }),
+        });
+        return chain;
+      });
+
+      await mediaEngine.deleteMedia('event-delete-id');
+
+      expect(handler).toHaveBeenCalledWith('event-delete-id');
+    });
+
+    it('should delete from FTS index', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'fts-delete-id',
+            filePath: '/mock/media/test.jpg',
+          }),
+        });
+        return chain;
+      });
+
+      ftsExecuteCalls = [];
+      await mediaEngine.deleteMedia('fts-delete-id');
+
+      const ftsDelete = ftsExecuteCalls.find(c => c.sql.includes('DELETE FROM media_fts'));
+      expect(ftsDelete).toBeDefined();
+    });
+
+    it('should handle file deletion error gracefully', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'error-delete-id',
+            filePath: '/mock/media/missing-file.jpg',
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('ENOENT'));
+
+      // Should not throw
+      const result = await mediaEngine.deleteMedia('error-delete-id');
+      expect(result).toBe(true);
+    });
+
+    it('should return true on successful deletion', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'success-delete-id',
+            filePath: '/mock/media/test.jpg',
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.deleteMedia('success-delete-id');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('getAllMedia', () => {
+    it('should return empty array when no media exists', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getAllMedia();
+      expect(result).toEqual([]);
+    });
+
+    it('should return all media for current project', async () => {
+      mediaEngine.setProjectContext('media-project');
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { id: 'm1', originalName: 'image1.jpg', projectId: 'media-project' },
+            { id: 'm2', originalName: 'image2.png', projectId: 'media-project' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getAllMedia();
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('getMediaFiltered', () => {
+    it('should filter by MIME type', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([
+                { id: 'm1', mimeType: 'image/jpeg', tags: '[]' },
+              ]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaFiltered({ mimeType: 'image/jpeg' });
+      expect(result).toHaveLength(1);
+    });
+
+    it('should filter by date range', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([
+                { id: 'm1', mimeType: 'image/jpeg', createdAt: new Date('2024-01-15'), tags: '[]' },
+              ]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaFiltered({ 
+        startDate: new Date('2024-01-01'),
+        endDate: new Date('2024-01-31')
+      });
+      expect(result).toHaveLength(1);
+    });
+
+    it('should filter by year and month', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([
+                { id: 'm1', mimeType: 'image/jpeg', createdAt: new Date('2024-06-15'), tags: '[]' },
+              ]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaFiltered({ year: 2024, month: 5 }); // June (0-indexed)
+      expect(result).toHaveLength(1);
+    });
+
+    it('should filter by tags on client side', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([
+                { id: 'm1', mimeType: 'image/jpeg', tags: '["nature", "landscape"]' },
+                { id: 'm2', mimeType: 'image/jpeg', tags: '["portrait"]' },
+              ]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaFiltered({ tags: ['nature'] });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('m1');
+    });
+  });
+
+  describe('getMediaByYearMonth', () => {
+    it('should return empty array when no media exists', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaByYearMonth();
+      expect(result).toEqual([]);
+    });
+
+    it('should group media by year and month', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([
+                { createdAt: new Date('2024-01-15'), tags: '[]' },
+                { createdAt: new Date('2024-01-20'), tags: '[]' },
+                { createdAt: new Date('2024-02-10'), tags: '[]' },
+              ]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaByYearMonth();
+
+      // Note: month is 0-indexed from Date.getMonth()
+      expect(result).toContainEqual({ year: 2024, month: 0, count: 2 }); // January
+      expect(result).toContainEqual({ year: 2024, month: 1, count: 1 }); // February
+    });
+
+    it('should sort by year and month descending', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockReturnValue({
+            ...chain,
+            orderBy: vi.fn().mockReturnValue({
+              ...chain,
+              all: vi.fn().mockResolvedValue([
+                { createdAt: new Date('2023-06-01'), tags: '[]' },
+                { createdAt: new Date('2024-03-01'), tags: '[]' },
+              ]),
+            }),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.getMediaByYearMonth();
+
+      expect(result[0].year).toBe(2024);
+      expect(result[0].month).toBe(2); // March is month 2 (0-indexed)
+    });
+  });
+
+  describe('generateThumbnails', () => {
+    it('should skip non-image media', async () => {
+      const fs = await import('fs/promises');
+      
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'pdf-id',
+            mimeType: 'application/pdf',
+            filePath: '/mock/media/document.pdf',
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.writeFile).mockClear();
+      await mediaEngine.generateThumbnails('pdf-id');
+
+      // Should not write any thumbnail files for non-images
+      const thumbnailWrites = vi.mocked(fs.writeFile).mock.calls.filter(
+        call => String(call[0]).includes('thumbnail')
+      );
+      expect(thumbnailWrites).toHaveLength(0);
+    });
+  });
+
+  describe('getThumbnailPaths', () => {
+    it('should return object with all size keys', async () => {
+      // getThumbnailPaths checks fs.access for each thumbnail
+      // By default our mock throws ENOENT, so all paths will be null
+      const paths = await mediaEngine.getThumbnailPaths('test-media-id');
+
+      expect(paths).toHaveProperty('small');
+      expect(paths).toHaveProperty('medium');
+      expect(paths).toHaveProperty('large');
+    });
+
+    it('should return null for non-existent thumbnails', async () => {
+      const paths = await mediaEngine.getThumbnailPaths('non-existent-media-id');
+
+      expect(paths.small).toBeNull();
+      expect(paths.medium).toBeNull();
+      expect(paths.large).toBeNull();
+    });
+
+    it('should return paths when thumbnails exist', async () => {
+      const fs = await import('fs/promises');
+      const mediaId = 'existing-media-id';
+
+      // Mock fs.access to succeed for small thumbnail
+      vi.mocked(fs.access).mockImplementation(async (path: any) => {
+        if (path.includes(`${mediaId}-small.webp`)) {
+          return undefined; // File exists
+        }
+        throw new Error('ENOENT');
+      });
+
+      const paths = await mediaEngine.getThumbnailPaths(mediaId);
+
+      expect(paths.small).not.toBeNull();
+      expect(paths.small).toContain(`${mediaId}-small.webp`);
+      expect(paths.medium).toBeNull();
+      expect(paths.large).toBeNull();
+    });
+  });
 });

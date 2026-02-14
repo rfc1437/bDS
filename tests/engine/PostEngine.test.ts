@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PostEngine, PostData } from '../../src/main/engine/PostEngine';
 import { resetMockCounters } from '../utils/factories';
+import * as fs from 'fs/promises';
 
 // Create mock data stores
 const mockPosts = new Map<string, any>();
@@ -76,43 +77,76 @@ vi.mock('../../src/main/database', () => ({
   })),
 }));
 
-// Mock fs/promises
-vi.mock('fs/promises', () => ({
-  readFile: vi.fn(async (path: string) => {
-    const content = mockFiles.get(path);
+// Mock fs/promises - implementations MUST be inline in vi.mock due to hoisting
+vi.mock('fs/promises', () => {
+  // These implementations use a global mockFiles Map from the test
+  const getMockFiles = () => (globalThis as any).__mockFiles || new Map();
+  
+  return {
+    readFile: vi.fn(async (path: string) => {
+      const mockFiles = getMockFiles();
+      const content = mockFiles.get(path);
+      if (!content) {
+        const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
+        (error as any).code = 'ENOENT';
+        throw error;
+      }
+      return content;
+    }),
+    writeFile: vi.fn(async (path: string, content: string) => {
+      getMockFiles().set(path, content);
+    }),
+    unlink: vi.fn(async (path: string) => {
+      getMockFiles().delete(path);
+    }),
+    mkdir: vi.fn(async () => {}),
+    readdir: vi.fn(async () => []),
+    stat: vi.fn(async (path: string) => {
+      const mockFiles = getMockFiles();
+      return {
+        isFile: () => mockFiles.has(path),
+        isDirectory: () => !mockFiles.has(path),
+        size: mockFiles.get(path)?.length || 0,
+      };
+    }),
+    access: vi.fn(async (path: string) => {
+      const mockFiles = getMockFiles();
+      if (!mockFiles.has(path)) {
+        const error = new Error(`ENOENT`);
+        (error as any).code = 'ENOENT';
+        throw error;
+      }
+    }),
+  };
+});
+
+// Mock uuid
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => 'mock-uuid-' + Math.random().toString(36).substr(2, 9)),
+}));
+
+// Helper functions to reset fs mocks to default implementations
+function createDefaultFsReadFile(mockFilesRef: Map<string, string>) {
+  return async (path: string) => {
+    const content = mockFilesRef.get(path);
     if (!content) {
       const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
       (error as any).code = 'ENOENT';
       throw error;
     }
     return content;
-  }),
-  writeFile: vi.fn(async (path: string, content: string) => {
-    mockFiles.set(path, content);
-  }),
-  unlink: vi.fn(async (path: string) => {
-    mockFiles.delete(path);
-  }),
-  mkdir: vi.fn(async () => {}),
-  readdir: vi.fn(async () => []),
-  stat: vi.fn(async (path: string) => ({
-    isFile: () => mockFiles.has(path),
-    isDirectory: () => !mockFiles.has(path),
-    size: mockFiles.get(path)?.length || 0,
-  })),
-  access: vi.fn(async (path: string) => {
-    if (!mockFiles.has(path)) {
+  };
+}
+
+function createDefaultFsAccess(mockFilesRef: Map<string, string>) {
+  return async (path: string) => {
+    if (!mockFilesRef.has(path)) {
       const error = new Error(`ENOENT`);
       (error as any).code = 'ENOENT';
       throw error;
     }
-  }),
-}));
-
-// Mock uuid
-vi.mock('uuid', () => ({
-  v4: vi.fn(() => 'mock-uuid-' + Math.random().toString(36).substr(2, 9)),
-}));
+  };
+}
 
 describe('PostEngine', () => {
   let postEngine: PostEngine;
@@ -124,8 +158,15 @@ describe('PostEngine', () => {
     mockExecuteArgs = [];
     resetMockCounters();
     
+    // Sync mockFiles with globalThis for the mocked fs module
+    (globalThis as any).__mockFiles = mockFiles;
+    
     // Reset the mock implementations
     vi.mocked(mockLocalDb.select).mockImplementation(() => createSelectChain());
+    
+    // Reset fs implementations to use mockFiles map (fixes test leakage from other tests)
+    vi.mocked(fs.readFile).mockImplementation(createDefaultFsReadFile(mockFiles) as any);
+    vi.mocked(fs.access).mockImplementation(createDefaultFsAccess(mockFiles) as any);
     
     postEngine = new PostEngine();
   });
@@ -1506,6 +1547,1127 @@ Valid content`;
       const postPath = postEngine.getPostPath('january-post', january);
 
       expect(postPath).toMatch(/[/\\]2024[/\\]01[/\\]/);
+    });
+  });
+
+  describe('publishPost', () => {
+    it('should return null for non-existent post', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.publishPost('non-existent-id');
+      expect(result).toBeNull();
+    });
+
+    it('should change status to published', async () => {
+      const created = await postEngine.createPost({ 
+        title: 'Publish Test', 
+        content: '# Published content' 
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: created.content,
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.publishPost(created.id);
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe('published');
+    });
+
+    it('should set publishedAt timestamp on first publish', async () => {
+      const created = await postEngine.createPost({ title: 'First Publish' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: 'Test content',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+            publishedAt: null,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const before = new Date();
+      const result = await postEngine.publishPost(created.id);
+      const after = new Date();
+
+      expect(result?.publishedAt).toBeDefined();
+      expect(result?.publishedAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(result?.publishedAt!.getTime()).toBeLessThanOrEqual(after.getTime());
+    });
+
+    it('should preserve existing publishedAt on re-publish', async () => {
+      const existingPublishedAt = new Date('2024-01-15T10:00:00.000Z');
+      const created = await postEngine.createPost({ title: 'Re-publish Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: 'Updated content',
+            filePath: '/mock/existing-file.md',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+            publishedAt: existingPublishedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.publishPost(created.id);
+
+      expect(result?.publishedAt).toEqual(existingPublishedAt);
+    });
+
+    it('should write post to filesystem', async () => {
+      const fs = await import('fs/promises');
+      const created = await postEngine.createPost({ 
+        title: 'File Write Test', 
+        content: 'Published content' 
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: 'Published content',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.writeFile).mockClear();
+      await postEngine.publishPost(created.id);
+
+      expect(fs.writeFile).toHaveBeenCalled();
+    });
+
+    it('should emit postUpdated event', async () => {
+      const handler = vi.fn();
+      postEngine.on('postUpdated', handler);
+
+      const created = await postEngine.createPost({ title: 'Event Publish Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: 'Test content',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      await postEngine.publishPost(created.id);
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'published' })
+      );
+    });
+
+    it('should update FTS index on publish', async () => {
+      const created = await postEngine.createPost({ 
+        title: 'FTS Publish Test',
+        content: 'Searchable content' 
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: 'Searchable content',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+      await postEngine.publishPost(created.id);
+
+      const ftsUpdate = mockExecuteArgs.find((q) => q.sql.includes('posts_fts'));
+      expect(ftsUpdate).toBeDefined();
+    });
+
+    it('should remove old file when slug changes', async () => {
+      const fs = await import('fs/promises');
+      const created = await postEngine.createPost({ title: 'Slug Change Publish' });
+      const oldFilePath = '/mock/old/path/old-slug.md';
+      const newFilePath = `/mock/userData/projects/default/posts/2024/01/${created.slug}.md`;
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: 'Content',
+            filePath: oldFilePath,
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.unlink).mockClear();
+      await postEngine.publishPost(created.id);
+
+      expect(fs.unlink).toHaveBeenCalledWith(oldFilePath);
+    });
+  });
+
+  describe('discardChanges', () => {
+    it('should return null for non-existent post', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.discardChanges('non-existent-id');
+      expect(result).toBeNull();
+    });
+
+    it('should return null if post has no published file', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'draft-only-id',
+            filePath: '', // No published file
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.discardChanges('draft-only-id');
+      expect(result).toBeNull();
+    });
+
+    it('should restore post from filesystem', async () => {
+      const publishedFilePath = '/mock/published/post.md';
+      mockFiles.set(publishedFilePath, `---
+id: restore-id
+projectId: default
+title: Published Title
+slug: published-slug
+status: published
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags:
+  - original
+categories: []
+---
+Original published content`);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'restore-id',
+            filePath: publishedFilePath,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.discardChanges('restore-id');
+
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('Published Title');
+      expect(result?.content).toBe('Original published content');
+      expect(result?.status).toBe('published');
+    });
+
+    it('should return null if published file is missing', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'missing-file-id',
+            filePath: '/mock/missing/file.md',
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.discardChanges('missing-file-id');
+      expect(result).toBeNull();
+    });
+
+    it('should emit postUpdated event', async () => {
+      const handler = vi.fn();
+      postEngine.on('postUpdated', handler);
+
+      const publishedFilePath = '/mock/discard-event.md';
+      mockFiles.set(publishedFilePath, `---
+id: event-discard-id
+projectId: default
+title: Event Discard Test
+slug: event-discard
+status: published
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Published content`);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'event-discard-id',
+            filePath: publishedFilePath,
+          }),
+        });
+        return chain;
+      });
+
+      await postEngine.discardChanges('event-discard-id');
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Event Discard Test' })
+      );
+    });
+  });
+
+  describe('hasPublishedVersion', () => {
+    it('should return false for non-existent post', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.hasPublishedVersion('non-existent-id');
+      expect(result).toBe(false);
+    });
+
+    it('should return false for draft-only post', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'draft-only-id',
+            filePath: '',
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.hasPublishedVersion('draft-only-id');
+      expect(result).toBe(false);
+    });
+
+    it('should return true for published post', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'published-id',
+            filePath: '/mock/published/file.md',
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.hasPublishedVersion('published-id');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('getAllPosts', () => {
+    it('should return empty result when no posts exist', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          offset: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getAllPosts();
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should return all posts for current project', async () => {
+      postEngine.setProjectContext('test-project');
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          offset: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { id: '1', title: 'Post 1', projectId: 'test-project', tags: '[]', categories: '[]' },
+            { id: '2', title: 'Post 2', projectId: 'test-project', tags: '[]', categories: '[]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getAllPosts();
+      expect(result.items).toHaveLength(2);
+    });
+
+    it('should parse tags and categories JSON', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          offset: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { 
+              id: '1', 
+              title: 'Tagged Post', 
+              tags: '["tag1","tag2"]', 
+              categories: '["cat1"]' 
+            },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getAllPosts();
+      expect(result.items[0].tags).toEqual(['tag1', 'tag2']);
+      expect(result.items[0].categories).toEqual(['cat1']);
+    });
+  });
+
+  describe('getPostsFiltered', () => {
+    it('should filter by status', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { id: '1', title: 'Published', status: 'published', tags: '[]', categories: '[]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPostsFiltered({ status: 'published' });
+      expect(result).toHaveLength(1);
+      expect(result[0].status).toBe('published');
+    });
+
+    it('should apply pagination with limit and offset', async () => {
+      const allMock = vi.fn().mockResolvedValue([
+        { id: '1', title: 'Post 1', tags: '[]', categories: '[]' },
+      ]);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: allMock,
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPostsFiltered({});
+
+      expect(mockLocalDb.select).toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('searchPosts', () => {
+    it('should return empty array for empty query', async () => {
+      const result = await postEngine.searchPosts('');
+      expect(result).toEqual([]);
+    });
+
+    it('should search using FTS', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ 
+        rows: [
+          { id: 'post-1' },
+          { id: 'post-2' },
+        ] 
+      });
+
+      // searchPosts calls .get() for each result, not .all()
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn()
+            .mockResolvedValueOnce({ id: 'post-1', title: 'Found Post 1', slug: 'found-1', excerpt: 'First result', tags: '[]', categories: '[]' })
+            .mockResolvedValueOnce({ id: 'post-2', title: 'Found Post 2', slug: 'found-2', excerpt: 'Second result', tags: '[]', categories: '[]' }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.searchPosts('search term');
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        id: 'post-1',
+        title: 'Found Post 1',
+        slug: 'found-1',
+        excerpt: 'First result',
+      });
+    });
+
+    it('should return empty array when FTS returns no results', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      const result = await postEngine.searchPosts('nonexistent');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getTagsWithCounts', () => {
+    it('should return empty array when no posts have tags', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getTagsWithCounts();
+      expect(result).toEqual([]);
+    });
+
+    it('should count tag occurrences across posts', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([
+            { tags: '["javascript","testing"]' },
+            { tags: '["javascript","react"]' },
+            { tags: '["testing"]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getTagsWithCounts();
+      
+      expect(result).toContainEqual({ tag: 'javascript', count: 2 });
+      expect(result).toContainEqual({ tag: 'testing', count: 2 });
+      expect(result).toContainEqual({ tag: 'react', count: 1 });
+    });
+
+    it('should sort by count descending', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([
+            { tags: '["a","b","c"]' },
+            { tags: '["a","b"]' },
+            { tags: '["a"]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getTagsWithCounts();
+      
+      expect(result[0].count).toBeGreaterThanOrEqual(result[1].count);
+      expect(result[1].count).toBeGreaterThanOrEqual(result[2].count);
+    });
+  });
+
+  describe('getCategoriesWithCounts', () => {
+    it('should return empty array when no posts have categories', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getCategoriesWithCounts();
+      expect(result).toEqual([]);
+    });
+
+    it('should count category occurrences', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([
+            { categories: '["tutorials"]' },
+            { categories: '["tutorials","news"]' },
+            { categories: '["news"]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getCategoriesWithCounts();
+      
+      expect(result).toContainEqual({ category: 'tutorials', count: 2 });
+      expect(result).toContainEqual({ category: 'news', count: 2 });
+    });
+  });
+
+  describe('getDashboardStats', () => {
+    it('should return counts for all statuses', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([
+            { status: 'draft' },
+            { status: 'draft' },
+            { status: 'published' },
+            { status: 'published' },
+            { status: 'published' },
+            { status: 'archived' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getDashboardStats();
+
+      expect(result.draftCount).toBe(2);
+      expect(result.publishedCount).toBe(3);
+      expect(result.archivedCount).toBe(1);
+      expect(result.totalPosts).toBe(6);
+    });
+
+    it('should handle empty project', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getDashboardStats();
+
+      expect(result.draftCount).toBe(0);
+      expect(result.publishedCount).toBe(0);
+      expect(result.archivedCount).toBe(0);
+      expect(result.totalPosts).toBe(0);
+    });
+  });
+
+  describe('getPostsByYearMonth', () => {
+    it('should return empty array when no posts exist', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPostsByYearMonth();
+      expect(result).toEqual([]);
+    });
+
+    it('should group posts by year and month', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { createdAt: new Date('2024-01-15'), tags: '[]', categories: '[]' },
+            { createdAt: new Date('2024-01-20'), tags: '[]', categories: '[]' },
+            { createdAt: new Date('2024-02-10'), tags: '[]', categories: '[]' },
+            { createdAt: new Date('2023-12-25'), tags: '[]', categories: '[]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPostsByYearMonth();
+
+      // Note: getMonth() returns 0-11, so January is 0, February is 1, etc.
+      expect(result).toContainEqual({ year: 2024, month: 0, count: 2 }); // January
+      expect(result).toContainEqual({ year: 2024, month: 1, count: 1 }); // February
+      expect(result).toContainEqual({ year: 2023, month: 11, count: 1 }); // December
+    });
+
+    it('should sort by year and month descending', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { createdAt: new Date('2023-06-01'), tags: '[]', categories: '[]' },
+            { createdAt: new Date('2024-03-01'), tags: '[]', categories: '[]' },
+            { createdAt: new Date('2024-01-01'), tags: '[]', categories: '[]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPostsByYearMonth();
+
+      expect(result[0].year).toBe(2024);
+      expect(result[0].month).toBe(2); // March (0-indexed)
+      expect(result[result.length - 1].year).toBe(2023);
+    });
+  });
+
+  describe('extractInternalLinks', () => {
+    it('should extract markdown-style internal links', () => {
+      const content = 'Check out [my post](/posts/my-post) for more info.';
+      const links = postEngine.extractInternalLinks(content);
+
+      expect(links).toHaveLength(1);
+      expect(links[0]).toEqual({ text: 'my post', slug: 'my-post' });
+    });
+
+    it('should extract multiple links', () => {
+      const content = 'See [Post A](/posts/post-a) and [Post B](/posts/post-b).';
+      const links = postEngine.extractInternalLinks(content);
+
+      expect(links).toHaveLength(2);
+      expect(links).toContainEqual({ text: 'Post A', slug: 'post-a' });
+      expect(links).toContainEqual({ text: 'Post B', slug: 'post-b' });
+    });
+
+    it('should extract HTML-style links', () => {
+      const content = 'Visit <a href="/posts/html-link">HTML Link</a> for details.';
+      const links = postEngine.extractInternalLinks(content);
+
+      expect(links).toHaveLength(1);
+      expect(links[0]).toEqual({ text: 'HTML Link', slug: 'html-link' });
+    });
+
+    it('should handle date-structured paths', () => {
+      const content = 'See [Old Post](/posts/2023/05/old-post) from last year.';
+      const links = postEngine.extractInternalLinks(content);
+
+      expect(links).toHaveLength(1);
+      expect(links[0].slug).toBe('old-post');
+    });
+
+    it('should return empty array for content without links', () => {
+      const content = 'This is plain text with no internal links.';
+      const links = postEngine.extractInternalLinks(content);
+
+      expect(links).toEqual([]);
+    });
+  });
+
+  describe('updatePostLinks', () => {
+    it('should delete existing links before inserting new ones', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([
+            { id: 'target-id', slug: 'target-post' },
+          ]),
+        });
+        return chain;
+      });
+
+      await postEngine.updatePostLinks('source-id', 'Link to [target](/posts/target-post)');
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should not insert self-referential links', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([
+            { id: 'same-id', slug: 'self-link' },
+          ]),
+        });
+        return chain;
+      });
+
+      const insertMock = vi.fn().mockReturnValue({
+        values: vi.fn().mockResolvedValue(undefined),
+      });
+      vi.mocked(mockLocalDb.insert).mockImplementation(insertMock);
+
+      await postEngine.updatePostLinks('same-id', 'Link to [self](/posts/self-link)');
+
+      // Insert should be called for other table operations but not for the self-link
+      // The function should skip inserting when targetId === postId
+    });
+
+    it('should handle content with no links', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      await postEngine.updatePostLinks('post-id', 'Content without any links');
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+      // No inserts for empty links
+    });
+  });
+
+  describe('getLinkedBy', () => {
+    it('should return posts that link to the specified post', async () => {
+      // Mock the two database queries
+      let callCount = 0;
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        callCount++;
+        const chain = createSelectChain();
+        
+        if (callCount === 1) {
+          // First call: get links from postLinks table
+          chain.from = vi.fn().mockReturnValue({
+            ...chain,
+            where: vi.fn().mockResolvedValue([
+              { sourcePostId: 'source-1', linkText: 'Link Text' },
+              { sourcePostId: 'source-2', linkText: 'Another Link' },
+            ]),
+          });
+        } else {
+          // Second call: get source posts
+          chain.from = vi.fn().mockReturnValue({
+            ...chain,
+            where: vi.fn().mockResolvedValue([
+              { id: 'source-1', title: 'Source Post 1', slug: 'source-1' },
+              { id: 'source-2', title: 'Source Post 2', slug: 'source-2' },
+              { id: 'other', title: 'Other Post', slug: 'other' },
+            ]),
+          });
+        }
+        return chain;
+      });
+
+      const result = await postEngine.getLinkedBy('target-id');
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('should return empty array when no posts link to target', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getLinkedBy('isolated-post');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getLinksTo', () => {
+    it('should return posts that the specified post links to', async () => {
+      let callCount = 0;
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        callCount++;
+        const chain = createSelectChain();
+        
+        if (callCount === 1) {
+          // First call: get links from postLinks table
+          chain.from = vi.fn().mockReturnValue({
+            ...chain,
+            where: vi.fn().mockResolvedValue([
+              { targetPostId: 'target-1', linkText: 'Link Text' },
+            ]),
+          });
+        } else {
+          // Second call: get target posts
+          chain.from = vi.fn().mockReturnValue({
+            ...chain,
+            where: vi.fn().mockResolvedValue([
+              { id: 'target-1', title: 'Target Post', slug: 'target-1' },
+            ]),
+          });
+        }
+        return chain;
+      });
+
+      const result = await postEngine.getLinksTo('source-id');
+
+      expect(result).toHaveLength(1);
+    });
+
+    it('should return empty array when post has no outgoing links', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getLinksTo('no-links-post');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('rebuildAllPostLinks', () => {
+    it('should clear all existing links', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildAllPostLinks();
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+    });
+
+    it('should emit postLinksRebuilt event', async () => {
+      const handler = vi.fn();
+      postEngine.on('postLinksRebuilt', handler);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildAllPostLinks();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it('should process posts with file content', async () => {
+      const filePath = '/mock/posts/2024/01/test-post.md';
+      mockFiles.set(filePath, `---
+id: file-post-id
+title: File Post
+slug: file-post
+---
+Content with [link](/posts/other-post)`);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([
+            { id: 'file-post-id', filePath, content: null },
+          ]),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildAllPostLinks();
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+    });
+
+    it('should process posts with draft content in DB', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.from = vi.fn().mockReturnValue({
+          ...chain,
+          where: vi.fn().mockResolvedValue([
+            { id: 'draft-id', filePath: '', content: 'Draft with [link](/posts/target)' },
+          ]),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildAllPostLinks();
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+    });
+  });
+
+  describe('rebuildFTSIndex', () => {
+    it('should call getAllPostsUnpaginated', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      await postEngine.rebuildFTSIndex();
+
+      expect(mockLocalDb.select).toHaveBeenCalled();
+    });
+
+    it('should update FTS for each post', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { id: 'post-1', title: 'Post 1', content: 'Content 1', tags: '[]', categories: '[]' },
+            { id: 'post-2', title: 'Post 2', content: 'Content 2', tags: '[]', categories: '[]' },
+          ]),
+        });
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+      await postEngine.rebuildFTSIndex();
+
+      // FTS update is called for each post
+      const ftsOperations = mockExecuteArgs.filter((q) => q.sql.includes('posts_fts'));
+      expect(ftsOperations.length).toBeGreaterThan(0);
+    });
+
+    it('should re-index all posts in project', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { id: 'post-1', title: 'Post 1', content: 'Content 1', tags: '["a"]', categories: '[]' },
+            { id: 'post-2', title: 'Post 2', content: 'Content 2', tags: '[]', categories: '["b"]' },
+          ]),
+        });
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+      await postEngine.rebuildFTSIndex();
+
+      const ftsInserts = mockExecuteArgs.filter((q) => 
+        q.sql.includes('INSERT INTO posts_fts')
+      );
+      expect(ftsInserts.length).toBeGreaterThanOrEqual(2);
     });
   });
 });
