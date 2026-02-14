@@ -11,6 +11,7 @@
  * 4. Conflict Resolution - verifies ignore/overwrite/import behaviors
  * 5. Media Import - verifies media file handling with post linkage
  * 6. Page Import - verifies pages become posts with "page" category
+ * 7. Other Post Types - verifies nav_menu_item, revision, wp_template are analyzed but not imported
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
@@ -1373,6 +1374,147 @@ describe('ImportExecutionEngine E2E Tests', () => {
 
       // WpId mapping should have entries for imported posts
       expect(result.wpIdToPostId.size).toBeGreaterThanOrEqual(2);  // post1, post3
+    });
+  });
+
+  // ==========================================================================
+  // SECTION 7: OTHER POST TYPES (analyzed but not imported)
+  // ==========================================================================
+
+  describe('Other Post Types (analyzed but not imported)', () => {
+    it('should include nav_menu_item, revision, and wp_template in WXR parsed data', () => {
+      // Verify the WXR parser includes these in the posts array
+      const navMenuItem = wxrData.posts.find(p => p.wpId === 601);
+      const revision = wxrData.posts.find(p => p.wpId === 602);
+      const wpTemplate = wxrData.posts.find(p => p.wpId === 603);
+
+      expect(navMenuItem).toBeDefined();
+      expect(navMenuItem!.postType).toBe('nav_menu_item');
+      expect(navMenuItem!.title).toBe('Home Menu Link');
+
+      expect(revision).toBeDefined();
+      expect(revision!.postType).toBe('revision');
+      expect(revision!.slug).toBe('101-revision-v1');
+
+      expect(wpTemplate).toBeDefined();
+      expect(wpTemplate!.postType).toBe('wp_template');
+      expect(wpTemplate!.title).toBe('Single Post Template');
+    });
+
+    it('should include other post types in analysis report but skip them during import', async () => {
+      // Find the "other" post types from parsed WXR
+      const navMenuItem = wxrData.posts.find(p => p.wpId === 601)!;
+      const revision = wxrData.posts.find(p => p.wpId === 602)!;
+      const wpTemplate = wxrData.posts.find(p => p.wpId === 603)!;
+      
+      // Also include a regular post to verify it gets imported
+      const regularPost = wxrData.posts.find(p => p.wpId === 101)!;
+
+      // Create analysis report that includes both regular posts and "other" post types
+      const report: ImportAnalysisReport = {
+        wxrData: wxrData,
+        posts: {
+          total: 4,
+          new: 4,
+          update: 0,
+          conflict: 0,
+          items: [
+            {
+              wxrPost: regularPost,
+              status: 'new' as PostAnalysisStatus,
+              contentHash: 'hash1',
+              markdownPreview: '',
+            },
+            {
+              wxrPost: navMenuItem,
+              status: 'new' as PostAnalysisStatus,
+              contentHash: 'hash2',
+              markdownPreview: '',
+            },
+            {
+              wxrPost: revision,
+              status: 'new' as PostAnalysisStatus,
+              contentHash: 'hash3',
+              markdownPreview: '',
+            },
+            {
+              wxrPost: wpTemplate,
+              status: 'new' as PostAnalysisStatus,
+              contentHash: 'hash4',
+              markdownPreview: '',
+            },
+          ],
+        },
+        pages: { total: 0, new: 0, update: 0, conflict: 0, items: [] },
+        media: { total: 0, new: 0, update: 0, conflict: 0, missing: 0, items: [] },
+        tags: [],
+        categories: [],
+        site: wxrData.site,
+        macros: { totalUniqueMacros: 0, totalMacroUsages: 0, allMapped: true, macros: [] },
+      };
+
+      const result = await engine.executeImport(report, {});
+
+      // Verify only the regular post was imported
+      expect(result.posts.imported).toBe(1);
+      
+      // The 3 "other" post types should be skipped
+      expect(result.posts.skipped).toBe(3);
+      expect(result.posts.errors).toBe(0);
+
+      // Verify only one post was actually written to database/filesystem
+      expect(insertedPosts.length).toBe(1);
+      expect(insertedPosts[0].slug).toBe('html-formatting-basic');
+
+      // Verify no files were written for nav_menu_item, revision, or wp_template
+      const writtenSlugs = writtenFiles.map(f => f.path);
+      expect(writtenSlugs.some(p => p.includes('home-menu-link'))).toBe(false);
+      expect(writtenSlugs.some(p => p.includes('101-revision-v1'))).toBe(false);
+      expect(writtenSlugs.some(p => p.includes('single'))).toBe(false);
+    });
+
+    it('should correctly count skipped "other" types in result summary', async () => {
+      // Test with only "other" post types to verify counting
+      const navMenuItem = wxrData.posts.find(p => p.wpId === 601)!;
+      const revision = wxrData.posts.find(p => p.wpId === 602)!;
+
+      const report: ImportAnalysisReport = {
+        wxrData: wxrData,
+        posts: {
+          total: 2,
+          new: 2,
+          update: 0,
+          conflict: 0,
+          items: [
+            {
+              wxrPost: navMenuItem,
+              status: 'new' as PostAnalysisStatus,
+              contentHash: 'hash1',
+              markdownPreview: '',
+            },
+            {
+              wxrPost: revision,
+              status: 'new' as PostAnalysisStatus,
+              contentHash: 'hash2',
+              markdownPreview: '',
+            },
+          ],
+        },
+        pages: { total: 0, new: 0, update: 0, conflict: 0, items: [] },
+        media: { total: 0, new: 0, update: 0, conflict: 0, missing: 0, items: [] },
+        tags: [],
+        categories: [],
+        site: wxrData.site,
+        macros: { totalUniqueMacros: 0, totalMacroUsages: 0, allMapped: true, macros: [] },
+      };
+
+      const result = await engine.executeImport(report, {});
+
+      // All should be skipped, none imported
+      expect(result.posts.imported).toBe(0);
+      expect(result.posts.skipped).toBe(2);
+      expect(result.posts.errors).toBe(0);
+      expect(insertedPosts.length).toBe(0);
     });
   });
 });
