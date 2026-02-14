@@ -643,6 +643,9 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
+  const hydrationOverlayRef = useRef<HTMLDivElement>(null);
+  const isHydratingRef = useRef(false);
+  const previewContentRef = useRef<HTMLDivElement>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -700,23 +703,57 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   // Hydrate galleries and photo archives when in preview mode
   useEffect(() => {
-    if (editorMode !== 'preview' || !previewRef.current) return;
+    if (editorMode !== 'preview' || !previewRef.current || !previewContentRef.current) return;
+    
+    let cancelled = false;
+    
+    // Helper to show/hide the overlay without triggering React re-render
+    const showOverlay = (show: boolean) => {
+      if (hydrationOverlayRef.current) {
+        hydrationOverlayRef.current.style.display = show ? 'flex' : 'none';
+      }
+    };
+    
+    // Set content immediately if not hydrating
+    // During hydration, we skip updating to preserve the hydrated DOM
+    if (!isHydratingRef.current) {
+      previewContentRef.current.innerHTML = markdownToHtml(resolvedContent, postId);
+    }
     
     // Small delay to ensure DOM is updated
-    const timer = setTimeout(() => {
-      if (previewRef.current) {
-        const lightboxHandler = (index: number, imgs: { src: string; alt: string }[]) => {
-          setGalleryImages(imgs);
-          setLightboxIndex(index);
-          setLightboxOpen(true);
-        };
-        
-        hydrateGalleries(previewRef.current, postId, lightboxHandler);
-        hydratePhotoArchive(previewRef.current, postId, lightboxHandler);
+    const timer = setTimeout(async () => {
+      if (cancelled || !previewRef.current) return;
+      
+      const lightboxHandler = (index: number, imgs: { src: string; alt: string }[]) => {
+        setGalleryImages(imgs);
+        setLightboxIndex(index);
+        setLightboxOpen(true);
+      };
+      
+      // Check if there are photo_archive macros that need hydration
+      const hasPhotoArchives = previewRef.current.querySelectorAll('.macro-photo-archive[data-year], .macro-photo-archive[data-recent]').length > 0;
+      
+      if (hasPhotoArchives) {
+        isHydratingRef.current = true;
+        showOverlay(true);
+      }
+      
+      try {
+        await hydrateGalleries(previewRef.current, postId, lightboxHandler);
+        if (!cancelled) {
+          await hydratePhotoArchive(previewRef.current, postId, lightboxHandler);
+        }
+      } finally {
+        // Always reset hydration state when complete - the ref is global to the component
+        isHydratingRef.current = false;
+        showOverlay(false);
       }
     }, 100);
     
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [editorMode, postId, resolvedContent]);
 
   // Track latest values for auto-save on unmount/switch
@@ -1326,9 +1363,15 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           
           {editorMode === 'preview' && (
             <div className="editor-preview markdown-body" ref={previewRef}>
+              <div className="preview-hydrating-overlay" ref={hydrationOverlayRef} style={{ display: 'none' }}>
+                <div className="preview-hydrating-content">
+                  <div className="preview-hydrating-spinner" />
+                  <span>Linking images to post...</span>
+                </div>
+              </div>
               <div
                 className="preview-content"
-                dangerouslySetInnerHTML={{ __html: markdownToHtml(resolvedContent, postId) }}
+                ref={previewContentRef}
               />
             </div>
           )}
