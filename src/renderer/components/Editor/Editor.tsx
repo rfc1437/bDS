@@ -906,6 +906,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           setContent(reverted.content);
           setTags(reverted.tags);
           setCategory(reverted.categories[0] || 'article');
+          // Update local post state so UI reflects the published status
+          setPost(reverted as PostData);
           updatePost(postId, reverted as Partial<PostData>);
           markClean(postId);
           showToast.success('Reverted to last published version');
