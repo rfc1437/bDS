@@ -814,7 +814,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         // Clear pending ref to prevent auto-save on unmount from resurrecting the post
         pendingChangesRef.current = null;
         useAppStore.getState().removePost(postId);
-        useAppStore.getState().setSelectedPost(null);
+        useAppStore.getState().closeTab(postId);
         showToast.success('Draft deleted');
       }
     } catch (error) {
