@@ -90,6 +90,9 @@ const WXR_WITH_POST = `<?xml version="1.0" encoding="UTF-8"?>
       <excerpt:encoded><![CDATA[Welcome to my blog.]]></excerpt:encoded>
       <wp:post_id>42</wp:post_id>
       <wp:post_date>2024-01-15 10:30:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-15 10:30:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-20 15:45:30</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-20 15:45:30</wp:post_modified_gmt>
       <wp:post_name>hello-world</wp:post_name>
       <wp:status>publish</wp:status>
       <wp:post_type>post</wp:post_type>
@@ -349,6 +352,28 @@ describe('WxrParser', () => {
       expect(post.categories).toEqual(['Uncategorized']);
       expect(post.tags).toEqual(['Intro', 'Welcome']);
       expect(post.pubDate).toBeInstanceOf(Date);
+    });
+
+    it('should extract postDate and postModified from WXR', () => {
+      const result = parser.parseXml(WXR_WITH_POST);
+      const post = result.posts[0];
+
+      // postDate is the WordPress local creation date
+      expect(post.postDate).toBeInstanceOf(Date);
+      expect(post.postDate?.toISOString()).toBe('2024-01-15T10:30:00.000Z');
+
+      // postModified is the WordPress local modification date  
+      expect(post.postModified).toBeInstanceOf(Date);
+      expect(post.postModified?.toISOString()).toBe('2024-01-20T15:45:30.000Z');
+    });
+
+    it('should handle missing postDate and postModified gracefully', () => {
+      const result = parser.parseXml(WXR_WITH_PAGE);
+      const page = result.pages[0];
+
+      // Page test data doesn't have post_date/post_modified
+      expect(page.postDate).toBeNull();
+      expect(page.postModified).toBeNull();
     });
 
     it('should parse a page and put it in pages array', () => {

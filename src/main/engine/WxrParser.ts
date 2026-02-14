@@ -15,6 +15,8 @@ export interface WxrPost {
   content: string;
   excerpt: string;
   pubDate: Date | null;
+  postDate: Date | null;
+  postModified: Date | null;
   creator: string;
   status: string;
   postType: string;
@@ -197,6 +199,26 @@ export class WxrParser {
       }
     }
 
+    // Parse WordPress local post date (wp:post_date)
+    const postDateStr = this.getElementText(item, 'post_date', NS.wp);
+    let postDate: Date | null = null;
+    if (postDateStr) {
+      const parsed = new Date(postDateStr.replace(' ', 'T') + 'Z');
+      if (!isNaN(parsed.getTime())) {
+        postDate = parsed;
+      }
+    }
+
+    // Parse WordPress local modification date (wp:post_modified)
+    const postModifiedStr = this.getElementText(item, 'post_modified', NS.wp);
+    let postModified: Date | null = null;
+    if (postModifiedStr) {
+      const parsed = new Date(postModifiedStr.replace(' ', 'T') + 'Z');
+      if (!isNaN(parsed.getTime())) {
+        postModified = parsed;
+      }
+    }
+
     return {
       wpId: parseInt(this.getElementText(item, 'post_id', NS.wp) || '0', 10),
       title: this.getDirectChildText(item, 'title'),
@@ -204,6 +226,8 @@ export class WxrParser {
       content: this.getElementText(item, 'encoded', NS.content),
       excerpt: this.getElementText(item, 'encoded', NS.excerpt),
       pubDate,
+      postDate,
+      postModified,
       creator: this.getElementText(item, 'creator', NS.dc),
       status: this.getElementText(item, 'status', NS.wp),
       postType: this.getElementText(item, 'post_type', NS.wp),
