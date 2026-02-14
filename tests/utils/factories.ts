@@ -6,6 +6,7 @@
 import { vi } from 'vitest';
 import type { PostData } from '../../src/main/engine/PostEngine';
 import type { MediaData } from '../../src/main/engine/MediaEngine';
+import type { ProjectData } from '../../src/main/engine/ProjectEngine';
 import type { Task, TaskProgress } from '../../src/main/engine/TaskManager';
 
 // ============================================
@@ -79,6 +80,36 @@ export function createMockPdfMedia(overrides?: Partial<MediaData>): MediaData {
     mimeType: 'application/pdf',
     width: undefined,
     height: undefined,
+    ...overrides,
+  });
+}
+
+// ============================================
+// Project Mock Factory
+// ============================================
+
+let projectIdCounter = 1;
+
+export function createMockProject(overrides?: Partial<ProjectData>): ProjectData {
+  const id = overrides?.id ?? `project-${projectIdCounter++}`;
+  const now = new Date();
+  
+  return {
+    id,
+    name: `Test Project ${id}`,
+    slug: `test-project-${id}`,
+    description: 'A test project',
+    dataPath: undefined,
+    createdAt: now,
+    updatedAt: now,
+    isActive: false,
+    ...overrides,
+  };
+}
+
+export function createMockActiveProject(overrides?: Partial<ProjectData>): ProjectData {
+  return createMockProject({
+    isActive: true,
     ...overrides,
   });
 }
@@ -369,6 +400,7 @@ export function createMockDropboxConflict(overrides?: Partial<DropboxConflict>):
 export function resetMockCounters(): void {
   postIdCounter = 1;
   mediaIdCounter = 1;
+  projectIdCounter = 1;
   taskIdCounter = 1;
   dropboxConflictIdCounter = 1;
 }
