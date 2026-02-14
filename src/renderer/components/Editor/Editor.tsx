@@ -1943,10 +1943,12 @@ export const Editor: React.FC = () => {
   const activeTab = tabs.find(t => t.id === activeTabId);
 
   // Determine what to show based on active tab
+  // Settings and tags should only show when their tab is active, not based on activeView
+  // (activeView controls the sidebar, not the main content area)
   const showPost = activeTab?.type === 'post';
   const showMedia = activeTab?.type === 'media';
-  const showSettings = activeTab?.type === 'settings' || (activeView === 'settings' && !activeTab);
-  const showTags = activeTab?.type === 'tags' || (activeView === 'tags' && !activeTab);
+  const showSettings = activeTab?.type === 'settings';
+  const showTags = activeTab?.type === 'tags';
   const showChat = activeTab?.type === 'chat';
   const showImport = activeTab?.type === 'import';
 
@@ -1992,7 +1994,7 @@ export const Editor: React.FC = () => {
     <ConfirmDeleteModal details={confirmDeleteModal} onClose={hideConfirmDeleteModal} />
   );
 
-  // Show settings if settings tab is active or settings view with no tab
+  // Show settings only if settings tab is active
   if (showSettings) {
     return (
       <div className="editor">
