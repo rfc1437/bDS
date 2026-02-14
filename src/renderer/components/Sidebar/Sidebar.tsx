@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
+import { groupPostsByStatus } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import './Sidebar.css';
 
@@ -524,6 +525,76 @@ const PostsList: React.FC = () => {
     applyFilters();
   }, [selectedTags, selectedCategories]);
 
+  // Track previous post statuses to detect changes
+  const prevPostStatusMapRef = useRef<Map<string, string>>(new Map());
+  
+  // Re-run search/filter when a post's status changes (e.g., draft becomes published or vice versa)
+  // This ensures the sidebar lists are always up-to-date without stale cached data
+  useEffect(() => {
+    const currentStatusMap = new Map(posts.map(p => [p.id, p.status]));
+    const prevStatusMap = prevPostStatusMapRef.current;
+    
+    // Check if any post's status changed
+    let statusChanged = false;
+    for (const [id, status] of currentStatusMap) {
+      const prevStatus = prevStatusMap.get(id);
+      if (prevStatus !== undefined && prevStatus !== status) {
+        statusChanged = true;
+        break;
+      }
+    }
+    
+    // Update the ref for next comparison
+    prevPostStatusMapRef.current = currentStatusMap;
+    
+    // If a status changed and we have active filters, re-run them to get fresh data
+    if (statusChanged) {
+      if (searchQuery) {
+        // Re-run search inline to avoid dependency on handleSearch
+        const refreshSearch = async () => {
+          try {
+            const results = await window.electronAPI?.posts.search(searchQuery);
+            if (results) {
+              const fullPosts: PostData[] = [];
+              for (const result of results as { id: string }[]) {
+                const post = await window.electronAPI?.posts.get(result.id);
+                if (post) {
+                  fullPosts.push(post as PostData);
+                }
+              }
+              setSearchResults(fullPosts);
+            }
+          } catch (error) {
+            console.error('Search refresh failed:', error);
+          }
+        };
+        refreshSearch();
+      } else if (selectedYear || selectedTags.length > 0 || selectedCategories.length > 0) {
+        // Re-run filter
+        const refetchFilters = async () => {
+          try {
+            const results = await window.electronAPI?.posts.filter({
+              year: selectedYear,
+              month: selectedMonth,
+              tags: selectedTags.length > 0 ? selectedTags : undefined,
+              categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+            });
+            if (results) {
+              setFilteredPosts(results as PostData[]);
+            }
+          } catch (error) {
+            console.error('Filter refresh failed:', error);
+          }
+        };
+        refetchFilters();
+      } else {
+        // No active filters, just clear any stale cached results
+        setSearchResults(null);
+        setFilteredPosts(null);
+      }
+    }
+  }, [posts, searchQuery, selectedYear, selectedMonth, selectedTags, selectedCategories]);
+
   const handleCreatePost = async () => {
     // Create a real post immediately in the database with default empty content
     try {
@@ -566,11 +637,12 @@ const PostsList: React.FC = () => {
   const isFiltered = filteredDisplayPosts !== null;
   const hasActiveFilters = searchQuery || selectedYear || selectedTags.length > 0 || selectedCategories.length > 0;
 
-  const groupedPosts = {
-    draft: posts.filter(p => p.status === 'draft'),
-    published: (filteredDisplayPosts ?? posts).filter(p => p.status === 'published'),
-    archived: (filteredDisplayPosts ?? posts).filter(p => p.status === 'archived'),
-  };
+  // Memoized grouping that freshens cached filter results with current store data
+  // This ensures status changes are reflected even when filters are active
+  const groupedPosts = useMemo(
+    () => groupPostsByStatus(posts, filteredDisplayPosts),
+    [posts, filteredDisplayPosts]
+  );
 
   const clearAllFilters = () => {
     setSearchQuery('');
