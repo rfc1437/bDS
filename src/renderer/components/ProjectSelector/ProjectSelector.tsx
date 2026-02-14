@@ -38,7 +38,7 @@ export const ProjectSelector: React.FC = () => {
   const [newProjectDataPath, setNewProjectDataPath] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load projects on mount
+  // Load projects on mount (active project is loaded by App.tsx)
   useEffect(() => {
     const loadProjects = async () => {
       try {
@@ -46,16 +46,12 @@ export const ProjectSelector: React.FC = () => {
         if (allProjects) {
           setProjects(allProjects as ProjectData[]);
         }
-        const active = await window.electronAPI?.projects.getActive();
-        if (active) {
-          setActiveProject(active as ProjectData);
-        }
       } catch (error) {
         console.error('Failed to load projects:', error);
       }
     };
     loadProjects();
-  }, [setProjects, setActiveProject]);
+  }, [setProjects]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
