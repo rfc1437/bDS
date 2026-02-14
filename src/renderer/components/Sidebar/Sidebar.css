@@ -412,6 +412,28 @@
   margin-bottom: 8px;
 }
 
+.calendar-header.collapsible-header {
+  cursor: pointer;
+  padding: 4px 6px;
+  margin: 0 -6px 8px -6px;
+  border-radius: 3px;
+  user-select: none;
+}
+
+.calendar-header.collapsible-header:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.calendar-header.collapsible-header.collapsed {
+  margin-bottom: 0;
+}
+
+.calendar-header .collapse-icon {
+  font-size: 9px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
 .calendar-header .clear-filter {
   background: transparent;
   border: none;
@@ -523,12 +545,51 @@
 }
 
 .filter-header {
+  display: flex;
+  align-items: center;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--vscode-descriptionForeground);
   margin-bottom: 6px;
+}
+
+.filter-header.collapsible-header {
+  cursor: pointer;
+  padding: 4px 6px;
+  margin: 0 -6px 6px -6px;
+  border-radius: 3px;
+  user-select: none;
+}
+
+.filter-header.collapsible-header:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.filter-header.collapsible-header.collapsed {
+  margin-bottom: 0;
+}
+
+.filter-header .collapse-icon {
+  font-size: 9px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+.filter-header .clear-filter {
+  background: transparent;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.filter-header .clear-filter:hover {
+  opacity: 1;
 }
 
 .filter-chips {
