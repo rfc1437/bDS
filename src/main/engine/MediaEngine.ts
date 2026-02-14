@@ -520,7 +520,6 @@ export class MediaEngine extends EventEmitter {
       sidecarPath,
       createdAt: mediaData.createdAt,
       updatedAt: mediaData.updatedAt,
-      syncStatus: 'pending',
       checksum,
       tags: JSON.stringify(mediaData.tags),
     };
@@ -566,7 +565,6 @@ export class MediaEngine extends EventEmitter {
         alt: updated.alt,
         caption: updated.caption,
         updatedAt: updated.updatedAt,
-        syncStatus: 'pending',
         tags: JSON.stringify(updated.tags),
       })
       .where(eq(media.id, id));
@@ -933,7 +931,6 @@ export class MediaEngine extends EventEmitter {
                 sidecarPath,
                 createdAt: new Date(metadata.createdAt),
                 updatedAt: new Date(metadata.updatedAt),
-                syncStatus: 'pending',
                 checksum,
                 tags: JSON.stringify(metadata.tags),
               });

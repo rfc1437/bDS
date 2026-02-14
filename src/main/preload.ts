@@ -78,17 +78,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     rebuild: () => ipcRenderer.invoke('postMedia:rebuild'),
   },
 
-  // Sync
-  sync: {
-    configure: (config: unknown) => ipcRenderer.invoke('sync:configure', config),
-    start: (direction?: string) => ipcRenderer.invoke('sync:start', direction),
-    getStatus: () => ipcRenderer.invoke('sync:getStatus'),
-    isConfigured: () => ipcRenderer.invoke('sync:isConfigured'),
-    getPendingCount: () => ipcRenderer.invoke('sync:getPendingCount'),
-    getLog: (limit?: number) => ipcRenderer.invoke('sync:getLog', limit),
-    stopAutoSync: () => ipcRenderer.invoke('sync:stopAutoSync'),
-  },
-
   // Tasks
   tasks: {
     getAll: () => ipcRenderer.invoke('tasks:getAll'),
@@ -272,15 +261,6 @@ export interface ElectronAPI {
     get: (id: string) => Promise<unknown>;
     getAll: () => Promise<unknown[]>;
     rebuildFromFiles: () => Promise<void>;
-  };
-  sync: {
-    configure: (config: unknown) => Promise<void>;
-    start: (direction?: string) => Promise<unknown>;
-    getStatus: () => Promise<string>;
-    isConfigured: () => Promise<boolean>;
-    getPendingCount: () => Promise<{ posts: number; media: number }>;
-    getLog: (limit?: number) => Promise<unknown[]>;
-    stopAutoSync: () => Promise<void>;
   };
   dropbox: {
     configure: (config: unknown) => Promise<void>;

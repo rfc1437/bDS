@@ -30,8 +30,6 @@ export const posts = sqliteTable('posts', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   publishedAt: integer('published_at', { mode: 'timestamp' }),
   filePath: text('file_path').notNull().default(''), // Empty for never-published drafts
-  syncStatus: text('sync_status', { enum: ['pending', 'synced', 'conflict'] }).notNull().default('pending'),
-  syncedAt: integer('synced_at', { mode: 'timestamp' }),
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
   categories: text('categories'), // JSON array stored as text
@@ -62,22 +60,8 @@ export const media = sqliteTable('media', {
   sidecarPath: text('sidecar_path').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-  syncStatus: text('sync_status', { enum: ['pending', 'synced', 'conflict'] }).notNull().default('pending'),
-  syncedAt: integer('synced_at', { mode: 'timestamp' }),
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
-});
-
-// Sync log - tracks sync operations
-export const syncLog = sqliteTable('sync_log', {
-  id: text('id').primaryKey(),
-  entityType: text('entity_type', { enum: ['post', 'media'] }).notNull(),
-  entityId: text('entity_id').notNull(),
-  operation: text('operation', { enum: ['create', 'update', 'delete'] }).notNull(),
-  status: text('status', { enum: ['pending', 'completed', 'failed'] }).notNull().default('pending'),
-  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
-  errorMessage: text('error_message'),
-  retryCount: integer('retry_count').notNull().default(0),
 });
 
 // App settings - stores application configuration
@@ -162,8 +146,6 @@ export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
-export type SyncLogEntry = typeof syncLog.$inferSelect;
-export type NewSyncLogEntry = typeof syncLog.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
 export type PostLink = typeof postLinks.$inferSelect;

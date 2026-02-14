@@ -94,17 +94,6 @@ const mockProjectEngine = {
   getProjectPaths: vi.fn(),
 };
 
-const mockSyncEngine = {
-  on: vi.fn(),
-  configure: vi.fn(),
-  fullSync: vi.fn(),
-  getSyncStatus: vi.fn(),
-  isConfigured: vi.fn(),
-  getPendingChangesCount: vi.fn(),
-  getSyncLog: vi.fn(),
-  stopAutoSync: vi.fn(),
-};
-
 const mockMetaEngine = {
   on: vi.fn(),
   setProjectContext: vi.fn(),
@@ -187,12 +176,6 @@ vi.mock('../../src/main/engine/MediaEngine', () => ({
 vi.mock('../../src/main/engine/ProjectEngine', () => ({
   getProjectEngine: vi.fn(() => mockProjectEngine),
   ProjectData: {},
-}));
-
-vi.mock('../../src/main/engine/SyncEngine', () => ({
-  getSyncEngine: vi.fn(() => mockSyncEngine),
-  SyncConfig: {},
-  SyncDirection: {},
 }));
 
 vi.mock('../../src/main/engine/MetaEngine', () => ({
@@ -705,105 +688,6 @@ describe('IPC Handlers', () => {
 
         expect(mockMediaEngine.getThumbnailDataUrl).toHaveBeenCalledWith('media-1', 'small');
         expect(result).toEqual(thumbnailDataUrl);
-      });
-    });
-  });
-
-  // ============ Sync Handlers ============
-  describe('Sync Handlers', () => {
-    describe('sync:configure', () => {
-      it('should configure sync with provided config', async () => {
-        const config = { provider: 'dropbox', accessToken: 'token123' };
-        mockSyncEngine.configure.mockResolvedValue(undefined);
-
-        await invokeHandler('sync:configure', config);
-
-        expect(mockSyncEngine.configure).toHaveBeenCalledWith(config);
-      });
-    });
-
-    describe('sync:start', () => {
-      it('should start sync with default direction', async () => {
-        const syncResult = { success: true, uploaded: 5, downloaded: 3 };
-        mockSyncEngine.fullSync.mockResolvedValue(syncResult);
-
-        const result = await invokeHandler('sync:start');
-
-        expect(mockSyncEngine.fullSync).toHaveBeenCalledWith('bidirectional');
-        expect(result).toEqual(syncResult);
-      });
-
-      it('should start sync with specified direction', async () => {
-        mockSyncEngine.fullSync.mockResolvedValue({ success: true });
-
-        await invokeHandler('sync:start', 'upload');
-
-        expect(mockSyncEngine.fullSync).toHaveBeenCalledWith('upload');
-      });
-    });
-
-    describe('sync:getStatus', () => {
-      it('should return current sync status', async () => {
-        const status = { state: 'idle', lastSync: new Date() };
-        mockSyncEngine.getSyncStatus.mockResolvedValue(status);
-
-        const result = await invokeHandler('sync:getStatus');
-
-        expect(mockSyncEngine.getSyncStatus).toHaveBeenCalled();
-        expect(result).toEqual(status);
-      });
-    });
-
-    describe('sync:isConfigured', () => {
-      it('should return true when sync is configured', async () => {
-        mockSyncEngine.isConfigured.mockResolvedValue(true);
-
-        const result = await invokeHandler('sync:isConfigured');
-
-        expect(result).toBe(true);
-      });
-
-      it('should return false when sync is not configured', async () => {
-        mockSyncEngine.isConfigured.mockResolvedValue(false);
-
-        const result = await invokeHandler('sync:isConfigured');
-
-        expect(result).toBe(false);
-      });
-    });
-
-    describe('sync:getPendingCount', () => {
-      it('should return count of pending changes', async () => {
-        mockSyncEngine.getPendingChangesCount.mockResolvedValue(42);
-
-        const result = await invokeHandler('sync:getPendingCount');
-
-        expect(mockSyncEngine.getPendingChangesCount).toHaveBeenCalled();
-        expect(result).toBe(42);
-      });
-    });
-
-    describe('sync:getLog', () => {
-      it('should return sync log entries', async () => {
-        const logEntries = [
-          { timestamp: new Date(), action: 'upload', file: 'post.md' },
-        ];
-        mockSyncEngine.getSyncLog.mockResolvedValue(logEntries);
-
-        const result = await invokeHandler('sync:getLog', 10);
-
-        expect(mockSyncEngine.getSyncLog).toHaveBeenCalledWith(10);
-        expect(result).toEqual(logEntries);
-      });
-    });
-
-    describe('sync:stopAutoSync', () => {
-      it('should stop automatic sync', async () => {
-        mockSyncEngine.stopAutoSync.mockResolvedValue(undefined);
-
-        await invokeHandler('sync:stopAutoSync');
-
-        expect(mockSyncEngine.stopAutoSync).toHaveBeenCalled();
       });
     });
   });

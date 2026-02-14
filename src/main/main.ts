@@ -256,43 +256,6 @@ function createApplicationMenu(): Menu {
       ],
     },
     {
-      label: 'Sync',
-      submenu: [
-        {
-          label: 'Sync Now',
-          accelerator: 'CmdOrCtrl+Shift+S',
-          click: () => {
-            mainWindow?.webContents.send('menu:syncNow');
-          },
-        },
-        {
-          label: 'Push Changes',
-          click: () => {
-            mainWindow?.webContents.send('menu:pushChanges');
-          },
-        },
-        {
-          label: 'Pull Changes',
-          click: () => {
-            mainWindow?.webContents.send('menu:pullChanges');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Configure Sync...',
-          click: () => {
-            mainWindow?.webContents.send('menu:configureSync');
-          },
-        },
-        {
-          label: 'View Sync Log',
-          click: () => {
-            mainWindow?.webContents.send('menu:viewSyncLog');
-          },
-        },
-      ],
-    },
-    {
       label: 'Help',
       submenu: [
         {

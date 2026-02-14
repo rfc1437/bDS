@@ -2,7 +2,6 @@ export { TaskManager, taskManager, type Task, type TaskProgress, type TaskStatus
 export { PostEngine, getPostEngine, type PostData, type PostFilter, type SearchResult, type PaginatedResult, type PaginationOptions } from './PostEngine';
 export { MediaEngine, getMediaEngine, type MediaData } from './MediaEngine';
 export { PostMediaEngine, getPostMediaEngine, postMediaEngine, type PostMediaLinkData } from './PostMediaEngine';
-export { SyncEngine, getSyncEngine, type SyncConfig, type SyncResult, type SyncDirection, type SyncStatus } from './SyncEngine';
 export { ProjectEngine, getProjectEngine, type ProjectData } from './ProjectEngine';
 export { MetaEngine, getMetaEngine, type ProjectMetadata, DEFAULT_CATEGORIES } from './MetaEngine';
 export {

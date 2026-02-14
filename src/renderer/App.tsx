@@ -29,9 +29,6 @@ const App: React.FC = () => {
     removeMedia,
     setTasks,
     updateTask,
-    setSyncStatus,
-    setSyncConfigured,
-    setPendingChanges,
     setLoading,
     toggleSidebar,
     togglePanel,
@@ -72,16 +69,6 @@ const App: React.FC = () => {
           if (savedTabState) {
             restoreTabState(savedTabState);
           }
-        }
-
-        // Check sync status
-        const syncConfigured = await window.electronAPI?.sync.isConfigured();
-        setSyncConfigured(syncConfigured || false);
-
-        // Get pending changes count
-        const pending = await window.electronAPI?.sync.getPendingCount();
-        if (pending) {
-          setPendingChanges(pending);
         }
 
         // Load tasks
@@ -162,36 +149,6 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
-    // Sync events
-    unsubscribers.push(
-      window.electronAPI?.on('sync:started', () => {
-        setSyncStatus('syncing');
-        showToast.loading('Syncing...');
-      }) || (() => {})
-    );
-
-    unsubscribers.push(
-      window.electronAPI?.on('sync:completed', async () => {
-        setSyncStatus('idle');
-        showToast.dismiss();
-        showToast.success('Sync completed');
-        const pending = await window.electronAPI?.sync.getPendingCount();
-        if (pending) {
-          setPendingChanges(pending);
-        }
-      }) || (() => {})
-    );
-
-    unsubscribers.push(
-      window.electronAPI?.on('sync:failed', (errorMsg: unknown) => {
-        setSyncStatus('error');
-        showToast.dismiss();
-        const message = typeof errorMsg === 'string' && errorMsg ? errorMsg : 'Unknown error';
-        showToast.error(`Sync failed: ${message}`);
-        console.error('Sync failed:', message);
-      }) || (() => {})
-    );
-
     // Task events
     unsubscribers.push(
       window.electronAPI?.on('task:started', (task: unknown) => {
@@ -264,30 +221,6 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('menu:viewMedia', () => {
         setActiveView('media');
-      }) || (() => {})
-    );
-
-    unsubscribers.push(
-      window.electronAPI?.on('menu:syncNow', () => {
-        window.electronAPI?.sync.start('bidirectional');
-      }) || (() => {})
-    );
-
-    unsubscribers.push(
-      window.electronAPI?.on('menu:pushChanges', () => {
-        window.electronAPI?.sync.start('push');
-      }) || (() => {})
-    );
-
-    unsubscribers.push(
-      window.electronAPI?.on('menu:pullChanges', () => {
-        window.electronAPI?.sync.start('pull');
-      }) || (() => {})
-    );
-
-    unsubscribers.push(
-      window.electronAPI?.on('menu:configureSync', () => {
-        openTab({ type: 'settings', id: 'settings', isTransient: false });
       }) || (() => {})
     );
 
