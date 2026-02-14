@@ -13,6 +13,7 @@
  * Parameters:
  * - columns: Number of columns (default: 3)
  * - caption: Gallery caption
+ * - link: (deprecated, ignored) Accepted for backwards compatibility with old sites
  */
 
 import { registerMacro } from '../registry';
