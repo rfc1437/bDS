@@ -839,6 +839,18 @@ export class MediaEngine extends EventEmitter {
     return path.join(this.getMediaDir(), id);
   }
 
+  /**
+   * Get the relative path for a media item (e.g. media/2025/01/uuid.jpg).
+   * This is the path format used in markdown content for image references.
+   */
+  async getRelativePath(id: string): Promise<string | null> {
+    const db = getDatabase().getLocal();
+    const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
+    if (!dbMedia?.filePath) return null;
+    const dataDir = this.getDataDir();
+    return path.relative(dataDir, dbMedia.filePath);
+  }
+
   async rebuildDatabaseFromFiles(): Promise<void> {
     const mediaBaseDir = this.getMediaBaseDir();
     console.log(`[MediaEngine] rebuildDatabaseFromFiles: scanning mediaBaseDir=${mediaBaseDir}`);

@@ -463,6 +463,47 @@ describe('MediaEngine', () => {
     });
   });
 
+  describe('getRelativePath', () => {
+    it('should return relative path from dataDir for a media item', async () => {
+      mediaEngine.setProjectContext('test-project', '/projects/my-blog');
+
+      const selectChain = createSelectChain();
+      selectChain.get.mockResolvedValue({
+        id: 'abc-123',
+        filePath: '/projects/my-blog/media/2025/01/abc-123.jpg',
+      });
+      vi.mocked(mockLocalDb.select).mockReturnValue(selectChain as any);
+
+      const result = await mediaEngine.getRelativePath('abc-123');
+
+      expect(result).toBe('media/2025/01/abc-123.jpg');
+    });
+
+    it('should return null when media item is not found', async () => {
+      mediaEngine.setProjectContext('test-project', '/projects/my-blog');
+
+      const selectChain = createSelectChain();
+      selectChain.get.mockResolvedValue(undefined);
+      vi.mocked(mockLocalDb.select).mockReturnValue(selectChain as any);
+
+      const result = await mediaEngine.getRelativePath('nonexistent');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when filePath is empty', async () => {
+      mediaEngine.setProjectContext('test-project', '/projects/my-blog');
+
+      const selectChain = createSelectChain();
+      selectChain.get.mockResolvedValue({ id: 'abc-123', filePath: '' });
+      vi.mocked(mockLocalDb.select).mockReturnValue(selectChain as any);
+
+      const result = await mediaEngine.getRelativePath('abc-123');
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('Multiple Media Import', () => {
     beforeEach(() => {
       mockFiles.set('/source/image1.jpg', Buffer.from('image1-data'));

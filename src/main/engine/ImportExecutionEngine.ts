@@ -637,6 +637,10 @@ export class ImportExecutionEngine extends EventEmitter {
     // Unescape double-bracket macros that TurndownService escaped
     // \[\[ becomes [[ and \]\] becomes ]]
     markdown = markdown.replace(/\\\[\\\[/g, '[[').replace(/\\\]\\\]/g, ']]');
+    // Remove backslash escapes inside [[macro]] blocks (e.g. photo\_archive → photo_archive)
+    markdown = markdown.replace(/\[\[([^\]]*?)\]\]/g, (_match, inner: string) => {
+      return '[[' + inner.replace(/\\(.)/g, '$1') + ']]';
+    });
     return markdown;
   }
 

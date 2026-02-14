@@ -823,6 +823,73 @@ describe('ImportExecutionEngine', () => {
       expect(insertedPosts[0].content).toContain('[[video src="test.mp4"]]');
     });
 
+    it('should not escape underscores inside macro names during markdown conversion', async () => {
+      const wxrPost = createMockWxrPost({
+        content: '<p>Here is a photo archive: [photo_archive]</p>',
+      });
+      const analyzed = createMockAnalyzedPost(wxrPost, 'conflict', 'overwrite');
+      analyzed.existingPost = {
+        id: 'existing-post-id',
+        title: 'Existing Post',
+        slug: 'test-post',
+        checksum: 'old-checksum',
+        pubDate: null,
+        excerpt: null,
+        author: null,
+        tags: [],
+        categories: [],
+      };
+      const report = createMockAnalysisReport({
+        posts: {
+          total: 1,
+          new: 0,
+          updates: 0,
+          conflicts: 1,
+          contentDuplicates: 0,
+          items: [analyzed],
+        },
+      });
+
+      await engine.executeImport(report, {});
+
+      expect(insertedPosts.length).toBe(1);
+      expect(insertedPosts[0].content).toContain('[[photo_archive]]');
+      expect(insertedPosts[0].content).not.toContain('photo\\_archive');
+    });
+
+    it('should not escape underscores in macro attributes during markdown conversion', async () => {
+      const wxrPost = createMockWxrPost({
+        content: '<p>Show: [my_gallery type="grid_view" size="large_thumb"]</p>',
+      });
+      const analyzed = createMockAnalyzedPost(wxrPost, 'conflict', 'overwrite');
+      analyzed.existingPost = {
+        id: 'existing-post-id',
+        title: 'Existing Post',
+        slug: 'test-post',
+        checksum: 'old-checksum',
+        pubDate: null,
+        excerpt: null,
+        author: null,
+        tags: [],
+        categories: [],
+      };
+      const report = createMockAnalysisReport({
+        posts: {
+          total: 1,
+          new: 0,
+          updates: 0,
+          conflicts: 1,
+          contentDuplicates: 0,
+          items: [analyzed],
+        },
+      });
+
+      await engine.executeImport(report, {});
+
+      expect(insertedPosts.length).toBe(1);
+      expect(insertedPosts[0].content).toContain('[[my_gallery type="grid_view" size="large_thumb"]]');
+    });
+
     it('should map tags based on analysis mappings', async () => {
       const wxrPost = createMockWxrPost({
         tags: ['OldTagName', 'NewTag'],
