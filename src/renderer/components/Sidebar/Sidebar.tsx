@@ -1269,7 +1269,7 @@ const ChatList: React.FC = () => {
 };
 
 const ImportList: React.FC = () => {
-  const { openTab, closeTab } = useAppStore();
+  const { openTab, closeTab, activeProject } = useAppStore();
   const [definitions, setDefinitions] = useState<ImportDefinitionData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -1284,6 +1284,7 @@ const ImportList: React.FC = () => {
     }
   }, []);
 
+  // Reload definitions when project changes
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
@@ -1291,7 +1292,7 @@ const ImportList: React.FC = () => {
       setIsLoading(false);
     };
     init();
-  }, [loadDefinitions]);
+  }, [loadDefinitions, activeProject?.id]);
 
   // Listen for import definition name updates
   useEffect(() => {
