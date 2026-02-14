@@ -376,6 +376,14 @@ export function registerIpcHandlers(): void {
     });
   });
 
+  safeHandle('media:reindexText', async () => {
+    const engine = getMediaEngine();
+    // Fire and forget - don't await, let it run in background
+    engine.reindexText().catch(err => {
+      console.error('Media text reindex failed:', err);
+    });
+  });
+
   safeHandle('media:getThumbnail', async (_, id: string, size?: 'small' | 'medium' | 'large') => {
     const engine = getMediaEngine();
     return engine.getThumbnailDataUrl(id, size || 'small');
