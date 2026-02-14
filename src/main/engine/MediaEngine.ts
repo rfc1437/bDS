@@ -451,13 +451,17 @@ export class MediaEngine extends EventEmitter {
     const id = uuidv4();
     const now = new Date();
     
+    // Use provided createdAt date or current date
+    const createdAt = metadata?.createdAt ?? now;
+    const updatedAt = metadata?.updatedAt ?? now;
+    
     const sourceBuffer = await fs.readFile(sourcePath);
     const originalName = path.basename(sourcePath);
     const ext = path.extname(originalName);
     const filename = `${id}${ext}`;
     
-    // Use date-based directory structure (media/YYYY/MM/)
-    const mediaDir = this.getMediaDirForDate(now);
+    // Use date-based directory structure (media/YYYY/MM/) based on createdAt
+    const mediaDir = this.getMediaDirForDate(createdAt);
     await fs.mkdir(mediaDir, { recursive: true });
     const destPath = path.join(mediaDir, filename);
 
@@ -490,8 +494,8 @@ export class MediaEngine extends EventEmitter {
       height,
       alt: metadata?.alt,
       caption: metadata?.caption,
-      createdAt: now,
-      updatedAt: now,
+      createdAt,
+      updatedAt,
       tags: metadata?.tags || [],
     };
 

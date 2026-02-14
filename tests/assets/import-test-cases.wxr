@@ -1,0 +1,608 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  IMPORT TEST CASES WXR FILE
+  ==========================
+  
+  This file contains WordPress export data designed to test all aspects of the 
+  ImportExecutionEngine. Each element is documented with its test purpose.
+
+  TEST CATEGORIES:
+  ================
+  
+  1. HTML TO MARKDOWN CONVERSION
+     - Post ID 101: Basic text formatting (bold, italic, underline, strikethrough)
+     - Post ID 102: Headings (h1-h6)
+     - Post ID 103: Lists (ordered, unordered, nested)
+     - Post ID 104: Links and images
+     - Post ID 105: Code blocks (inline and fenced)
+     - Post ID 106: Blockquotes
+     - Post ID 107: Tables
+     
+  2. WORDPRESS SHORTCODE/MACRO CONVERSION
+     - Post ID 201: [gallery] shortcode → [[gallery]] macro
+     - Post ID 202: [video] shortcode with attributes → [[video]] macro
+     - Post ID 203: Multiple shortcodes in one post
+     - Post ID 204: Self-closing shortcodes [shortcode /]
+     - Post ID 205: Nested content should NOT be double-converted (already [[ ]])
+     
+  3. TAG AND CATEGORY MAPPING
+     - Categories: "Technology", "Web Dev", "Programming" 
+     - Tags: "JavaScript", "TypeScript", "React", "nodejs"
+     - Test: Map "Web Dev" to existing "web-development"
+     - Test: Map "nodejs" to existing "node"
+     - Test: Create new tag "react" (doesn't exist)
+     
+  4. CONFLICT RESOLUTION - POSTS
+     - Post ID 301: slug "existing-post" → exists → "ignore" (skip import)
+     - Post ID 302: slug "overwrite-me" → exists → "overwrite" (import as draft)
+     - Post ID 303: slug "duplicate-slug" → exists → "import" (new slug)
+     
+  5. MEDIA IMPORT
+     - Media ID 401: New image, parent is Post 201
+     - Media ID 402: New image, no parent (standalone)
+     - Media ID 403: conflict "ignore" (existing file)
+     
+  6. PAGE IMPORT
+     - Page ID 501: Standard page → becomes post with "page" category
+     - Page ID 502: Page with HTML content for conversion test
+-->
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+  <channel>
+    <title>Test Blog for Import</title>
+    <link>https://testblog.example.com</link>
+    <description>A comprehensive test blog for WXR import testing</description>
+    <language>en-US</language>
+    
+    <!-- ======================================== -->
+    <!-- CATEGORIES (defined at channel level)   -->
+    <!-- ======================================== -->
+    
+    <wp:category>
+      <wp:term_id>1</wp:term_id>
+      <wp:category_nicename>technology</wp:category_nicename>
+      <wp:category_parent></wp:category_parent>
+      <wp:cat_name><![CDATA[Technology]]></wp:cat_name>
+    </wp:category>
+    
+    <wp:category>
+      <wp:term_id>2</wp:term_id>
+      <wp:category_nicename>web-dev</wp:category_nicename>
+      <wp:category_parent>technology</wp:category_parent>
+      <wp:cat_name><![CDATA[Web Dev]]></wp:cat_name>
+    </wp:category>
+    
+    <wp:category>
+      <wp:term_id>3</wp:term_id>
+      <wp:category_nicename>programming</wp:category_nicename>
+      <wp:category_parent></wp:category_parent>
+      <wp:cat_name><![CDATA[Programming]]></wp:cat_name>
+    </wp:category>
+    
+    <!-- ======================================== -->
+    <!-- TAGS (defined at channel level)         -->
+    <!-- ======================================== -->
+    
+    <wp:tag>
+      <wp:term_id>10</wp:term_id>
+      <wp:tag_slug>javascript</wp:tag_slug>
+      <wp:tag_name><![CDATA[JavaScript]]></wp:tag_name>
+    </wp:tag>
+    
+    <wp:tag>
+      <wp:term_id>11</wp:term_id>
+      <wp:tag_slug>typescript</wp:tag_slug>
+      <wp:tag_name><![CDATA[TypeScript]]></wp:tag_name>
+    </wp:tag>
+    
+    <wp:tag>
+      <wp:term_id>12</wp:term_id>
+      <wp:tag_slug>react</wp:tag_slug>
+      <wp:tag_name><![CDATA[React]]></wp:tag_name>
+    </wp:tag>
+    
+    <wp:tag>
+      <wp:term_id>13</wp:term_id>
+      <wp:tag_slug>nodejs</wp:tag_slug>
+      <wp:tag_name><![CDATA[nodejs]]></wp:tag_name>
+    </wp:tag>
+    
+    <!-- ======================================== -->
+    <!-- SECTION 1: HTML TO MARKDOWN CONVERSION  -->
+    <!-- ======================================== -->
+    
+    <!-- Post 101: Basic Text Formatting -->
+    <item>
+      <title>HTML Formatting Test: Basic Text Styles</title>
+      <link>https://testblog.example.com/html-formatting-basic/</link>
+      <pubDate>Mon, 01 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>This paragraph has <strong>bold text</strong> and <em>italic text</em>.</p>
+<p>Here is <b>another bold</b> using b tag and <i>italic using i tag</i>.</p>
+<p>Combined: <strong><em>bold and italic together</em></strong>.</p>
+<p>Some <del>strikethrough text</del> and <s>also this</s>.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing basic HTML text formatting]]></excerpt:encoded>
+      <wp:post_id>101</wp:post_id>
+      <wp:post_date>2024-01-01 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-01 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-02 12:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-02 12:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-basic</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 102: Headings -->
+    <item>
+      <title>HTML Formatting Test: Headings</title>
+      <link>https://testblog.example.com/html-formatting-headings/</link>
+      <pubDate>Tue, 02 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<h1>Heading Level 1</h1>
+<p>Paragraph after h1.</p>
+<h2>Heading Level 2</h2>
+<p>Paragraph after h2.</p>
+<h3>Heading Level 3</h3>
+<p>Paragraph after h3.</p>
+<h4>Heading Level 4</h4>
+<h5>Heading Level 5</h5>
+<h6>Heading Level 6</h6>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing heading levels]]></excerpt:encoded>
+      <wp:post_id>102</wp:post_id>
+      <wp:post_date>2024-01-02 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-02 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-02 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-02 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-headings</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 103: Lists -->
+    <item>
+      <title>HTML Formatting Test: Lists</title>
+      <link>https://testblog.example.com/html-formatting-lists/</link>
+      <pubDate>Wed, 03 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="programming"><![CDATA[Programming]]></category>
+      <content:encoded><![CDATA[<p>Unordered list:</p>
+<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>
+<p>Ordered list:</p>
+<ol>
+<li>Step one</li>
+<li>Step two</li>
+<li>Step three</li>
+</ol>
+<p>Nested list:</p>
+<ul>
+<li>Parent item
+<ul>
+<li>Child item 1</li>
+<li>Child item 2</li>
+</ul>
+</li>
+<li>Another parent</li>
+</ul>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing list formatting]]></excerpt:encoded>
+      <wp:post_id>103</wp:post_id>
+      <wp:post_date>2024-01-03 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-03 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-03 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-03 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-lists</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 104: Links and Images -->
+    <item>
+      <title>HTML Formatting Test: Links and Images</title>
+      <link>https://testblog.example.com/html-formatting-links/</link>
+      <pubDate>Thu, 04 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="web-dev"><![CDATA[Web Dev]]></category>
+      <category domain="post_tag" nicename="javascript"><![CDATA[JavaScript]]></category>
+      <content:encoded><![CDATA[<p>Here is a <a href="https://example.com">simple link</a>.</p>
+<p>Link with title: <a href="https://example.com" title="Example Site">titled link</a>.</p>
+<p>Image: <img src="https://example.com/image.jpg" alt="Test image" /></p>
+<p>Image with title: <img src="https://example.com/photo.png" alt="Photo" title="My Photo" /></p>
+<p>Linked image: <a href="https://example.com"><img src="https://example.com/banner.jpg" alt="Banner" /></a></p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing links and images]]></excerpt:encoded>
+      <wp:post_id>104</wp:post_id>
+      <wp:post_date>2024-01-04 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-04 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-04 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-04 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-links</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 105: Code Blocks -->
+    <item>
+      <title>HTML Formatting Test: Code Blocks</title>
+      <link>https://testblog.example.com/html-formatting-code/</link>
+      <pubDate>Fri, 05 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="programming"><![CDATA[Programming]]></category>
+      <category domain="post_tag" nicename="javascript"><![CDATA[JavaScript]]></category>
+      <category domain="post_tag" nicename="typescript"><![CDATA[TypeScript]]></category>
+      <content:encoded><![CDATA[<p>Inline code: Use <code>const x = 10;</code> to declare a constant.</p>
+<p>Code block:</p>
+<pre><code>function hello() {
+  console.log("Hello World");
+}
+hello();</code></pre>
+<p>Another block with pre only:</p>
+<pre>Plain preformatted text
+with multiple lines</pre>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing code formatting]]></excerpt:encoded>
+      <wp:post_id>105</wp:post_id>
+      <wp:post_date>2024-01-05 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-05 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-06 09:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-06 09:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-code</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 106: Blockquotes -->
+    <item>
+      <title>HTML Formatting Test: Blockquotes</title>
+      <link>https://testblog.example.com/html-formatting-quotes/</link>
+      <pubDate>Sat, 06 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>A famous quote:</p>
+<blockquote>
+<p>The only way to do great work is to love what you do.</p>
+<p>- Steve Jobs</p>
+</blockquote>
+<p>Nested blockquote:</p>
+<blockquote>
+<p>Outer quote</p>
+<blockquote>
+<p>Inner quote</p>
+</blockquote>
+</blockquote>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing blockquote formatting]]></excerpt:encoded>
+      <wp:post_id>106</wp:post_id>
+      <wp:post_date>2024-01-06 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-06 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-06 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-06 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-quotes</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- ======================================== -->
+    <!-- SECTION 2: SHORTCODE/MACRO CONVERSION   -->
+    <!-- ======================================== -->
+    
+    <!-- Post 201: Gallery Shortcode -->
+    <item>
+      <title>Shortcode Test: Gallery</title>
+      <link>https://testblog.example.com/shortcode-gallery/</link>
+      <pubDate>Mon, 15 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <category domain="post_tag" nicename="react"><![CDATA[React]]></category>
+      <content:encoded><![CDATA[<p>Check out this gallery:</p>
+[gallery ids="1,2,3" columns="3"]
+<p>Pretty nice, right?</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing gallery shortcode conversion]]></excerpt:encoded>
+      <wp:post_id>201</wp:post_id>
+      <wp:post_date>2024-01-15 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-15 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-15 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-15 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>shortcode-gallery</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 202: Video Shortcode -->
+    <item>
+      <title>Shortcode Test: Video</title>
+      <link>https://testblog.example.com/shortcode-video/</link>
+      <pubDate>Tue, 16 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>Watch this video:</p>
+[video src="https://example.com/video.mp4" width="640" height="360"]
+<p>Hope you enjoyed it!</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing video shortcode conversion]]></excerpt:encoded>
+      <wp:post_id>202</wp:post_id>
+      <wp:post_date>2024-01-16 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-16 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-16 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-16 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>shortcode-video</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 203: Multiple Shortcodes -->
+    <item>
+      <title>Shortcode Test: Multiple Macros</title>
+      <link>https://testblog.example.com/shortcode-multiple/</link>
+      <pubDate>Wed, 17 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="web-dev"><![CDATA[Web Dev]]></category>
+      <category domain="post_tag" nicename="javascript"><![CDATA[JavaScript]]></category>
+      <category domain="post_tag" nicename="nodejs"><![CDATA[nodejs]]></category>
+      <content:encoded><![CDATA[<p>Multiple shortcodes in one post:</p>
+[audio src="https://example.com/podcast.mp3"]
+<p>And here's a gallery:</p>
+[gallery ids="10,20,30"]
+<p>With an embed:</p>
+[embed]https://youtube.com/watch?v=abc123[/embed]
+<p>End of post.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing multiple shortcodes]]></excerpt:encoded>
+      <wp:post_id>203</wp:post_id>
+      <wp:post_date>2024-01-17 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-17 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-17 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-17 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>shortcode-multiple</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 204: Self-Closing Shortcodes -->
+    <item>
+      <title>Shortcode Test: Self-Closing</title>
+      <link>https://testblog.example.com/shortcode-selfclose/</link>
+      <pubDate>Thu, 18 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="programming"><![CDATA[Programming]]></category>
+      <content:encoded><![CDATA[<p>Self-closing shortcodes:</p>
+[divider /]
+<p>Another one:</p>
+[spacer height="20" /]
+<p>Done.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing self-closing shortcodes]]></excerpt:encoded>
+      <wp:post_id>204</wp:post_id>
+      <wp:post_date>2024-01-18 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-18 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-18 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-18 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>shortcode-selfclose</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 205: Already Double-Bracketed (should NOT convert) -->
+    <item>
+      <title>Shortcode Test: Already Converted</title>
+      <link>https://testblog.example.com/shortcode-already/</link>
+      <pubDate>Fri, 19 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>This is already in our format:</p>
+[[gallery ids="1,2,3"]]
+<p>Mixed content:</p>
+[video src="new.mp4"]
+<p>And already converted:</p>
+[[audio src="podcast.mp3"]]]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing already-converted macros]]></excerpt:encoded>
+      <wp:post_id>205</wp:post_id>
+      <wp:post_date>2024-01-19 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-19 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-19 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-19 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>shortcode-already</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- ======================================== -->
+    <!-- SECTION 3: CONFLICT RESOLUTION - POSTS  -->
+    <!-- ======================================== -->
+    
+    <!-- Post 301: Conflict → Ignore -->
+    <item>
+      <title>Conflict Test: Ignore Resolution</title>
+      <link>https://testblog.example.com/existing-post/</link>
+      <pubDate>Mon, 22 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>This post has slug "existing-post" which already exists in the project.</p>
+<p>The conflict resolution is set to "ignore" so this should be skipped.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing ignore resolution]]></excerpt:encoded>
+      <wp:post_id>301</wp:post_id>
+      <wp:post_date>2024-01-22 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-22 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-22 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-22 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>existing-post</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 302: Conflict → Overwrite -->
+    <item>
+      <title>Conflict Test: Overwrite Resolution</title>
+      <link>https://testblog.example.com/overwrite-me/</link>
+      <pubDate>Tue, 23 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="programming"><![CDATA[Programming]]></category>
+      <category domain="post_tag" nicename="typescript"><![CDATA[TypeScript]]></category>
+      <content:encoded><![CDATA[<p>This post has slug "overwrite-me" which exists.</p>
+<p>The conflict resolution is "overwrite" so it should be imported as a <strong>draft</strong>.</p>
+<p>The draft will have the same slug for review.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing overwrite resolution]]></excerpt:encoded>
+      <wp:post_id>302</wp:post_id>
+      <wp:post_date>2024-01-23 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-23 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-23 15:30:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-23 15:30:00</wp:post_modified_gmt>
+      <wp:post_name>overwrite-me</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 303: Conflict → Import (new slug) -->
+    <item>
+      <title>Conflict Test: Import as New</title>
+      <link>https://testblog.example.com/duplicate-slug/</link>
+      <pubDate>Wed, 24 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="web-dev"><![CDATA[Web Dev]]></category>
+      <content:encoded><![CDATA[<p>This post has slug "duplicate-slug" which exists.</p>
+<p>The conflict resolution is "import" so it should get a <strong>new unique slug</strong>.</p>
+<p>The new slug will be generated from the title.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing import as new resolution]]></excerpt:encoded>
+      <wp:post_id>303</wp:post_id>
+      <wp:post_date>2024-01-24 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-24 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-24 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-24 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>duplicate-slug</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- ======================================== -->
+    <!-- SECTION 4: MEDIA IMPORT                 -->
+    <!-- ======================================== -->
+    
+    <!-- Media 401: New image with parent post -->
+    <item>
+      <title>gallery-image-1</title>
+      <link>https://testblog.example.com/gallery-image-1/</link>
+      <pubDate>Mon, 15 Jan 2024 09:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <content:encoded><![CDATA[A beautiful sunset over the mountains]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>401</wp:post_id>
+      <wp:post_date>2024-01-15 09:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-15 09:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-15 09:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-15 09:00:00</wp:post_modified_gmt>
+      <wp:post_name>gallery-image-1</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:post_parent>201</wp:post_parent>
+      <wp:attachment_url>https://testblog.example.com/wp-content/uploads/2024/01/sunset.jpg</wp:attachment_url>
+    </item>
+    
+    <!-- Media 402: Standalone image (no parent) -->
+    <item>
+      <title>standalone-logo</title>
+      <link>https://testblog.example.com/standalone-logo/</link>
+      <pubDate>Tue, 02 Jan 2024 08:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <content:encoded><![CDATA[Site logo image]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>402</wp:post_id>
+      <wp:post_date>2024-01-02 08:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-02 08:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-02 08:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-02 08:00:00</wp:post_modified_gmt>
+      <wp:post_name>standalone-logo</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:attachment_url>https://testblog.example.com/wp-content/uploads/2024/01/logo.png</wp:attachment_url>
+    </item>
+    
+    <!-- Media 403: Conflict ignore -->
+    <item>
+      <title>existing-image</title>
+      <link>https://testblog.example.com/existing-image/</link>
+      <pubDate>Wed, 03 Jan 2024 08:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <content:encoded><![CDATA[Image that already exists]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>403</wp:post_id>
+      <wp:post_date>2024-01-03 08:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-03 08:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-03 08:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-03 08:00:00</wp:post_modified_gmt>
+      <wp:post_name>existing-image</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:attachment_url>https://testblog.example.com/wp-content/uploads/2024/01/existing.jpg</wp:attachment_url>
+    </item>
+    
+    <!-- ======================================== -->
+    <!-- SECTION 5: PAGE IMPORT                  -->
+    <!-- ======================================== -->
+    
+    <!-- Page 501: Standard page -->
+    <item>
+      <title>About This Blog</title>
+      <link>https://testblog.example.com/about/</link>
+      <pubDate>Sun, 01 Jan 2024 08:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <content:encoded><![CDATA[<h2>About</h2>
+<p>Welcome to my blog. This is a page, not a post.</p>
+<p>Pages should be imported as posts with the "page" category.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[About page]]></excerpt:encoded>
+      <wp:post_id>501</wp:post_id>
+      <wp:post_date>2024-01-01 08:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-01 08:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-10 12:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-10 12:00:00</wp:post_modified_gmt>
+      <wp:post_name>about</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>page</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Page 502: Page with complex HTML -->
+    <item>
+      <title>Contact Information</title>
+      <link>https://testblog.example.com/contact/</link>
+      <pubDate>Sun, 01 Jan 2024 09:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[<h2>Contact Us</h2>
+<p>Reach out through the following channels:</p>
+<ul>
+<li>Email: <a href="mailto:test@example.com">test@example.com</a></li>
+<li>Twitter: <a href="https://twitter.com/test">@test</a></li>
+</ul>
+<h3>Office Hours</h3>
+<p>Monday to Friday, 9am-5pm.</p>
+[contact_form id="1"]]]></content:encoded>
+      <excerpt:encoded><![CDATA[Contact us]]></excerpt:encoded>
+      <wp:post_id>502</wp:post_id>
+      <wp:post_date>2024-01-01 09:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-01 09:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-15 16:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-15 16:00:00</wp:post_modified_gmt>
+      <wp:post_name>contact</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>page</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+  </channel>
+</rss>

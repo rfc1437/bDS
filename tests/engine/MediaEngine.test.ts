@@ -284,6 +284,17 @@ describe('MediaEngine', () => {
       expect(media.updatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
     });
 
+    it('should use provided createdAt date when specified', async () => {
+      const historicalDate = new Date('2018-05-15T10:30:00Z');
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
+        createdAt: historicalDate,
+        updatedAt: historicalDate,
+      });
+
+      expect(media.createdAt.getTime()).toBe(historicalDate.getTime());
+      expect(media.updatedAt.getTime()).toBe(historicalDate.getTime());
+    });
+
     it('should emit mediaImported event', async () => {
       const handler = vi.fn();
       mediaEngine.on('mediaImported', handler);

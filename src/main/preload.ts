@@ -130,10 +130,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectAndAnalyze: (uploadsFolder?: string) => ipcRenderer.invoke('import:selectAndAnalyze', uploadsFolder),
     analyzeFile: (filePath: string, uploadsFolder?: string) => ipcRenderer.invoke('import:analyzeFile', filePath, uploadsFolder),
     selectUploadsFolder: () => ipcRenderer.invoke('import:selectUploadsFolder'),
+    execute: (reportJson: string, uploadsFolder?: string) => ipcRenderer.invoke('import:execute', reportJson, uploadsFolder),
     onProgress: (callback: (data: { step: string; detail?: string }) => void) => {
       const subscription = (_event: Electron.IpcRendererEvent, data: { step: string; detail?: string }) => callback(data);
       ipcRenderer.on('import:progress', subscription);
       return () => ipcRenderer.removeListener('import:progress', subscription);
+    },
+    onExecutionProgress: (callback: (data: {
+      taskId: string;
+      phase: string;
+      current: number;
+      total: number;
+      detail?: string;
+      eta?: number;
+    }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: {
+        taskId: string;
+        phase: string;
+        current: number;
+        total: number;
+        detail?: string;
+        eta?: number;
+      }) => callback(data);
+      ipcRenderer.on('import:executionProgress', subscription);
+      return () => ipcRenderer.removeListener('import:executionProgress', subscription);
     },
   },
 
@@ -314,7 +334,16 @@ export interface ElectronAPI {
     selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
     analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
     selectUploadsFolder: () => Promise<string | null>;
+    execute: (reportJson: string, uploadsFolder?: string) => Promise<{ taskId: string; totalItems: number }>;
     onProgress: (callback: (data: { step: string; detail?: string }) => void) => () => void;
+    onExecutionProgress: (callback: (data: {
+      taskId: string;
+      phase: string;
+      current: number;
+      total: number;
+      detail?: string;
+      eta?: number;
+    }) => void) => () => void;
   };
   importDefinitions: {
     create: (name?: string) => Promise<unknown>;

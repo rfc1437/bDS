@@ -130,6 +130,30 @@ interface ImportAnalysisViewProps {
   definitionId: string;
 }
 
+interface ImportExecutionState {
+  isExecuting: boolean;
+  taskId: string | null;
+  phase: string;
+  current: number;
+  total: number;
+  detail: string;
+  eta: number | null;
+  completed: boolean;
+  error: string | null;
+}
+
+const formatEta = (etaMs: number): string => {
+  if (etaMs <= 0) return '';
+  const seconds = Math.ceil(etaMs / 1000);
+  if (seconds < 60) return `~${seconds}s remaining`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (minutes < 60) return `~${minutes}m ${secs}s remaining`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `~${hours}h ${mins}m remaining`;
+};
+
 export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definitionId }) => {
   const [name, setName] = useState('Untitled Import');
   const [uploadsFolder, setUploadsFolder] = useState<string | null>(null);
@@ -140,6 +164,17 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [progressStep, setProgressStep] = useState<string>('');
   const [progressDetail, setProgressDetail] = useState<string>('');
+  const [executionState, setExecutionState] = useState<ImportExecutionState>({
+    isExecuting: false,
+    taskId: null,
+    phase: '',
+    current: 0,
+    total: 0,
+    detail: '',
+    eta: null,
+    completed: false,
+    error: null,
+  });
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Subscribe to progress events
@@ -147,6 +182,46 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
     const unsubscribe = window.electronAPI?.import.onProgress(({ step, detail }) => {
       setProgressStep(step);
       setProgressDetail(detail || '');
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  // Subscribe to execution progress events
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.import.onExecutionProgress(({ taskId, phase, current, total, detail, eta }) => {
+      setExecutionState(prev => {
+        if (prev.taskId !== taskId) return prev;
+        return {
+          ...prev,
+          phase,
+          current,
+          total,
+          detail: detail || '',
+          eta: eta ?? null,
+        };
+      });
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  // Subscribe to task completion events
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.on('task:completed', (task: { taskId: string }) => {
+      setExecutionState(prev => {
+        if (prev.taskId !== task.taskId) return prev;
+        return { ...prev, isExecuting: false, completed: true };
+      });
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  // Subscribe to task failure events
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.on('task:failed', (task: { taskId: string; error: string }) => {
+      setExecutionState(prev => {
+        if (prev.taskId !== task.taskId) return prev;
+        return { ...prev, isExecuting: false, error: task.error };
+      });
     });
     return () => unsubscribe?.();
   }, []);
@@ -295,6 +370,104 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
     }
   }, [definitionId, uploadsFolder]);
 
+  const handleExecuteImport = useCallback(async () => {
+    if (!report) return;
+
+    // Reset execution state
+    setExecutionState({
+      isExecuting: true,
+      taskId: null,
+      phase: 'Starting...',
+      current: 0,
+      total: 0,
+      detail: '',
+      eta: null,
+      completed: false,
+      error: null,
+    });
+
+    try {
+      const result = await window.electronAPI?.import.execute(
+        JSON.stringify(report),
+        uploadsFolder || undefined
+      );
+      
+      if (result) {
+        setExecutionState(prev => ({
+          ...prev,
+          taskId: result.taskId,
+          total: result.totalItems,
+        }));
+      }
+    } catch (error) {
+      console.error('Import execution failed:', error);
+      setExecutionState(prev => ({
+        ...prev,
+        isExecuting: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }));
+    }
+  }, [report, uploadsFolder]);
+
+  // Calculate how many items will be imported
+  // Note: 'update' and 'content-duplicate' are SKIPPED - only 'new' and resolved conflicts are imported
+  const getImportableCount = useCallback(() => {
+    if (!report) return { posts: 0, media: 0, pages: 0, tags: 0 };
+    
+    const postsToImport = report.posts.items.filter(p => 
+      p.status === 'new' || 
+      (p.status === 'conflict' && p.conflictResolution && p.conflictResolution !== 'ignore')
+    ).length;
+    
+    const mediaToImport = report.media.items.filter(m => 
+      m.status === 'new'
+    ).length;
+    
+    const pagesToImport = report.pages.items.filter(p => 
+      p.status === 'new' || 
+      (p.status === 'conflict' && p.conflictResolution && p.conflictResolution !== 'ignore')
+    ).length;
+    
+    const tagsToImport = report.tags.filter(t => !t.existsInProject).length +
+      report.categories.filter(c => !c.existsInProject).length;
+    
+    return { posts: postsToImport, media: mediaToImport, pages: pagesToImport, tags: tagsToImport };
+  }, [report]);
+
+  // Calculate date distribution for posts and media
+  const getDateDistribution = useCallback(() => {
+    if (!report) return { posts: {}, media: {} };
+    
+    const postsDistrib: Record<number, number> = {};
+    const mediaDistrib: Record<number, number> = {};
+    
+    for (const item of report.posts.items) {
+      const date = item.wxrPost.postDate || item.wxrPost.pubDate;
+      if (date) {
+        const year = new Date(date).getFullYear();
+        postsDistrib[year] = (postsDistrib[year] || 0) + 1;
+      }
+    }
+    
+    for (const item of report.pages.items) {
+      const date = item.wxrPost.postDate || item.wxrPost.pubDate;
+      if (date) {
+        const year = new Date(date).getFullYear();
+        postsDistrib[year] = (postsDistrib[year] || 0) + 1;
+      }
+    }
+    
+    for (const item of report.media.items) {
+      const date = item.wxrMedia.pubDate;
+      if (date) {
+        const year = new Date(date).getFullYear();
+        mediaDistrib[year] = (mediaDistrib[year] || 0) + 1;
+      }
+    }
+    
+    return { posts: postsDistrib, media: mediaDistrib };
+  }, [report]);
+
   const toggleSection = useCallback((section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   }, []);
@@ -371,6 +544,76 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
         <>
           <SiteInfoCard site={report.site} sourceFile={report.sourceFile} />
           <StatCards report={report} />
+          <DateDistributionCard distribution={getDateDistribution()} />
+
+          {/* Execution Progress */}
+          {executionState.isExecuting && (
+            <div className="import-execution-progress">
+              <div className="import-execution-header">
+                <h3>Importing...</h3>
+                {executionState.eta !== null && executionState.eta > 0 && (
+                  <span className="import-eta">{formatEta(executionState.eta)}</span>
+                )}
+              </div>
+              <div className="import-progress-bar">
+                <div 
+                  className="import-progress-fill" 
+                  style={{ width: `${executionState.total > 0 ? (executionState.current / executionState.total) * 100 : 0}%` }}
+                />
+              </div>
+              <div className="import-progress-info">
+                <span className="import-phase">{executionState.phase}</span>
+                {executionState.detail && <span className="import-detail">{executionState.detail}</span>}
+                <span className="import-counter">{executionState.current} / {executionState.total}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Execution Complete */}
+          {executionState.completed && (
+            <div className="import-execution-complete">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span>Import completed successfully!</span>
+            </div>
+          )}
+
+          {/* Execution Error */}
+          {executionState.error && (
+            <div className="import-execution-error">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+              </svg>
+              <span>Import failed: {executionState.error}</span>
+            </div>
+          )}
+
+          {/* Execute Button */}
+          {!executionState.isExecuting && !executionState.completed && (
+            (() => {
+              const counts = getImportableCount();
+              const totalImportable = counts.posts + counts.media + counts.pages + counts.tags;
+              return (
+                <div className="import-execute-section">
+                  <div className="import-execute-summary">
+                    Ready to import:
+                    {counts.tags > 0 && <span className="import-count-tag">{counts.tags} tags/categories</span>}
+                    {counts.posts > 0 && <span className="import-count-tag">{counts.posts} posts</span>}
+                    {counts.media > 0 && <span className="import-count-tag">{counts.media} media</span>}
+                    {counts.pages > 0 && <span className="import-count-tag">{counts.pages} pages</span>}
+                  </div>
+                  <button
+                    className="import-execute-btn"
+                    onClick={handleExecuteImport}
+                    disabled={totalImportable === 0}
+                  >
+                    {totalImportable === 0 ? 'Nothing to Import' : `Import ${totalImportable} Items`}
+                  </button>
+                </div>
+              );
+            })()
+          )}
 
           {report.posts.conflicts > 0 && (
             <ConflictsSection
@@ -582,6 +825,82 @@ const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => {
           {report.tags.filter(t => !t.existsInProject && !t.mappedTo).length > 0 && (
             <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject && !t.mappedTo).length} new</span>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface DateDistribution {
+  posts: Record<number, number>;
+  media: Record<number, number>;
+}
+
+const DateDistributionCard: React.FC<{ distribution: DateDistribution }> = ({ distribution }) => {
+  const postYears = Object.keys(distribution.posts).map(Number).sort();
+  const mediaYears = Object.keys(distribution.media).map(Number).sort();
+  const allYears = [...new Set([...postYears, ...mediaYears])].sort();
+
+  if (allYears.length === 0) {
+    return null;
+  }
+
+  const maxPostCount = Math.max(...Object.values(distribution.posts), 1);
+  const maxMediaCount = Math.max(...Object.values(distribution.media), 1);
+  const totalPosts = Object.values(distribution.posts).reduce((a, b) => a + b, 0);
+  const totalMedia = Object.values(distribution.media).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="import-date-distribution">
+      <h3>Date Distribution</h3>
+      <div className="distribution-grid">
+        <div className="distribution-column">
+          <div className="distribution-header">
+            <span className="distribution-label">Posts/Pages</span>
+            <span className="distribution-total">{totalPosts} total</span>
+          </div>
+          <div className="distribution-bars">
+            {allYears.map(year => {
+              const count = distribution.posts[year] || 0;
+              const percentage = (count / maxPostCount) * 100;
+              return (
+                <div key={`post-${year}`} className="distribution-row">
+                  <span className="distribution-year">{year}</span>
+                  <div className="distribution-bar-container">
+                    <div 
+                      className="distribution-bar distribution-bar-posts" 
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                  <span className="distribution-count">{count || '-'}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="distribution-column">
+          <div className="distribution-header">
+            <span className="distribution-label">Media</span>
+            <span className="distribution-total">{totalMedia} total</span>
+          </div>
+          <div className="distribution-bars">
+            {allYears.map(year => {
+              const count = distribution.media[year] || 0;
+              const percentage = (count / maxMediaCount) * 100;
+              return (
+                <div key={`media-${year}`} className="distribution-row">
+                  <span className="distribution-year">{year}</span>
+                  <div className="distribution-bar-container">
+                    <div 
+                      className="distribution-bar distribution-bar-media" 
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                  <span className="distribution-count">{count || '-'}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

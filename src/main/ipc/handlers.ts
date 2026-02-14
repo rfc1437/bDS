@@ -775,6 +775,101 @@ export function registerIpcHandlers(): void {
     return result.filePaths[0];
   });
 
+  // Helper to emit import execution progress events
+  const emitImportExecutionProgress = (
+    taskId: string,
+    phase: string,
+    current: number,
+    total: number,
+    detail?: string,
+    eta?: number
+  ) => {
+    ipcMain.emit('forward-to-renderer', 'import:executionProgress', {
+      taskId,
+      phase,
+      current,
+      total,
+      detail,
+      eta,
+    });
+  };
+
+  safeHandle('import:execute', async (_, reportJson: string, uploadsFolder?: string) => {
+    const { ImportExecutionEngine } = await import('../engine/ImportExecutionEngine');
+    
+    // Parse the report
+    const report = JSON.parse(reportJson) as import('../engine/ImportAnalysisEngine').ImportAnalysisReport;
+    
+    // Set up project context
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    
+    // Calculate total items for ETA
+    // Note: 'update' and 'content-duplicate' statuses are SKIPPED during import, only 'new' and resolved conflicts are imported
+    const totalItems = 
+      report.tags.filter(t => !t.existsInProject).length +
+      report.categories.filter(c => !c.existsInProject).length +
+      report.posts.items.filter(p => p.status === 'new' || (p.status === 'conflict' && p.conflictResolution && p.conflictResolution !== 'ignore')).length +
+      report.media.items.filter(m => m.status === 'new').length +
+      report.pages.items.filter(p => p.status === 'new' || (p.status === 'conflict' && p.conflictResolution && p.conflictResolution !== 'ignore')).length;
+
+    // Create a task for the import
+    const taskId = `import-${Date.now()}`;
+    let processedItems = 0;
+    let startTime = Date.now();
+
+    const task = {
+      id: taskId,
+      name: `Import from ${report.site.title || 'WordPress'}`,
+      execute: async (onProgress: (progress: number, message: string) => void) => {
+        const executionEngine = new ImportExecutionEngine();
+        
+        if (activeProject) {
+          executionEngine.setProjectContext(activeProject.id, activeProject.dataPath);
+        }
+
+        const result = await executionEngine.executeImport(report, {
+          uploadsFolder,
+          onProgress: (phase, current, total, detail) => {
+            // Update processed items count based on phase progress
+            processedItems++;
+            
+            // Calculate ETA
+            const elapsed = Date.now() - startTime;
+            const itemsPerMs = processedItems / elapsed;
+            const remainingItems = totalItems - processedItems;
+            const etaMs = itemsPerMs > 0 ? remainingItems / itemsPerMs : 0;
+            
+            // Calculate overall progress percentage
+            const overallProgress = totalItems > 0 
+              ? Math.round((processedItems / totalItems) * 100) 
+              : 0;
+            
+            // Report to TaskManager
+            onProgress(overallProgress, `${phase}: ${detail || `${current}/${total}`}`);
+            
+            // Also emit detailed progress for UI
+            emitImportExecutionProgress(taskId, phase, current, total, detail, etaMs);
+          },
+        });
+
+        // Convert Map to plain object for serialization
+        const serializedResult = {
+          ...result,
+          wpIdToPostId: Object.fromEntries(result.wpIdToPostId),
+        };
+
+        return serializedResult;
+      },
+    };
+
+    // Run the task - this returns immediately with a promise
+    const resultPromise = taskManager.runTask(task);
+    
+    // Return task ID so UI can track it
+    return { taskId, totalItems };
+  });
+
   // ============ Import Definition CRUD Handlers ============
 
   safeHandle('importDefinitions:create', async (_, name?: string) => {
