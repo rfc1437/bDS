@@ -88,22 +88,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stopAutoSync: () => ipcRenderer.invoke('sync:stopAutoSync'),
   },
 
-  // Dropbox File Sync
-  dropbox: {
-    configure: (config: unknown) => ipcRenderer.invoke('dropbox:configure', config),
-    isConfigured: () => ipcRenderer.invoke('dropbox:isConfigured'),
-    getStatus: () => ipcRenderer.invoke('dropbox:getStatus'),
-    syncAll: () => ipcRenderer.invoke('dropbox:syncAll'),
-    startWatching: () => ipcRenderer.invoke('dropbox:startWatching'),
-    stopWatching: () => ipcRenderer.invoke('dropbox:stopWatching'),
-    startPolling: () => ipcRenderer.invoke('dropbox:startPolling'),
-    stopPolling: () => ipcRenderer.invoke('dropbox:stopPolling'),
-    getConflicts: () => ipcRenderer.invoke('dropbox:getConflicts'),
-    resolveConflict: (conflictId: string, resolution: string) =>
-      ipcRenderer.invoke('dropbox:resolveConflict', conflictId, resolution),
-    getLastSyncTime: () => ipcRenderer.invoke('dropbox:getLastSyncTime'),
-  },
-
   // Tasks
   tasks: {
     getAll: () => ipcRenderer.invoke('tasks:getAll'),

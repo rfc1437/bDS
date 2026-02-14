@@ -38,10 +38,6 @@ reflections in the filesystem, so available tags, available categories, all
 those things must be automatically reflected to the filesystem in a per-project
 way. Use a meta/ folder under the project folder for those files.
 
-There should be good cloud-storage based syncing that can be triggered when
-online again and should use asynchronous syncing with auto-resolving of issues.
-The solution should be end-user friendly and not too technical in setup.
-
 The application must be able to support multiple projects (ie web sites), so
 there must be a way to create new projects and select current project. The UI is
 only showing all data of the current selected project and all tools are only

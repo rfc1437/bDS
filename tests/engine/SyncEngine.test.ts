@@ -2,11 +2,12 @@
  * SyncEngine Unit Tests
  *
  * Tests the REAL SyncEngine class with mocked dependencies.
- * Following TDD best practices: mock external dependencies, test real implementation.
+ * Note: Cloud sync is currently not implemented, so SyncEngine
+ * always returns "not configured" status.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SyncEngine, SyncConfig, SyncResult, SyncDirection } from '../../src/main/engine/SyncEngine';
+import { SyncEngine, SyncConfig } from '../../src/main/engine/SyncEngine';
 import { resetMockCounters } from '../utils/factories';
 
 // Create mock data stores
@@ -58,7 +59,7 @@ vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => ({
     getLocal: vi.fn(() => mockLocalDb),
     getLocalClient: vi.fn(() => null),
-    getRemote: vi.fn(() => null), // Will be overridden in tests
+    getRemote: vi.fn(() => null),
     getDataPaths: vi.fn(() => ({
       database: '/mock/userData/bds.db',
       posts: '/mock/userData/posts',
@@ -69,40 +70,6 @@ vi.mock('../../src/main/database', () => ({
     runRemoteMigrations: vi.fn(async () => {}),
     close: vi.fn(),
   })),
-}));
-
-// Mock PostEngine and MediaEngine
-vi.mock('../../src/main/engine/PostEngine', () => ({
-  getPostEngine: vi.fn(() => ({
-    on: vi.fn(),
-    emit: vi.fn(),
-  })),
-}));
-
-vi.mock('../../src/main/engine/MediaEngine', () => ({
-  getMediaEngine: vi.fn(() => ({
-    on: vi.fn(),
-    emit: vi.fn(),
-  })),
-}));
-
-// Mock DropboxSyncEngine
-let mockDropboxConfigured = false;
-const mockDropboxSyncEngine = {
-  isConfigured: vi.fn(() => mockDropboxConfigured),
-  configure: vi.fn(async () => {}),
-  syncAll: vi.fn(async () => ({
-    success: true,
-    uploaded: 0,
-    downloaded: 0,
-    deleted: 0,
-    conflicts: 0,
-    errors: [],
-  })),
-};
-
-vi.mock('../../src/main/engine/DropboxSyncEngine', () => ({
-  getDropboxSyncEngine: vi.fn(() => mockDropboxSyncEngine),
 }));
 
 // Mock uuid
@@ -120,10 +87,6 @@ describe('SyncEngine', () => {
     mockMedia.clear();
     mockSyncLog.clear();
     resetMockCounters();
-    
-    // Reset Dropbox mock state
-    mockDropboxConfigured = false;
-    mockDropboxSyncEngine.isConfigured.mockImplementation(() => mockDropboxConfigured);
 
     syncEngine = new SyncEngine();
   });
@@ -147,27 +110,13 @@ describe('SyncEngine', () => {
       expect(syncEngine.getSyncStatus()).toBe('idle');
     });
 
-    it('should not be configured initially', () => {
+    it('should not be configured (cloud sync is not implemented)', () => {
       expect(syncEngine.isConfigured()).toBe(false);
     });
   });
 
   describe('Configuration', () => {
-    it('should configure sync settings', async () => {
-      // Mark Dropbox as configured
-      mockDropboxConfigured = true;
-      
-      const config: SyncConfig = {
-        autoSync: false,
-        syncInterval: 30,
-      };
-
-      await syncEngine.configure(config);
-
-      expect(syncEngine.isConfigured()).toBe(true);
-    });
-
-    it('should emit configured event', async () => {
+    it('should emit configured event when configure is called', async () => {
       const handler = vi.fn();
       syncEngine.on('configured', handler);
 
@@ -181,9 +130,7 @@ describe('SyncEngine', () => {
       expect(handler).toHaveBeenCalledWith(config);
     });
 
-    it('should not be configured when Dropbox is not configured', async () => {
-      mockDropboxConfigured = false;
-      
+    it('should always return not configured (cloud sync not implemented)', async () => {
       const config: SyncConfig = {
         autoSync: false,
         syncInterval: 30,
@@ -191,58 +138,8 @@ describe('SyncEngine', () => {
 
       await syncEngine.configure(config);
 
+      // Cloud sync is not implemented, so always returns false
       expect(syncEngine.isConfigured()).toBe(false);
-    });
-  });
-
-  describe('Auto Sync', () => {
-    it('should start auto sync when enabled', async () => {
-      mockDropboxConfigured = true;
-      
-      const config: SyncConfig = {
-        autoSync: true,
-        syncInterval: 1, // 1 minute
-      };
-
-      await syncEngine.configure(config);
-
-      // Auto sync should be scheduled
-      expect(syncEngine.isConfigured()).toBe(true);
-    });
-
-    it('should stop auto sync when called', async () => {
-      const handler = vi.fn();
-      syncEngine.on('autoSyncStopped', handler);
-
-      mockDropboxConfigured = true;
-      const config: SyncConfig = {
-        autoSync: true,
-        syncInterval: 1,
-      };
-
-      await syncEngine.configure(config);
-      syncEngine.stopAutoSync();
-
-      expect(handler).toHaveBeenCalled();
-    });
-
-    it('should stop previous auto sync when reconfiguring', async () => {
-      mockDropboxConfigured = true;
-      
-      const config1: SyncConfig = {
-        autoSync: true,
-        syncInterval: 1,
-      };
-
-      const config2: SyncConfig = {
-        autoSync: true,
-        syncInterval: 5,
-      };
-
-      await syncEngine.configure(config1);
-      await syncEngine.configure(config2);
-
-      expect(syncEngine.isConfigured()).toBe(true);
     });
   });
 
@@ -252,42 +149,51 @@ describe('SyncEngine', () => {
     });
   });
 
-  describe('Sync without Configuration', () => {
-    it('should return error when syncing without configuration', async () => {
+  describe('Sync Operations', () => {
+    it('should return error when syncing (cloud sync not implemented)', async () => {
       const result = await syncEngine.sync('bidirectional');
 
       expect(result.success).toBe(false);
-      expect(result.errors).toContain('Dropbox sync not configured');
+      expect(result.errors).toContain('Cloud sync not configured');
     });
 
-    it('should return zero counts when not configured', async () => {
+    it('should return zero counts when sync is not available', async () => {
       const result = await syncEngine.sync('push');
 
       expect(result.pushed).toBe(0);
       expect(result.pulled).toBe(0);
       expect(result.conflicts).toBe(0);
     });
-  });
 
-  describe('Sync Directions', () => {
     it('should accept push direction', async () => {
       const result = await syncEngine.sync('push');
       expect(result).toBeDefined();
+      expect(result.success).toBe(false);
     });
 
     it('should accept pull direction', async () => {
       const result = await syncEngine.sync('pull');
       expect(result).toBeDefined();
+      expect(result.success).toBe(false);
     });
 
     it('should accept bidirectional direction', async () => {
       const result = await syncEngine.sync('bidirectional');
       expect(result).toBeDefined();
+      expect(result.success).toBe(false);
     });
 
     it('should default to bidirectional when no direction specified', async () => {
       const result = await syncEngine.sync();
       expect(result).toBeDefined();
+      expect(result.success).toBe(false);
+    });
+
+    it('should use fullSync as alias for sync', async () => {
+      const result = await syncEngine.fullSync('push');
+      expect(result).toBeDefined();
+      expect(result.success).toBe(false);
+      expect(result.errors).toContain('Cloud sync not configured');
     });
   });
 
@@ -351,7 +257,6 @@ describe('SyncEngine', () => {
     });
 
     it('should return zero counts when no pending changes', async () => {
-      // With empty mock data
       const count = await syncEngine.getPendingChangesCount();
 
       expect(count.posts).toBeGreaterThanOrEqual(0);
@@ -395,280 +300,6 @@ describe('SyncEngine', () => {
         syncEngine.stopAutoSync();
         syncEngine.stopAutoSync();
       }).not.toThrow();
-    });
-  });
-
-  describe('Sync Configuration Validation', () => {
-    it('should not be configured when Dropbox is not set up', async () => {
-      mockDropboxConfigured = false;
-      
-      await syncEngine.configure({
-        autoSync: false,
-        syncInterval: 30,
-      });
-
-      expect(syncEngine.isConfigured()).toBe(false);
-    });
-
-    it('should be configured when Dropbox is set up', async () => {
-      mockDropboxConfigured = true;
-      
-      await syncEngine.configure({
-        autoSync: false,
-        syncInterval: 30,
-      });
-
-      expect(syncEngine.isConfigured()).toBe(true);
-    });
-  });
-
-  describe('Sync Interval Configuration', () => {
-    it('should accept sync interval in minutes', async () => {
-      mockDropboxConfigured = true;
-      
-      const config: SyncConfig = {
-        autoSync: true,
-        syncInterval: 15, // 15 minutes
-      };
-
-      await syncEngine.configure(config);
-      expect(syncEngine.isConfigured()).toBe(true);
-    });
-
-    it('should not set auto sync with zero interval', async () => {
-      mockDropboxConfigured = true;
-      
-      const config: SyncConfig = {
-        autoSync: true,
-        syncInterval: 0,
-      };
-
-      await syncEngine.configure(config);
-      // Should not crash, but won't set up interval
-      expect(syncEngine.isConfigured()).toBe(true);
-    });
-  });
-
-  describe('SyncStatus Reset on Failure', () => {
-    it('should reset syncStatus to idle when task manager throws', async () => {
-      const { getDatabase } = await import('../../src/main/database');
-
-      vi.mocked(getDatabase).mockReturnValue({
-        getLocal: vi.fn(() => ({
-          ...mockLocalDb,
-          select: vi.fn(() => {
-            throw new Error('Database exploded');
-          }),
-        })),
-        getLocalClient: vi.fn(() => null),
-        getRemote: vi.fn(() => mockRemoteDb),
-        getDataPaths: vi.fn(() => ({
-          database: '/mock/userData/bds.db',
-          posts: '/mock/userData/posts',
-          media: '/mock/userData/media',
-        })),
-        initializeLocal: vi.fn(),
-        initializeRemote: vi.fn(async () => {}),
-        runRemoteMigrations: vi.fn(async () => {}),
-        close: vi.fn(),
-      } as any);
-
-      mockDropboxConfigured = true;
-      // Mock Dropbox sync to fail
-      mockDropboxSyncEngine.syncAll.mockRejectedValue(new Error('Database exploded'));
-      
-      const config: SyncConfig = {
-        autoSync: false,
-        syncInterval: 30,
-      };
-
-      await syncEngine.configure(config);
-
-      // First sync should fail
-      await syncEngine.sync('push');
-
-      // Status should be reset to allow future syncs
-      expect(syncEngine.getSyncStatus()).not.toBe('syncing');
-
-      // Reset mock for second call
-      mockDropboxSyncEngine.syncAll.mockRejectedValue(new Error('Database exploded'));
-      
-      // A subsequent sync should not return "Sync already in progress"
-      const result = await syncEngine.sync('push');
-      expect(result.errors).not.toContain('Sync already in progress');
-    });
-
-    it('should reset syncStatus to error after failure', async () => {
-      const { getDatabase } = await import('../../src/main/database');
-
-      vi.mocked(getDatabase).mockReturnValue({
-        getLocal: vi.fn(() => ({
-          ...mockLocalDb,
-          select: vi.fn(() => {
-            throw new Error('Database error');
-          }),
-        })),
-        getLocalClient: vi.fn(() => null),
-        getRemote: vi.fn(() => mockRemoteDb),
-        getDataPaths: vi.fn(() => ({
-          database: '/mock/userData/bds.db',
-          posts: '/mock/userData/posts',
-          media: '/mock/userData/media',
-        })),
-        initializeLocal: vi.fn(),
-        initializeRemote: vi.fn(async () => {}),
-        runRemoteMigrations: vi.fn(async () => {}),
-        close: vi.fn(),
-      } as any);
-
-      mockDropboxConfigured = true;
-      // Mock Dropbox sync to fail
-      mockDropboxSyncEngine.syncAll.mockRejectedValue(new Error('Database error'));
-      
-      const config: SyncConfig = {
-        autoSync: false,
-        syncInterval: 30,
-      };
-
-      await syncEngine.configure(config);
-      await syncEngine.sync('push');
-
-      // After failure, status should be 'error' or 'idle', not 'syncing'
-      const status = syncEngine.getSyncStatus();
-      expect(status === 'error' || status === 'idle').toBe(true);
-    });
-  });
-
-  describe('Console Logging', () => {
-    it('should log sync start with direction', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-      mockDropboxConfigured = true;
-      const config: SyncConfig = {
-        autoSync: false,
-        syncInterval: 30,
-      };
-
-      await syncEngine.configure(config);
-      await syncEngine.sync('push');
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[SyncEngine]'),
-        expect.stringContaining('push')
-      );
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should log sync completion with results', async () => {
-      // Use real timers for this test as TaskManager may use timers
-      vi.useRealTimers();
-      
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-      const { getDatabase } = await import('../../src/main/database');
-
-      // Reset the Dropbox sync mock to return success (might have been modified by previous test)
-      mockDropboxSyncEngine.syncAll.mockResolvedValue({
-        success: true,
-        uploaded: 0,
-        downloaded: 0,
-        deleted: 0,
-        conflicts: 0,
-        errors: [],
-      });
-
-      // Mock a complete sync with no pending items (so it completes quickly)
-      vi.mocked(getDatabase).mockReturnValue({
-        getLocal: vi.fn(() => ({
-          ...mockLocalDb,
-          select: vi.fn(() => ({
-            from: vi.fn().mockReturnThis(),
-            where: vi.fn().mockReturnThis(),
-            all: vi.fn().mockResolvedValue([]), // No pending items
-          })),
-        })),
-        getLocalClient: vi.fn(() => null),
-        getRemote: vi.fn(() => mockRemoteDb),
-        getDataPaths: vi.fn(() => ({
-          database: '/mock/userData/bds.db',
-          posts: '/mock/userData/posts',
-          media: '/mock/userData/media',
-        })),
-        initializeLocal: vi.fn(),
-        initializeRemote: vi.fn(async () => {}),
-        runRemoteMigrations: vi.fn(async () => {}),
-        close: vi.fn(),
-      } as any);
-
-      mockDropboxConfigured = true;
-      const config: SyncConfig = {
-        autoSync: false,
-        syncInterval: 30,
-      };
-
-      await syncEngine.configure(config);
-      const result = await syncEngine.sync('push');
-
-      // Debug: check what was logged
-      const calls = consoleSpy.mock.calls;
-      
-      // Check that sync completed successfully
-      expect(result.success).toBe(true);
-      
-      // Check that at least one log call contains "[SyncEngine]" and "complete"
-      const hasCompleteLog = calls.some((call: any[]) => 
-        call.some((arg: any) => typeof arg === 'string' && arg.includes('[SyncEngine]') && arg.includes('complete'))
-      );
-
-      expect(hasCompleteLog).toBe(true);
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should log errors when sync fails', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      const { getDatabase } = await import('../../src/main/database');
-
-      vi.mocked(getDatabase).mockReturnValue({
-        getLocal: vi.fn(() => ({
-          ...mockLocalDb,
-          select: vi.fn(() => {
-            throw new Error('Test error for logging');
-          }),
-        })),
-        getLocalClient: vi.fn(() => null),
-        getRemote: vi.fn(() => mockRemoteDb),
-        getDataPaths: vi.fn(() => ({
-          database: '/mock/userData/bds.db',
-          posts: '/mock/userData/posts',
-          media: '/mock/userData/media',
-        })),
-        initializeLocal: vi.fn(),
-        initializeRemote: vi.fn(async () => {}),
-        runRemoteMigrations: vi.fn(async () => {}),
-        close: vi.fn(),
-      } as any);
-
-      mockDropboxConfigured = true;
-      // Mock Dropbox sync to fail
-      mockDropboxSyncEngine.syncAll.mockRejectedValue(new Error('Test error for logging'));
-      
-      const config: SyncConfig = {
-        autoSync: false,
-        syncInterval: 30,
-      };
-
-      await syncEngine.configure(config);
-      await syncEngine.sync('push');
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[SyncEngine]'),
-        expect.anything()
-      );
-
-      consoleErrorSpy.mockRestore();
     });
   });
 });

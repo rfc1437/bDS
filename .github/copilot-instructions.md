@@ -59,16 +59,16 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
-## ⚠️ MANDATORY: TypeScript Checks After Code Changes
+## ⚠️ MANDATORY: Build Verification After Code Changes
 
-**You MUST run TypeScript type checking after making code changes.**
+**You MUST run the full build after making code changes.**
 
-- Run `npx tsc --noEmit` after any code modifications
-- Fix ALL type errors before considering the task complete
-- Type errors indicate mismatches between APIs and their usage - these MUST be resolved
-- Do NOT ignore or work around type errors with `any` casts
+- Run `npm run build` after any code modifications
+- Fix ALL build errors before considering the task complete
+- Build errors indicate issues that may not be caught by `tsc --noEmit` alone (e.g., event forwarding, renderer build)
+- The build must complete successfully before the task is complete
 
-> **Zero TypeScript errors. No exceptions.**
+> **Successful build required. No exceptions.**
 
 ---
 

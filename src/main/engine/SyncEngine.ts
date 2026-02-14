@@ -3,8 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { syncLog, posts, media, NewSyncLogEntry } from '../database/schema';
-import { taskManager, Task } from './TaskManager';
-import { getDropboxSyncEngine } from './DropboxSyncEngine';
 
 export type SyncDirection = 'push' | 'pull' | 'bidirectional';
 export type SyncStatus = 'idle' | 'syncing' | 'error';
@@ -20,13 +18,6 @@ export interface SyncResult {
   pulled: number;
   conflicts: number;
   errors: string[];
-  dropboxResult?: {
-    uploaded: number;
-    downloaded: number;
-    deleted: number;
-    conflicts: number;
-    errors: string[];
-  };
 }
 
 export class SyncEngine extends EventEmitter {
@@ -43,11 +34,11 @@ export class SyncEngine extends EventEmitter {
   }
 
   /**
-   * Check if sync is configured. Uses Dropbox configuration status.
+   * Check if sync is configured.
+   * Currently returns false as cloud sync is not implemented.
    */
   isConfigured(): boolean {
-    const dropboxEngine = getDropboxSyncEngine();
-    return dropboxEngine.isConfigured();
+    return false;
   }
 
   async configure(config: SyncConfig): Promise<void> {
@@ -59,14 +50,7 @@ export class SyncEngine extends EventEmitter {
       this.syncIntervalId = null;
     }
 
-    // Start auto-sync if enabled
-    if (config.autoSync && config.syncInterval > 0) {
-      this.syncIntervalId = setInterval(
-        () => this.fullSync('bidirectional'),
-        config.syncInterval * 60 * 1000
-      );
-    }
-
+    // Auto-sync is disabled as cloud sync is not implemented
     this.emit('configured', config);
   }
 
@@ -159,110 +143,17 @@ export class SyncEngine extends EventEmitter {
   }
 
   /**
-   * Full sync: Files via Dropbox.
-   * Synchronizes posts and media files to Dropbox for backup and cross-device access.
+   * Full sync is not currently implemented.
+   * Returns a result indicating sync is not configured.
    */
-  async fullSync(direction: SyncDirection = 'bidirectional'): Promise<SyncResult> {
-    if (this.syncStatus === 'syncing') {
-      return {
-        success: false,
-        pushed: 0,
-        pulled: 0,
-        conflicts: 0,
-        errors: ['Sync already in progress'],
-      };
-    }
-
-    const result: SyncResult = {
-      success: true,
+  async fullSync(_direction: SyncDirection = 'bidirectional'): Promise<SyncResult> {
+    return {
+      success: false,
       pushed: 0,
       pulled: 0,
       conflicts: 0,
-      errors: [],
+      errors: ['Cloud sync not configured'],
     };
-
-    const dropboxEngine = getDropboxSyncEngine();
-    if (!dropboxEngine.isConfigured()) {
-      return {
-        success: false,
-        pushed: 0,
-        pulled: 0,
-        conflicts: 0,
-        errors: ['Dropbox sync not configured'],
-      };
-    }
-
-    console.log('[SyncEngine] Starting Dropbox file sync...', direction);
-
-    const task: Task<SyncResult> = {
-      id: uuidv4(),
-      name: `Sync (${direction})`,
-      execute: async (onProgress) => {
-        this.syncStatus = 'syncing';
-        this.emit('syncStarted', direction);
-
-        try {
-          onProgress(10, 'Starting Dropbox sync...');
-          
-          const fileResult = await dropboxEngine.syncAll();
-          
-          result.dropboxResult = {
-            uploaded: fileResult.uploaded,
-            downloaded: fileResult.downloaded,
-            deleted: fileResult.deleted,
-            conflicts: fileResult.conflicts,
-            errors: fileResult.errors,
-          };
-
-          result.pushed = fileResult.uploaded;
-          result.pulled = fileResult.downloaded;
-          result.conflicts = fileResult.conflicts;
-
-          if (!fileResult.success) {
-            result.success = false;
-            result.errors.push(...fileResult.errors.map(e => `Dropbox: ${e}`));
-          }
-
-          onProgress(100, 'Sync complete');
-          console.log('[SyncEngine] Dropbox sync complete:', {
-            uploaded: fileResult.uploaded,
-            downloaded: fileResult.downloaded,
-            errors: fileResult.errors.length,
-          });
-
-          this.syncStatus = 'idle';
-          this.emit('syncCompleted', result);
-
-          return result;
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          console.error('[SyncEngine] Sync failed:', errorMsg);
-          result.success = false;
-          result.errors.push(`Dropbox sync failed: ${errorMsg}`);
-
-          this.syncStatus = 'error';
-          this.emit('syncFailed', errorMsg);
-
-          return result;
-        }
-      },
-    };
-
-    try {
-      return await taskManager.runTask(task);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[SyncEngine] Task manager error:', errorMsg);
-      this.syncStatus = 'error';
-      this.emit('syncFailed', errorMsg);
-      return {
-        success: false,
-        pushed: 0,
-        pulled: 0,
-        conflicts: 0,
-        errors: [errorMsg],
-      };
-    }
   }
 }
 

@@ -26,19 +26,6 @@ export {
   type SupportedLanguage,
 } from './stemmer';
 export {
-  DropboxSyncEngine,
-  getDropboxSyncEngine,
-  type DropboxSyncConfig,
-  type DropboxSyncStatus,
-  type DropboxConflict,
-  type DropboxRemoteChange,
-  type DropboxChangesResult,
-  type FileSyncResult,
-  type FileUploadResult,
-  type FileDownloadResult,
-  type ConflictResolution,
-} from './DropboxSyncEngine';
-export {
   ChatEngine,
   type ChatConversationData,
   type ChatMessageData,

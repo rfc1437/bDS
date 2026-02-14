@@ -4,7 +4,7 @@ import { showToast } from '../Toast';
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
-export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'sync' | 'publishing' | 'data';
+export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'publishing' | 'data';
 
 // Scroll to a settings section by category ID
 export const scrollToSettingsSection = (category: SettingsCategory) => {
@@ -17,10 +17,6 @@ export const scrollToSettingsSection = (category: SettingsCategory) => {
 // Settings categories
 
 interface Credentials {
-  // Dropbox File Sync
-  dropboxAccessToken: string;
-  dropboxAppKey: string;
-  dropboxRemotePath: string;
   // FTP Publishing
   ftpHost: string;
   ftpUser: string;
@@ -32,9 +28,6 @@ interface Credentials {
 }
 
 const defaultCredentials: Credentials = {
-  dropboxAccessToken: '',
-  dropboxAppKey: '',
-  dropboxRemotePath: '/blog',
   ftpHost: '',
   ftpUser: '',
   ftpPassword: '',
@@ -101,8 +94,6 @@ export const SettingsView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [credentials, setCredentials] = useState<Credentials>(defaultCredentials);
   const [showSecrets, setShowSecrets] = useState(false);
-  const [dropboxConfigured, setDropboxConfigured] = useState(false);
-  const [dropboxLastSync, setDropboxLastSync] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Project settings
@@ -193,42 +184,12 @@ export const SettingsView: React.FC = () => {
         } catch (error) {
           console.error('Failed to load AI settings:', error);
         }
-
-        // Check Dropbox status
-        const dbxConfigured = await window.electronAPI?.dropbox?.isConfigured();
-        setDropboxConfigured(dbxConfigured || false);
-        
-        if (dbxConfigured) {
-          const lastSync = await window.electronAPI?.dropbox?.getLastSyncTime();
-          setDropboxLastSync(lastSync || null);
-        }
       } catch (error) {
         console.error('Failed to load settings:', error);
       }
     };
     loadSettings();
   }, [activeProject?.id]); // Reload when project changes
-
-  const handleSaveDropbox = async () => {
-    try {
-      localStorage.setItem('bds-credentials', JSON.stringify(credentials));
-
-      if (credentials.dropboxAccessToken && credentials.dropboxAppKey) {
-        await window.electronAPI?.dropbox?.configure({
-          accessToken: credentials.dropboxAccessToken,
-          appKey: credentials.dropboxAppKey,
-          remotePath: credentials.dropboxRemotePath || '/blog',
-        });
-        setDropboxConfigured(true);
-        showToast.success('Dropbox sync configured');
-      } else {
-        showToast.success('Credentials saved');
-      }
-    } catch (error) {
-      console.error('Failed to save Dropbox credentials:', error);
-      showToast.error('Failed to configure Dropbox sync');
-    }
-  };
 
   const handleSavePublishing = async () => {
     try {
@@ -240,14 +201,9 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleClearCredentials = (type: 'dropbox' | 'ftp' | 'ssh') => {
+  const handleClearCredentials = (type: 'ftp' | 'ssh') => {
     const newCreds = { ...credentials };
     switch (type) {
-      case 'dropbox':
-        newCreds.dropboxAccessToken = '';
-        newCreds.dropboxAppKey = '';
-        newCreds.dropboxRemotePath = '/blog';
-        break;
       case 'ftp':
         newCreds.ftpHost = '';
         newCreds.ftpUser = '';
@@ -262,36 +218,6 @@ export const SettingsView: React.FC = () => {
     setCredentials(newCreds);
     localStorage.setItem('bds-credentials', JSON.stringify(newCreds));
     showToast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} credentials cleared`);
-  };
-
-  const handleDropboxSync = async () => {
-    try {
-      showToast.loading('Starting Dropbox sync...');
-      await window.electronAPI?.dropbox?.syncAll();
-      showToast.dismiss();
-      showToast.success('Dropbox sync completed');
-      const lastSync = await window.electronAPI?.dropbox?.getLastSyncTime();
-      setDropboxLastSync(lastSync || null);
-    } catch (error) {
-      showToast.dismiss();
-      showToast.error('Dropbox sync failed');
-    }
-  };
-
-  const handleTestDropboxConnection = async () => {
-    showToast.loading('Testing Dropbox connection...');
-    try {
-      const status = await window.electronAPI?.dropbox?.getStatus();
-      showToast.dismiss();
-      if (status) {
-        showToast.success('Dropbox connection active');
-      } else {
-        showToast.error('Dropbox connection failed');
-      }
-    } catch {
-      showToast.dismiss();
-      showToast.error('Dropbox connection failed');
-    }
   };
 
   // Save project settings
@@ -338,7 +264,6 @@ export const SettingsView: React.FC = () => {
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
-  const syncKeywords = ['sync', 'dropbox', 'file', 'backup', 'token', 'remote'];
   const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
 
@@ -746,97 +671,6 @@ export const SettingsView: React.FC = () => {
     </SettingSection>
   );
 
-  const renderSyncSettings = () => (
-    <>
-      <SettingSection
-        id="settings-section-sync"
-        title="File Sync — Dropbox"
-        description="Synchronize your blog files (posts and media) to Dropbox for backup and cross-device access."
-        hidden={!sectionHasMatches(syncKeywords)}
-      >
-        <SettingRow
-          id="dropbox-token"
-          label="Access Token"
-          description="Your Dropbox API access token. Generate one from the Dropbox App Console."
-        >
-          <div className="setting-input-group">
-            <input
-              id="dropbox-token"
-              type={showSecrets ? 'text' : 'password'}
-              placeholder="Your Dropbox access token"
-              value={credentials.dropboxAccessToken}
-              onChange={(e) => setCredentials({ ...credentials, dropboxAccessToken: e.target.value })}
-            />
-            <button
-              className="setting-toggle-visibility"
-              onClick={() => setShowSecrets(!showSecrets)}
-              title={showSecrets ? 'Hide secrets' : 'Show secrets'}
-            >
-              {showSecrets ? '🔒' : '👁'}
-            </button>
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          id="dropbox-appkey"
-          label="App Key"
-          description="The App Key from your Dropbox developer application."
-        >
-          <input
-            id="dropbox-appkey"
-            type="text"
-            placeholder="Your Dropbox App Key"
-            value={credentials.dropboxAppKey}
-            onChange={(e) => setCredentials({ ...credentials, dropboxAppKey: e.target.value })}
-          />
-        </SettingRow>
-
-        <SettingRow
-          id="dropbox-path"
-          label="Remote Path"
-          description="The folder path in Dropbox where blog files will be synced. Default: /blog"
-        >
-          <input
-            id="dropbox-path"
-            type="text"
-            placeholder="/blog"
-            value={credentials.dropboxRemotePath}
-            onChange={(e) => setCredentials({ ...credentials, dropboxRemotePath: e.target.value })}
-          />
-        </SettingRow>
-
-        <div className="setting-actions">
-          <button className="primary" onClick={handleSaveDropbox}>
-            {dropboxConfigured ? 'Update Configuration' : 'Enable Dropbox Sync'}
-          </button>
-          <button className="secondary" onClick={handleTestDropboxConnection}>
-            Test Connection
-          </button>
-          {dropboxConfigured && (
-            <button className="secondary" onClick={handleDropboxSync}>
-              Sync Now
-            </button>
-          )}
-          <button className="secondary danger" onClick={() => handleClearCredentials('dropbox')}>
-            Clear
-          </button>
-        </div>
-
-        {dropboxConfigured && (
-          <div className="setting-status success">
-            <span className="status-icon">✓</span>
-            <span>
-              Dropbox sync is configured
-              {dropboxLastSync && (
-                <span className="status-detail"> · Last sync: {new Date(dropboxLastSync).toLocaleString()}</span>
-              )}
-            </span>
-          </div>
-        )}
-      </SettingSection>
-    </>
-  );
-
   const renderPublishingSettings = () => (
     <>
       <SettingSection
@@ -878,13 +712,22 @@ export const SettingsView: React.FC = () => {
           label="Password"
           description="Your FTP account password."
         >
-          <input
-            id="ftp-password"
-            type={showSecrets ? 'text' : 'password'}
-            placeholder="Password"
-            value={credentials.ftpPassword}
-            onChange={(e) => setCredentials({ ...credentials, ftpPassword: e.target.value })}
-          />
+          <div className="setting-input-group">
+            <input
+              id="ftp-password"
+              type={showSecrets ? 'text' : 'password'}
+              placeholder="Password"
+              value={credentials.ftpPassword}
+              onChange={(e) => setCredentials({ ...credentials, ftpPassword: e.target.value })}
+            />
+            <button
+              className="setting-toggle-visibility"
+              onClick={() => setShowSecrets(!showSecrets)}
+              title={showSecrets ? 'Hide password' : 'Show password'}
+            >
+              {showSecrets ? '🔒' : '👁'}
+            </button>
+          </div>
         </SettingRow>
 
         <div className="setting-actions">
@@ -1095,7 +938,6 @@ export const SettingsView: React.FC = () => {
     sectionHasMatches(editorKeywords) ||
     sectionHasMatches(contentKeywords) ||
     sectionHasMatches(aiKeywords) ||
-    sectionHasMatches(syncKeywords) ||
     sectionHasMatches(publishingKeywords) ||
     sectionHasMatches(dataKeywords);
 
@@ -1131,7 +973,6 @@ export const SettingsView: React.FC = () => {
             {renderEditorSettings()}
             {renderContentSettings()}
             {renderAISettings()}
-            {renderSyncSettings()}
             {renderPublishingSettings()}
             {renderDataSettings()}
           </>

@@ -70,24 +70,7 @@ const App: React.FC = () => {
           }
         }
 
-        // Re-configure Dropbox sync from saved credentials
-        const savedCreds = localStorage.getItem('bds-credentials');
-        if (savedCreds) {
-          try {
-            const creds = JSON.parse(savedCreds);
-            if (creds.dropboxAccessToken && creds.dropboxAppKey) {
-              await window.electronAPI?.dropbox?.configure({
-                accessToken: creds.dropboxAccessToken,
-                appKey: creds.dropboxAppKey,
-                remotePath: creds.dropboxRemotePath || '/blog',
-              });
-            }
-          } catch (e) {
-            console.error('Failed to restore sync configuration:', e);
-          }
-        }
-
-        // Check sync status (uses Dropbox configuration)
+        // Check sync status
         const syncConfigured = await window.electronAPI?.sync.isConfigured();
         setSyncConfigured(syncConfigured || false);
 
