@@ -126,6 +126,7 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('post:deleted', (id: unknown) => {
         removePost(id as string);
+        useAppStore.getState().closeTab(id as string);
       }) || (() => {})
     );
 
