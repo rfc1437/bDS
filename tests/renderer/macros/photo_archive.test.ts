@@ -18,12 +18,12 @@ describe('photo_archive macro', () => {
   });
 
   describe('validation', () => {
-    it('should require year parameter', () => {
+    it('should accept no parameters (recent mode)', () => {
       const macro = getMacro('photo_archive');
       
       expect(macro).toBeDefined();
       const error = macro!.validate?.({});
-      expect(error).toBe('photo_archive macro requires a "year" parameter');
+      expect(error).toBeUndefined();
     });
 
     it('should reject non-numeric year', () => {
@@ -167,6 +167,59 @@ describe('photo_archive macro', () => {
       const html = macro!.render({ year: '2024', month: '6' }, context);
       
       expect(html).toContain('photo-archive-single-month');
+    });
+  });
+
+  describe('render - no parameters (recent mode)', () => {
+    it('should accept no parameters', () => {
+      const macro = getMacro('photo_archive');
+      
+      const error = macro!.validate?.({});
+      expect(error).toBeUndefined();
+    });
+
+    it('should render with data-recent attribute when no params', () => {
+      const macro = getMacro('photo_archive');
+      const context: MacroRenderContext = { isPreview: true, postId: 'test-post-id' };
+      
+      const html = macro!.render({}, context);
+      
+      expect(html).toContain('data-recent="10"');
+      expect(html).not.toContain('data-year=');
+    });
+
+    it('should have recent-months class when no params', () => {
+      const macro = getMacro('photo_archive');
+      const context: MacroRenderContext = { isPreview: true, postId: 'test-post-id' };
+      
+      const html = macro!.render({}, context);
+      
+      expect(html).toContain('photo-archive-recent-months');
+    });
+
+    it('should show appropriate loading message for recent mode', () => {
+      const macro = getMacro('photo_archive');
+      const context: MacroRenderContext = { isPreview: true, postId: 'test-post-id' };
+      
+      const html = macro!.render({}, context);
+      
+      expect(html).toContain('Loading recent photos');
+    });
+
+    it('should show recent photos preview', () => {
+      const macro = getMacro('photo_archive');
+      
+      const preview = macro!.editorPreview?.({});
+      expect(preview).toBe('📅 Photo Archive: Recent');
+    });
+
+    it('should include post-id data attribute in recent mode', () => {
+      const macro = getMacro('photo_archive');
+      const context: MacroRenderContext = { isPreview: true, postId: 'post-123' };
+      
+      const html = macro!.render({}, context);
+      
+      expect(html).toContain('data-post-id="post-123"');
     });
   });
 
