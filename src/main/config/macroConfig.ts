@@ -49,6 +49,31 @@ export const macroConfigs: MacroConfig[] = [
           return 'Gallery columns must be a number between 1 and 6';
         }
       }
+      // 'link' parameter is accepted for backwards compatibility but ignored
+      return undefined;
+    },
+  },
+  {
+    name: 'photo_archive',
+    description: 'Creates a photo archive gallery organized by year and month, or shows recent months',
+    validate: (params) => {
+      // Year is optional - if not provided, shows recent 10 months
+      if (params.year) {
+        const year = parseInt(params.year, 10);
+        if (isNaN(year) || year < 1000 || year > 9999) {
+          return 'Year must be a valid 4-digit year (e.g., 2024)';
+        }
+      }
+      // Month requires year
+      if (params.month) {
+        if (!params.year) {
+          return 'Month parameter requires a year parameter';
+        }
+        const month = parseInt(params.month, 10);
+        if (isNaN(month) || month < 1 || month > 12) {
+          return 'Month must be a number between 1 and 12';
+        }
+      }
       return undefined;
     },
   },
