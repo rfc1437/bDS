@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { app } from 'electron';
+import { eq, and, asc, sql, like } from 'drizzle-orm';
 import { getDatabase } from '../database';
+import { tags, posts } from '../database/schema';
 import { taskManager } from './TaskManager';
 
 /**
@@ -125,6 +127,15 @@ export class TagEngine extends EventEmitter {
     super();
   }
 
+  private getDb() {
+    return getDatabase().getLocal();
+  }
+
+  // For JSON operations that Drizzle doesn't support natively
+  private getClient() {
+    return getDatabase().getLocalClient();
+  }
+
   /**
    * Returns the default internal project directory (in userData).
    */
@@ -167,11 +178,10 @@ export class TagEngine extends EventEmitter {
    * Get all tags with their post counts for the tag cloud
    */
   async getTagsWithCounts(): Promise<TagWithCount[]> {
-    const client = getDatabase().getLocalClient();
+    const client = this.getClient();
     if (!client) return [];
 
-    // Query tags with counts from posts
-    // Use a subquery to count posts per tag name
+    // Query tags with counts from posts - requires raw SQL for JSON operations
     const result = await client.execute({
       sql: `
         SELECT 
@@ -202,8 +212,7 @@ export class TagEngine extends EventEmitter {
    * Create a new tag
    */
   async createTag(input: CreateTagInput): Promise<TagData> {
-    const client = getDatabase().getLocalClient();
-    if (!client) throw new Error('Database not initialized');
+    const db = this.getDb();
 
     const name = input.name.trim().toLowerCase();
     if (!name) {
@@ -215,29 +224,36 @@ export class TagEngine extends EventEmitter {
       throw new Error('Invalid color format. Use hex format like #ff0000 or #f00');
     }
 
-    // Check for duplicate
-    const existing = await client.execute({
-      sql: 'SELECT id, name FROM tags WHERE project_id = ? AND LOWER(name) = LOWER(?)',
-      args: [this.currentProjectId, name],
-    });
+    // Check for duplicate using Drizzle
+    const existing = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(
+        eq(tags.projectId, this.currentProjectId),
+        sql`LOWER(${tags.name}) = LOWER(${name})`
+      ));
 
-    if (existing.rows.length > 0) {
+    if (existing.length > 0) {
       throw new Error(`Tag "${name}" already exists`);
     }
 
-    const now = Date.now();
+    const now = new Date();
     const tag: TagData = {
       id: uuidv4(),
       projectId: this.currentProjectId,
       name,
       color: input.color,
-      createdAt: new Date(now),
-      updatedAt: new Date(now),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    await client.execute({
-      sql: 'INSERT INTO tags (id, project_id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      args: [tag.id, tag.projectId, tag.name, tag.color || null, now, now],
+    await db.insert(tags).values({
+      id: tag.id,
+      projectId: tag.projectId,
+      name: tag.name,
+      color: tag.color || null,
+      createdAt: now,
+      updatedAt: now,
     });
 
     this.emit('tagCreated', tag);
@@ -250,57 +266,53 @@ export class TagEngine extends EventEmitter {
    * Update a tag
    */
   async updateTag(id: string, input: UpdateTagInput): Promise<TagData | null> {
-    const client = getDatabase().getLocalClient();
-    if (!client) return null;
+    const db = this.getDb();
 
     // Get existing tag
-    const existing = await client.execute({
-      sql: 'SELECT * FROM tags WHERE id = ? AND project_id = ?',
-      args: [id, this.currentProjectId],
-    });
+    const existing = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.id, id),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
-    if (existing.rows.length === 0) {
+    if (existing.length === 0) {
       return null;
     }
 
-    const row = existing.rows[0] as any;
+    const row = existing[0];
 
     // Validate color if provided
     if (input.color !== undefined && input.color !== null && !isValidHexColor(input.color)) {
       throw new Error('Invalid color format. Use hex format like #ff0000 or #f00');
     }
 
-    const now = Date.now();
-    const updates: string[] = [];
-    const args: any[] = [];
-
-    if (input.color !== undefined) {
-      updates.push('color = ?');
-      args.push(input.color);
-    }
-
-    if (updates.length === 0) {
+    if (input.color === undefined) {
       // No updates
       return this.rowToTagData(row);
     }
 
-    updates.push('updated_at = ?');
-    args.push(now);
-    args.push(id);
-    args.push(this.currentProjectId);
+    const now = new Date();
 
-    await client.execute({
-      sql: `UPDATE tags SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
-      args,
-    });
+    await db
+      .update(tags)
+      .set({
+        color: input.color,
+        updatedAt: now,
+      })
+      .where(and(
+        eq(tags.id, id),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
     const updatedTag: TagData = {
       id: row.id,
-      projectId: row.project_id,
+      projectId: row.projectId,
       name: row.name,
-      color: input.color !== undefined ? input.color || undefined : row.color,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(now),
+      color: input.color !== undefined ? input.color || undefined : row.color || undefined,
+      createdAt: row.createdAt,
+      updatedAt: now,
     };
 
     this.emit('tagUpdated', updatedTag);
@@ -313,21 +325,25 @@ export class TagEngine extends EventEmitter {
    * Delete a tag and remove it from all posts (runs as background task)
    */
   async deleteTag(id: string): Promise<DeleteTagResult> {
-    const client = getDatabase().getLocalClient();
+    const db = this.getDb();
+    const client = this.getClient();
     if (!client) throw new Error('Database not initialized');
 
     // Get tag
-    const tagResult = await client.execute({
-      sql: 'SELECT * FROM tags WHERE id = ? AND project_id = ?',
-      args: [id, this.currentProjectId],
-    });
+    const tagRows = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.id, id),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
-    if (tagResult.rows.length === 0) {
+    if (tagRows.length === 0) {
       throw new Error('Tag not found');
     }
 
-    const tag = tagResult.rows[0] as any;
-    const tagName = tag.name as string;
+    const tag = tagRows[0];
+    const tagName = tag.name;
 
     // Run the deletion as a background task
     return taskManager.runTask({
@@ -336,15 +352,15 @@ export class TagEngine extends EventEmitter {
       execute: async (onProgress) => {
         onProgress(0, `Finding posts with tag "${tagName}"...`);
 
-        // Find all posts with this tag
+        // Find all posts with this tag - requires raw SQL for JSON
         const postsResult = await client.execute({
           sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
           args: [this.currentProjectId, `%"${tagName}"%`],
         });
 
         const postsToUpdate = postsResult.rows.filter((row: any) => {
-          const tags: string[] = JSON.parse(row.tags || '[]');
-          return tags.includes(tagName);
+          const postTags: string[] = JSON.parse(row.tags || '[]');
+          return postTags.includes(tagName);
         });
 
         const total = postsToUpdate.length;
@@ -352,13 +368,16 @@ export class TagEngine extends EventEmitter {
 
         for (const row of postsToUpdate) {
           const postId = row.id as string;
-          const tags: string[] = JSON.parse((row as any).tags || '[]');
-          const newTags = tags.filter(t => t !== tagName);
+          const postTags: string[] = JSON.parse((row as any).tags || '[]');
+          const newTags = postTags.filter(t => t !== tagName);
 
-          await client.execute({
-            sql: 'UPDATE posts SET tags = ?, updated_at = ? WHERE id = ?',
-            args: [JSON.stringify(newTags), Date.now(), postId],
-          });
+          await db
+            .update(posts)
+            .set({
+              tags: JSON.stringify(newTags),
+              updatedAt: new Date(),
+            })
+            .where(eq(posts.id, postId));
 
           updated++;
           onProgress((updated / total) * 80, `Updated ${updated}/${total} posts...`);
@@ -367,10 +386,12 @@ export class TagEngine extends EventEmitter {
         onProgress(90, 'Deleting tag...');
 
         // Delete the tag
-        await client.execute({
-          sql: 'DELETE FROM tags WHERE id = ? AND project_id = ?',
-          args: [id, this.currentProjectId],
-        });
+        await db
+          .delete(tags)
+          .where(and(
+            eq(tags.id, id),
+            eq(tags.projectId, this.currentProjectId)
+          ));
 
         onProgress(100, 'Complete');
 
@@ -386,7 +407,8 @@ export class TagEngine extends EventEmitter {
    * Merge multiple source tags into a target tag (runs as background task)
    */
   async mergeTags(sourceTagIds: string[], targetTagId: string): Promise<MergeTagsResult> {
-    const client = getDatabase().getLocalClient();
+    const db = this.getDb();
+    const client = this.getClient();
     if (!client) throw new Error('Database not initialized');
 
     if (sourceTagIds.length === 0) {
@@ -394,30 +416,36 @@ export class TagEngine extends EventEmitter {
     }
 
     // Verify all source tags exist
-    const sourceTags: any[] = [];
+    const sourceTags: (typeof tags.$inferSelect)[] = [];
     for (const id of sourceTagIds) {
-      const result = await client.execute({
-        sql: 'SELECT * FROM tags WHERE id = ? AND project_id = ?',
-        args: [id, this.currentProjectId],
-      });
-      if (result.rows.length > 0) {
-        sourceTags.push(result.rows[0]);
+      const rows = await db
+        .select()
+        .from(tags)
+        .where(and(
+          eq(tags.id, id),
+          eq(tags.projectId, this.currentProjectId)
+        ));
+      if (rows.length > 0) {
+        sourceTags.push(rows[0]);
       }
     }
 
     // Verify target tag exists
-    const targetResult = await client.execute({
-      sql: 'SELECT * FROM tags WHERE id = ? AND project_id = ?',
-      args: [targetTagId, this.currentProjectId],
-    });
+    const targetRows = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.id, targetTagId),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
-    if (targetResult.rows.length === 0) {
+    if (targetRows.length === 0) {
       throw new Error('Target tag not found');
     }
 
-    const targetTag = targetResult.rows[0] as any;
-    const targetName = targetTag.name as string;
-    const sourceNames = sourceTags.map((t: any) => t.name as string);
+    const targetTag = targetRows[0];
+    const targetName = targetTag.name;
+    const sourceNames = sourceTags.map(t => t.name);
 
     // Run as background task
     return taskManager.runTask({
@@ -441,19 +469,22 @@ export class TagEngine extends EventEmitter {
 
           for (const row of postsResult.rows) {
             const postId = row.id as string;
-            const tags: string[] = JSON.parse((row as any).tags || '[]');
+            const postTags: string[] = JSON.parse((row as any).tags || '[]');
             
-            if (tags.includes(sourceName)) {
+            if (postTags.includes(sourceName)) {
               // Remove source tag and add target if not already present
-              const newTags = tags.filter(t => t !== sourceName);
+              const newTags = postTags.filter(t => t !== sourceName);
               if (!newTags.includes(targetName)) {
                 newTags.push(targetName);
               }
 
-              await client.execute({
-                sql: 'UPDATE posts SET tags = ?, updated_at = ? WHERE id = ?',
-                args: [JSON.stringify(newTags), Date.now(), postId],
-              });
+              await db
+                .update(posts)
+                .set({
+                  tags: JSON.stringify(newTags),
+                  updatedAt: new Date(),
+                })
+                .where(eq(posts.id, postId));
 
               totalPostsUpdated++;
             }
@@ -464,10 +495,12 @@ export class TagEngine extends EventEmitter {
 
         // Delete source tags
         for (const id of sourceTagIds) {
-          await client.execute({
-            sql: 'DELETE FROM tags WHERE id = ? AND project_id = ?',
-            args: [id, this.currentProjectId],
-          });
+          await db
+            .delete(tags)
+            .where(and(
+              eq(tags.id, id),
+              eq(tags.projectId, this.currentProjectId)
+            ));
         }
 
         onProgress(100, 'Complete');
@@ -491,7 +524,8 @@ export class TagEngine extends EventEmitter {
    * Rename a tag (runs as background task to update posts)
    */
   async renameTag(id: string, newName: string): Promise<RenameTagResult> {
-    const client = getDatabase().getLocalClient();
+    const db = this.getDb();
+    const client = this.getClient();
     if (!client) throw new Error('Database not initialized');
 
     newName = newName.trim().toLowerCase();
@@ -500,29 +534,36 @@ export class TagEngine extends EventEmitter {
     }
 
     // Get existing tag
-    const tagResult = await client.execute({
-      sql: 'SELECT * FROM tags WHERE id = ? AND project_id = ?',
-      args: [id, this.currentProjectId],
-    });
+    const tagRows = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.id, id),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
-    if (tagResult.rows.length === 0) {
+    if (tagRows.length === 0) {
       throw new Error('Tag not found');
     }
 
-    const tag = tagResult.rows[0] as any;
-    const oldName = tag.name as string;
+    const tag = tagRows[0];
+    const oldName = tag.name;
 
     if (oldName === newName) {
       return { success: true, postsUpdated: 0, oldName, newName };
     }
 
     // Check for duplicate
-    const duplicateResult = await client.execute({
-      sql: 'SELECT id FROM tags WHERE project_id = ? AND LOWER(name) = LOWER(?) AND id != ?',
-      args: [this.currentProjectId, newName, id],
-    });
+    const duplicateRows = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(
+        eq(tags.projectId, this.currentProjectId),
+        sql`LOWER(${tags.name}) = LOWER(${newName})`,
+        sql`${tags.id} != ${id}`
+      ));
 
-    if (duplicateResult.rows.length > 0) {
+    if (duplicateRows.length > 0) {
       throw new Error(`Tag "${newName}" already exists`);
     }
 
@@ -540,8 +581,8 @@ export class TagEngine extends EventEmitter {
         });
 
         const postsToUpdate = postsResult.rows.filter((row: any) => {
-          const tags: string[] = JSON.parse(row.tags || '[]');
-          return tags.includes(oldName);
+          const postTags: string[] = JSON.parse(row.tags || '[]');
+          return postTags.includes(oldName);
         });
 
         const total = postsToUpdate.length;
@@ -549,13 +590,16 @@ export class TagEngine extends EventEmitter {
 
         for (const row of postsToUpdate) {
           const postId = row.id as string;
-          const tags: string[] = JSON.parse((row as any).tags || '[]');
-          const newTags = tags.map(t => t === oldName ? newName : t);
+          const postTags: string[] = JSON.parse((row as any).tags || '[]');
+          const updatedTags = postTags.map(t => t === oldName ? newName : t);
 
-          await client.execute({
-            sql: 'UPDATE posts SET tags = ?, updated_at = ? WHERE id = ?',
-            args: [JSON.stringify(newTags), Date.now(), postId],
-          });
+          await db
+            .update(posts)
+            .set({
+              tags: JSON.stringify(updatedTags),
+              updatedAt: new Date(),
+            })
+            .where(eq(posts.id, postId));
 
           updated++;
           onProgress((updated / total) * 80, `Updated ${updated}/${total} posts...`);
@@ -564,10 +608,16 @@ export class TagEngine extends EventEmitter {
         onProgress(90, 'Updating tag record...');
 
         // Update the tag name
-        await client.execute({
-          sql: 'UPDATE tags SET name = ?, updated_at = ? WHERE id = ? AND project_id = ?',
-          args: [newName, Date.now(), id, this.currentProjectId],
-        });
+        await db
+          .update(tags)
+          .set({
+            name: newName,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(tags.id, id),
+            eq(tags.projectId, this.currentProjectId)
+          ));
 
         onProgress(100, 'Complete');
 
@@ -590,75 +640,84 @@ export class TagEngine extends EventEmitter {
    * Get a tag by ID
    */
   async getTag(id: string): Promise<TagData | null> {
-    const client = getDatabase().getLocalClient();
-    if (!client) return null;
+    const db = this.getDb();
 
-    const result = await client.execute({
-      sql: 'SELECT * FROM tags WHERE id = ? AND project_id = ?',
-      args: [id, this.currentProjectId],
-    });
+    const rows = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.id, id),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       return null;
     }
 
-    return this.rowToTagData(result.rows[0] as any);
+    return this.rowToTagData(rows[0]);
   }
 
   /**
    * Get a tag by name (case-insensitive)
    */
   async getTagByName(name: string): Promise<TagData | null> {
-    const client = getDatabase().getLocalClient();
-    if (!client) return null;
+    const db = this.getDb();
+    const normalizedName = name.trim().toLowerCase();
 
-    const result = await client.execute({
-      sql: 'SELECT * FROM tags WHERE project_id = ? AND LOWER(name) = LOWER(?)',
-      args: [this.currentProjectId, name.trim().toLowerCase()],
-    });
+    const rows = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.projectId, this.currentProjectId),
+        sql`LOWER(${tags.name}) = LOWER(${normalizedName})`
+      ));
 
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       return null;
     }
 
-    return this.rowToTagData(result.rows[0] as any);
+    return this.rowToTagData(rows[0]);
   }
 
   /**
    * Get all tags for the current project
    */
   async getAllTags(): Promise<TagData[]> {
-    const client = getDatabase().getLocalClient();
-    if (!client) return [];
+    const db = this.getDb();
 
-    const result = await client.execute({
-      sql: 'SELECT * FROM tags WHERE project_id = ? ORDER BY name ASC',
-      args: [this.currentProjectId],
-    });
+    const rows = await db
+      .select()
+      .from(tags)
+      .where(eq(tags.projectId, this.currentProjectId))
+      .orderBy(asc(tags.name));
 
-    return result.rows.map((row: any) => this.rowToTagData(row));
+    return rows.map(row => this.rowToTagData(row));
   }
 
   /**
    * Get post IDs that have a specific tag
    */
   async getPostsWithTag(tagId: string): Promise<string[]> {
-    const client = getDatabase().getLocalClient();
+    const db = this.getDb();
+    const client = this.getClient();
     if (!client) return [];
 
     // First get the tag name
-    const tagResult = await client.execute({
-      sql: 'SELECT name FROM tags WHERE id = ? AND project_id = ?',
-      args: [tagId, this.currentProjectId],
-    });
+    const tagRows = await db
+      .select({ name: tags.name })
+      .from(tags)
+      .where(and(
+        eq(tags.id, tagId),
+        eq(tags.projectId, this.currentProjectId)
+      ));
 
-    if (tagResult.rows.length === 0) {
+    if (tagRows.length === 0) {
       return [];
     }
 
-    const tagName = (tagResult.rows[0] as any).name as string;
+    const tagName = tagRows[0].name;
 
-    // Find posts with this tag
+    // Find posts with this tag - requires raw SQL for JSON
     const postsResult = await client.execute({
       sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
       args: [this.currentProjectId, `%"${tagName}"%`],
@@ -666,8 +725,8 @@ export class TagEngine extends EventEmitter {
 
     return postsResult.rows
       .filter((row: any) => {
-        const tags: string[] = JSON.parse(row.tags || '[]');
-        return tags.includes(tagName);
+        const postTags: string[] = JSON.parse(row.tags || '[]');
+        return postTags.includes(tagName);
       })
       .map((row: any) => row.id as string);
   }
@@ -676,19 +735,18 @@ export class TagEngine extends EventEmitter {
    * Sync tags from existing posts - discover tags that exist in posts but not in tags table
    */
   async syncTagsFromPosts(): Promise<SyncTagsResult> {
-    const client = getDatabase().getLocalClient();
-    if (!client) throw new Error('Database not initialized');
+    const db = this.getDb();
 
     // Get all tags from posts
-    const postsResult = await client.execute({
-      sql: 'SELECT tags FROM posts WHERE project_id = ?',
-      args: [this.currentProjectId],
-    });
+    const postRows = await db
+      .select({ tags: posts.tags })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId));
 
     const discoveredTags = new Set<string>();
-    for (const row of postsResult.rows) {
-      const tags: string[] = JSON.parse((row as any).tags || '[]');
-      for (const tag of tags) {
+    for (const row of postRows) {
+      const postTags: string[] = JSON.parse(row.tags || '[]');
+      for (const tag of postTags) {
         if (tag.trim()) {
           discoveredTags.add(tag.trim().toLowerCase());
         }
@@ -696,23 +754,27 @@ export class TagEngine extends EventEmitter {
     }
 
     // Get existing tags
-    const existingResult = await client.execute({
-      sql: 'SELECT name FROM tags WHERE project_id = ?',
-      args: [this.currentProjectId],
-    });
+    const existingRows = await db
+      .select({ name: tags.name })
+      .from(tags)
+      .where(eq(tags.projectId, this.currentProjectId));
 
-    const existingNames = new Set(existingResult.rows.map((row: any) => (row.name as string).toLowerCase()));
+    const existingNames = new Set(existingRows.map(row => row.name.toLowerCase()));
 
     // Find missing tags
     const missingTags = Array.from(discoveredTags).filter(t => !existingNames.has(t));
     const added: string[] = [];
 
     // Add missing tags
-    const now = Date.now();
+    const now = new Date();
     for (const tagName of missingTags) {
-      await client.execute({
-        sql: 'INSERT INTO tags (id, project_id, name, color, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)',
-        args: [uuidv4(), this.currentProjectId, tagName, now, now],
+      await db.insert(tags).values({
+        id: uuidv4(),
+        projectId: this.currentProjectId,
+        name: tagName,
+        color: null,
+        createdAt: now,
+        updatedAt: now,
       });
       added.push(tagName);
     }
@@ -731,14 +793,14 @@ export class TagEngine extends EventEmitter {
   /**
    * Convert database row to TagData
    */
-  private rowToTagData(row: any): TagData {
+  private rowToTagData(row: typeof tags.$inferSelect): TagData {
     return {
       id: row.id,
-      projectId: row.project_id,
+      projectId: row.projectId,
       name: row.name,
       color: row.color || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 
@@ -748,12 +810,12 @@ export class TagEngine extends EventEmitter {
    */
   private async saveTagsToFile(): Promise<void> {
     try {
-      const tags = await this.getAllTags();
+      const allTags = await this.getAllTags();
       const filePath = this.getTagsFilePath();
       const dir = path.dirname(filePath);
 
       // Serialize to portable format - only name and optional color
-      const serialized: SerializedTag[] = tags.map(tag => {
+      const serialized: SerializedTag[] = allTags.map(tag => {
         const entry: SerializedTag = { name: tag.name };
         if (tag.color) {
           entry.color = tag.color;
@@ -778,10 +840,8 @@ export class TagEngine extends EventEmitter {
       const content = await fs.readFile(filePath, 'utf-8');
       const rawTags: any[] = JSON.parse(content);
 
-      const client = getDatabase().getLocalClient();
-      if (!client) return;
-
-      const now = Date.now();
+      const db = this.getDb();
+      const now = new Date();
 
       for (const tag of rawTags) {
         // Support both portable format { name, color? } and legacy format with id
@@ -791,23 +851,36 @@ export class TagEngine extends EventEmitter {
         const color = tag.color || null;
 
         // Check if tag with this name already exists
-        const existing = await client.execute({
-          sql: 'SELECT id FROM tags WHERE project_id = ? AND LOWER(name) = LOWER(?)',
-          args: [this.currentProjectId, name],
-        });
+        const existing = await db
+          .select({ id: tags.id })
+          .from(tags)
+          .where(and(
+            eq(tags.projectId, this.currentProjectId),
+            sql`LOWER(${tags.name}) = LOWER(${name})`
+          ));
 
-        if (existing.rows.length === 0) {
+        if (existing.length === 0) {
           // Create new tag with fresh ID
-          await client.execute({
-            sql: 'INSERT INTO tags (id, project_id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-            args: [uuidv4(), this.currentProjectId, name, color, now, now],
+          await db.insert(tags).values({
+            id: uuidv4(),
+            projectId: this.currentProjectId,
+            name,
+            color,
+            createdAt: now,
+            updatedAt: now,
           });
         } else if (color) {
           // Update color if provided and tag exists
-          await client.execute({
-            sql: 'UPDATE tags SET color = ?, updated_at = ? WHERE project_id = ? AND LOWER(name) = LOWER(?)',
-            args: [color, now, this.currentProjectId, name],
-          });
+          await db
+            .update(tags)
+            .set({
+              color,
+              updatedAt: now,
+            })
+            .where(and(
+              eq(tags.projectId, this.currentProjectId),
+              sql`LOWER(${tags.name}) = LOWER(${name})`
+            ));
         }
       }
     } catch (error: any) {

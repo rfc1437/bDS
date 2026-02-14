@@ -8,7 +8,9 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { eq, desc, asc } from 'drizzle-orm';
 import { DatabaseConnection } from '../database/connection';
+import { chatConversations, chatMessages, settings } from '../database/schema';
 
 export interface ChatConversationData {
   id: string;
@@ -45,19 +47,18 @@ export class ChatEngine {
    * Create a new chat conversation
    */
   async createConversation(input: CreateConversationInput = {}): Promise<ChatConversationData> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
-
+    const drizzle = this.db.getLocal();
     const id = `chat_${uuidv4()}`;
     const title = input.title || 'New Chat';
     const model = input.model || 'claude-sonnet-4';
-    const now = Date.now();
+    const now = new Date();
 
-    await client.execute({
-      sql: `INSERT INTO chat_conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-      args: [id, title, model, now, now],
+    await drizzle.insert(chatConversations).values({
+      id,
+      title,
+      model,
+      createdAt: now,
+      updatedAt: now,
     });
 
     // Add system prompt as first message if provided
@@ -66,7 +67,7 @@ export class ChatEngine {
         conversationId: id,
         role: 'system',
         content: input.systemPrompt,
-        createdAt: new Date(now),
+        createdAt: now,
       });
     }
 
@@ -74,8 +75,8 @@ export class ChatEngine {
       id,
       title,
       model,
-      createdAt: new Date(now),
-      updatedAt: new Date(now),
+      createdAt: now,
+      updatedAt: now,
     };
   }
 
@@ -83,42 +84,40 @@ export class ChatEngine {
    * Get a conversation by ID with all messages
    */
   async getConversation(id: string): Promise<(ChatConversationData & { messages: ChatMessageData[] }) | null> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    const convResult = await client.execute({
-      sql: `SELECT * FROM chat_conversations WHERE id = ?`,
-      args: [id],
-    });
+    const rows = await drizzle
+      .select()
+      .from(chatConversations)
+      .where(eq(chatConversations.id, id));
 
-    if (convResult.rows.length === 0) {
+    if (rows.length === 0) {
       return null;
     }
 
-    const row = convResult.rows[0];
+    const row = rows[0];
     const conversation: ChatConversationData = {
-      id: row.id as string,
-      title: row.title as string,
-      model: row.model as string | undefined,
-      createdAt: new Date(row.created_at as number),
-      updatedAt: new Date(row.updated_at as number),
+      id: row.id,
+      title: row.title,
+      model: row.model || undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
 
-    const messagesResult = await client.execute({
-      sql: `SELECT * FROM chat_messages WHERE conversation_id = ? ORDER BY created_at ASC`,
-      args: [id],
-    });
+    const messageRows = await drizzle
+      .select()
+      .from(chatMessages)
+      .where(eq(chatMessages.conversationId, id))
+      .orderBy(asc(chatMessages.createdAt));
 
-    const messages: ChatMessageData[] = messagesResult.rows.map(r => ({
-      id: r.id as number,
-      conversationId: r.conversation_id as string,
-      role: r.role as 'system' | 'user' | 'assistant' | 'tool',
-      content: r.content as string | undefined,
-      toolCallId: r.tool_call_id as string | undefined,
-      toolCalls: r.tool_calls as string | undefined,
-      createdAt: new Date(r.created_at as number),
+    const messages: ChatMessageData[] = messageRows.map(r => ({
+      id: r.id,
+      conversationId: r.conversationId,
+      role: r.role,
+      content: r.content || undefined,
+      toolCallId: r.toolCallId || undefined,
+      toolCalls: r.toolCalls || undefined,
+      createdAt: r.createdAt,
     }));
 
     return { ...conversation, messages };
@@ -128,22 +127,20 @@ export class ChatEngine {
    * Get all conversations, sorted by most recently updated
    */
   async getRecentConversations(limit: number = 50): Promise<ChatConversationData[]> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    const result = await client.execute({
-      sql: `SELECT * FROM chat_conversations ORDER BY updated_at DESC LIMIT ?`,
-      args: [limit],
-    });
+    const rows = await drizzle
+      .select()
+      .from(chatConversations)
+      .orderBy(desc(chatConversations.updatedAt))
+      .limit(limit);
 
-    return result.rows.map(row => ({
-      id: row.id as string,
-      title: row.title as string,
-      model: row.model as string | undefined,
-      createdAt: new Date(row.created_at as number),
-      updatedAt: new Date(row.updated_at as number),
+    return rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      model: row.model || undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     }));
   }
 
@@ -151,90 +148,66 @@ export class ChatEngine {
    * Update a conversation's metadata
    */
   async updateConversation(id: string, updates: Partial<Pick<ChatConversationData, 'title' | 'model'>>): Promise<void> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    const setClauses: string[] = ['updated_at = ?'];
-    const args: (string | number | null)[] = [Date.now()];
-
-    if (updates.title !== undefined) {
-      setClauses.push('title = ?');
-      args.push(updates.title);
-    }
-    if (updates.model !== undefined) {
-      setClauses.push('model = ?');
-      args.push(updates.model);
-    }
-
-    args.push(id);
-
-    await client.execute({
-      sql: `UPDATE chat_conversations SET ${setClauses.join(', ')} WHERE id = ?`,
-      args,
-    });
+    await drizzle
+      .update(chatConversations)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatConversations.id, id));
   }
 
   /**
    * Delete a conversation and all its messages
    */
   async deleteConversation(id: string): Promise<void> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
     // Messages are deleted via CASCADE, but let's be explicit
-    await client.execute({
-      sql: `DELETE FROM chat_messages WHERE conversation_id = ?`,
-      args: [id],
-    });
+    await drizzle
+      .delete(chatMessages)
+      .where(eq(chatMessages.conversationId, id));
 
-    await client.execute({
-      sql: `DELETE FROM chat_conversations WHERE id = ?`,
-      args: [id],
-    });
+    await drizzle
+      .delete(chatConversations)
+      .where(eq(chatConversations.id, id));
   }
 
   /**
    * Add a message to a conversation
    */
   async addMessage(message: Omit<ChatMessageData, 'id'>): Promise<ChatMessageData> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
+    const createdAt = message.createdAt || new Date();
 
-    const createdAt = message.createdAt?.getTime() || Date.now();
-
-    const result = await client.execute({
-      sql: `INSERT INTO chat_messages (conversation_id, role, content, tool_call_id, tool_calls, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [
-        message.conversationId,
-        message.role,
-        message.content || null,
-        message.toolCallId || null,
-        message.toolCalls || null,
+    const result = await drizzle
+      .insert(chatMessages)
+      .values({
+        conversationId: message.conversationId,
+        role: message.role,
+        content: message.content || null,
+        toolCallId: message.toolCallId || null,
+        toolCalls: message.toolCalls || null,
         createdAt,
-      ],
-    });
+      })
+      .returning({ id: chatMessages.id });
 
     // Update conversation's updated_at timestamp
-    await client.execute({
-      sql: `UPDATE chat_conversations SET updated_at = ? WHERE id = ?`,
-      args: [createdAt, message.conversationId],
-    });
+    await drizzle
+      .update(chatConversations)
+      .set({ updatedAt: createdAt })
+      .where(eq(chatConversations.id, message.conversationId));
 
     return {
-      id: Number(result.lastInsertRowid),
+      id: result[0].id,
       conversationId: message.conversationId,
       role: message.role,
       content: message.content,
       toolCallId: message.toolCallId,
       toolCalls: message.toolCalls,
-      createdAt: new Date(createdAt),
+      createdAt,
     };
   }
 
@@ -242,24 +215,22 @@ export class ChatEngine {
    * Get messages for a conversation
    */
   async getMessages(conversationId: string): Promise<ChatMessageData[]> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    const result = await client.execute({
-      sql: `SELECT * FROM chat_messages WHERE conversation_id = ? ORDER BY created_at ASC`,
-      args: [conversationId],
-    });
+    const rows = await drizzle
+      .select()
+      .from(chatMessages)
+      .where(eq(chatMessages.conversationId, conversationId))
+      .orderBy(asc(chatMessages.createdAt));
 
-    return result.rows.map(r => ({
-      id: r.id as number,
-      conversationId: r.conversation_id as string,
-      role: r.role as 'system' | 'user' | 'assistant' | 'tool',
-      content: r.content as string | undefined,
-      toolCallId: r.tool_call_id as string | undefined,
-      toolCalls: r.tool_calls as string | undefined,
-      createdAt: new Date(r.created_at as number),
+    return rows.map(r => ({
+      id: r.id,
+      conversationId: r.conversationId,
+      role: r.role,
+      content: r.content || undefined,
+      toolCallId: r.toolCallId || undefined,
+      toolCalls: r.toolCalls || undefined,
+      createdAt: r.createdAt,
     }));
   }
 
@@ -267,34 +238,27 @@ export class ChatEngine {
    * Clear all messages from a conversation (but keep the conversation)
    */
   async clearMessages(conversationId: string): Promise<void> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    await client.execute({
-      sql: `DELETE FROM chat_messages WHERE conversation_id = ?`,
-      args: [conversationId],
-    });
+    await drizzle
+      .delete(chatMessages)
+      .where(eq(chatMessages.conversationId, conversationId));
   }
 
   /**
    * Get default system prompt for new conversations
    */
   async getDefaultSystemPrompt(): Promise<string> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      return this.getBuiltInSystemPrompt();
-    }
+    const drizzle = this.db.getLocal();
 
-    const result = await client.execute({
-      sql: `SELECT value FROM settings WHERE key = 'chat_system_prompt'`,
-      args: [],
-    });
+    const rows = await drizzle
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'chat_system_prompt'));
 
     // Return saved prompt if it exists and is non-empty
-    if (result.rows.length > 0 && result.rows[0].value) {
-      return result.rows[0].value as string;
+    if (rows.length > 0 && rows[0].value) {
+      return rows[0].value;
     }
 
     return this.getBuiltInSystemPrompt();
@@ -305,25 +269,30 @@ export class ChatEngine {
    * Pass empty string to reset to built-in default.
    */
   async setDefaultSystemPrompt(prompt: string): Promise<void> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
     // If empty string, delete the setting to use built-in default
     if (!prompt || prompt.trim() === '') {
-      await client.execute({
-        sql: `DELETE FROM settings WHERE key = ?`,
-        args: ['chat_system_prompt'],
-      });
+      await drizzle
+        .delete(settings)
+        .where(eq(settings.key, 'chat_system_prompt'));
       return;
     }
 
-    const now = Date.now();
-    await client.execute({
-      sql: `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)`,
-      args: ['chat_system_prompt', prompt, now],
-    });
+    await drizzle
+      .insert(settings)
+      .values({
+        key: 'chat_system_prompt',
+        value: prompt,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: {
+          value: prompt,
+          updatedAt: new Date(),
+        },
+      });
   }
 
   /**
@@ -360,16 +329,15 @@ When answering questions:
    * Get a setting by key
    */
   async getSetting(key: string): Promise<string | null> {
-    const client = this.db.getLocalClient();
-    if (!client) return null;
+    const drizzle = this.db.getLocal();
 
-    const result = await client.execute({
-      sql: `SELECT value FROM settings WHERE key = ?`,
-      args: [key],
-    });
+    const rows = await drizzle
+      .select()
+      .from(settings)
+      .where(eq(settings.key, key));
 
-    if (result.rows.length > 0) {
-      return result.rows[0].value as string;
+    if (rows.length > 0) {
+      return rows[0].value;
     }
     return null;
   }
@@ -378,34 +346,37 @@ When answering questions:
    * Set a setting by key
    */
   async setSetting(key: string, value: string): Promise<void> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    const now = Date.now();
-    await client.execute({
-      sql: `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)`,
-      args: [key, value, now],
-    });
+    await drizzle
+      .insert(settings)
+      .values({
+        key,
+        value,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: {
+          value,
+          updatedAt: new Date(),
+        },
+      });
   }
 
   /**
    * Get selected model for new conversations
    */
   async getSelectedModel(): Promise<string> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      return 'claude-sonnet-4';
-    }
+    const drizzle = this.db.getLocal();
 
-    const result = await client.execute({
-      sql: `SELECT value FROM settings WHERE key = 'chat_model'`,
-      args: [],
-    });
+    const rows = await drizzle
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'chat_model'));
 
-    if (result.rows.length > 0) {
-      return result.rows[0].value as string;
+    if (rows.length > 0) {
+      return rows[0].value;
     }
 
     return 'claude-sonnet-4';
@@ -415,15 +386,21 @@ When answering questions:
    * Set selected model for new conversations
    */
   async setSelectedModel(model: string): Promise<void> {
-    const client = this.db.getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
+    const drizzle = this.db.getLocal();
 
-    const now = Date.now();
-    await client.execute({
-      sql: `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)`,
-      args: ['chat_model', model, now],
-    });
+    await drizzle
+      .insert(settings)
+      .values({
+        key: 'chat_model',
+        value: model,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: {
+          value: model,
+          updatedAt: new Date(),
+        },
+      });
   }
 }

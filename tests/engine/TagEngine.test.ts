@@ -14,19 +14,34 @@ const mockTags = new Map<string, any>();
 const mockPosts = new Map<string, any>();
 let mockExecuteArgs: any[] = [];
 
-// Create chainable mock for Drizzle ORM
+// Configure what data the Drizzle select chain returns - supports queue for multiple calls
+let mockSelectDataQueue: any[][] = [];
+let mockSelectDataDefault: any[] = [];
+
+function getNextMockSelectData(): any[] {
+  if (mockSelectDataQueue.length > 0) {
+    return mockSelectDataQueue.shift()!;
+  }
+  if (mockSelectDataDefault.length > 0) {
+    return mockSelectDataDefault;
+  }
+  return Array.from(mockTags.values());
+}
+
+// Create chainable mock for Drizzle ORM that is thenable (can be awaited)
 function createSelectChain() {
-  return {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockImplementation(function(this: any) {
-      return this;
-    }),
-    orderBy: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    offset: vi.fn().mockReturnThis(),
-    all: vi.fn().mockImplementation(() => Promise.resolve(Array.from(mockTags.values()))),
-    get: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
+  const chain: any = {
+    from: vi.fn().mockImplementation(() => chain),
+    where: vi.fn().mockImplementation(() => chain),
+    orderBy: vi.fn().mockImplementation(() => chain),
+    limit: vi.fn().mockImplementation(() => chain),
+    offset: vi.fn().mockImplementation(() => chain),
+    // Make the chain thenable so it can be awaited directly
+    then: (resolve: (value: any[]) => void, reject?: (reason: any) => void) => {
+      return Promise.resolve(getNextMockSelectData()).then(resolve, reject);
+    },
   };
+  return chain;
 }
 
 function createDrizzleMock() {
@@ -115,6 +130,8 @@ describe('TagEngine', () => {
     mockTags.clear();
     mockPosts.clear();
     mockExecuteArgs = [];
+    mockSelectDataQueue = [];
+    mockSelectDataDefault = [];
     resetMockCounters();
     tagEngine = new TagEngine();
   });
@@ -198,9 +215,8 @@ describe('TagEngine', () => {
     });
 
     it('should throw error for duplicate tag name', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ id: 'existing', name: 'react' }],
-      });
+      // Drizzle ORM: check for existing tag with same name
+      mockSelectDataQueue = [[{ id: 'existing', name: 'react' }]];
 
       await expect(tagEngine.createTag({ name: 'react' })).rejects.toThrow('Tag "react" already exists');
     });
@@ -208,9 +224,7 @@ describe('TagEngine', () => {
 
   describe('updateTag', () => {
     it('should update tag color', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ id: 'tag-1', name: 'react', color: null }],
-      });
+      mockSelectDataDefault = [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }];
 
       const result = await tagEngine.updateTag('tag-1', { color: '#61dafb' });
 
@@ -219,9 +233,7 @@ describe('TagEngine', () => {
     });
 
     it('should emit tagUpdated event', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ id: 'tag-1', name: 'react', color: null }],
-      });
+      mockSelectDataDefault = [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }];
       
       const handler = vi.fn();
       tagEngine.on('tagUpdated', handler);
@@ -232,7 +244,7 @@ describe('TagEngine', () => {
     });
 
     it('should return null for non-existent tag', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+      mockSelectDataDefault = [];
 
       const result = await tagEngine.updateTag('non-existent', { color: '#fff' });
 
@@ -242,15 +254,17 @@ describe('TagEngine', () => {
 
   describe('deleteTag', () => {
     it('should delete tag and remove from posts as a background task', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'react', color: null }] }) // Find tag
-        .mockResolvedValueOnce({ rows: [
+      // Drizzle ORM: get tag first
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+      // Raw SQL: find posts with tag
+      mockLocalClient.execute.mockImplementationOnce(async () => ({
+        rows: [
           { id: 'post-1', tags: '["react", "typescript"]' },
           { id: 'post-2', tags: '["react"]' },
-        ] }) // Posts with tag
-        .mockResolvedValueOnce({ rows: [] }) // Update post-1
-        .mockResolvedValueOnce({ rows: [] }) // Update post-2
-        .mockResolvedValueOnce({ rows: [] }); // Delete tag
+        ],
+      }));
 
       const result = await tagEngine.deleteTag('tag-1');
 
@@ -259,10 +273,10 @@ describe('TagEngine', () => {
     });
 
     it('should emit tagDeleted event', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'react', color: null }] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [] });
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+      mockLocalClient.execute.mockImplementationOnce(async () => ({ rows: [] }));
 
       const handler = vi.fn();
       tagEngine.on('tagDeleted', handler);
@@ -273,7 +287,7 @@ describe('TagEngine', () => {
     });
 
     it('should throw error for non-existent tag', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+      mockSelectDataDefault = [];
 
       await expect(tagEngine.deleteTag('non-existent')).rejects.toThrow('Tag not found');
     });
@@ -281,14 +295,16 @@ describe('TagEngine', () => {
 
   describe('mergeTags', () => {
     it('should merge multiple tags into one', async () => {
+      // Drizzle ORM selects: source tag 1, source tag 2, target tag
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'js', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-2', name: 'javascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-3', name: 'ecmascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+      // Raw SQL for finding posts with tags
       mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'js' }] }) // Source tag 1
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-2', name: 'javascript' }] }) // Source tag 2
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-3', name: 'ecmascript' }] }) // Target tag
-        .mockResolvedValueOnce({ rows: [{ id: 'post-1' }, { id: 'post-2' }] }) // Posts with source tags
-        .mockResolvedValueOnce({ rows: [] }) // Update posts
-        .mockResolvedValueOnce({ rows: [] }) // Delete source tag 1
-        .mockResolvedValueOnce({ rows: [] }); // Delete source tag 2
+        .mockResolvedValueOnce({ rows: [{ id: 'post-1', tags: '["js"]' }] }) // Posts with source tag 1
+        .mockResolvedValueOnce({ rows: [{ id: 'post-2', tags: '["javascript"]' }] }); // Posts with source tag 2
 
       const result = await tagEngine.mergeTags(['tag-1', 'tag-2'], 'tag-3');
 
@@ -298,11 +314,11 @@ describe('TagEngine', () => {
     });
 
     it('should emit tagsMerged event', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'js' }] })
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-2', name: 'javascript' }] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [] });
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'js', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-2', name: 'javascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] }); // No posts with source tag
 
       const handler = vi.fn();
       tagEngine.on('tagsMerged', handler);
@@ -317,9 +333,10 @@ describe('TagEngine', () => {
     });
 
     it('should throw error when target tag does not exist', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'js' }] })
-        .mockResolvedValueOnce({ rows: [] }); // Target not found
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'js', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [], // Target not found
+      ];
 
       await expect(tagEngine.mergeTags(['tag-1'], 'non-existent')).rejects.toThrow('Target tag not found');
     });
@@ -327,12 +344,13 @@ describe('TagEngine', () => {
 
   describe('renameTags (batch rename)', () => {
     it('should rename multiple tags and update posts', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'old-name' }] })
-        .mockResolvedValueOnce({ rows: [] }) // Check no duplicate
-        .mockResolvedValueOnce({ rows: [{ id: 'post-1' }] }) // Posts with tag
-        .mockResolvedValueOnce({ rows: [] }) // Update posts
-        .mockResolvedValueOnce({ rows: [] }); // Update tag name
+      // First call: get existing tag, Second call: check for duplicate
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'old-name', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [], // no duplicate
+      ];
+      // Raw SQL for finding posts with the tag
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [{ id: 'post-1', tags: '["old-name"]' }] });
 
       const result = await tagEngine.renameTag('tag-1', 'new-name');
 
@@ -341,11 +359,11 @@ describe('TagEngine', () => {
     });
 
     it('should emit tagRenamed event', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ id: 'tag-1', name: 'old-name' }] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [] });
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'old-name', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [], // no duplicate
+      ];
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] }); // no posts to update
 
       const handler = vi.fn();
       tagEngine.on('tagRenamed', handler);
@@ -361,9 +379,8 @@ describe('TagEngine', () => {
 
   describe('getTag', () => {
     it('should return tag by ID', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ id: 'tag-1', name: 'react', color: '#61dafb', project_id: 'default', created_at: Date.now(), updated_at: Date.now() }],
-      });
+      // Set up mock data for Drizzle select (camelCase properties)
+      mockSelectDataDefault = [{ id: 'tag-1', name: 'react', color: '#61dafb', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }];
 
       const result = await tagEngine.getTag('tag-1');
 
@@ -373,7 +390,7 @@ describe('TagEngine', () => {
     });
 
     it('should return null for non-existent tag', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+      mockSelectDataDefault = [];
 
       const result = await tagEngine.getTag('non-existent');
 
@@ -383,9 +400,7 @@ describe('TagEngine', () => {
 
   describe('getTagByName', () => {
     it('should return tag by name', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ id: 'tag-1', name: 'react', color: '#61dafb', project_id: 'default', created_at: Date.now(), updated_at: Date.now() }],
-      });
+      mockSelectDataDefault = [{ id: 'tag-1', name: 'react', color: '#61dafb', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }];
 
       const result = await tagEngine.getTagByName('react');
 
@@ -394,9 +409,7 @@ describe('TagEngine', () => {
     });
 
     it('should be case-insensitive', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ id: 'tag-1', name: 'react', color: null }],
-      });
+      mockSelectDataDefault = [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }];
 
       const result = await tagEngine.getTagByName('REACT');
 
@@ -406,12 +419,10 @@ describe('TagEngine', () => {
 
   describe('getAllTags', () => {
     it('should return all tags for the current project', async () => {
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [
-          { id: 'tag-1', name: 'react', color: null, project_id: 'default', created_at: Date.now(), updated_at: Date.now() },
-          { id: 'tag-2', name: 'vue', color: '#42b883', project_id: 'default', created_at: Date.now(), updated_at: Date.now() },
-        ],
-      });
+      mockSelectDataDefault = [
+        { id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() },
+        { id: 'tag-2', name: 'vue', color: '#42b883', projectId: 'default', createdAt: new Date(), updatedAt: new Date() },
+      ];
 
       const result = await tagEngine.getAllTags();
 
@@ -423,17 +434,15 @@ describe('TagEngine', () => {
 
   describe('getPostsWithTag', () => {
     it('should return post IDs that have the specified tag', async () => {
-      // First call: get tag name from id
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [{ name: 'react' }],
-      });
-      // Second call: find posts with this tag
-      mockLocalClient.execute.mockResolvedValueOnce({
+      // First call: Drizzle ORM to get tag name from id
+      mockSelectDataQueue = [[{ name: 'react' }]];
+      // Second call: raw SQL to find posts with this tag
+      mockLocalClient.execute.mockImplementationOnce(async () => ({
         rows: [
           { id: 'post-1', tags: '["react", "typescript"]' },
           { id: 'post-2', tags: '["react"]' },
         ],
-      });
+      }));
 
       const result = await tagEngine.getPostsWithTag('tag-1');
 
@@ -467,12 +476,11 @@ describe('TagEngine', () => {
 
   describe('syncTagsFromPosts', () => {
     it('should discover tags from existing posts and add missing ones', async () => {
-      mockLocalClient.execute
-        .mockResolvedValueOnce({ rows: [{ tags: '["react", "javascript"]' }, { tags: '["vue", "typescript"]' }] }) // Get posts
-        .mockResolvedValueOnce({ rows: [{ name: 'react' }] }) // Existing tags
-        .mockResolvedValueOnce({ rows: [] }) // Insert missing tags
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [] });
+      // First call: get posts' tags, Second call: get existing tags
+      mockSelectDataQueue = [
+        [{ tags: '["react", "javascript"]' }, { tags: '["vue", "typescript"]' }],
+        [{ name: 'react' }], // existing tags
+      ];
 
       const result = await tagEngine.syncTagsFromPosts();
 

@@ -6,7 +6,9 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { eq, and, desc } from 'drizzle-orm';
 import { getDatabase } from '../database';
+import { importDefinitions } from '../database/schema';
 
 export interface ImportDefinitionData {
   id: string;
@@ -22,12 +24,8 @@ export interface ImportDefinitionData {
 export class ImportDefinitionEngine {
   private currentProjectId: string = 'default';
 
-  private getClient() {
-    const client = getDatabase().getLocalClient();
-    if (!client) {
-      throw new Error('Database not initialized');
-    }
-    return client;
+  private getDb() {
+    return getDatabase().getLocal();
   }
 
   setProjectContext(projectId: string): void {
@@ -39,15 +37,20 @@ export class ImportDefinitionEngine {
   }
 
   async createDefinition(name?: string): Promise<ImportDefinitionData> {
-    const client = this.getClient();
+    const db = this.getDb();
     const id = `import_${uuidv4()}`;
-    const now = Date.now();
+    const now = new Date();
     const defName = name || 'Untitled Import';
 
-    await client.execute({
-      sql: `INSERT INTO import_definitions (id, project_id, name, wxr_file_path, uploads_folder_path, last_analysis_result, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [id, this.currentProjectId, defName, null, null, null, now, now],
+    await db.insert(importDefinitions).values({
+      id,
+      projectId: this.currentProjectId,
+      name: defName,
+      wxrFilePath: null,
+      uploadsFolderPath: null,
+      lastAnalysisResult: null,
+      createdAt: now,
+      updatedAt: now,
     });
 
     return {
@@ -57,31 +60,37 @@ export class ImportDefinitionEngine {
       wxrFilePath: null,
       uploadsFolderPath: null,
       lastAnalysisResult: null,
-      createdAt: new Date(now).toISOString(),
-      updatedAt: new Date(now).toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
     };
   }
 
   async getDefinition(id: string): Promise<ImportDefinitionData | null> {
-    const client = this.getClient();
-    const result = await client.execute({
-      sql: `SELECT * FROM import_definitions WHERE id = ? AND project_id = ?`,
-      args: [id, this.currentProjectId],
-    });
+    const db = this.getDb();
 
-    if (result.rows.length === 0) return null;
+    const rows = await db
+      .select()
+      .from(importDefinitions)
+      .where(and(
+        eq(importDefinitions.id, id),
+        eq(importDefinitions.projectId, this.currentProjectId)
+      ));
 
-    return this.rowToData(result.rows[0] as any);
+    if (rows.length === 0) return null;
+
+    return this.rowToData(rows[0]);
   }
 
   async getAllForProject(): Promise<ImportDefinitionData[]> {
-    const client = this.getClient();
-    const result = await client.execute({
-      sql: `SELECT * FROM import_definitions WHERE project_id = ? ORDER BY updated_at DESC`,
-      args: [this.currentProjectId],
-    });
+    const db = this.getDb();
 
-    return result.rows.map((row: any) => this.rowToData(row));
+    const rows = await db
+      .select()
+      .from(importDefinitions)
+      .where(eq(importDefinitions.projectId, this.currentProjectId))
+      .orderBy(desc(importDefinitions.updatedAt));
+
+    return rows.map(row => this.rowToData(row));
   }
 
   async updateDefinition(
@@ -92,42 +101,35 @@ export class ImportDefinitionEngine {
     const existing = await this.getDefinition(id);
     if (!existing) return null;
 
-    const setClauses: string[] = [];
-    const args: any[] = [];
+    const db = this.getDb();
+
+    // Build update object
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
 
     if (updates.name !== undefined) {
-      setClauses.push('name = ?');
-      args.push(updates.name);
+      updateData.name = updates.name;
     }
     if (updates.wxrFilePath !== undefined) {
-      setClauses.push('wxr_file_path = ?');
-      args.push(updates.wxrFilePath);
+      updateData.wxrFilePath = updates.wxrFilePath;
     }
     if (updates.uploadsFolderPath !== undefined) {
-      setClauses.push('uploads_folder_path = ?');
-      args.push(updates.uploadsFolderPath);
+      updateData.uploadsFolderPath = updates.uploadsFolderPath;
     }
     if (updates.lastAnalysisResult !== undefined) {
-      setClauses.push('last_analysis_result = ?');
-      args.push(typeof updates.lastAnalysisResult === 'string'
+      updateData.lastAnalysisResult = typeof updates.lastAnalysisResult === 'string'
         ? updates.lastAnalysisResult
-        : JSON.stringify(updates.lastAnalysisResult));
+        : JSON.stringify(updates.lastAnalysisResult);
     }
 
-    if (setClauses.length === 0) return existing;
-
-    const now = Date.now();
-    setClauses.push('updated_at = ?');
-    args.push(now);
-
-    // WHERE clause args
-    args.push(id, this.currentProjectId);
-
-    const client = this.getClient();
-    await client.execute({
-      sql: `UPDATE import_definitions SET ${setClauses.join(', ')} WHERE id = ? AND project_id = ?`,
-      args,
-    });
+    await db
+      .update(importDefinitions)
+      .set(updateData)
+      .where(and(
+        eq(importDefinitions.id, id),
+        eq(importDefinitions.projectId, this.currentProjectId)
+      ));
 
     return this.getDefinition(id);
   }
@@ -137,38 +139,41 @@ export class ImportDefinitionEngine {
     const existing = await this.getDefinition(id);
     if (!existing) return false;
 
-    const client = this.getClient();
-    await client.execute({
-      sql: `DELETE FROM import_definitions WHERE id = ? AND project_id = ?`,
-      args: [id, this.currentProjectId],
-    });
+    const db = this.getDb();
+
+    await db
+      .delete(importDefinitions)
+      .where(and(
+        eq(importDefinitions.id, id),
+        eq(importDefinitions.projectId, this.currentProjectId)
+      ));
 
     return true;
   }
 
-  private rowToData(row: any): ImportDefinitionData {
+  private rowToData(row: typeof importDefinitions.$inferSelect): ImportDefinitionData {
     let parsedResult: unknown | null = null;
-    if (row.last_analysis_result) {
+    if (row.lastAnalysisResult) {
       try {
-        parsedResult = JSON.parse(row.last_analysis_result);
+        parsedResult = JSON.parse(row.lastAnalysisResult);
       } catch {
-        parsedResult = row.last_analysis_result;
+        parsedResult = row.lastAnalysisResult;
       }
     }
 
     return {
       id: row.id,
-      projectId: row.project_id,
+      projectId: row.projectId,
       name: row.name,
-      wxrFilePath: row.wxr_file_path ?? null,
-      uploadsFolderPath: row.uploads_folder_path ?? null,
+      wxrFilePath: row.wxrFilePath ?? null,
+      uploadsFolderPath: row.uploadsFolderPath ?? null,
       lastAnalysisResult: parsedResult,
-      createdAt: typeof row.created_at === 'number'
-        ? new Date(row.created_at).toISOString()
-        : row.created_at,
-      updatedAt: typeof row.updated_at === 'number'
-        ? new Date(row.updated_at).toISOString()
-        : row.updated_at,
+      createdAt: row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : new Date(row.createdAt as unknown as number).toISOString(),
+      updatedAt: row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : new Date(row.updatedAt as unknown as number).toISOString(),
     };
   }
 }
