@@ -83,6 +83,7 @@ interface CalendarViewProps {
 const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear, selectedMonth }) => {
   const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
   const [expandedYear, setExpandedYear] = useState<number | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
@@ -107,15 +108,23 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear,
 
   return (
     <div className="calendar-view">
-      <div className="calendar-header">
+      <div 
+        className={`calendar-header collapsible-header ${isCollapsed ? 'collapsed' : 'expanded'}`}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
+        <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
         <span>ARCHIVE</span>
         {(selectedYear || selectedMonth !== undefined) && (
-          <button className="clear-filter" onClick={() => onDateSelect(0)} title="Clear filter">
+          <button 
+            className="clear-filter" 
+            onClick={(e) => { e.stopPropagation(); onDateSelect(0); }} 
+            title="Clear filter"
+          >
             ✕
           </button>
         )}
       </div>
-      <div className="calendar-years">
+      {!isCollapsed && <div className="calendar-years">
         {years.map(year => (
           <div key={year} className="calendar-year">
             <div 
@@ -151,7 +160,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear,
         {years.length === 0 && (
           <div className="calendar-empty">No posts yet</div>
         )}
-      </div>
+      </div>}
     </div>
   );
 };
@@ -175,12 +184,30 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onTagSelect,
   onCategorySelect,
 }) => {
+  const [tagsCollapsed, setTagsCollapsed] = useState(true);
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(true);
+
   return (
     <div className="filter-panel">
       {tags.length > 0 && (
         <div className="filter-section">
-          <div className="filter-header">TAGS</div>
-          <div className="filter-chips">
+          <div 
+            className={`filter-header collapsible-header ${tagsCollapsed ? 'collapsed' : 'expanded'}`}
+            onClick={() => setTagsCollapsed(!tagsCollapsed)}
+          >
+            <span className="collapse-icon">{tagsCollapsed ? '▶' : '▼'}</span>
+            <span>TAGS</span>
+            {selectedTags.length > 0 && (
+              <button 
+                className="clear-filter" 
+                onClick={(e) => { e.stopPropagation(); onTagSelect([]); }} 
+                title="Clear tags"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {!tagsCollapsed && <div className="filter-chips">
             {tags.map(tag => {
               const color = tagColors.get(tag);
               const hasColor = !!color;
@@ -208,13 +235,28 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 </button>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
       {categories.length > 0 && (
         <div className="filter-section">
-          <div className="filter-header">CATEGORIES</div>
-          <div className="filter-chips">
+          <div 
+            className={`filter-header collapsible-header ${categoriesCollapsed ? 'collapsed' : 'expanded'}`}
+            onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
+          >
+            <span className="collapse-icon">{categoriesCollapsed ? '▶' : '▼'}</span>
+            <span>CATEGORIES</span>
+            {selectedCategories.length > 0 && (
+              <button 
+                className="clear-filter" 
+                onClick={(e) => { e.stopPropagation(); onCategorySelect([]); }} 
+                title="Clear categories"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {!categoriesCollapsed && <div className="filter-chips">
             {categories.map(cat => (
               <button
                 key={cat}
@@ -230,7 +272,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 {cat}
               </button>
             ))}
-          </div>
+          </div>}
         </div>
       )}
     </div>
@@ -247,6 +289,7 @@ interface MediaCalendarViewProps {
 const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, selectedYear, selectedMonth }) => {
   const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
   const [expandedYear, setExpandedYear] = useState<number | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
@@ -270,15 +313,23 @@ const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, sel
 
   return (
     <div className="calendar-view">
-      <div className="calendar-header">
+      <div 
+        className={`calendar-header collapsible-header ${isCollapsed ? 'collapsed' : 'expanded'}`}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
+        <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
         <span>ARCHIVE</span>
         {(selectedYear || selectedMonth !== undefined) && (
-          <button className="clear-filter" onClick={() => onDateSelect(0)} title="Clear filter">
+          <button 
+            className="clear-filter" 
+            onClick={(e) => { e.stopPropagation(); onDateSelect(0); }} 
+            title="Clear filter"
+          >
             ✕
           </button>
         )}
       </div>
-      <div className="calendar-years">
+      {!isCollapsed && <div className="calendar-years">
         {years.map(year => (
           <div key={year} className="calendar-year">
             <div
@@ -314,7 +365,7 @@ const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, sel
         {years.length === 0 && (
           <div className="calendar-empty">No media yet</div>
         )}
-      </div>
+      </div>}
     </div>
   );
 };
@@ -333,12 +384,29 @@ const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
   selectedTags,
   onTagSelect,
 }) => {
+  const [tagsCollapsed, setTagsCollapsed] = useState(true);
+
   return (
     <div className="filter-panel">
       {tags.length > 0 && (
         <div className="filter-section">
-          <div className="filter-header">TAGS</div>
-          <div className="filter-chips">
+          <div 
+            className={`filter-header collapsible-header ${tagsCollapsed ? 'collapsed' : 'expanded'}`}
+            onClick={() => setTagsCollapsed(!tagsCollapsed)}
+          >
+            <span className="collapse-icon">{tagsCollapsed ? '▶' : '▼'}</span>
+            <span>TAGS</span>
+            {selectedTags.length > 0 && (
+              <button 
+                className="clear-filter" 
+                onClick={(e) => { e.stopPropagation(); onTagSelect([]); }} 
+                title="Clear tags"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {!tagsCollapsed && <div className="filter-chips">
             {tags.map(tag => {
               const color = tagColors.get(tag);
               const hasColor = !!color;
@@ -366,7 +434,7 @@ const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
                 </button>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
     </div>
