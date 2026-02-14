@@ -61,6 +61,7 @@ export interface MediaFilter {
 export interface MediaSearchResult {
   id: string;
   originalName: string;
+  caption?: string;
   mimeType: string;
   createdAt: Date;
 }
@@ -767,6 +768,7 @@ export class MediaEngine extends EventEmitter {
           searchResults.push({
             id: item.id,
             originalName: item.originalName,
+            caption: item.caption || undefined,
             mimeType: item.mimeType,
             createdAt: item.createdAt,
           });

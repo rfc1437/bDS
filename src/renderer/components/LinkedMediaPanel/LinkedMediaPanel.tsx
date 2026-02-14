@@ -14,6 +14,16 @@ import { useAppStore, MediaData } from '../../store';
 import { showToast } from '../Toast';
 import './LinkedMediaPanel.css';
 
+/** Get display name for media: caption (truncated to 60 chars) or fallback to filename */
+function getMediaDisplayName(media: MediaData): string {
+  if (media.caption) {
+    return media.caption.length > 60 
+      ? media.caption.substring(0, 60) + '...' 
+      : media.caption;
+  }
+  return media.originalName;
+}
+
 interface LinkedMediaPanelProps {
   postId: string;
   collapsed?: boolean;
@@ -181,7 +191,12 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
   const unlinkedMedia = allMedia.filter(
     m => !linkedMedia.find(l => l.id === m.id)
   ).filter(
-    m => !mediaSearchQuery || m.originalName.toLowerCase().includes(mediaSearchQuery.toLowerCase())
+    m => {
+      if (!mediaSearchQuery) return true;
+      const query = mediaSearchQuery.toLowerCase();
+      return m.originalName.toLowerCase().includes(query) || 
+             (m.caption && m.caption.toLowerCase().includes(query));
+    }
   );
 
   if (collapsed) {
@@ -244,14 +259,14 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
                   key={media.id}
                   className="media-picker-item"
                   onClick={() => handleLinkExisting(media.id)}
-                  title={media.originalName}
+                  title={media.caption || media.originalName}
                 >
                   {media.mimeType?.startsWith('image/') ? (
-                    <img src={`bds-media://${media.id}`} alt={media.originalName} />
+                    <img src={`bds-media://${media.id}`} alt={media.alt || media.originalName} />
                   ) : (
                     <div className="media-icon">📄</div>
                   )}
-                  <span className="media-name">{media.originalName}</span>
+                  <span className="media-name">{getMediaDisplayName(media)}</span>
                 </div>
               ))
             )}
@@ -290,8 +305,8 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
                     <div className="media-icon">📄</div>
                   )}
                 </div>
-                <span className="media-name" title={media.originalName}>
-                  {media.originalName}
+                <span className="media-name" title={media.caption || media.originalName}>
+                  {getMediaDisplayName(media)}
                 </span>
                 <button
                   className="unlink-btn"

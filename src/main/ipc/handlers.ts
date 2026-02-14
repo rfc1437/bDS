@@ -85,6 +85,15 @@ export function registerIpcHandlers(): void {
 
       // Sync meta on startup
       await metaEngine.syncOnStartup();
+
+      // Set search language from project metadata
+      const { isoToStemmerLanguage } = await import('../engine/stemmer');
+      const metadata = await metaEngine.getProjectMetadata();
+      if (metadata?.mainLanguage) {
+        const stemmerLang = isoToStemmerLanguage(metadata.mainLanguage);
+        postEngine.setSearchLanguage(stemmerLang);
+        mediaEngine.setSearchLanguage(stemmerLang);
+      }
     }
 
     return project;
@@ -112,6 +121,15 @@ export function registerIpcHandlers(): void {
 
       // Sync meta on project switch
       await metaEngine.syncOnStartup();
+
+      // Set search language from project metadata
+      const { isoToStemmerLanguage } = await import('../engine/stemmer');
+      const metadata = await metaEngine.getProjectMetadata();
+      if (metadata?.mainLanguage) {
+        const stemmerLang = isoToStemmerLanguage(metadata.mainLanguage);
+        postEngine.setSearchLanguage(stemmerLang);
+        mediaEngine.setSearchLanguage(stemmerLang);
+      }
     }
 
     return project;
