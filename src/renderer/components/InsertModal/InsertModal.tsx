@@ -11,8 +11,19 @@ interface PostSearchResult {
 interface MediaSearchResult {
   id: string;
   originalName: string;
+  caption?: string;
   mimeType: string;
   createdAt: string;
+}
+
+/** Get display name for media: caption (truncated to 60 chars) or fallback to filename */
+function getMediaDisplayName(media: MediaSearchResult): string {
+  if (media.caption) {
+    return media.caption.length > 60 
+      ? media.caption.substring(0, 60) + '...' 
+      : media.caption;
+  }
+  return media.originalName;
 }
 
 type SearchResult = PostSearchResult | MediaSearchResult;
@@ -251,7 +262,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                     </>
                   ) : (
                     <>
-                      <div className="insert-modal-result-title">{result.originalName}</div>
+                      <div className="insert-modal-result-title">{getMediaDisplayName(result)}</div>
                       <div className="insert-modal-result-meta">
                         {result.mimeType} • {new Date(result.createdAt).toLocaleDateString()}
                       </div>

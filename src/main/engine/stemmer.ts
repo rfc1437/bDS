@@ -35,6 +35,50 @@ export type SupportedLanguage =
   | 'tamil'
   | 'turkish';
 
+/**
+ * Map of ISO 639-1 language codes to Snowball stemmer language names.
+ * Falls back to 'english' for unsupported codes.
+ */
+const isoToSnowball: Record<string, SupportedLanguage> = {
+  ar: 'arabic',
+  hy: 'armenian',
+  eu: 'basque',
+  ca: 'catalan',
+  cs: 'czech',
+  da: 'danish',
+  nl: 'dutch',
+  en: 'english',
+  fi: 'finnish',
+  fr: 'french',
+  de: 'german',
+  hu: 'hungarian',
+  it: 'italian',
+  ga: 'irish',
+  no: 'norwegian',
+  nb: 'norwegian',
+  nn: 'norwegian',
+  pt: 'portuguese',
+  ro: 'romanian',
+  ru: 'russian',
+  es: 'spanish',
+  sl: 'slovene',
+  sv: 'swedish',
+  ta: 'tamil',
+  tr: 'turkish',
+};
+
+/**
+ * Convert an ISO 639-1 language code to a Snowball stemmer language name.
+ * Returns 'english' as fallback for unknown codes.
+ * 
+ * @param isoCode - ISO 639-1 language code (e.g., 'en', 'de', 'fr')
+ * @returns Snowball language name (e.g., 'english', 'german', 'french')
+ */
+export function isoToStemmerLanguage(isoCode: string): SupportedLanguage {
+  const normalized = isoCode.toLowerCase().split('-')[0]; // Handle 'en-US' -> 'en'
+  return isoToSnowball[normalized] || 'english';
+}
+
 interface Stemmer {
   stem(word: string): string;
 }

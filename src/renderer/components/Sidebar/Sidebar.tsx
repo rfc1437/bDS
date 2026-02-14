@@ -4,6 +4,16 @@ import { showToast } from '../Toast';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import './Sidebar.css';
 
+/** Get display name for media: caption (truncated to 60 chars) or fallback to filename */
+function getMediaDisplayName(media: MediaData): string {
+  if (media.caption) {
+    return media.caption.length > 60 
+      ? media.caption.substring(0, 60) + '...' 
+      : media.caption;
+  }
+  return media.originalName;
+}
+
 // Tag data with color information
 interface TagData {
   id: string;
@@ -946,7 +956,7 @@ const MediaList: React.FC = () => {
             className={`media-item ${activeTabId === item.id ? 'selected' : ''}`}
             onClick={() => handleMediaClick(item.id)}
             onDoubleClick={() => handleMediaDoubleClick(item.id)}
-            title={item.originalName}
+            title={item.caption || item.originalName}
           >
             {item.mimeType.startsWith('image/') ? (
               <div className="media-thumbnail">
@@ -967,7 +977,7 @@ const MediaList: React.FC = () => {
               </div>
             )}
             <div className="media-item-info">
-              <div className="media-item-name truncate">{item.originalName}</div>
+              <div className="media-item-name truncate">{getMediaDisplayName(item)}</div>
               <div className="media-item-size">{formatFileSize(item.size)}</div>
             </div>
           </div>
