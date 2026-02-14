@@ -29,10 +29,6 @@ build/
 *.sqlite
 *.sqlite3
 
-# Drizzle ORM
-drizzle/
-migrations/
-
 # ===================
 # Environment & Secrets
 # ===================

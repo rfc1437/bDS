@@ -10,91 +10,58 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 // Store for mock data
 const mockDefinitions = new Map<string, any>();
 
-const mockLocalClient = {
-  execute: vi.fn(async (query: { sql: string; args: any[] }) => {
-    const sql = query.sql.trim();
+// Create chainable mock for Drizzle ORM that is thenable (can be awaited)
+function createSelectChain(getData: () => any[]) {
+  const chain: any = {
+    from: vi.fn().mockImplementation(() => chain),
+    where: vi.fn().mockImplementation(() => chain),
+    orderBy: vi.fn().mockImplementation(() => chain),
+    limit: vi.fn().mockImplementation(() => chain),
+    // Make the chain thenable so it can be awaited directly
+    then: (resolve: (value: any[]) => void, reject?: (reason: any) => void) => {
+      return Promise.resolve(getData()).then(resolve, reject);
+    },
+  };
+  return chain;
+}
 
-    // INSERT
-    if (sql.startsWith('INSERT')) {
-      const row = {
-        id: query.args[0],
-        project_id: query.args[1],
-        name: query.args[2],
-        wxr_file_path: query.args[3] ?? null,
-        uploads_folder_path: query.args[4] ?? null,
-        last_analysis_result: query.args[5] ?? null,
-        created_at: query.args[6],
-        updated_at: query.args[7],
-      };
-      mockDefinitions.set(row.id, row);
-      return { rows: [] };
-    }
+// Track what data Drizzle queries should return
+let mockDrizzleSelectResults: any[][] = [];
 
-    // SELECT by id
-    if (sql.startsWith('SELECT') && sql.includes('WHERE id = ?') && sql.includes('project_id = ?')) {
-      const id = query.args[0];
-      const projectId = query.args[1];
-      const def = mockDefinitions.get(id);
-      if (def && def.project_id === projectId) {
-        return { rows: [def] };
+const mockLocalDb = {
+  select: vi.fn(() => createSelectChain(() => mockDrizzleSelectResults.shift() || [])),
+  insert: vi.fn(() => ({
+    values: vi.fn((data: any) => {
+      if (data && data.id) {
+        mockDefinitions.set(data.id, {
+          id: data.id,
+          projectId: data.projectId,
+          name: data.name,
+          wxrFilePath: data.wxrFilePath,
+          uploadsFolderPath: data.uploadsFolderPath,
+          lastAnalysisResult: data.lastAnalysisResult,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        });
       }
-      return { rows: [] };
-    }
-
-    // SELECT all for project
-    if (sql.startsWith('SELECT') && sql.includes('WHERE project_id = ?') && sql.includes('ORDER BY')) {
-      const projectId = query.args[0];
-      const rows = Array.from(mockDefinitions.values())
-        .filter(d => d.project_id === projectId)
-        .sort((a, b) => b.updated_at - a.updated_at);
-      return { rows };
-    }
-
-    // UPDATE
-    if (sql.startsWith('UPDATE')) {
-      // Find the id in args (last two args are id and project_id in WHERE)
-      const id = query.args[query.args.length - 2];
-      const projectId = query.args[query.args.length - 1];
-      const def = mockDefinitions.get(id);
-      if (def && def.project_id === projectId) {
-        // Apply updates based on the SET clause
-        // Parse set fields from the sql
-        const setMatch = sql.match(/SET (.+?) WHERE/);
-        if (setMatch) {
-          const setParts = setMatch[1].split(', ');
-          let argIdx = 0;
-          for (const part of setParts) {
-            const field = part.split(' = ')[0].trim();
-            def[field] = query.args[argIdx];
-            argIdx++;
-          }
-        }
-        return { rowsAffected: 1, rows: [] };
-      }
-      return { rowsAffected: 0, rows: [] };
-    }
-
-    // DELETE
-    if (sql.startsWith('DELETE')) {
-      const id = query.args[0];
-      const projectId = query.args[1];
-      const def = mockDefinitions.get(id);
-      if (def && def.project_id === projectId) {
-        mockDefinitions.delete(id);
-        return { rowsAffected: 1, rows: [] };
-      }
-      return { rowsAffected: 0, rows: [] };
-    }
-
-    return { rows: [] };
-  }),
+      return Promise.resolve();
+    }),
+  })),
+  update: vi.fn(() => ({
+    set: vi.fn(() => ({
+      where: vi.fn(() => Promise.resolve()),
+    })),
+  })),
+  delete: vi.fn(() => ({
+    where: vi.fn(() => Promise.resolve()),
+  })),
 };
 
 // Mock the database module
 vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => ({
-    getLocal: vi.fn(() => null),
-    getLocalClient: vi.fn(() => mockLocalClient),
+    getLocal: vi.fn(() => mockLocalDb),
+    getLocalClient: vi.fn(() => null),
     getRemote: vi.fn(() => null),
     getDataPaths: vi.fn(() => ({
       database: '/mock/userData/bds.db',
@@ -122,6 +89,7 @@ describe('ImportDefinitionEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDefinitions.clear();
+    mockDrizzleSelectResults = [];
     engine = new ImportDefinitionEngine();
     engine.setProjectContext('test-project');
   });
@@ -168,17 +136,24 @@ describe('ImportDefinitionEngine', () => {
     it('should insert into the database', async () => {
       await engine.createDefinition('Test Import');
 
-      expect(mockLocalClient.execute).toHaveBeenCalledTimes(1);
-      const call = mockLocalClient.execute.mock.calls[0][0];
-      expect(call.sql).toContain('INSERT INTO import_definitions');
-      expect(call.args[2]).toBe('Test Import');
+      expect(mockLocalDb.insert).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('getDefinition', () => {
     it('should return a definition by ID', async () => {
       const created = await engine.createDefinition('My Import');
-      mockLocalClient.execute.mockClear();
+      // Set up mock to return the created definition
+      mockDrizzleSelectResults = [[{
+        id: created.id,
+        projectId: 'test-project',
+        name: 'My Import',
+        wxrFilePath: null,
+        uploadsFolderPath: null,
+        lastAnalysisResult: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }]];
 
       const def = await engine.getDefinition(created.id);
 
@@ -188,6 +163,7 @@ describe('ImportDefinitionEngine', () => {
     });
 
     it('should return null for non-existent ID', async () => {
+      mockDrizzleSelectResults = [[]];
       const def = await engine.getDefinition('non-existent-id');
 
       expect(def).toBeNull();
@@ -196,6 +172,7 @@ describe('ImportDefinitionEngine', () => {
     it('should not return definitions from other projects', async () => {
       const created = await engine.createDefinition('My Import');
       engine.setProjectContext('other-project');
+      mockDrizzleSelectResults = [[]]; // would be filtered by project
 
       const def = await engine.getDefinition(created.id);
 
@@ -204,9 +181,17 @@ describe('ImportDefinitionEngine', () => {
 
     it('should parse lastAnalysisResult JSON', async () => {
       const created = await engine.createDefinition('My Import');
-      // Manually set analysis result in mock store
-      const storedDef = mockDefinitions.get(created.id);
-      storedDef.last_analysis_result = JSON.stringify({ posts: { total: 5 } });
+      // Set up mock to return the definition with analysis result
+      mockDrizzleSelectResults = [[{
+        id: created.id,
+        projectId: 'test-project',
+        name: 'My Import',
+        wxrFilePath: null,
+        uploadsFolderPath: null,
+        lastAnalysisResult: JSON.stringify({ posts: { total: 5 } }),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }]];
 
       const def = await engine.getDefinition(created.id);
 
@@ -216,6 +201,7 @@ describe('ImportDefinitionEngine', () => {
 
   describe('getAllForProject', () => {
     it('should return empty array when no definitions exist', async () => {
+      mockDrizzleSelectResults = [[]];
       const defs = await engine.getAllForProject();
 
       expect(defs).toEqual([]);
@@ -224,6 +210,11 @@ describe('ImportDefinitionEngine', () => {
     it('should return all definitions for the current project', async () => {
       await engine.createDefinition('Import 1');
       await engine.createDefinition('Import 2');
+      // Mock returning both definitions
+      mockDrizzleSelectResults = [[
+        { id: 'id1', projectId: 'test-project', name: 'Import 1', wxrFilePath: null, uploadsFolderPath: null, lastAnalysisResult: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'id2', projectId: 'test-project', name: 'Import 2', wxrFilePath: null, uploadsFolderPath: null, lastAnalysisResult: null, createdAt: new Date(), updatedAt: new Date() },
+      ]];
 
       const defs = await engine.getAllForProject();
 
@@ -235,6 +226,10 @@ describe('ImportDefinitionEngine', () => {
       engine.setProjectContext('other-project');
       await engine.createDefinition('Import B');
       engine.setProjectContext('test-project');
+      // Mock returning only the test-project definition
+      mockDrizzleSelectResults = [[
+        { id: 'id1', projectId: 'test-project', name: 'Import A', wxrFilePath: null, uploadsFolderPath: null, lastAnalysisResult: null, createdAt: new Date(), updatedAt: new Date() },
+      ]];
 
       const defs = await engine.getAllForProject();
 
@@ -243,10 +238,12 @@ describe('ImportDefinitionEngine', () => {
     });
 
     it('should return definitions ordered by updatedAt DESC', async () => {
-      await engine.createDefinition('Older');
-      // Small delay to ensure different timestamps
-      await new Promise(resolve => setTimeout(resolve, 10));
-      await engine.createDefinition('Newer');
+      const olderDate = new Date('2024-01-01');
+      const newerDate = new Date('2024-02-01');
+      mockDrizzleSelectResults = [[
+        { id: 'id2', projectId: 'test-project', name: 'Newer', wxrFilePath: null, uploadsFolderPath: null, lastAnalysisResult: null, createdAt: newerDate, updatedAt: newerDate },
+        { id: 'id1', projectId: 'test-project', name: 'Older', wxrFilePath: null, uploadsFolderPath: null, lastAnalysisResult: null, createdAt: olderDate, updatedAt: olderDate },
+      ]];
 
       const defs = await engine.getAllForProject();
 
@@ -258,6 +255,29 @@ describe('ImportDefinitionEngine', () => {
   describe('updateDefinition', () => {
     it('should update the name', async () => {
       const created = await engine.createDefinition('Old Name');
+      // First call for getDefinition check, second for returning updated data
+      mockDrizzleSelectResults = [
+        [{ // getDefinition call inside updateDefinition
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Old Name',
+          wxrFilePath: null,
+          uploadsFolderPath: null,
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+        [{ // return after update
+          id: created.id,
+          projectId: 'test-project',
+          name: 'New Name',
+          wxrFilePath: null,
+          uploadsFolderPath: null,
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+      ];
 
       const updated = await engine.updateDefinition(created.id, { name: 'New Name' });
 
@@ -267,6 +287,29 @@ describe('ImportDefinitionEngine', () => {
 
     it('should update wxrFilePath', async () => {
       const created = await engine.createDefinition('Test');
+      // First call for check, second for returning updated data
+      mockDrizzleSelectResults = [
+        [{ // getDefinition check
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Test',
+          wxrFilePath: null,
+          uploadsFolderPath: null,
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+        [{ // return after update
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Test',
+          wxrFilePath: '/path/to/export.xml',
+          uploadsFolderPath: null,
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+      ];
 
       const updated = await engine.updateDefinition(created.id, { wxrFilePath: '/path/to/export.xml' });
 
@@ -275,6 +318,28 @@ describe('ImportDefinitionEngine', () => {
 
     it('should update uploadsFolderPath', async () => {
       const created = await engine.createDefinition('Test');
+      mockDrizzleSelectResults = [
+        [{ // getDefinition check
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Test',
+          wxrFilePath: null,
+          uploadsFolderPath: null,
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+        [{ // return after update
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Test',
+          wxrFilePath: null,
+          uploadsFolderPath: '/path/to/uploads',
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+      ];
 
       const updated = await engine.updateDefinition(created.id, { uploadsFolderPath: '/path/to/uploads' });
 
@@ -284,6 +349,28 @@ describe('ImportDefinitionEngine', () => {
     it('should update lastAnalysisResult as JSON', async () => {
       const created = await engine.createDefinition('Test');
       const report = { posts: { total: 10, new: 5 } };
+      mockDrizzleSelectResults = [
+        [{ // getDefinition check
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Test',
+          wxrFilePath: null,
+          uploadsFolderPath: null,
+          lastAnalysisResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+        [{ // return after update
+          id: created.id,
+          projectId: 'test-project',
+          name: 'Test',
+          wxrFilePath: null,
+          uploadsFolderPath: null,
+          lastAnalysisResult: JSON.stringify(report),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }],
+      ];
 
       const updated = await engine.updateDefinition(created.id, { lastAnalysisResult: JSON.stringify(report) });
 
@@ -291,6 +378,7 @@ describe('ImportDefinitionEngine', () => {
     });
 
     it('should return null for non-existent definition', async () => {
+      mockDrizzleSelectResults = [[]];
       const updated = await engine.updateDefinition('non-existent', { name: 'Test' });
 
       expect(updated).toBeNull();
@@ -299,6 +387,7 @@ describe('ImportDefinitionEngine', () => {
     it('should not update definitions from other projects', async () => {
       const created = await engine.createDefinition('Test');
       engine.setProjectContext('other-project');
+      mockDrizzleSelectResults = [[]]; // Would be filtered by project
 
       const updated = await engine.updateDefinition(created.id, { name: 'Hacked' });
 
@@ -309,6 +398,16 @@ describe('ImportDefinitionEngine', () => {
   describe('deleteDefinition', () => {
     it('should delete an existing definition', async () => {
       const created = await engine.createDefinition('To Delete');
+      mockDrizzleSelectResults = [[{
+        id: created.id,
+        projectId: 'test-project',
+        name: 'To Delete',
+        wxrFilePath: null,
+        uploadsFolderPath: null,
+        lastAnalysisResult: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }]];
 
       const result = await engine.deleteDefinition(created.id);
 
@@ -316,6 +415,7 @@ describe('ImportDefinitionEngine', () => {
     });
 
     it('should return false for non-existent definition', async () => {
+      mockDrizzleSelectResults = [[]];
       const result = await engine.deleteDefinition('non-existent');
 
       expect(result).toBe(false);
@@ -324,6 +424,7 @@ describe('ImportDefinitionEngine', () => {
     it('should not delete definitions from other projects', async () => {
       const created = await engine.createDefinition('Test');
       engine.setProjectContext('other-project');
+      mockDrizzleSelectResults = [[]]; // Would be filtered by project
 
       const result = await engine.deleteDefinition(created.id);
 
@@ -332,8 +433,21 @@ describe('ImportDefinitionEngine', () => {
 
     it('should remove the definition from the database', async () => {
       const created = await engine.createDefinition('Test');
+      // First call returns the definition for delete
+      mockDrizzleSelectResults = [[{
+        id: created.id,
+        projectId: 'test-project',
+        name: 'Test',
+        wxrFilePath: null,
+        uploadsFolderPath: null,
+        lastAnalysisResult: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }]];
       await engine.deleteDefinition(created.id);
-
+      
+      // Second call returns empty for get
+      mockDrizzleSelectResults = [[]];
       const def = await engine.getDefinition(created.id);
       expect(def).toBeNull();
     });
