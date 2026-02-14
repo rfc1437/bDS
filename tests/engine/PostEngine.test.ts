@@ -2001,17 +2001,24 @@ Published content`);
     it('should return all posts for current project', async () => {
       postEngine.setProjectContext('test-project');
 
+      // getAllPosts now makes 3 queries: count, drafts, non-drafts
+      let selectCallCount = 0;
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        selectCallCount++;
         const chain = createSelectChain();
+        const callNum = selectCallCount;
         chain.where = vi.fn().mockReturnValue({
           ...chain,
           orderBy: vi.fn().mockReturnThis(),
           limit: vi.fn().mockReturnThis(),
           offset: vi.fn().mockReturnThis(),
-          all: vi.fn().mockResolvedValue([
-            { id: '1', title: 'Post 1', projectId: 'test-project', tags: '[]', categories: '[]' },
-            { id: '2', title: 'Post 2', projectId: 'test-project', tags: '[]', categories: '[]' },
-          ]),
+          all: vi.fn().mockResolvedValue(
+            callNum === 1
+              ? [{ id: '1' }, { id: '2' }] // count query: 2 total
+              : callNum === 2
+                ? [{ id: '1', title: 'Draft Post', projectId: 'test-project', status: 'draft', tags: '[]', categories: '[]' }] // drafts
+                : [{ id: '2', title: 'Published Post', projectId: 'test-project', status: 'published', tags: '[]', categories: '[]' }] // non-drafts
+          ),
         });
         return chain;
       });
@@ -2021,21 +2028,24 @@ Published content`);
     });
 
     it('should parse tags and categories JSON', async () => {
+      // getAllPosts makes 3 queries: count, drafts, non-drafts
+      let selectCallCount = 0;
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        selectCallCount++;
         const chain = createSelectChain();
+        const callNum = selectCallCount;
         chain.where = vi.fn().mockReturnValue({
           ...chain,
           orderBy: vi.fn().mockReturnThis(),
           limit: vi.fn().mockReturnThis(),
           offset: vi.fn().mockReturnThis(),
-          all: vi.fn().mockResolvedValue([
-            { 
-              id: '1', 
-              title: 'Tagged Post', 
-              tags: '["tag1","tag2"]', 
-              categories: '["cat1"]' 
-            },
-          ]),
+          all: vi.fn().mockResolvedValue(
+            callNum === 1
+              ? [{ id: '1' }] // count
+              : callNum === 2
+                ? [] // no drafts
+                : [{ id: '1', title: 'Tagged Post', tags: '["tag1","tag2"]', categories: '["cat1"]' }] // non-drafts
+          ),
         });
         return chain;
       });
@@ -2043,6 +2053,42 @@ Published content`);
       const result = await postEngine.getAllPosts();
       expect(result.items[0].tags).toEqual(['tag1', 'tag2']);
       expect(result.items[0].categories).toEqual(['cat1']);
+    });
+
+    it('should always include all drafts regardless of pagination limit', async () => {
+      postEngine.setProjectContext('test-project');
+
+      // Simulate: 3 drafts + many published, limit=2
+      let selectCallCount = 0;
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        selectCallCount++;
+        const chain = createSelectChain();
+        const callNum = selectCallCount;
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          offset: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue(
+            callNum === 1
+              ? [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }] // count: 5 total
+              : callNum === 2
+                ? [ // 3 drafts (ALL of them, regardless of limit)
+                    { id: '1', title: 'Draft 1', status: 'draft', tags: '[]', categories: '[]' },
+                    { id: '2', title: 'Draft 2', status: 'draft', tags: '[]', categories: '[]' },
+                    { id: '3', title: 'Draft 3', status: 'draft', tags: '[]', categories: '[]' },
+                  ]
+                : [] // no remaining slots for non-drafts (limit=2, 3 drafts > 2)
+          ),
+        });
+        return chain;
+      });
+
+      // Even with limit=2, all 3 drafts must be returned
+      const result = await postEngine.getAllPosts({ limit: 2, offset: 0 });
+      expect(result.items).toHaveLength(3);
+      expect(result.items.every(p => p.status === 'draft')).toBe(true);
+      expect(result.hasMore).toBe(true);
     });
   });
 

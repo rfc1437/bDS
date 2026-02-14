@@ -336,8 +336,11 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('media:getUrl', async (_, id: string) => {
-    // Returns the bds-media:// protocol URL for a media item
-    return `bds-media://${id}`;
+    // Returns the relative path for a media item (e.g. media/2025/01/uuid.jpg)
+    // This is the format used in markdown content for image references
+    const engine = getMediaEngine();
+    const relativePath = await engine.getRelativePath(id);
+    return relativePath ?? `media/${id}`;
   });
 
   safeHandle('media:getFilePath', async (_, id: string) => {

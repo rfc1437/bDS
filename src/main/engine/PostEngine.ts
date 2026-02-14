@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import matter from 'gray-matter';
-import { eq, and, desc, gte, lte, like, inArray } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, like, inArray, ne } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { posts, Post, NewPost, postLinks } from '../database/schema';
@@ -532,19 +532,74 @@ export class PostEngine extends EventEmitter {
       .all();
     const total = countResult.length;
 
+    // Drafts must ALWAYS be included regardless of pagination.
+    // On the first page (offset=0), fetch all drafts and fill remaining slots with non-drafts.
+    // On subsequent pages, only paginate non-draft posts (drafts were already returned).
+    if (offset === 0) {
+      // Fetch ALL drafts (typically few)
+      const draftPosts = await db
+        .select()
+        .from(posts)
+        .where(and(
+          eq(posts.projectId, this.currentProjectId),
+          eq(posts.status, 'draft')
+        ))
+        .orderBy(desc(posts.createdAt))
+        .all();
+
+      // Fill remaining slots with non-draft posts
+      const remainingSlots = Math.max(0, limit - draftPosts.length);
+      const nonDraftPosts = remainingSlots > 0 ? await db
+        .select()
+        .from(posts)
+        .where(and(
+          eq(posts.projectId, this.currentProjectId),
+          ne(posts.status, 'draft')
+        ))
+        .orderBy(desc(posts.createdAt))
+        .limit(remainingSlots)
+        .all() : [];
+
+      const allDbPosts = [...draftPosts, ...nonDraftPosts];
+      const items: PostData[] = allDbPosts.map(dbPost =>
+        this.dbRowToPostData(dbPost, dbPost.content || '')
+      );
+
+      return {
+        items,
+        hasMore: allDbPosts.length < total,
+        total,
+      };
+    }
+
+    // Subsequent pages: only paginate non-draft posts
+    // Count drafts to calculate correct offset into non-draft posts
+    const draftCount = await db
+      .select({ count: posts.id })
+      .from(posts)
+      .where(and(
+        eq(posts.projectId, this.currentProjectId),
+        eq(posts.status, 'draft')
+      ))
+      .all();
+    const numDrafts = draftCount.length;
+
+    // Adjust offset: the first page returned numDrafts + (limit - numDrafts) non-draft posts
+    // So for page 2+, offset into non-draft posts = offset - numDrafts
+    const nonDraftOffset = offset - numDrafts;
     const dbPosts = await db
       .select()
       .from(posts)
-      .where(eq(posts.projectId, this.currentProjectId))
+      .where(and(
+        eq(posts.projectId, this.currentProjectId),
+        ne(posts.status, 'draft')
+      ))
       .orderBy(desc(posts.createdAt))
       .limit(limit)
-      .offset(offset)
+      .offset(nonDraftOffset)
       .all();
-    
-    // For listing, we don't need to load content from filesystem.
-    // Use DB content for drafts, empty string for published posts.
-    // This avoids expensive filesystem reads for each post.
-    const items: PostData[] = dbPosts.map(dbPost => 
+
+    const items: PostData[] = dbPosts.map(dbPost =>
       this.dbRowToPostData(dbPost, dbPost.content || '')
     );
 

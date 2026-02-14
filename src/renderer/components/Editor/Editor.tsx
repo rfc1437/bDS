@@ -42,6 +42,8 @@ const autoSaveManager = new AutoSaveManager({
     if (updated) {
       useAppStore.getState().updatePost(id, updated as Partial<PostData>);
       useAppStore.getState().markClean(id);
+      // Emit event so PostEditor can update its local state
+      window.dispatchEvent(new CustomEvent('bds:post-auto-saved', { detail: { id, updated } }));
     }
   },
   onSaveComplete: (id) => {
@@ -670,6 +672,18 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   const isDirty = checkIsDirty(postId);
 
+  // Listen for auto-save events to keep local post state in sync
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { id, updated } = (e as CustomEvent).detail;
+      if (id === postId && updated) {
+        setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
+      }
+    };
+    window.addEventListener('bds:post-auto-saved', handler);
+    return () => window.removeEventListener('bds:post-auto-saved', handler);
+  }, [postId]);
+
   // Check if post has a published version for discard functionality
   useEffect(() => {
     window.electronAPI?.posts.hasPublishedVersion(postId).then(setHasPublishedVersion);
@@ -764,6 +778,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           if (updated) {
             useAppStore.getState().updatePost(pending.postId, updated as Partial<PostData>);
             useAppStore.getState().markClean(pending.postId);
+            window.dispatchEvent(new CustomEvent('bds:post-auto-saved', { detail: { id: pending.postId, updated } }));
           }
         }).catch((error) => {
           console.error('Auto-save failed:', error);
@@ -835,6 +850,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       
       if (updated) {
         updatePost(postId, updated as Partial<PostData>);
+        setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
         markClean(postId);
       }
     } catch (error) {
@@ -856,6 +872,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const updated = await window.electronAPI?.posts.publish(postId);
       if (updated) {
         updatePost(postId, updated as Partial<PostData>);
+        setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
         showToast.success('Post published');
       }
     } catch (error) {
