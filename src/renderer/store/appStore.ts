@@ -117,11 +117,6 @@ interface AppState {
 
   // Confirm delete modal
   confirmDeleteModal: ConfirmDeleteDetails | null;
-
-  // Sync
-  syncStatus: 'idle' | 'syncing' | 'error';
-  syncConfigured: boolean;
-  pendingChanges: { posts: number; media: number };
   
   // Loading states
   isLoading: boolean;
@@ -178,10 +173,7 @@ interface AppState {
   setTasks: (tasks: TaskProgress[]) => void;
   updateTask: (taskId: string, task: Partial<TaskProgress>) => void;
   
-  setSyncStatus: (status: 'idle' | 'syncing' | 'error') => void;
-  setSyncConfigured: (configured: boolean) => void;
-  setPendingChanges: (changes: { posts: number; media: number }) => void;
-  
+  // Loading Actions
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -222,11 +214,6 @@ export const useAppStore = create<AppState>()(
 
       // Confirm delete modal
       confirmDeleteModal: null,
-
-      // Initial Sync State
-      syncStatus: 'idle',
-      syncConfigured: false,
-      pendingChanges: { posts: 0, media: 0 },
       
       // Initial Loading State
       isLoading: false,
@@ -396,11 +383,6 @@ export const useAppStore = create<AppState>()(
         // Add new task if it doesn't exist yet
         return { tasks: [...state.tasks, { taskId, status: 'running', progress: 0, message: '', startTime: new Date().toISOString(), ...task } as TaskProgress] };
       }),
-      
-      // Sync Actions
-      setSyncStatus: (syncStatus) => set({ syncStatus }),
-      setSyncConfigured: (syncConfigured) => set({ syncConfigured }),
-      setPendingChanges: (pendingChanges) => set({ pendingChanges }),
       
       // Loading Actions
       setLoading: (isLoading) => set({ isLoading }),

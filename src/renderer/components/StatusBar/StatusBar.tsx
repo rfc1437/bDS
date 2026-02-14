@@ -5,9 +5,6 @@ import './StatusBar.css';
 
 export const StatusBar: React.FC = () => {
   const {
-    syncStatus,
-    syncConfigured,
-    pendingChanges,
     media,
     tasks,
     selectedPostId,
@@ -28,27 +25,12 @@ export const StatusBar: React.FC = () => {
   }, [selectedPostId]);
 
   const runningTasks = tasks.filter(t => t.status === 'running');
-  const totalPending = pendingChanges.posts + pendingChanges.media;
 
   return (
     <div className="status-bar">
       <div className="status-bar-left">
         {/* Project Selector */}
         <ProjectSelector />
-
-        {/* Sync Status */}
-        <div className={`status-bar-item ${!syncConfigured ? 'warning' : ''}`}>
-          <span className={`sync-indicator ${syncStatus}`} />
-          {!syncConfigured ? (
-            <span>Sync not configured</span>
-          ) : syncStatus === 'syncing' ? (
-            <span>Syncing...</span>
-          ) : totalPending > 0 ? (
-            <span>{totalPending} pending</span>
-          ) : (
-            <span>Synced</span>
-          )}
-        </div>
 
         {/* Running Tasks */}
         {runningTasks.length > 0 && (

@@ -43,16 +43,8 @@ const ImportIcon = () => (
   </svg>
 );
 
-const SyncIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
-  </svg>
-);
-
 export const ActivityBar: React.FC = () => {
-  const { activeView, setActiveView, sidebarVisible, toggleSidebar, syncStatus, pendingChanges, openTab, tabs, activeTabId } = useAppStore();
-  
-  const totalPending = pendingChanges.posts + pendingChanges.media;
+  const { activeView, setActiveView, sidebarVisible, toggleSidebar, openTab, tabs, activeTabId } = useAppStore();
   
   // Check if settings tab is currently active
   const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
@@ -157,16 +149,6 @@ export const ActivityBar: React.FC = () => {
       </div>
       
       <div className="activity-bar-bottom">
-        <button
-          className={`activity-bar-item ${syncStatus === 'syncing' ? 'syncing' : ''}`}
-          onClick={() => window.electronAPI?.sync.start()}
-          title={`Sync (${totalPending} pending)`}
-        >
-          <SyncIcon />
-          {totalPending > 0 && (
-            <span className="activity-bar-badge">{totalPending}</span>
-          )}
-        </button>
         <button
           className={`activity-bar-item ${isSettingsActive ? 'active' : ''}`}
           onClick={handleSettingsClick}

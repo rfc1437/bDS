@@ -4,7 +4,6 @@ import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
 import { getPostEngine, PostData, PostFilter, PaginationOptions } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
-import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
 import { getTagEngine } from '../engine/TagEngine';
@@ -432,43 +431,6 @@ export function registerIpcHandlers(): void {
     return engine.regenerateMissingThumbnails();
   });
 
-  // ============ Sync Handlers ============
-
-  safeHandle('sync:configure', async (_, config: SyncConfig) => {
-    const engine = getSyncEngine();
-    return engine.configure(config);
-  });
-
-  safeHandle('sync:start', async (_, direction: SyncDirection = 'bidirectional') => {
-    const engine = getSyncEngine();
-    return engine.fullSync(direction);
-  });
-
-  safeHandle('sync:getStatus', async () => {
-    const engine = getSyncEngine();
-    return engine.getSyncStatus();
-  });
-
-  safeHandle('sync:isConfigured', async () => {
-    const engine = getSyncEngine();
-    return engine.isConfigured();
-  });
-
-  safeHandle('sync:getPendingCount', async () => {
-    const engine = getSyncEngine();
-    return engine.getPendingChangesCount();
-  });
-
-  safeHandle('sync:getLog', async (_, limit?: number) => {
-    const engine = getSyncEngine();
-    return engine.getSyncLog(limit);
-  });
-
-  safeHandle('sync:stopAutoSync', async () => {
-    const engine = getSyncEngine();
-    return engine.stopAutoSync();
-  });
-
   // ============ Task Handlers ============
 
   safeHandle('tasks:getAll', async () => {
@@ -880,7 +842,6 @@ export function registerIpcHandlers(): void {
   // Forward engine events to renderer
   const postEngine = getPostEngine();
   const mediaEngine = getMediaEngine();
-  const syncEngine = getSyncEngine();
   const projectEngine = getProjectEngine();
   const metaEngine = getMetaEngine();
   const tagEngine = getTagEngine();
@@ -925,10 +886,6 @@ export function registerIpcHandlers(): void {
   postMediaEngine.on('mediaUnlinked', forwardEvent('postMedia:unlinked'));
   postMediaEngine.on('mediaReordered', forwardEvent('postMedia:reordered'));
   postMediaEngine.on('rebuilt', forwardEvent('postMedia:rebuilt'));
-
-  syncEngine.on('syncStarted', forwardEvent('sync:started'));
-  syncEngine.on('syncCompleted', forwardEvent('sync:completed'));
-  syncEngine.on('syncFailed', forwardEvent('sync:failed'));
 
   taskManager.on('taskCreated', forwardEvent('task:created'));
   taskManager.on('taskStarted', forwardEvent('task:started'));
