@@ -44,6 +44,8 @@ interface AnalyzedPostItem {
     status: string;
     excerpt: string;
     pubDate: string | null;
+    postDate: string | null;
+    postModified: string | null;
     creator: string;
     postType: string;
     categories: string[];
