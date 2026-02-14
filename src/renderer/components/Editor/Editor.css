@@ -265,6 +265,44 @@
   overflow-y: auto;
   font-size: 14px;
   line-height: 1.6;
+  position: relative;
+}
+
+/* Hydration loading overlay */
+.preview-hydrating-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(30, 30, 30, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 4px;
+}
+
+.preview-hydrating-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--vscode-foreground);
+  font-size: 14px;
+}
+
+.preview-hydrating-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--vscode-panel-border);
+  border-top-color: var(--vscode-focusBorder);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .editor-preview .preview-content {
