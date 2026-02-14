@@ -240,6 +240,23 @@
   background-color: var(--vscode-button-secondaryHoverBackground);
 }
 
+.insert-post-link-button,
+.insert-media-button {
+  padding: 4px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.insert-post-link-button:hover,
+.insert-media-button:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
 .editor-preview {
   flex: 1;
   background-color: var(--vscode-input-background);

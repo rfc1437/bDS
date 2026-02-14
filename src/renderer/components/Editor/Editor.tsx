@@ -15,15 +15,8 @@ import { ChatPanel } from '../ChatPanel';
 import { ImportAnalysisView } from '../ImportAnalysisView';
 import { AutoSaveManager } from '../../utils';
 import { parseMacros, getMacro } from '../../macros/registry';
-import { PostSearchModal } from '../PostSearchModal';
+import { InsertModal } from '../InsertModal';
 import './Editor.css';
-
-interface SearchResult {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt?: string;
-}
 
 // Module-level AutoSaveManager for idle-time based auto-saving
 const autoSaveManager = new AutoSaveManager({
@@ -577,6 +570,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [galleryImages, setGalleryImages] = useState<{ src: string; alt: string }[]>([]);
   const [showPostSearch, setShowPostSearch] = useState(false);
+  const [showMediaSearch, setShowMediaSearch] = useState(false);
   const editorRef = useRef<unknown>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -908,8 +902,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     });
   };
 
-  // Handle post selection from search modal
-  const handlePostSelected = useCallback((post: SearchResult) => {
+  // Handle link insertion from InsertModal (for posts or external URLs)
+  const handleInsertLink = useCallback((url: string, text?: string) => {
     const editor = editorRef.current as any;
     if (!editor) return;
 
@@ -919,17 +913,33 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     const selection = editor.getSelection();
     const selectedText = selection ? model.getValueInRange(selection) : '';
 
-    const linkText = selectedText || post.title;
-    const linkUrl = `/posts/${post.slug}`;
-    const linkMarkdown = `[${linkText}](${linkUrl})`;
+    const linkText = text || selectedText || url;
+    const linkMarkdown = `[${linkText}](${url})`;
 
-    editor.executeEdits('insert-post-link', [{
+    editor.executeEdits('insert-link', [{
       range: selection || editor.getSelection(),
       text: linkMarkdown,
       forceMoveMarkers: true
     }]);
 
     setShowPostSearch(false);
+  }, []);
+
+  // Handle image insertion from InsertModal (for media library)
+  const handleInsertImage = useCallback((url: string, alt: string) => {
+    const editor = editorRef.current as any;
+    if (!editor) return;
+
+    const selection = editor.getSelection();
+    const imageMarkdown = `![${alt}](${url})`;
+
+    editor.executeEdits('insert-image', [{
+      range: selection || editor.getSelection(),
+      text: imageMarkdown,
+      forceMoveMarkers: true
+    }]);
+
+    setShowMediaSearch(false);
   }, []);
 
   // Configure Monaco before mount to add macro syntax highlighting
@@ -1165,13 +1175,22 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               </button>
             )}
             {editorMode === 'markdown' && (
-              <button
-                className="insert-post-link-button"
-                onClick={() => setShowPostSearch(true)}
-                title="Link to post (Ctrl+K)"
-              >
-                📝
-              </button>
+              <>
+                <button
+                  className="insert-post-link-button"
+                  onClick={() => setShowPostSearch(true)}
+                  title="Link to post (Ctrl+K)"
+                >
+                  📝
+                </button>
+                <button
+                  className="insert-media-button"
+                  onClick={() => setShowMediaSearch(true)}
+                  title="Insert image from media library"
+                >
+                  🖼️
+                </button>
+              </>
             )}
           </div>
           
@@ -1244,9 +1263,20 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       </div>
 
       {showPostSearch && (
-        <PostSearchModal
-          onSelect={handlePostSelected}
+        <InsertModal
+          mode="link"
+          onInsertLink={handleInsertLink}
+          onInsertImage={() => {}}
           onClose={() => setShowPostSearch(false)}
+        />
+      )}
+      
+      {showMediaSearch && (
+        <InsertModal
+          mode="image"
+          onInsertImage={handleInsertImage}
+          onInsertLink={() => {}}
+          onClose={() => setShowMediaSearch(false)}
         />
       )}
     </div>
