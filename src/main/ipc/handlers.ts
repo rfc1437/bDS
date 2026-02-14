@@ -640,6 +640,16 @@ export function registerIpcHandlers(): void {
     return engine.unlinkMediaFromPost(postId, mediaId);
   });
 
+  safeHandle('postMedia:linkMany', async (_, postId: string, mediaIds: string[]) => {
+    const engine = getPostMediaEngine();
+    return engine.linkManyToPost(postId, mediaIds);
+  });
+
+  safeHandle('postMedia:unlinkMany', async (_, postId: string, mediaIds: string[]) => {
+    const engine = getPostMediaEngine();
+    return engine.unlinkManyFromPost(postId, mediaIds);
+  });
+
   safeHandle('postMedia:getForPost', async (_, postId: string) => {
     const engine = getPostMediaEngine();
     return engine.getLinkedMediaForPost(postId);
@@ -982,6 +992,8 @@ export function registerIpcHandlers(): void {
 
   postMediaEngine.on('mediaLinked', forwardEvent('postMedia:linked'));
   postMediaEngine.on('mediaUnlinked', forwardEvent('postMedia:unlinked'));
+  postMediaEngine.on('mediaBatchLinked', forwardEvent('postMedia:batchLinked'));
+  postMediaEngine.on('mediaBatchUnlinked', forwardEvent('postMedia:batchUnlinked'));
   postMediaEngine.on('mediaReordered', forwardEvent('postMedia:reordered'));
   postMediaEngine.on('rebuilt', forwardEvent('postMedia:rebuilt'));
 

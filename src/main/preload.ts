@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   postMedia: {
     link: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:link', postId, mediaId),
     unlink: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:unlink', postId, mediaId),
+    linkMany: (postId: string, mediaIds: string[]) => ipcRenderer.invoke('postMedia:linkMany', postId, mediaIds),
+    unlinkMany: (postId: string, mediaIds: string[]) => ipcRenderer.invoke('postMedia:unlinkMany', postId, mediaIds),
     getForPost: (postId: string) => ipcRenderer.invoke('postMedia:getForPost', postId),
     getForMedia: (mediaId: string) => ipcRenderer.invoke('postMedia:getForMedia', mediaId),
     getMediaDataForPost: (postId: string) => ipcRenderer.invoke('postMedia:getMediaDataForPost', postId),
