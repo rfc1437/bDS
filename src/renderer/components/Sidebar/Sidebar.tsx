@@ -1031,7 +1031,7 @@ const TagsNav: React.FC = () => {
 };
 
 const SettingsNav: React.FC = () => {
-  const { syncConfigured, tabs, activeTabId, openTab } = useAppStore();
+  const { tabs, activeTabId, openTab } = useAppStore();
   const [activeSection, setActiveSection] = useState<SettingsCategory | null>(null);
 
   // Check if settings panel is currently active
@@ -1085,14 +1085,6 @@ const SettingsNav: React.FC = () => {
         >
           <span className="settings-nav-entry-icon">🤖</span>
           <span>AI Assistant</span>
-        </button>
-        <button 
-          className={`settings-nav-entry ${activeSection === 'sync' ? 'active' : ''}`}
-          onClick={() => handleNavClick('sync')}
-        >
-          <span className="settings-nav-entry-icon">🔄</span>
-          <span>Sync</span>
-          {syncConfigured && <span className="settings-nav-badge">✓</span>}
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'publishing' ? 'active' : ''}`}

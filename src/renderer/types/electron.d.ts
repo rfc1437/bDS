@@ -114,27 +114,6 @@ export interface SyncResult {
   errors: string[];
 }
 
-export interface DropboxConfig {
-  accessToken: string;
-  appKey: string;
-  remotePath?: string;
-}
-
-export interface DropboxSyncResult {
-  uploaded: number;
-  downloaded: number;
-  conflicts: number;
-  errors?: string[];
-}
-
-export interface DropboxConflict {
-  id: string;
-  localPath: string;
-  remotePath: string;
-  localModified: string;
-  remoteModified: string;
-}
-
 export interface PaginatedPostsResult {
   items: PostData[];
   hasMore: boolean;
@@ -347,19 +326,6 @@ export interface ElectronAPI {
     getRunning: () => Promise<TaskProgress[]>;
     cancel: (taskId: string) => Promise<boolean>;
     clearCompleted: () => Promise<void>;
-  };
-  dropbox: {
-    configure: (config: DropboxConfig) => Promise<void>;
-    isConfigured: () => Promise<boolean>;
-    getStatus: () => Promise<string>;
-    syncAll: () => Promise<DropboxSyncResult>;
-    startWatching: () => Promise<void>;
-    stopWatching: () => Promise<void>;
-    startPolling: () => Promise<void>;
-    stopPolling: () => Promise<void>;
-    getConflicts: () => Promise<DropboxConflict[]>;
-    resolveConflict: (conflictId: string, resolution: 'local-wins' | 'remote-wins') => Promise<void>;
-    getLastSyncTime: () => Promise<string | null>;
   };
   app: {
     getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;

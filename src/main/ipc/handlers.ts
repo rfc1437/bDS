@@ -5,7 +5,6 @@ import { eq } from 'drizzle-orm';
 import { getPostEngine, PostData, PostFilter, PaginationOptions } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getSyncEngine, SyncConfig, SyncDirection } from '../engine/SyncEngine';
-import { getDropboxSyncEngine, DropboxSyncConfig, ConflictResolution } from '../engine/DropboxSyncEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
 import { getTagEngine } from '../engine/TagEngine';
@@ -442,87 +441,6 @@ export function registerIpcHandlers(): void {
   safeHandle('sync:stopAutoSync', async () => {
     const engine = getSyncEngine();
     return engine.stopAutoSync();
-  });
-
-  // ============ Dropbox Sync Handlers ============
-
-  safeHandle('dropbox:configure', async (_, config: Partial<DropboxSyncConfig>) => {
-    const engine = getDropboxSyncEngine();
-
-    // Inject local project paths so the engine knows where files live
-    const projectEngine = getProjectEngine();
-    const activeProject = await projectEngine.getActiveProject();
-    const projectId = activeProject?.id || 'default';
-    const paths = projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
-
-    const fullConfig: DropboxSyncConfig = {
-      accessToken: config.accessToken,
-      appKey: config.appKey || '',
-      appSecret: config.appSecret,
-      refreshToken: config.refreshToken,
-      syncEnabled: config.syncEnabled ?? true,
-      syncInterval: config.syncInterval ?? 60,
-      localPostsDir: paths.posts,
-      localMediaDir: paths.media,
-      remoteBasePath: config.remoteBasePath ?? (config as any).remotePath ?? '',
-    };
-
-    return engine.configure(fullConfig);
-  });
-
-  safeHandle('dropbox:isConfigured', async () => {
-    const engine = getDropboxSyncEngine();
-    return engine.isConfigured();
-  });
-
-  safeHandle('dropbox:getStatus', async () => {
-    const engine = getDropboxSyncEngine();
-    return engine.getStatus();
-  });
-
-  safeHandle('dropbox:syncAll', async () => {
-    const engine = getDropboxSyncEngine();
-    return engine.syncAll();
-  });
-
-  safeHandle('dropbox:startWatching', async () => {
-    const engine = getDropboxSyncEngine();
-    engine.startWatching();
-  });
-
-  safeHandle('dropbox:stopWatching', async () => {
-    const engine = getDropboxSyncEngine();
-    engine.stopWatching();
-  });
-
-  safeHandle('dropbox:startPolling', async () => {
-    const engine = getDropboxSyncEngine();
-    engine.startPolling();
-  });
-
-  safeHandle('dropbox:stopPolling', async () => {
-    const engine = getDropboxSyncEngine();
-    engine.stopPolling();
-  });
-
-  safeHandle('dropbox:getConflicts', async () => {
-    const engine = getDropboxSyncEngine();
-    return engine.getPendingConflicts();
-  });
-
-  safeHandle('dropbox:resolveConflict', async (_, conflictId: string, resolution: ConflictResolution) => {
-    const engine = getDropboxSyncEngine();
-    const conflicts = engine.getPendingConflicts();
-    const conflict = conflicts.find(c => c.id === conflictId);
-    if (!conflict) {
-      throw new Error(`Conflict ${conflictId} not found`);
-    }
-    return engine.resolveConflict(conflict, resolution);
-  });
-
-  safeHandle('dropbox:getLastSyncTime', async () => {
-    const engine = getDropboxSyncEngine();
-    return engine.getLastSyncTime();
   });
 
   // ============ Task Handlers ============
@@ -985,20 +903,6 @@ export function registerIpcHandlers(): void {
   syncEngine.on('syncStarted', forwardEvent('sync:started'));
   syncEngine.on('syncCompleted', forwardEvent('sync:completed'));
   syncEngine.on('syncFailed', forwardEvent('sync:failed'));
-
-  const dropboxEngine = getDropboxSyncEngine();
-  dropboxEngine.on('configured', forwardEvent('dropbox:configured'));
-  dropboxEngine.on('syncStarted', forwardEvent('dropbox:syncStarted'));
-  dropboxEngine.on('syncCompleted', forwardEvent('dropbox:syncCompleted'));
-  dropboxEngine.on('syncFailed', forwardEvent('dropbox:syncFailed'));
-  dropboxEngine.on('fileUploaded', forwardEvent('dropbox:fileUploaded'));
-  dropboxEngine.on('fileDownloaded', forwardEvent('dropbox:fileDownloaded'));
-  dropboxEngine.on('fileDeleted', forwardEvent('dropbox:fileDeleted'));
-  dropboxEngine.on('conflictDetected', forwardEvent('dropbox:conflictDetected'));
-  dropboxEngine.on('conflictResolved', forwardEvent('dropbox:conflictResolved'));
-  dropboxEngine.on('watchStarted', forwardEvent('dropbox:watchStarted'));
-  dropboxEngine.on('watchStopped', forwardEvent('dropbox:watchStopped'));
-  dropboxEngine.on('authError', forwardEvent('dropbox:authError'));
 
   taskManager.on('taskCreated', forwardEvent('task:created'));
   taskManager.on('taskStarted', forwardEvent('task:started'));

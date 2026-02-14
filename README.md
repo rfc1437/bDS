@@ -1,11 +1,10 @@
 # Blogging Desktop Server (bDS)
 
-A desktop blogging application with offline-first capabilities and cloud sync via Dropbox.
+A desktop blogging application with offline-first capabilities.
 
 ## Features
 
 - **Offline-First**: All data is stored locally in SQLite, works without internet
-- **Cloud Sync**: Synchronize files with Dropbox for multi-device access
 - **VS Code-Inspired UI**: Familiar, clean interface with activity bar, sidebar, and editor
 - **Markdown Posts**: Write blog posts in Markdown with YAML frontmatter
 - **Media Management**: Import and manage images with metadata sidecar files
@@ -20,7 +19,6 @@ src/
 │   ├── engine/           # Business logic engines
 │   │   ├── PostEngine    # Post CRUD, file operations
 │   │   ├── MediaEngine   # Media import/management
-│   │   ├── SyncEngine    # Dropbox sync logic
 │   │   └── TaskManager   # Async task handling
 │   ├── ipc/              # IPC handlers for renderer communication
 │   └── main.ts           # App entry point
@@ -118,17 +116,6 @@ npx electron-builder
 | Ctrl+1 | View Posts |
 | Ctrl+2 | View Media |
 | Ctrl+Shift+P | Publish Selected |
-| Ctrl+Shift+S | Sync Now |
-
-## Cloud Sync Setup
-
-1. Create a Dropbox App at https://www.dropbox.com/developers/apps
-2. Generate an access token for your app
-3. Go to Settings in the app
-4. Enter your Dropbox credentials (access token, app key, remote path)
-5. Click "Configure Dropbox"
-
-Files are synced to Dropbox for backup and multi-device access.
 
 ## License
 
