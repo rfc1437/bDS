@@ -608,4 +608,597 @@ describe('ProjectEngine', () => {
       expect(dataDir).toContain(projectId);
     });
   });
+
+  describe('updateProject', () => {
+    it('should return null for non-existent project', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.updateProject('non-existent', { name: 'New Name' });
+      expect(result).toBeNull();
+    });
+
+    it('should update project name', async () => {
+      const existingProject = {
+        id: 'update-name-test',
+        name: 'Old Name',
+        slug: 'old-name',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        isActive: false,
+      };
+      mockProjects.set(existingProject.id, existingProject);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.updateProject('update-name-test', { name: 'New Name' });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('New Name');
+    });
+
+    it('should update project description', async () => {
+      const existingProject = {
+        id: 'update-desc-test',
+        name: 'Project',
+        slug: 'project',
+        description: 'Old description',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        isActive: false,
+      };
+      mockProjects.set(existingProject.id, existingProject);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.updateProject('update-desc-test', { 
+        description: 'New description' 
+      });
+
+      expect(result?.description).toBe('New description');
+    });
+
+    it('should update updatedAt timestamp', async () => {
+      const oldDate = new Date('2024-01-01');
+      const existingProject = {
+        id: 'update-time-test',
+        name: 'Project',
+        slug: 'project',
+        createdAt: oldDate,
+        updatedAt: oldDate,
+        isActive: false,
+      };
+      mockProjects.set(existingProject.id, existingProject);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingProject),
+        });
+        return chain;
+      });
+
+      const before = new Date();
+      const result = await projectEngine.updateProject('update-time-test', { name: 'Updated' });
+
+      expect(result?.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(result?.createdAt).toEqual(oldDate);
+    });
+
+    it('should emit projectUpdated event', async () => {
+      const existingProject = {
+        id: 'update-event-test',
+        name: 'Project',
+        slug: 'project',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+      mockProjects.set(existingProject.id, existingProject);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingProject),
+        });
+        return chain;
+      });
+
+      const handler = vi.fn();
+      projectEngine.on('projectUpdated', handler);
+
+      await projectEngine.updateProject('update-event-test', { name: 'Updated Name' });
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Updated Name' })
+      );
+    });
+
+    it('should call database update', async () => {
+      const existingProject = {
+        id: 'update-db-test',
+        name: 'Project',
+        slug: 'project',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+      mockProjects.set(existingProject.id, existingProject);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingProject),
+        });
+        return chain;
+      });
+
+      await projectEngine.updateProject('update-db-test', { name: 'Updated' });
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+    });
+
+    it('should update isActive status', async () => {
+      const existingProject = {
+        id: 'update-active-test',
+        name: 'Project',
+        slug: 'project',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+      mockProjects.set(existingProject.id, existingProject);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.updateProject('update-active-test', { isActive: true });
+
+      expect(result?.isActive).toBe(true);
+    });
+  });
+
+  describe('getProject', () => {
+    it('should return null for non-existent project', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(null),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.getProject('non-existent');
+      expect(result).toBeNull();
+    });
+
+    it('should return project data for existing project', async () => {
+      const dbProject = {
+        id: 'existing-project',
+        name: 'My Project',
+        slug: 'my-project',
+        description: 'A test project',
+        dataPath: '/custom/path',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-06-01'),
+        isActive: true,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(dbProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.getProject('existing-project');
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('existing-project');
+      expect(result?.name).toBe('My Project');
+      expect(result?.slug).toBe('my-project');
+      expect(result?.description).toBe('A test project');
+      expect(result?.dataPath).toBe('/custom/path');
+      expect(result?.isActive).toBe(true);
+    });
+
+    it('should handle null description gracefully', async () => {
+      const dbProject = {
+        id: 'no-desc-project',
+        name: 'No Description',
+        slug: 'no-desc',
+        description: null,
+        dataPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(dbProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.getProject('no-desc-project');
+
+      expect(result?.description).toBeUndefined();
+      expect(result?.dataPath).toBeUndefined();
+    });
+  });
+
+  describe('getAllProjects', () => {
+    it('should return empty array when no projects exist', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.all = vi.fn().mockResolvedValue([]);
+        return chain;
+      });
+
+      const result = await projectEngine.getAllProjects();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return all projects', async () => {
+      const dbProjects = [
+        { id: 'p1', name: 'Project 1', slug: 'p1', createdAt: new Date(), updatedAt: new Date(), isActive: false },
+        { id: 'p2', name: 'Project 2', slug: 'p2', createdAt: new Date(), updatedAt: new Date(), isActive: true },
+        { id: 'p3', name: 'Project 3', slug: 'p3', createdAt: new Date(), updatedAt: new Date(), isActive: false },
+      ];
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.all = vi.fn().mockResolvedValue(dbProjects);
+        return chain;
+      });
+
+      const result = await projectEngine.getAllProjects();
+
+      expect(result).toHaveLength(3);
+      expect(result.map(p => p.name)).toEqual(['Project 1', 'Project 2', 'Project 3']);
+    });
+
+    it('should convert null values to undefined', async () => {
+      const dbProjects = [
+        { 
+          id: 'p1', 
+          name: 'Project', 
+          slug: 'p1', 
+          description: null,
+          dataPath: null,
+          createdAt: new Date(), 
+          updatedAt: new Date(), 
+          isActive: null
+        },
+      ];
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.all = vi.fn().mockResolvedValue(dbProjects);
+        return chain;
+      });
+
+      const result = await projectEngine.getAllProjects();
+
+      expect(result[0].description).toBeUndefined();
+      expect(result[0].dataPath).toBeUndefined();
+      expect(result[0].isActive).toBe(false); // null coalesces to false
+    });
+  });
+
+  describe('getActiveProject', () => {
+    it('should return default project when no active project', async () => {
+      const defaultProject = {
+        id: 'default',
+        name: 'Default Project',
+        slug: 'default',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockImplementation(() => ({
+          ...chain,
+          get: vi.fn().mockImplementation((callback) => {
+            // First call (isActive=true) returns null, second call (id='default') returns default
+            return Promise.resolve(null);
+          }),
+        }));
+        return chain;
+      });
+
+      // Mock getProject to return default
+      const originalGetProject = projectEngine.getProject.bind(projectEngine);
+      vi.spyOn(projectEngine, 'getProject').mockResolvedValue({
+        id: 'default',
+        name: 'Default Project',
+        slug: 'default',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      });
+
+      const result = await projectEngine.getActiveProject();
+
+      expect(result?.id).toBe('default');
+      
+      // Restore
+      vi.mocked(projectEngine.getProject).mockRestore();
+    });
+
+    it('should return active project when one exists', async () => {
+      const activeProject = {
+        id: 'active-project',
+        name: 'Active Blog',
+        slug: 'active-blog',
+        description: 'The currently active project',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: true,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(activeProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.getActiveProject();
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('active-project');
+      expect(result?.isActive).toBe(true);
+    });
+  });
+
+  describe('setActiveProject', () => {
+    it('should deactivate all projects first', async () => {
+      const updateCalls: any[] = [];
+      vi.mocked(mockLocalDb.update).mockImplementation(() => {
+        const chain = {
+          set: vi.fn((data) => {
+            updateCalls.push(data);
+            return {
+              where: vi.fn().mockResolvedValue(undefined),
+            };
+          }),
+        };
+        return chain as any;
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'target-project',
+            name: 'Target',
+            slug: 'target',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
+          }),
+        });
+        return chain;
+      });
+
+      await projectEngine.setActiveProject('target-project');
+
+      // First update should set isActive: false for all
+      expect(updateCalls[0]).toEqual({ isActive: false });
+    });
+
+    it('should activate the specified project', async () => {
+      const updateCalls: any[] = [];
+      vi.mocked(mockLocalDb.update).mockImplementation(() => {
+        const chain = {
+          set: vi.fn((data) => {
+            updateCalls.push(data);
+            return {
+              where: vi.fn().mockResolvedValue(undefined),
+            };
+          }),
+        };
+        return chain as any;
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'target-project',
+            name: 'Target',
+            slug: 'target',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
+          }),
+        });
+        return chain;
+      });
+
+      await projectEngine.setActiveProject('target-project');
+
+      // Second update should set isActive: true for the target
+      expect(updateCalls[1]).toEqual({ isActive: true });
+    });
+
+    it('should emit activeProjectChanged event', async () => {
+      vi.mocked(mockLocalDb.update).mockImplementation(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn().mockResolvedValue(undefined),
+        })),
+      } as any));
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'event-project',
+            name: 'Event Project',
+            slug: 'event-project',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
+          }),
+        });
+        return chain;
+      });
+
+      const handler = vi.fn();
+      projectEngine.on('activeProjectChanged', handler);
+
+      await projectEngine.setActiveProject('event-project');
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'event-project' })
+      );
+    });
+
+    it('should return the activated project', async () => {
+      vi.mocked(mockLocalDb.update).mockImplementation(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn().mockResolvedValue(undefined),
+        })),
+      } as any));
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'return-project',
+            name: 'Return Test',
+            slug: 'return-test',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.setActiveProject('return-project');
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('return-project');
+    });
+  });
+
+  describe('getProjectPathsResolved', () => {
+    it('should resolve paths from database project', async () => {
+      const projectWithPath = {
+        id: 'resolved-project',
+        name: 'Resolved Project',
+        slug: 'resolved',
+        dataPath: '/custom/data/path',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(projectWithPath),
+        });
+        return chain;
+      });
+
+      const paths = await projectEngine.getProjectPathsResolved('resolved-project');
+
+      expect(paths.posts).toContain('/custom/data/path');
+      expect(paths.media).toContain('/custom/data/path');
+    });
+
+    it('should use internal path when project has no dataPath', async () => {
+      const projectNoPath = {
+        id: 'internal-project',
+        name: 'Internal Project',
+        slug: 'internal',
+        dataPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(projectNoPath),
+        });
+        return chain;
+      });
+
+      const paths = await projectEngine.getProjectPathsResolved('internal-project');
+
+      expect(paths.posts).toContain('internal-project');
+      expect(paths.media).toContain('internal-project');
+    });
+  });
+
+  describe('getInternalBaseDir', () => {
+    it('should return path containing project ID', () => {
+      const projectId = 'test-internal-id';
+      const result = projectEngine.getInternalBaseDir(projectId);
+
+      expect(result).toContain(projectId);
+      expect(result).toContain('projects');
+    });
+  });
+
+  describe('getDefaultProjectBaseDir', () => {
+    it('should be alias for getInternalBaseDir', () => {
+      const projectId = 'test-default-id';
+      const internalDir = projectEngine.getInternalBaseDir(projectId);
+      const defaultDir = projectEngine.getDefaultProjectBaseDir(projectId);
+
+      expect(defaultDir).toBe(internalDir);
+    });
+  });
 });
