@@ -288,10 +288,8 @@ const hydratePhotoArchive = async (
     // No photo_archive macros - unlink any previously linked and clear state
     const previouslyLinked = loadPreviouslyLinkedIds(postId);
     if (previouslyLinked.size > 0) {
-      console.log(`[photo_archive] No macros found, unlinking ${previouslyLinked.size} previously linked media`);
-      for (const mediaId of previouslyLinked) {
-        await window.electronAPI?.postMedia.unlink(postId, mediaId);
-      }
+      console.log(`[photo_archive] No macros found, batch unlinking ${previouslyLinked.size} previously linked media`);
+      await window.electronAPI?.postMedia.unlinkMany(postId, Array.from(previouslyLinked));
       localStorage.removeItem(getPhotoArchiveLinkedKey(postId));
     }
     return;
@@ -444,19 +442,31 @@ const doHydratePhotoArchive = async (
   
   console.log(`[photo_archive] Should link ${shouldBeLinkedIds.size} media IDs`);
   
-  // Phase 2: Unlink media that was previously linked but is no longer needed
-  // Simple set difference: previouslyLinkedIds - shouldBeLinkedIds
+  // Phase 2: Batch unlink media that was previously linked but is no longer needed
+  const idsToUnlink: string[] = [];
   for (const mediaId of previouslyLinkedIds) {
     if (!shouldBeLinkedIds.has(mediaId)) {
-      console.log(`[photo_archive] Unlinking ${mediaId} - no longer in range`);
-      await window.electronAPI?.postMedia.unlink(postId, mediaId);
+      idsToUnlink.push(mediaId);
     }
+  }
+  
+  if (idsToUnlink.length > 0) {
+    console.log(`[photo_archive] Batch unlinking ${idsToUnlink.length} media items`);
+    await window.electronAPI?.postMedia.unlinkMany(postId, idsToUnlink);
   }
   
   // Save current linked IDs for next hydration
   saveLinkedIds(postId, shouldBeLinkedIds);
   
-  // Phase 3: Link new media and render
+  // Phase 3: Batch link all media that should be linked and render
+  // Use linkMany which internally skips already linked items
+  const idsToLink = Array.from(shouldBeLinkedIds);
+  if (idsToLink.length > 0) {
+    console.log(`[photo_archive] Batch linking ${idsToLink.length} media items`);
+    await window.electronAPI?.postMedia.linkMany(postId, idsToLink);
+  }
+  
+  // Phase 4: Render galleries (no more link/unlink calls here)
   for (const { element, mode, year, month, images, monthlyImages, showYearInLabel } of archiveData) {
     const archiveContainer = element.querySelector('.photo-archive-container');
     if (!archiveContainer) continue;
@@ -467,14 +477,6 @@ const doHydratePhotoArchive = async (
       
       if (mode === 'single-month' && month !== undefined && images && year) {
         // Single month view
-        // Link images to the post
-        for (const img of images) {
-          const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
-          if (!isLinked) {
-            await window.electronAPI?.postMedia.link(postId, img.id);
-          }
-        }
-        
         if (images.length === 0) {
           archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${FULL_MONTH_NAMES[month - 1]} ${year}</div>`;
           continue;
@@ -482,16 +484,6 @@ const doHydratePhotoArchive = async (
         html = buildMonthGallery(month, year, images, onImageClick, false);
       } else if (mode === 'recent' && monthlyImages) {
         // Recent mode - keys are "YYYY-MM" strings
-        // Link all images to the post
-        for (const imgs of monthlyImages.values()) {
-          for (const img of imgs) {
-            const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
-            if (!isLinked) {
-              await window.electronAPI?.postMedia.link(postId, img.id);
-            }
-          }
-        }
-        
         if (monthlyImages.size === 0) {
           archiveContainer.innerHTML = `<div class="photo-archive-empty">No recent photos found</div>`;
           continue;
@@ -510,16 +502,6 @@ const doHydratePhotoArchive = async (
         }).join('');
       } else if (mode === 'full-year' && monthlyImages && year) {
         // Full year view - keys are month numbers
-        // Link all images to the post
-        for (const imgs of monthlyImages.values()) {
-          for (const img of imgs) {
-            const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
-            if (!isLinked) {
-              await window.electronAPI?.postMedia.link(postId, img.id);
-            }
-          }
-        }
-        
         if (monthlyImages.size === 0) {
           archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${year}</div>`;
           continue;

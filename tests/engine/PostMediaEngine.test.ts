@@ -280,6 +280,172 @@ describe('PostMediaEngine', () => {
     });
   });
 
+  describe('linkManyToPost', () => {
+    it('should link multiple media files to a post in a single batch', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2', 'media-3'];
+      
+      // No existing links
+      selectMockData = [];
+      
+      // Setup mock media for each
+      mockGetMedia.mockImplementation((id: string) => 
+        Promise.resolve(createMockMedia({ id, linkedPostIds: [] }))
+      );
+
+      const result = await engine.linkManyToPost(postId, mediaIds);
+
+      expect(result.linked).toHaveLength(3);
+      expect(result.skipped).toHaveLength(0);
+      expect(insertedValues).toHaveLength(3);
+    });
+
+    it('should skip already linked media and include them in skipped array', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2', 'media-3'];
+      
+      // media-1 is already linked
+      selectMockData = [
+        { id: 'link-1', projectId: 'test-project', postId, mediaId: 'media-1', sortOrder: 0, createdAt: new Date() },
+      ];
+      
+      mockGetMedia.mockImplementation((id: string) => 
+        Promise.resolve(createMockMedia({ id, linkedPostIds: id === 'media-1' ? [postId] : [] }))
+      );
+
+      const result = await engine.linkManyToPost(postId, mediaIds);
+
+      expect(result.linked).toHaveLength(2);
+      expect(result.linked).toContain('media-2');
+      expect(result.linked).toContain('media-3');
+      expect(result.skipped).toHaveLength(1);
+      expect(result.skipped).toContain('media-1');
+    });
+
+    it('should emit mediaBatchLinked event once at the end', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2'];
+      selectMockData = [];
+      
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: 'any', linkedPostIds: [] }));
+
+      const handler = vi.fn();
+      engine.on('mediaBatchLinked', handler);
+      // Should NOT emit individual mediaLinked events
+      const individualHandler = vi.fn();
+      engine.on('mediaLinked', individualHandler);
+
+      await engine.linkManyToPost(postId, mediaIds);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith({ postId, mediaIds: expect.arrayContaining(['media-1', 'media-2']) });
+      expect(individualHandler).not.toHaveBeenCalled();
+    });
+
+    it('should not emit event if no media was linked', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1'];
+      
+      // media-1 is already linked
+      selectMockData = [
+        { id: 'link-1', projectId: 'test-project', postId, mediaId: 'media-1', sortOrder: 0, createdAt: new Date() },
+      ];
+      
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: 'media-1', linkedPostIds: [postId] }));
+
+      const handler = vi.fn();
+      engine.on('mediaBatchLinked', handler);
+
+      await engine.linkManyToPost(postId, mediaIds);
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('should update sortOrder incrementally for batch-linked media', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2', 'media-3'];
+      selectMockData = [];
+      
+      mockGetMedia.mockResolvedValue(createMockMedia({ linkedPostIds: [] }));
+
+      await engine.linkManyToPost(postId, mediaIds);
+
+      // Check that sort orders are sequential
+      const sortOrders = insertedValues.map(v => v.sortOrder);
+      expect(sortOrders).toEqual([0, 1, 2]);
+    });
+  });
+
+  describe('unlinkManyFromPost', () => {
+    it('should unlink multiple media files from a post in a single batch', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2', 'media-3'];
+      
+      mockGetMedia.mockImplementation((id: string) => 
+        Promise.resolve(createMockMedia({ id, linkedPostIds: [postId] }))
+      );
+
+      const result = await engine.unlinkManyFromPost(postId, mediaIds);
+
+      expect(result.unlinked).toHaveLength(3);
+      // deleteCalled flag is set to true when any delete is called
+      expect(deleteCalled).toBe(true);
+    });
+
+    it('should emit mediaBatchUnlinked event once at the end', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2'];
+      
+      mockGetMedia.mockResolvedValue(createMockMedia({ linkedPostIds: [postId] }));
+
+      const handler = vi.fn();
+      engine.on('mediaBatchUnlinked', handler);
+      // Should NOT emit individual mediaUnlinked events
+      const individualHandler = vi.fn();
+      engine.on('mediaUnlinked', individualHandler);
+
+      await engine.unlinkManyFromPost(postId, mediaIds);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith({ postId, mediaIds: expect.arrayContaining(['media-1', 'media-2']) });
+      expect(individualHandler).not.toHaveBeenCalled();
+    });
+
+    it('should not emit event if no media was unlinked', async () => {
+      const postId = 'post-1';
+      const mediaIds: string[] = [];
+      
+      const handler = vi.fn();
+      engine.on('mediaBatchUnlinked', handler);
+
+      await engine.unlinkManyFromPost(postId, mediaIds);
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('should update media sidecars to remove postId', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-2'];
+      
+      mockGetMedia.mockImplementation((id: string) => 
+        Promise.resolve(createMockMedia({ id, linkedPostIds: [postId, 'other-post'] }))
+      );
+
+      await engine.unlinkManyFromPost(postId, mediaIds);
+
+      // Both media should have their sidecars updated
+      expect(mockUpdateMedia).toHaveBeenCalledTimes(2);
+      expect(mockUpdateMedia).toHaveBeenCalledWith(
+        'media-1',
+        expect.objectContaining({ linkedPostIds: ['other-post'] })
+      );
+      expect(mockUpdateMedia).toHaveBeenCalledWith(
+        'media-2',
+        expect.objectContaining({ linkedPostIds: ['other-post'] })
+      );
+    });
+  });
+
   describe('getLinkedPostsForMedia', () => {
     it('should return all posts linked to a media file', async () => {
       const mediaId = 'media-1';

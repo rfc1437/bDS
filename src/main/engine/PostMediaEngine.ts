@@ -115,6 +115,102 @@ export class PostMediaEngine extends EventEmitter {
   }
 
   /**
+   * Batch link multiple media files to a post.
+   * Only emits a single event at the end instead of per-item events.
+   * Skips media that are already linked.
+   */
+  async linkManyToPost(postId: string, mediaIds: string[]): Promise<{ linked: string[]; skipped: string[] }> {
+    const db = getDatabase().getLocal();
+    const linked: string[] = [];
+    const skipped: string[] = [];
+
+    // Get all existing links for this post to check what's already linked
+    const existingLinks = await this.getLinkedMediaForPost(postId);
+    const existingMediaIds = new Set(existingLinks.map(l => l.mediaId));
+    
+    let maxSortOrder = existingLinks.length > 0
+      ? Math.max(...existingLinks.map(l => l.sortOrder))
+      : -1;
+
+    const now = new Date();
+
+    for (const mediaId of mediaIds) {
+      // Skip if already linked
+      if (existingMediaIds.has(mediaId)) {
+        skipped.push(mediaId);
+        continue;
+      }
+
+      maxSortOrder++;
+      const link: NewPostMediaLink = {
+        id: uuidv4(),
+        projectId: this.currentProjectId,
+        postId,
+        mediaId,
+        sortOrder: maxSortOrder,
+        createdAt: now,
+      };
+
+      await db.insert(postMedia).values(link);
+
+      // Update the media sidecar to include this post
+      const media = await getMediaEngine().getMedia(mediaId);
+      if (media) {
+        const linkedPostIds = media.linkedPostIds || [];
+        if (!linkedPostIds.includes(postId)) {
+          await getMediaEngine().updateMedia(mediaId, {
+            linkedPostIds: [...linkedPostIds, postId],
+          });
+        }
+      }
+
+      linked.push(mediaId);
+      existingMediaIds.add(mediaId); // Track to avoid duplicates within batch
+    }
+
+    // Emit a single batch event instead of per-item events
+    if (linked.length > 0) {
+      this.emit('mediaBatchLinked', { postId, mediaIds: linked });
+    }
+
+    return { linked, skipped };
+  }
+
+  /**
+   * Batch unlink multiple media files from a post.
+   * Only emits a single event at the end instead of per-item events.
+   */
+  async unlinkManyFromPost(postId: string, mediaIds: string[]): Promise<{ unlinked: string[] }> {
+    const db = getDatabase().getLocal();
+    const unlinked: string[] = [];
+
+    for (const mediaId of mediaIds) {
+      await db.delete(postMedia).where(
+        and(
+          eq(postMedia.postId, postId),
+          eq(postMedia.mediaId, mediaId)
+        )
+      );
+
+      // Update the media sidecar to remove this post
+      const media = await getMediaEngine().getMedia(mediaId);
+      if (media) {
+        const linkedPostIds = (media.linkedPostIds || []).filter(id => id !== postId);
+        await getMediaEngine().updateMedia(mediaId, { linkedPostIds });
+      }
+
+      unlinked.push(mediaId);
+    }
+
+    // Emit a single batch event instead of per-item events
+    if (unlinked.length > 0) {
+      this.emit('mediaBatchUnlinked', { postId, mediaIds: unlinked });
+    }
+
+    return { unlinked };
+  }
+
+  /**
    * Get all media linked to a post, ordered by sortOrder
    */
   async getLinkedMediaForPost(postId: string): Promise<PostMediaLinkData[]> {

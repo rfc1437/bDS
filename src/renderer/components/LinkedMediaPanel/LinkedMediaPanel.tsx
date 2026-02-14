@@ -78,12 +78,31 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
       }
     };
     
+    // Also handle batch events (single refresh for multiple link/unlink operations)
+    const handleBatchLinked = (...args: unknown[]) => {
+      const data = args[0] as { postId: string; mediaIds: string[] } | undefined;
+      if (data?.postId === postId) {
+        loadLinkedMedia();
+      }
+    };
+    
+    const handleBatchUnlinked = (...args: unknown[]) => {
+      const data = args[0] as { postId: string; mediaIds: string[] } | undefined;
+      if (data?.postId === postId) {
+        loadLinkedMedia();
+      }
+    };
+    
     const unsubLinked = window.electronAPI?.on('postMedia:linked', handleLinked);
     const unsubUnlinked = window.electronAPI?.on('postMedia:unlinked', handleUnlinked);
+    const unsubBatchLinked = window.electronAPI?.on('postMedia:batchLinked', handleBatchLinked);
+    const unsubBatchUnlinked = window.electronAPI?.on('postMedia:batchUnlinked', handleBatchUnlinked);
     
     return () => {
       unsubLinked?.();
       unsubUnlinked?.();
+      unsubBatchLinked?.();
+      unsubBatchUnlinked?.();
     };
   }, [postId, loadLinkedMedia]);
 

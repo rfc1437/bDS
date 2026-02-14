@@ -130,6 +130,8 @@ const mockPostMediaEngine = {
   setProjectContext: vi.fn(),
   linkMediaToPost: vi.fn(),
   unlinkMediaFromPost: vi.fn(),
+  linkManyToPost: vi.fn(),
+  unlinkManyFromPost: vi.fn(),
   getLinkedMediaForPost: vi.fn(),
   getLinkedPostsForMedia: vi.fn(),
   reorderMediaForPost: vi.fn(),
@@ -875,6 +877,32 @@ describe('IPC Handlers', () => {
         await invokeHandler('postMedia:unlink', 'post-1', 'media-1');
 
         expect(mockPostMediaEngine.unlinkMediaFromPost).toHaveBeenCalledWith('post-1', 'media-1');
+      });
+    });
+
+    describe('postMedia:linkMany', () => {
+      it('should batch link multiple media to post', async () => {
+        const batchResult = { linked: ['media-1', 'media-2'], skipped: [] };
+        mockPostMediaEngine.linkManyToPost.mockResolvedValue(batchResult);
+        const mediaIds = ['media-1', 'media-2'];
+
+        const result = await invokeHandler('postMedia:linkMany', 'post-1', mediaIds);
+
+        expect(mockPostMediaEngine.linkManyToPost).toHaveBeenCalledWith('post-1', mediaIds);
+        expect(result).toEqual(batchResult);
+      });
+    });
+
+    describe('postMedia:unlinkMany', () => {
+      it('should batch unlink multiple media from post', async () => {
+        const batchResult = { unlinked: ['media-1', 'media-2'] };
+        mockPostMediaEngine.unlinkManyFromPost.mockResolvedValue(batchResult);
+        const mediaIds = ['media-1', 'media-2'];
+
+        const result = await invokeHandler('postMedia:unlinkMany', 'post-1', mediaIds);
+
+        expect(mockPostMediaEngine.unlinkManyFromPost).toHaveBeenCalledWith('post-1', mediaIds);
+        expect(result).toEqual(batchResult);
       });
     });
 
