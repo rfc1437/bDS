@@ -6,7 +6,7 @@ import * as crypto from 'crypto';
 import { eq, and, gte, lte, lt, desc } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
-import { media, Media, NewMedia } from '../database/schema';
+import { media, Media, NewMedia, postMedia } from '../database/schema';
 
 // Thumbnail sizes
 const THUMBNAIL_SIZES = {
@@ -769,6 +769,10 @@ export class MediaEngine extends EventEmitter {
           console.log(`Deleted ${existingMedia.length} existing media record(s) for project ${this.currentProjectId}`);
         }
 
+        // Also delete all post-media links for the current project
+        await db.delete(postMedia).where(eq(postMedia.projectId, this.currentProjectId));
+        console.log(`Deleted post-media links for project ${this.currentProjectId}`);
+
         onProgress(5, 'Scanning media directory...');
 
         // Recursively find all .meta files in the media directory tree
@@ -834,6 +838,20 @@ export class MediaEngine extends EventEmitter {
                 checksum,
                 tags: JSON.stringify(metadata.tags),
               });
+
+              // Insert post-media links based on linkedPostIds from sidecar
+              const linkedPostIds = metadata.linkedPostIds || [];
+              for (let j = 0; j < linkedPostIds.length; j++) {
+                const postId = linkedPostIds[j];
+                await db.insert(postMedia).values({
+                  id: uuidv4(),
+                  projectId: this.currentProjectId,
+                  postId,
+                  mediaId: metadata.id,
+                  sortOrder: j,
+                  createdAt: new Date(),
+                });
+              }
             } catch (error) {
               console.error(`Media file not found for sidecar: ${sidecarPath}`, error);
             }

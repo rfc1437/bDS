@@ -27,7 +27,13 @@ import { MediaEngine, MediaData } from '../../src/main/engine/MediaEngine';
 
 // Create mock data stores
 const mockMedia = new Map<string, any>();
+const mockPostMedia = new Map<string, any>();
 const mockFiles = new Map<string, Buffer | string>();
+
+// Track database operations for testing
+let mediaDeleteCalled = false;
+let postMediaDeleteCalled = false;
+let postMediaInserts: any[] = [];
 
 // Create chainable mock for Drizzle ORM
 function createSelectChain() {
@@ -47,9 +53,15 @@ function createSelectChain() {
 function createDrizzleMock() {
   return {
     select: vi.fn(() => createSelectChain()),
-    insert: vi.fn(() => ({
+    insert: vi.fn((table: any) => ({
       values: vi.fn((data: any) => {
-        if (data && data.id) {
+        // Check if this is an insert to postMedia table by looking at inserted data structure
+        if (data && data.postId && data.mediaId && !data.filename) {
+          // This is a postMedia insert
+          mockPostMedia.set(data.id, data);
+          postMediaInserts.push(data);
+        } else if (data && data.id) {
+          // This is a media insert
           mockMedia.set(data.id, data);
         }
         return Promise.resolve();
@@ -60,8 +72,20 @@ function createDrizzleMock() {
         where: vi.fn(() => Promise.resolve()),
       })),
     })),
-    delete: vi.fn(() => ({
-      where: vi.fn(() => Promise.resolve()),
+    delete: vi.fn((table: any) => ({
+      where: vi.fn((condition: any) => {
+        // Track which table is being deleted from
+        // We detect by the condition - if it involves projectId and no filename, it's likely postMedia
+        // This is a simplified heuristic for testing
+        if (table && table.postId !== undefined) {
+          postMediaDeleteCalled = true;
+          mockPostMedia.clear();
+        } else {
+          mediaDeleteCalled = true;
+          mockMedia.clear();
+        }
+        return Promise.resolve();
+      }),
     })),
   };
 }
@@ -135,7 +159,11 @@ describe('MediaEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMedia.clear();
+    mockPostMedia.clear();
     mockFiles.clear();
+    mediaDeleteCalled = false;
+    postMediaDeleteCalled = false;
+    postMediaInserts = [];
     resetMockCounters();
 
     // Reset the mock implementations
@@ -517,6 +545,139 @@ describe('MediaEngine', () => {
 
       expect(januaryPath).toMatch(/[/\\]2024[/\\]01[/\\]/);
       expect(decemberPath).toMatch(/[/\\]2024[/\\]12[/\\]/);
+    });
+  });
+
+  describe('rebuildDatabaseFromFiles', () => {
+    beforeEach(() => {
+      mediaEngine.setProjectContext('test-project');
+    });
+
+    it('should delete post-media links for the project during rebuild', async () => {
+      const fs = await import('fs/promises');
+
+      // Mock readdir to return media with sidecar
+      vi.mocked(fs.readdir).mockImplementation(async (dir: string, options?: any) => {
+        if (typeof dir === 'string' && dir.includes('media')) {
+          return [
+            { name: 'media-1.jpg', isFile: () => true, isDirectory: () => false },
+            { name: 'media-1.jpg.meta', isFile: () => true, isDirectory: () => false },
+          ] as any;
+        }
+        return [];
+      });
+
+      // Set up sidecar file with linkedPostIds
+      const sidecarContent = `id: media-1
+originalName: test-image.jpg
+mimeType: image/jpeg
+size: 1024
+createdAt: 2024-01-15T10:00:00.000Z
+updatedAt: 2024-01-15T10:00:00.000Z
+linkedPostIds: ["post-1", "post-2"]`;
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg.meta', sidecarContent);
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg', Buffer.from('image-data'));
+
+      await mediaEngine.rebuildDatabaseFromFiles();
+
+      expect(postMediaDeleteCalled).toBe(true);
+    });
+
+    it('should insert post-media links based on linkedPostIds from sidecar files', async () => {
+      const fs = await import('fs/promises');
+
+      // Mock readdir to simulate directory traversal
+      vi.mocked(fs.readdir).mockImplementation(async (dir: string, options?: any) => {
+        if (typeof dir === 'string' && dir.includes('media')) {
+          return [
+            { name: 'media-1.jpg', isFile: () => true, isDirectory: () => false },
+            { name: 'media-1.jpg.meta', isFile: () => true, isDirectory: () => false },
+          ] as any;
+        }
+        return [];
+      });
+
+      // Set up sidecar file with linkedPostIds
+      const sidecarContent = `id: media-1
+originalName: test-image.jpg
+mimeType: image/jpeg
+size: 1024
+createdAt: 2024-01-15T10:00:00.000Z
+updatedAt: 2024-01-15T10:00:00.000Z
+linkedPostIds: ["post-1", "post-2"]`;
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg.meta', sidecarContent);
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg', Buffer.from('image-data'));
+
+      await mediaEngine.rebuildDatabaseFromFiles();
+
+      // Should have inserted 2 post-media links
+      expect(postMediaInserts).toHaveLength(2);
+      expect(postMediaInserts[0].postId).toBe('post-1');
+      expect(postMediaInserts[0].mediaId).toBe('media-1');
+      expect(postMediaInserts[1].postId).toBe('post-2');
+      expect(postMediaInserts[1].mediaId).toBe('media-1');
+    });
+
+    it('should handle media without linkedPostIds', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.readdir).mockImplementation(async (dir: string, options?: any) => {
+        if (typeof dir === 'string' && dir.includes('media')) {
+          return [
+            { name: 'media-1.jpg', isFile: () => true, isDirectory: () => false },
+            { name: 'media-1.jpg.meta', isFile: () => true, isDirectory: () => false },
+          ] as any;
+        }
+        return [];
+      });
+
+      // Sidecar without linkedPostIds
+      const sidecarContent = `id: media-1
+originalName: test-image.jpg
+mimeType: image/jpeg
+size: 1024
+createdAt: 2024-01-15T10:00:00.000Z
+updatedAt: 2024-01-15T10:00:00.000Z`;
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg.meta', sidecarContent);
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg', Buffer.from('image-data'));
+
+      await mediaEngine.rebuildDatabaseFromFiles();
+
+      // Should not insert any post-media links
+      expect(postMediaInserts).toHaveLength(0);
+    });
+
+    it('should set correct sortOrder for post-media links', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.readdir).mockImplementation(async (dir: string, options?: any) => {
+        if (typeof dir === 'string' && dir.includes('media')) {
+          return [
+            { name: 'media-1.jpg', isFile: () => true, isDirectory: () => false },
+            { name: 'media-1.jpg.meta', isFile: () => true, isDirectory: () => false },
+          ] as any;
+        }
+        return [];
+      });
+
+      // Sidecar with multiple linked posts
+      const sidecarContent = `id: media-1
+originalName: test-image.jpg
+mimeType: image/jpeg
+size: 1024
+createdAt: 2024-01-15T10:00:00.000Z
+updatedAt: 2024-01-15T10:00:00.000Z
+linkedPostIds: ["post-a", "post-b", "post-c"]`;
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg.meta', sidecarContent);
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg', Buffer.from('image-data'));
+
+      await mediaEngine.rebuildDatabaseFromFiles();
+
+      // Verify sortOrder is set correctly (0, 1, 2)
+      expect(postMediaInserts).toHaveLength(3);
+      expect(postMediaInserts[0].sortOrder).toBe(0);
+      expect(postMediaInserts[1].sortOrder).toBe(1);
+      expect(postMediaInserts[2].sortOrder).toBe(2);
     });
   });
 });
