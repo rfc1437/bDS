@@ -399,6 +399,18 @@ export class DatabaseConnection {
       console.log('FTS table migrated - rebuild index required');
     }
 
+    // Create FTS5 virtual table for media full-text search
+    // Stores: id (unindexed, for lookups), project_id (unindexed, for filtering),
+    // content (stemmed text from original_name, alt, caption, tags)
+    await this.localClient.execute(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
+        id UNINDEXED,
+        project_id UNINDEXED,
+        content,
+        content_rowid=rowid
+      );
+    `);
+
     // Migration: Ensure tags table exists (for databases created before tags feature)
     const tagsTableExists = await this.localClient.execute(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='tags'"

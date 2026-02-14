@@ -7,6 +7,7 @@ import { eq, and, gte, lte, lt, desc } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { media, Media, NewMedia, postMedia } from '../database/schema';
+import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 
 // Thumbnail sizes
 const THUMBNAIL_SIZES = {
@@ -68,9 +69,68 @@ export class MediaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private dataDir: string | null = null;      // For media files (may be external)
   private internalDir: string | null = null;   // For thumbnails (always local)
+  private searchLanguage: SupportedLanguage = 'english';
 
   constructor() {
     super();
+  }
+
+  /**
+   * Set the language used for full-text search stemming.
+   */
+  setSearchLanguage(language: SupportedLanguage): void {
+    this.searchLanguage = language;
+  }
+
+  /**
+   * Get the current search language.
+   */
+  getSearchLanguage(): SupportedLanguage {
+    return this.searchLanguage;
+  }
+
+  /**
+   * Update the FTS index for a media item.
+   * Stores stemmed content from original_name, alt, caption, and tags.
+   */
+  private async updateFTSIndex(item: {
+    id: string;
+    projectId: string;
+    originalName: string;
+    alt?: string;
+    caption?: string;
+    tags: string[];
+  }): Promise<void> {
+    const client = getDatabase().getLocalClient();
+    if (!client) return;
+
+    // Delete existing entry
+    await client.execute({ sql: 'DELETE FROM media_fts WHERE id = ?', args: [item.id] });
+
+    // Combine all searchable fields and stem them
+    const allText = [
+      item.originalName,
+      item.alt || '',
+      item.caption || '',
+      item.tags.join(' '),
+    ].join(' ');
+
+    const stemmedContent = stemText(allText, this.searchLanguage);
+
+    // Insert with id, project_id, and stemmed content
+    await client.execute({
+      sql: 'INSERT INTO media_fts (id, project_id, content) VALUES (?, ?, ?)',
+      args: [item.id, item.projectId, stemmedContent],
+    });
+  }
+
+  /**
+   * Delete a media item from the FTS index.
+   */
+  private async deleteFTSIndex(id: string): Promise<void> {
+    const client = getDatabase().getLocalClient();
+    if (!client) return;
+    await client.execute({ sql: 'DELETE FROM media_fts WHERE id = ?', args: [id] });
   }
 
   private getDefaultBaseDir(): string {
@@ -466,6 +526,16 @@ export class MediaEngine extends EventEmitter {
 
     await db.insert(media).values(dbMedia);
 
+    // Update FTS index
+    await this.updateFTSIndex({
+      id: mediaData.id,
+      projectId: this.currentProjectId,
+      originalName: mediaData.originalName,
+      alt: mediaData.alt,
+      caption: mediaData.caption,
+      tags: mediaData.tags,
+    });
+
     this.emit('mediaImported', mediaData);
     return mediaData;
   }
@@ -499,6 +569,16 @@ export class MediaEngine extends EventEmitter {
         tags: JSON.stringify(updated.tags),
       })
       .where(eq(media.id, id));
+
+    // Update FTS index
+    await this.updateFTSIndex({
+      id: updated.id,
+      projectId: this.currentProjectId,
+      originalName: updated.originalName,
+      alt: updated.alt,
+      caption: updated.caption,
+      tags: updated.tags,
+    });
 
     this.emit('mediaUpdated', updated);
     return updated;
@@ -534,6 +614,9 @@ export class MediaEngine extends EventEmitter {
     await db.delete(postMedia).where(eq(postMedia.mediaId, id));
 
     await db.delete(media).where(eq(media.id, id));
+
+    // Delete from FTS index
+    await this.deleteFTSIndex(id);
 
     this.emit('mediaDeleted', id);
     return true;
@@ -660,37 +743,41 @@ export class MediaEngine extends EventEmitter {
   }
 
   async searchMedia(query: string): Promise<MediaSearchResult[]> {
-    const db = getDatabase().getLocal();
-    const allMedia = await db
-      .select()
-      .from(media)
-      .where(eq(media.projectId, this.currentProjectId))
-      .orderBy(desc(media.createdAt))
-      .all();
+    const client = getDatabase().getLocalClient();
+    if (!client) return [];
 
-    const lowerQuery = query.toLowerCase();
-    const searchResults: MediaSearchResult[] = [];
+    try {
+      // Stem the query for multilingual matching
+      const stemmedQuery = stemQuery(query, this.searchLanguage);
+      
+      // Search the stemmed content, filtered by project_id for project isolation
+      const result = await client.execute({
+        sql: `SELECT id FROM media_fts WHERE project_id = ? AND media_fts MATCH ? ORDER BY rank LIMIT 50`,
+        args: [this.currentProjectId, stemmedQuery],
+      });
 
-    for (const item of allMedia) {
-      // Search in originalName, alt, caption, and tags
-      const searchableText = [
-        item.originalName,
-        item.alt || '',
-        item.caption || '',
-        ...(JSON.parse(item.tags || '[]') as string[]),
-      ].join(' ').toLowerCase();
-
-      if (searchableText.includes(lowerQuery)) {
-        searchResults.push({
-          id: item.id,
-          originalName: item.originalName,
-          mimeType: item.mimeType,
-          createdAt: item.createdAt,
-        });
+      // Fetch actual media data for results
+      const db = getDatabase().getLocal();
+      const searchResults: MediaSearchResult[] = [];
+      
+      for (const row of result.rows) {
+        const mediaId = row.id as string;
+        const item = await db.select().from(media).where(eq(media.id, mediaId)).get();
+        if (item) {
+          searchResults.push({
+            id: item.id,
+            originalName: item.originalName,
+            mimeType: item.mimeType,
+            createdAt: item.createdAt,
+          });
+        }
       }
-    }
 
-    return searchResults;
+      return searchResults;
+    } catch (error) {
+      console.error('Media search failed:', error);
+      return [];
+    }
   }
 
   async getMediaByYearMonth(): Promise<{ year: number; month: number; count: number }[]> {
@@ -773,6 +860,16 @@ export class MediaEngine extends EventEmitter {
         await db.delete(postMedia).where(eq(postMedia.projectId, this.currentProjectId));
         console.log(`Deleted post-media links for project ${this.currentProjectId}`);
 
+        // Delete all FTS entries for the current project
+        const client = getDatabase().getLocalClient();
+        if (client) {
+          await client.execute({
+            sql: 'DELETE FROM media_fts WHERE project_id = ?',
+            args: [this.currentProjectId],
+          });
+          console.log(`Deleted media FTS entries for project ${this.currentProjectId}`);
+        }
+
         onProgress(5, 'Scanning media directory...');
 
         // Recursively find all .meta files in the media directory tree
@@ -837,6 +934,16 @@ export class MediaEngine extends EventEmitter {
                 syncStatus: 'pending',
                 checksum,
                 tags: JSON.stringify(metadata.tags),
+              });
+
+              // Update FTS index
+              await this.updateFTSIndex({
+                id: metadata.id,
+                projectId: this.currentProjectId,
+                originalName: metadata.originalName,
+                alt: metadata.alt,
+                caption: metadata.caption,
+                tags: metadata.tags,
               });
 
               // Insert post-media links based on linkedPostIds from sidecar
@@ -959,6 +1066,72 @@ export class MediaEngine extends EventEmitter {
     };
 
     return await taskManager.runTask(task);
+  }
+
+  /**
+   * Reindex all text for full-text search.
+   * Runs as a background task with progress updates.
+   * Call this when search algorithms change or to fix search issues.
+   */
+  async reindexText(): Promise<void> {
+    const task: Task<void> = {
+      id: uuidv4(),
+      name: 'Reindex media search text',
+      execute: async (onProgress) => {
+        const client = getDatabase().getLocalClient();
+        if (!client) {
+          throw new Error('Database client not available');
+        }
+
+        onProgress(0, 'Clearing existing media search index...');
+
+        // Clear the FTS entries for current project
+        await client.execute({
+          sql: 'DELETE FROM media_fts WHERE project_id = ?',
+          args: [this.currentProjectId],
+        });
+
+        onProgress(5, 'Loading media...');
+
+        const allMedia = await this.getAllMedia();
+        const total = allMedia.length;
+
+        if (total === 0) {
+          onProgress(100, 'No media to index');
+          return;
+        }
+
+        onProgress(10, `Indexing ${total} media items...`);
+
+        for (let i = 0; i < allMedia.length; i++) {
+          const item = allMedia[i];
+          await this.updateFTSIndex({
+            id: item.id,
+            projectId: this.currentProjectId,
+            originalName: item.originalName,
+            alt: item.alt,
+            caption: item.caption,
+            tags: item.tags,
+          });
+
+          // Update progress (10% to 100%)
+          const progress = 10 + Math.round((i + 1) / total * 90);
+          if (i % 10 === 0 || i === allMedia.length - 1) {
+            onProgress(progress, `Indexed ${i + 1} of ${total} media items`);
+          }
+
+          // Yield to event loop periodically
+          if (i % 20 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
+        }
+
+        onProgress(100, `Reindexed ${total} media items`);
+        console.log(`Reindexed search text for ${total} media items`);
+      },
+    };
+
+    await taskManager.runTask(task);
   }
 }
 

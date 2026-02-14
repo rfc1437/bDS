@@ -21,7 +21,7 @@ import { imageResolverPlugin } from '../../plugins/imageResolverPlugin';
 // Import macros module to register all macro definitions
 import '../../macros';
 import './MilkdownEditor.css';
-import { PostSearchModal } from '../PostSearchModal';
+import { InsertModal } from '../InsertModal';
 import { unescapeMacroSyntax } from '../../utils/markdownEscape';
 
 // Remark plugin to force tight lists (no blank lines between list items)
@@ -47,12 +47,7 @@ const remarkTightLists: RemarkPlugin = {
   options: {},
 };
 
-interface SearchResult {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt?: string;
-}
+type InsertModalMode = 'link' | 'image' | null;
 
 interface MilkdownEditorProps {
   content: string;
@@ -63,7 +58,8 @@ interface MilkdownEditorProps {
 // Toolbar component that uses the editor instance
 const EditorToolbar: React.FC = () => {
   const [loading, getEditor] = useInstance();
-  const [showPostSearch, setShowPostSearch] = useState(false);
+  const [insertMode, setInsertMode] = useState<InsertModalMode>(null);
+  const [selectedText, setSelectedText] = useState('');
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,37 +97,48 @@ const EditorToolbar: React.FC = () => {
     });
   }, [loading, getEditor]);
 
-  const insertLink = useCallback(() => {
-    const url = window.prompt('Enter URL:');
-    if (!url) return;
-    runCommand(toggleLinkCommand.key, { href: url });
-  }, [runCommand]);
+  // Get current selection text from editor
+  const getSelectionText = useCallback(() => {
+    const editor = getEditor();
+    if (!editor) return '';
+    let text = '';
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const { state } = view;
+      const { selection } = state;
+      if (!selection.empty) {
+        text = state.doc.textBetween(selection.from, selection.to);
+      }
+    });
+    return text;
+  }, [getEditor]);
 
-  const insertImage = useCallback(() => {
-    const url = window.prompt('Enter image URL:');
-    if (!url) return;
-    const alt = window.prompt('Enter alt text:', 'Image') || 'Image';
-    runCommand(insertImageCommand.key, { src: url, alt });
-  }, [runCommand]);
+  const openLinkModal = useCallback(() => {
+    const text = getSelectionText();
+    setSelectedText(text);
+    setInsertMode('link');
+  }, [getSelectionText]);
 
-  const insertPostLink = useCallback(() => {
-    setShowPostSearch(true);
+  const openImageModal = useCallback(() => {
+    setSelectedText('');
+    setInsertMode('image');
   }, []);
 
-  // Add keyboard shortcut listener for Ctrl/Cmd+K
+  // Add keyboard shortcut listener for Ctrl/Cmd+K (link)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
-        setShowPostSearch(true);
+        openLinkModal();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [openLinkModal]);
 
-  const handlePostSelected = useCallback((post: SearchResult) => {
+  // Handle link insertion from modal
+  const handleInsertLink = useCallback((url: string, text?: string) => {
     const editor = getEditor();
     if (!editor) return;
 
@@ -139,10 +146,10 @@ const EditorToolbar: React.FC = () => {
       const view = ctx.get(editorViewCtx);
       const { state, dispatch } = view;
       const { selection, schema } = state;
-      const selectedText = selection.empty ? '' : state.doc.textBetween(selection.from, selection.to);
+      const currentSelectedText = selection.empty ? '' : state.doc.textBetween(selection.from, selection.to);
 
-      const linkText = selectedText || post.title;
-      const linkUrl = `/posts/${post.slug}`;
+      const linkText = currentSelectedText || text || url;
+      const linkUrl = url;
 
       if (selection.empty) {
         // No selection - create text node with link mark and insert it
@@ -158,8 +165,14 @@ const EditorToolbar: React.FC = () => {
       }
     });
 
-    setShowPostSearch(false);
+    setInsertMode(null);
   }, [getEditor]);
+
+  // Handle image insertion from modal
+  const handleInsertImage = useCallback((url: string, alt: string) => {
+    runCommand(insertImageCommand.key, { src: url, alt });
+    setInsertMode(null);
+  }, [runCommand]);
 
   if (loading) return null;
 
@@ -198,9 +211,8 @@ const EditorToolbar: React.FC = () => {
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button onClick={insertLink} title="Insert Link">🔗</button>
-          <button onClick={insertPostLink} title="Link to Post (Ctrl+K)">📝</button>
-          <button onClick={insertImage} title="Insert Image">🖼</button>
+          <button onClick={openLinkModal} title="Insert Link (Ctrl+K)">🔗</button>
+          <button onClick={openImageModal} title="Insert Image">🖼</button>
           <button onClick={() => runCommand(insertHrCommand.key)} title="Horizontal Rule">―</button>
         </div>
 
@@ -212,10 +224,13 @@ const EditorToolbar: React.FC = () => {
         </div>
       </div>
 
-      {showPostSearch && (
-        <PostSearchModal
-          onSelect={handlePostSelected}
-          onClose={() => setShowPostSearch(false)}
+      {insertMode && (
+        <InsertModal
+          mode={insertMode}
+          onInsertLink={handleInsertLink}
+          onInsertImage={handleInsertImage}
+          onClose={() => setInsertMode(null)}
+          initialText={selectedText}
         />
       )}
     </>

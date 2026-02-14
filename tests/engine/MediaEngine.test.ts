@@ -92,11 +92,25 @@ function createDrizzleMock() {
 
 const mockLocalDb = createDrizzleMock();
 
+// Track FTS operations
+let ftsExecuteCalls: { sql: string; args?: any[] }[] = [];
+
 // Mock the database module
 vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => ({
     getLocal: vi.fn(() => mockLocalDb),
-    getLocalClient: vi.fn(() => null),
+    getLocalClient: vi.fn(() => ({
+      execute: vi.fn(async (query: { sql: string; args?: any[] } | string) => {
+        const sqlObj = typeof query === 'string' ? { sql: query } : query;
+        ftsExecuteCalls.push(sqlObj);
+        
+        // Mock FTS search results
+        if (sqlObj.sql.includes('media_fts MATCH')) {
+          return { rows: [] }; // Return empty results by default
+        }
+        return { rows: [] };
+      }),
+    })),
     getRemote: vi.fn(() => null),
     getDataPaths: vi.fn(() => ({
       database: '/mock/userData/bds.db',
@@ -164,6 +178,7 @@ describe('MediaEngine', () => {
     mediaDeleteCalled = false;
     postMediaDeleteCalled = false;
     postMediaInserts = [];
+    ftsExecuteCalls = [];
     resetMockCounters();
 
     // Reset the mock implementations
@@ -184,6 +199,25 @@ describe('MediaEngine', () => {
 
     it('should have default project context', () => {
       expect(mediaEngine.getProjectContext()).toBe('default');
+    });
+
+    it('should have default search language', () => {
+      expect(mediaEngine.getSearchLanguage()).toBe('english');
+    });
+  });
+
+  describe('Search Language', () => {
+    it('should set search language', () => {
+      mediaEngine.setSearchLanguage('german');
+      expect(mediaEngine.getSearchLanguage()).toBe('german');
+    });
+
+    it('should allow changing search language multiple times', () => {
+      mediaEngine.setSearchLanguage('french');
+      expect(mediaEngine.getSearchLanguage()).toBe('french');
+
+      mediaEngine.setSearchLanguage('spanish');
+      expect(mediaEngine.getSearchLanguage()).toBe('spanish');
     });
   });
 
@@ -678,6 +712,33 @@ linkedPostIds: ["post-a", "post-b", "post-c"]`;
       expect(postMediaInserts[0].sortOrder).toBe(0);
       expect(postMediaInserts[1].sortOrder).toBe(1);
       expect(postMediaInserts[2].sortOrder).toBe(2);
+    });
+  });
+
+  describe('Full-Text Search', () => {
+    it('should search media using FTS with stemmed query', async () => {
+      // Search for media
+      await mediaEngine.searchMedia('beautiful sunset');
+
+      // Should have called the FTS search
+      const ftsSearchCall = ftsExecuteCalls.find(c => c.sql.includes('media_fts MATCH'));
+      expect(ftsSearchCall).toBeDefined();
+      expect(ftsSearchCall?.args?.[0]).toBe('default'); // project_id
+      // The query should be stemmed (e.g., 'beautiful sunset' -> 'beauti sunset')
+      expect(ftsSearchCall?.args?.[1]).toBeDefined();
+    });
+
+    it('should filter search by project_id', async () => {
+      mediaEngine.setProjectContext('my-project');
+      await mediaEngine.searchMedia('test');
+
+      const ftsSearchCall = ftsExecuteCalls.find(c => c.sql.includes('media_fts MATCH'));
+      expect(ftsSearchCall?.args?.[0]).toBe('my-project');
+    });
+
+    it('should return empty array when no results found', async () => {
+      const results = await mediaEngine.searchMedia('nonexistent');
+      expect(results).toEqual([]);
     });
   });
 });

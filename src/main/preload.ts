@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTags: () => ipcRenderer.invoke('media:getTags'),
     getTagsWithCounts: () => ipcRenderer.invoke('media:getTagsWithCounts'),
     rebuildFromFiles: () => ipcRenderer.invoke('media:rebuildFromFiles'),
+    reindexText: () => ipcRenderer.invoke('media:reindexText'),
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => ipcRenderer.invoke('media:getThumbnail', id, size),
     regenerateThumbnails: (id: string) => ipcRenderer.invoke('media:regenerateThumbnails', id),
     regenerateMissingThumbnails: () => ipcRenderer.invoke('media:regenerateMissingThumbnails'),

@@ -292,6 +292,7 @@ export interface ElectronAPI {
     getFilePath: (id: string) => Promise<string | null>;
     getAll: () => Promise<MediaData[]>;
     rebuildFromFiles: () => Promise<void>;
+    reindexText: () => Promise<void>;
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => Promise<string | null>;
     regenerateThumbnails: (id: string) => Promise<Record<string, string> | null>;
     regenerateMissingThumbnails: () => Promise<{ processed: number; generated: number; failed: number }>;
