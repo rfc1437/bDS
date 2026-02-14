@@ -15,6 +15,7 @@ import { BrowserWindow } from 'electron';
 import { ChatEngine } from './ChatEngine';
 import { PostEngine } from './PostEngine';
 import { MediaEngine } from './MediaEngine';
+import { getPostMediaEngine } from './PostMediaEngine';
 
 // OpenCode Zen API endpoints
 const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
@@ -782,6 +783,50 @@ export class OpenCodeManager {
           required: ['mediaId'],
         },
       },
+      {
+        name: 'get_post_backlinks',
+        description: 'Get all posts that link TO a specific post (backlinks/inbound links). Use this to discover which other posts reference or cite a given post. Helpful for understanding how content is interconnected and finding related posts.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            postId: { type: 'string', description: 'The ID of the post to find backlinks for' },
+          },
+          required: ['postId'],
+        },
+      },
+      {
+        name: 'get_post_outlinks',
+        description: 'Get all posts that a specific post links TO (outbound links). Use this to discover what other posts are referenced or cited by a given post. Helpful for understanding content relationships and traversing linked posts.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            postId: { type: 'string', description: 'The ID of the post to find outbound links for' },
+          },
+          required: ['postId'],
+        },
+      },
+      {
+        name: 'get_post_media',
+        description: 'Get all media files linked to a specific post. Returns media that has been explicitly associated with the post (featured images, galleries, etc.). Use this to discover images and other media attached to a post.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            postId: { type: 'string', description: 'The ID of the post to get linked media for' },
+          },
+          required: ['postId'],
+        },
+      },
+      {
+        name: 'get_media_posts',
+        description: 'Get all posts that a specific media file is linked to. Use this to find which posts use or reference a particular image or media file. Helpful for understanding media usage across posts.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            mediaId: { type: 'string', description: 'The ID of the media file to find linked posts for' },
+          },
+          required: ['mediaId'],
+        },
+      },
     ];
   }
 
@@ -992,6 +1037,81 @@ export class OpenCodeManager {
               caption: mediaItem.caption,
               size: size,
             },
+          };
+        }
+
+        case 'get_post_backlinks': {
+          const linkedBy = await this.postEngine.getLinkedBy(args.postId as string);
+          return {
+            success: true,
+            postId: args.postId,
+            count: linkedBy.length,
+            linkedBy: linkedBy.map(p => ({
+              id: p.id,
+              title: p.title,
+              slug: p.slug,
+            })),
+          };
+        }
+
+        case 'get_post_outlinks': {
+          const linksTo = await this.postEngine.getLinksTo(args.postId as string);
+          return {
+            success: true,
+            postId: args.postId,
+            count: linksTo.length,
+            linksTo: linksTo.map(p => ({
+              id: p.id,
+              title: p.title,
+              slug: p.slug,
+            })),
+          };
+        }
+
+        case 'get_post_media': {
+          const postMediaEngine = getPostMediaEngine();
+          const linkedMedia = await postMediaEngine.getLinkedMediaDataForPost(args.postId as string);
+          return {
+            success: true,
+            postId: args.postId,
+            count: linkedMedia.length,
+            media: linkedMedia.map(link => ({
+              id: link.media.id,
+              filename: link.media.filename,
+              originalName: link.media.originalName,
+              mimeType: link.media.mimeType,
+              alt: link.media.alt,
+              caption: link.media.caption,
+              width: link.media.width,
+              height: link.media.height,
+              sortOrder: link.sortOrder,
+            })),
+          };
+        }
+
+        case 'get_media_posts': {
+          const postMediaEngine = getPostMediaEngine();
+          const linkedPosts = await postMediaEngine.getLinkedPostsForMedia(args.mediaId as string);
+          
+          // Fetch full post data for each linked post
+          const postsData = await Promise.all(
+            linkedPosts.map(async (link) => {
+              const post = await this.postEngine.getPost(link.postId);
+              return post ? {
+                id: post.id,
+                title: post.title,
+                slug: post.slug,
+                status: post.status,
+              } : null;
+            })
+          );
+          
+          const validPosts = postsData.filter(p => p !== null);
+          return {
+            success: true,
+            mediaId: args.mediaId,
+            count: validPosts.length,
+            posts: validPosts,
           };
         }
 
