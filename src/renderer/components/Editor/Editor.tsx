@@ -279,7 +279,8 @@ const hydratePhotoArchive = async (
   postId: string,
   onImageClick: (index: number, images: { src: string; alt: string }[]) => void
 ) => {
-  const archives = container.querySelectorAll('.macro-photo-archive[data-year]');
+  // Match both year-based and recent-based archives
+  const archives = container.querySelectorAll('.macro-photo-archive[data-year], .macro-photo-archive[data-recent]');
   
   if (archives.length === 0) {
     // No photo_archive macros - unlink any previously linked and clear state
@@ -323,62 +324,119 @@ const doHydratePhotoArchive = async (
   
   // Phase 1: Collect all media IDs that should be linked based on current macros
   const shouldBeLinkedIds = new Set<string>();
+  type ImageData = { id: string; originalName: string; alt?: string; mimeType: string; createdAt?: Date };
   const archiveData: Array<{
     element: Element;
-    year: number;
+    mode: 'single-month' | 'full-year' | 'recent';
+    year?: number;
     month?: number;
-    images?: Array<{ id: string; originalName: string; alt?: string; mimeType: string }>;
-    monthlyImages?: Map<number, Array<{ id: string; originalName: string; alt?: string; mimeType: string }>>;
+    images?: ImageData[];
+    // Map key is "YYYY-MM" for recent mode, or month number (1-12) for year mode
+    monthlyImages?: Map<string | number, ImageData[]>;
+    showYearInLabel?: boolean;
   }> = [];
   
   console.log(`[photo_archive] Processing ${archives.length} archive macro(s), previously linked: ${previouslyLinkedIds.size} IDs`);
   
   for (const archive of archives) {
-    const year = parseInt(archive.getAttribute('data-year') || '0', 10);
+    const recentStr = archive.getAttribute('data-recent');
+    const yearStr = archive.getAttribute('data-year');
     const monthStr = archive.getAttribute('data-month');
-    const month = monthStr ? parseInt(monthStr, 10) : undefined;
     
-    if (!year) continue;
-    
-    if (month !== undefined) {
-      // Single month view
-      const mediaItems = await window.electronAPI?.media.filter({
-        year,
-        month: month - 1, // API uses 0-based month
-      });
-      const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
+    if (recentStr) {
+      // Recent mode: get last N months with images
+      const recentCount = parseInt(recentStr, 10) || 10;
+      console.log(`[photo_archive] Recent mode: fetching last ${recentCount} months with images`);
       
-      // Add to the set of IDs that should be linked
-      for (const img of images) {
+      // Fetch all images (no filter)
+      const allMedia = await window.electronAPI?.media.filter({});
+      const allImages = (allMedia || []).filter(m => m.mimeType?.startsWith('image/'));
+      
+      // Group by year-month and sort by most recent
+      const monthlyMap = new Map<string, ImageData[]>();
+      for (const img of allImages) {
+        if (!img.createdAt) continue;
+        const date = new Date(img.createdAt);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1; // 1-based
+        const key = `${year}-${String(month).padStart(2, '0')}`; // e.g. "2024-06"
+        
+        if (!monthlyMap.has(key)) {
+          monthlyMap.set(key, []);
+        }
+        monthlyMap.get(key)!.push(img);
         shouldBeLinkedIds.add(img.id);
       }
       
-      archiveData.push({ element: archive, year, month, images });
-      console.log(`[photo_archive] Year ${year} month ${month}: ${images.length} images`);
-    } else {
-      // Full year view - collect all months, tracking which month each image belongs to
-      const monthlyImages = new Map<number, Array<{ id: string; originalName: string; alt?: string; mimeType: string }>>();
+      // Sort by key descending (newest first) and take top N
+      const sortedKeys = Array.from(monthlyMap.keys()).sort().reverse().slice(0, recentCount);
+      const recentMonthlyImages = new Map<string, ImageData[]>();
       
-      for (let m = 0; m < 12; m++) {
-        const mediaItems = await window.electronAPI?.media.filter({
-          year,
-          month: m,
-        });
-        const images = (mediaItems || []).filter(item => item.mimeType?.startsWith('image/'));
-        
-        if (images.length > 0) {
-          monthlyImages.set(m + 1, images); // Store with 1-based month key
-          
-          // Add to the set of IDs that should be linked
-          for (const img of images) {
-            shouldBeLinkedIds.add(img.id);
-          }
+      // Clear shouldBeLinkedIds and only add ones that are in top N months
+      shouldBeLinkedIds.clear();
+      for (const key of sortedKeys) {
+        const images = monthlyMap.get(key)!;
+        recentMonthlyImages.set(key, images);
+        for (const img of images) {
+          shouldBeLinkedIds.add(img.id);
         }
       }
       
-      const totalImages = Array.from(monthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
-      archiveData.push({ element: archive, year, month: undefined, monthlyImages });
-      console.log(`[photo_archive] Year ${year}: ${totalImages} images across ${monthlyImages.size} months`);
+      const totalImages = Array.from(recentMonthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
+      archiveData.push({ 
+        element: archive, 
+        mode: 'recent',
+        monthlyImages: recentMonthlyImages, 
+        showYearInLabel: true 
+      });
+      console.log(`[photo_archive] Recent: ${totalImages} images across ${recentMonthlyImages.size} months`);
+      
+    } else if (yearStr) {
+      const year = parseInt(yearStr, 10);
+      const month = monthStr ? parseInt(monthStr, 10) : undefined;
+      
+      if (!year) continue;
+      
+      if (month !== undefined) {
+        // Single month view
+        const mediaItems = await window.electronAPI?.media.filter({
+          year,
+          month: month - 1, // API uses 0-based month
+        });
+        const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
+        
+        // Add to the set of IDs that should be linked
+        for (const img of images) {
+          shouldBeLinkedIds.add(img.id);
+        }
+        
+        archiveData.push({ element: archive, mode: 'single-month', year, month, images });
+        console.log(`[photo_archive] Year ${year} month ${month}: ${images.length} images`);
+      } else {
+        // Full year view - collect all months, tracking which month each image belongs to
+        const monthlyImages = new Map<number, ImageData[]>();
+        
+        for (let m = 0; m < 12; m++) {
+          const mediaItems = await window.electronAPI?.media.filter({
+            year,
+            month: m,
+          });
+          const images = (mediaItems || []).filter(item => item.mimeType?.startsWith('image/'));
+          
+          if (images.length > 0) {
+            monthlyImages.set(m + 1, images); // Store with 1-based month key
+            
+            // Add to the set of IDs that should be linked
+            for (const img of images) {
+              shouldBeLinkedIds.add(img.id);
+            }
+          }
+        }
+        
+        const totalImages = Array.from(monthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
+        archiveData.push({ element: archive, mode: 'full-year', year, month: undefined, monthlyImages });
+        console.log(`[photo_archive] Year ${year}: ${totalImages} images across ${monthlyImages.size} months`);
+      }
     }
   }
   
@@ -397,7 +455,7 @@ const doHydratePhotoArchive = async (
   saveLinkedIds(postId, shouldBeLinkedIds);
   
   // Phase 3: Link new media and render
-  for (const { element, year, month, images, monthlyImages } of archiveData) {
+  for (const { element, mode, year, month, images, monthlyImages, showYearInLabel } of archiveData) {
     const archiveContainer = element.querySelector('.photo-archive-container');
     if (!archiveContainer) continue;
     
@@ -405,7 +463,7 @@ const doHydratePhotoArchive = async (
       // Render the gallery
       let html = '';
       
-      if (month !== undefined && images) {
+      if (mode === 'single-month' && month !== undefined && images && year) {
         // Single month view
         // Link images to the post
         for (const img of images) {
@@ -419,9 +477,37 @@ const doHydratePhotoArchive = async (
           archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${FULL_MONTH_NAMES[month - 1]} ${year}</div>`;
           continue;
         }
-        html = buildMonthGallery(month, year, images, onImageClick);
-      } else if (monthlyImages) {
-        // Full year view - already grouped by month
+        html = buildMonthGallery(month, year, images, onImageClick, false);
+      } else if (mode === 'recent' && monthlyImages) {
+        // Recent mode - keys are "YYYY-MM" strings
+        // Link all images to the post
+        for (const imgs of monthlyImages.values()) {
+          for (const img of imgs) {
+            const isLinked = await window.electronAPI?.postMedia.isLinked(postId, img.id);
+            if (!isLinked) {
+              await window.electronAPI?.postMedia.link(postId, img.id);
+            }
+          }
+        }
+        
+        if (monthlyImages.size === 0) {
+          archiveContainer.innerHTML = `<div class="photo-archive-empty">No recent photos found</div>`;
+          continue;
+        }
+        
+        // Sort by key descending (newest first) - keys are "YYYY-MM" strings
+        const sortedEntries = Array.from(monthlyImages.entries())
+          .sort((a, b) => (b[0] as string).localeCompare(a[0] as string));
+        
+        html = sortedEntries.map(([key, imgs]) => {
+          // Parse "YYYY-MM" to get year and month
+          const [yearStr, monthStr] = (key as string).split('-');
+          const entryYear = parseInt(yearStr, 10);
+          const entryMonth = parseInt(monthStr, 10);
+          return `<div class="photo-archive-month-wrapper">${buildMonthGallery(entryMonth, entryYear, imgs, onImageClick, true)}</div>`;
+        }).join('');
+      } else if (mode === 'full-year' && monthlyImages && year) {
+        // Full year view - keys are month numbers
         // Link all images to the post
         for (const imgs of monthlyImages.values()) {
           for (const img of imgs) {
@@ -437,10 +523,11 @@ const doHydratePhotoArchive = async (
           continue;
         }
         
-        // Sort months and build gallery
-        const sortedMonths = Array.from(monthlyImages.entries()).sort((a, b) => a[0] - b[0]);
+        // Sort months ascending (January first)
+        const sortedMonths = Array.from(monthlyImages.entries())
+          .sort((a, b) => (a[0] as number) - (b[0] as number));
         html = sortedMonths.map(([m, imgs]) => 
-          `<div class="photo-archive-month-wrapper">${buildMonthGallery(m, year, imgs, onImageClick)}</div>`
+          `<div class="photo-archive-month-wrapper">${buildMonthGallery(m as number, year, imgs, onImageClick, showYearInLabel || false)}</div>`
         ).join('');
       }
       
@@ -460,19 +547,26 @@ const doHydratePhotoArchive = async (
 
 /**
  * Build HTML for a single month's gallery with rotated month label
+ * @param month - 1-based month number (1 = January)
+ * @param year - The year
+ * @param images - Array of image data
+ * @param _onImageClick - Click handler (unused in template, set up separately)
+ * @param showYear - Whether to include the year in the label (e.g., "January 2024")
  */
 function buildMonthGallery(
   month: number,
   year: number,
   images: { id: string; originalName: string; alt?: string }[],
-  _onImageClick: (index: number, images: { src: string; alt: string }[]) => void
+  _onImageClick: (index: number, images: { src: string; alt: string }[]) => void,
+  showYear: boolean = false
 ): string {
   const monthName = FULL_MONTH_NAMES[month - 1];
+  const labelText = showYear ? `${monthName} ${year}` : monthName;
   
   return `
     <div class="photo-archive-month" data-month="${month}" data-year="${year}">
       <div class="photo-archive-month-label">
-        <span>${monthName}</span>
+        <span>${labelText}</span>
       </div>
       <div class="photo-archive-gallery gallery-lightbox">
         ${images.map((img, index) => `
