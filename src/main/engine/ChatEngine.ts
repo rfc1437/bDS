@@ -316,6 +316,10 @@ Available Tools:
 - update_media_metadata: Update a media file's alt text, caption, or tags.
 - list_tags: List all tags with post counts.
 - list_categories: List all categories with post counts.
+- get_post_backlinks: Get posts that link TO a given post (backlinks). Use to discover what references a post.
+- get_post_outlinks: Get posts that a given post links TO. Use to traverse outbound links.
+- get_post_media: Get media files linked to a post (featured images, galleries).
+- get_media_posts: Get posts that use a specific media file.
 
 When answering questions:
 1. USE THE TOOLS to find information. Never make up data about posts or media.
