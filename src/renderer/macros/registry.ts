@@ -70,12 +70,13 @@ export function clearMacros(): void {
 const MACRO_REGEX = /\[\[(\w+)(?:\s+([^\]]+))?\]\]/g;
 
 // Regex to extract individual parameters
-const PARAM_REGEX = /(\w+)=["']([^"']*?)["']/g;
+// Supports: key="value", key='value', key=value (unquoted)
+const PARAM_REGEX = /(\w+)=(?:["']([^"']*?)["']|([^\s\]]+))/g;
 
 /**
  * Parse parameters from a macro parameter string.
  * 
- * @param paramString - The parameter string (e.g., 'link="file.jpg" caption="Hello"')
+ * @param paramString - The parameter string (e.g., 'link="file.jpg" caption="Hello"' or 'year=2016')
  * @returns Parsed key-value pairs
  */
 export function parseParams(paramString: string | undefined): MacroParams {
@@ -85,7 +86,8 @@ export function parseParams(paramString: string | undefined): MacroParams {
   let match;
   
   while ((match = PARAM_REGEX.exec(paramString)) !== null) {
-    params[match[1]] = match[2];
+    // match[1] = key, match[2] = quoted value, match[3] = unquoted value
+    params[match[1]] = match[2] !== undefined ? match[2] : match[3];
   }
   
   // Reset regex lastIndex for next use

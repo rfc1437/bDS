@@ -149,6 +149,21 @@ describe('parseParams', () => {
     const result = parseParams('url="https://example.com/path?a=1&b=2"');
     expect(result).toEqual({ url: 'https://example.com/path?a=1&b=2' });
   });
+
+  it('should parse unquoted numeric parameters', () => {
+    const result = parseParams('year=2016 month=6');
+    expect(result).toEqual({ year: '2016', month: '6' });
+  });
+
+  it('should parse unquoted alphanumeric parameters', () => {
+    const result = parseParams('id=abc123 type=photo');
+    expect(result).toEqual({ id: 'abc123', type: 'photo' });
+  });
+
+  it('should parse mixed quoted and unquoted parameters', () => {
+    const result = parseParams('year=2016 title="My Photos" month=6');
+    expect(result).toEqual({ year: '2016', title: 'My Photos', month: '6' });
+  });
 });
 
 describe('parseMacros', () => {
