@@ -35,6 +35,7 @@ export const ProjectSelector: React.FC = () => {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
+  const [newProjectDataPath, setNewProjectDataPath] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Load projects on mount
@@ -125,12 +126,14 @@ export const ProjectSelector: React.FC = () => {
       const newProject = await window.electronAPI?.projects.create({
         name: newProjectName.trim(),
         description: newProjectDescription.trim() || undefined,
+        dataPath: newProjectDataPath || undefined,
       });
       if (newProject) {
         setProjects([...projects, newProject as ProjectData]);
         showToast.success(`Created project "${newProjectName}"`);
         setNewProjectName('');
         setNewProjectDescription('');
+        setNewProjectDataPath(null);
         setShowCreateModal(false);
         
         // Optionally switch to the new project
@@ -140,6 +143,42 @@ export const ProjectSelector: React.FC = () => {
       console.error('Failed to create project:', error);
       showToast.error('Failed to create project');
     }
+  };
+
+  const handleSelectFolder = async () => {
+    try {
+      const selectedPath = await window.electronAPI?.app.selectFolder('Select Project Location');
+      if (selectedPath) {
+        setNewProjectDataPath(selectedPath);
+        
+        // Check if the folder has existing project metadata
+        const existingMetadata = await window.electronAPI?.app.readProjectMetadata(selectedPath);
+        if (existingMetadata) {
+          // Pre-populate form fields from existing project.json (overwrite if found)
+          if (existingMetadata.name) {
+            setNewProjectName(existingMetadata.name);
+          }
+          if (existingMetadata.description) {
+            setNewProjectDescription(existingMetadata.description);
+          }
+          showToast.info('Found existing project settings');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to select folder:', error);
+      showToast.error('Failed to select folder');
+    }
+  };
+
+  const handleClearFolder = () => {
+    setNewProjectDataPath(null);
+  };
+
+  const handleCloseCreateModal = () => {
+    setNewProjectName('');
+    setNewProjectDescription('');
+    setNewProjectDataPath(null);
+    setShowCreateModal(false);
   };
 
   const openDeleteModal = (e: React.MouseEvent, project: ProjectData) => {
@@ -244,11 +283,11 @@ export const ProjectSelector: React.FC = () => {
       )}
 
       {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseCreateModal}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Create New Project</h3>
-              <button className="modal-close" onClick={() => setShowCreateModal(false)}>
+              <button className="modal-close" onClick={handleCloseCreateModal}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
                 </svg>
@@ -277,9 +316,37 @@ export const ProjectSelector: React.FC = () => {
                     rows={3}
                   />
                 </div>
+                <div className="form-field">
+                  <label>Project Location</label>
+                  <div className="folder-picker">
+                    {newProjectDataPath ? (
+                      <div className="folder-path-display">
+                        <span className="folder-path" title={newProjectDataPath}>{newProjectDataPath}</span>
+                        <button type="button" className="btn-icon" onClick={handleClearFolder} title="Use default location">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="folder-default-info">
+                        <span className="default-label">Default (internal storage)</span>
+                      </div>
+                    )}
+                    <button type="button" className="btn-secondary btn-small" onClick={handleSelectFolder}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M14.5 3H7.71l-.85-.85A.5.5 0 0 0 6.5 2h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5zm-13 1h5.29l.85.85c.1.1.23.15.36.15h6.5v9h-13V4z"/>
+                      </svg>
+                      Choose Folder...
+                    </button>
+                  </div>
+                  <p className="form-hint">
+                    Choose a custom folder for cloud storage backup, or use the default internal storage.
+                  </p>
+                </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn-secondary" onClick={() => setShowCreateModal(false)}>
+                <button type="button" className="btn-secondary" onClick={handleCloseCreateModal}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" disabled={!newProjectName.trim()}>

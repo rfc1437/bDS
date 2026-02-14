@@ -33,6 +33,7 @@ export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
  */
 export class MetaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
+  private dataDir: string | null = null; // Custom data directory (null = use internal userData)
   private tags: Set<string> = new Set();
   private categories: Set<string> = new Set();
   private projectMetadata: ProjectMetadata | null = null;
@@ -43,24 +44,27 @@ export class MetaEngine extends EventEmitter {
   }
 
   /**
-   * Always returns the internal project directory (in userData).
-   * Meta files never live in an external dataPath.
+   * Returns the default internal project directory (in userData).
    */
-  private getInternalBaseDir(): string {
+  private getDefaultBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
 
   /**
-   * Get the meta directory path for the current project.
-   * Always in the internal directory (userData), never external.
+   * Returns the base directory for project data.
+   * If a custom dataDir is set, uses that; otherwise uses internal userData.
    */
-  getMetaDir(): string {
-    return path.join(this.getInternalBaseDir(), 'meta');
+  private getBaseDir(): string {
+    return this.dataDir || this.getDefaultBaseDir();
   }
 
-  private getTagsFilePath(): string {
-    return path.join(this.getMetaDir(), 'tags.json');
+  /**
+   * Get the meta directory path for the current project.
+   * Uses custom dataDir if set, otherwise internal userData.
+   */
+  getMetaDir(): string {
+    return path.join(this.getBaseDir(), 'meta');
   }
 
   private getCategoriesFilePath(): string {
@@ -71,8 +75,9 @@ export class MetaEngine extends EventEmitter {
     return path.join(this.getMetaDir(), 'project.json');
   }
 
-  setProjectContext(projectId: string): void {
+  setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
+    this.dataDir = dataDir || null;
     // Reset in-memory cache when project changes
     this.tags.clear();
     this.categories.clear();
@@ -134,25 +139,25 @@ export class MetaEngine extends EventEmitter {
   }
 
   /**
-   * Add a new tag to the available tags list.
+   * Add a new tag to the available tags list (in-memory only).
+   * Note: Tag persistence is handled by TagEngine.
    */
   async addTag(tag: string): Promise<void> {
     const normalizedTag = tag.trim().toLowerCase();
     if (normalizedTag && !this.tags.has(normalizedTag)) {
       this.tags.add(normalizedTag);
       this.emit('tagsChanged', await this.getTags());
-      await this.saveTags();
     }
   }
 
   /**
-   * Remove a tag from the available tags list.
+   * Remove a tag from the available tags list (in-memory only).
+   * Note: Tag persistence is handled by TagEngine.
    */
   async removeTag(tag: string): Promise<void> {
     const normalizedTag = tag.trim().toLowerCase();
     if (this.tags.delete(normalizedTag)) {
       this.emit('tagsChanged', await this.getTags());
-      await this.saveTags();
     }
   }
 
@@ -176,21 +181,6 @@ export class MetaEngine extends EventEmitter {
     if (this.categories.delete(normalizedCategory)) {
       this.emit('categoriesChanged', await this.getCategories());
       await this.saveCategories();
-    }
-  }
-
-  /**
-   * Save tags to the filesystem.
-   */
-  async saveTags(): Promise<void> {
-    try {
-      await this.ensureMetaDirExists();
-      const filePath = this.getTagsFilePath();
-      const content = JSON.stringify(Array.from(this.tags).sort(), null, 2);
-      await fs.writeFile(filePath, content, 'utf-8');
-    } catch (error) {
-      console.error('[MetaEngine] Failed to save tags:', error);
-      throw error;
     }
   }
 
@@ -240,27 +230,6 @@ export class MetaEngine extends EventEmitter {
       }
       // File doesn't exist, that's OK
       this.projectMetadata = null;
-    }
-  }
-
-  /**
-   * Load tags from the filesystem.
-   */
-  async loadTags(): Promise<void> {
-    try {
-      const filePath = this.getTagsFilePath();
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(content) as string[];
-      this.tags.clear();
-      for (const tag of parsed) {
-        this.tags.add(tag.trim().toLowerCase());
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('[MetaEngine] Failed to load tags:', error);
-        throw error;
-      }
-      // File doesn't exist, that's OK
     }
   }
 
@@ -383,19 +352,18 @@ export class MetaEngine extends EventEmitter {
    * Sync tags and categories on startup.
    * 
    * Logic:
-   * 1. If files don't exist: export from database (posts) to files
-   * 2. If files exist: read from files, merge with database, save any changes
+   * - Tags: populated from posts (TagEngine handles persistence with colors)
+   * - Categories: read from file, merge with database
+   * - Project metadata: read from file or create from database
    */
   async syncOnStartup(): Promise<void> {
     console.log(`[MetaEngine] Syncing metadata for project: ${this.currentProjectId}`);
     
     await this.ensureMetaDirExists();
     
-    const tagsFilePath = this.getTagsFilePath();
     const categoriesFilePath = this.getCategoriesFilePath();
     const projectMetadataFilePath = this.getProjectMetadataFilePath();
     
-    const tagsFileExists = await this.fileExists(tagsFilePath);
     const categoriesFileExists = await this.fileExists(categoriesFilePath);
     const projectMetadataFileExists = await this.fileExists(projectMetadataFilePath);
     
@@ -403,32 +371,10 @@ export class MetaEngine extends EventEmitter {
     const dbTags = await this.collectTagsFromPosts();
     const dbCategories = await this.collectCategoriesFromPosts();
     
-    // Handle tags
-    if (tagsFileExists) {
-      // Load from file
-      await this.loadTags();
-      const fileTags = new Set(this.tags);
-      
-      // Merge: add any tags from DB that aren't in file
-      let changed = false;
-      for (const tag of dbTags) {
-        if (!fileTags.has(tag)) {
-          this.tags.add(tag);
-          changed = true;
-        }
-      }
-      
-      // Save if there were changes
-      if (changed) {
-        await this.saveTags();
-      }
-    } else {
-      // No file exists, create from database
-      this.tags.clear();
-      for (const tag of dbTags) {
-        this.tags.add(tag);
-      }
-      await this.saveTags();
+    // Handle tags - just populate from posts, TagEngine handles persistence
+    this.tags.clear();
+    for (const tag of dbTags) {
+      this.tags.add(tag);
     }
     
     // Handle categories

@@ -100,6 +100,15 @@ function isValidHexColor(color: string): boolean {
 }
 
 /**
+ * Portable tag format for filesystem serialization.
+ * Only stores name and optional color - no internal IDs.
+ */
+interface SerializedTag {
+  name: string;
+  color?: string;
+}
+
+/**
  * TagEngine manages tag metadata and operations.
  * 
  * Tags are stored in a dedicated tags table with optional colors.
@@ -110,25 +119,34 @@ function isValidHexColor(color: string): boolean {
  */
 export class TagEngine extends EventEmitter {
   private currentProjectId: string = 'default';
+  private dataDir: string | null = null; // Custom data directory (null = use internal userData)
 
   constructor() {
     super();
   }
 
   /**
-   * Always returns the internal project directory (in userData).
-   * Tag metadata never lives in an external dataPath.
+   * Returns the default internal project directory (in userData).
    */
-  private getInternalBaseDir(): string {
+  private getDefaultBaseDir(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
 
   /**
+   * Returns the base directory for project data.
+   * If a custom dataDir is set, uses that; otherwise uses internal userData.
+   */
+  private getBaseDir(): string {
+    return this.dataDir || this.getDefaultBaseDir();
+  }
+
+  /**
    * Set the current project context
    */
-  setProjectContext(projectId: string): void {
+  setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
+    this.dataDir = dataDir || null;
   }
 
   /**
@@ -142,7 +160,7 @@ export class TagEngine extends EventEmitter {
    * Get the tags file path for filesystem persistence
    */
   private getTagsFilePath(): string {
-    return path.join(this.getInternalBaseDir(), 'meta', 'tags-metadata.json');
+    return path.join(this.getBaseDir(), 'meta', 'tags.json');
   }
 
   /**
@@ -725,7 +743,8 @@ export class TagEngine extends EventEmitter {
   }
 
   /**
-   * Save tags metadata to filesystem for sync
+   * Save tags to filesystem in portable format (no internal IDs).
+   * Format: [{ name: "tag", color?: "#hex" }, ...]
    */
   private async saveTagsToFile(): Promise<void> {
     try {
@@ -733,43 +752,61 @@ export class TagEngine extends EventEmitter {
       const filePath = this.getTagsFilePath();
       const dir = path.dirname(filePath);
 
+      // Serialize to portable format - only name and optional color
+      const serialized: SerializedTag[] = tags.map(tag => {
+        const entry: SerializedTag = { name: tag.name };
+        if (tag.color) {
+          entry.color = tag.color;
+        }
+        return entry;
+      });
+
       await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(tags, null, 2), 'utf-8');
+      await fs.writeFile(filePath, JSON.stringify(serialized, null, 2), 'utf-8');
     } catch (error) {
       console.error('[TagEngine] Failed to save tags to file:', error);
     }
   }
 
   /**
-   * Load tags from filesystem (for initial sync)
+   * Load tags from filesystem (for initial sync).
+   * Handles both new portable format and legacy format with IDs.
    */
   async loadTagsFromFile(): Promise<void> {
     try {
       const filePath = this.getTagsFilePath();
       const content = await fs.readFile(filePath, 'utf-8');
-      const tags: TagData[] = JSON.parse(content);
+      const rawTags: any[] = JSON.parse(content);
 
       const client = getDatabase().getLocalClient();
       if (!client) return;
 
-      for (const tag of tags) {
-        // Check if tag exists
+      const now = Date.now();
+
+      for (const tag of rawTags) {
+        // Support both portable format { name, color? } and legacy format with id
+        const name = (tag.name || '').trim().toLowerCase();
+        if (!name) continue;
+
+        const color = tag.color || null;
+
+        // Check if tag with this name already exists
         const existing = await client.execute({
-          sql: 'SELECT id FROM tags WHERE id = ? AND project_id = ?',
-          args: [tag.id, this.currentProjectId],
+          sql: 'SELECT id FROM tags WHERE project_id = ? AND LOWER(name) = LOWER(?)',
+          args: [this.currentProjectId, name],
         });
 
         if (existing.rows.length === 0) {
+          // Create new tag with fresh ID
           await client.execute({
             sql: 'INSERT INTO tags (id, project_id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-            args: [
-              tag.id,
-              this.currentProjectId,
-              tag.name,
-              tag.color || null,
-              tag.createdAt instanceof Date ? tag.createdAt.getTime() : tag.createdAt,
-              tag.updatedAt instanceof Date ? tag.updatedAt.getTime() : tag.updatedAt,
-            ],
+            args: [uuidv4(), this.currentProjectId, name, color, now, now],
+          });
+        } else if (color) {
+          // Update color if provided and tag exists
+          await client.execute({
+            sql: 'UPDATE tags SET color = ?, updated_at = ? WHERE project_id = ? AND LOWER(name) = LOWER(?)',
+            args: [color, now, this.currentProjectId, name],
           });
         }
       }

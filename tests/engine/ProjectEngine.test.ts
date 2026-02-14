@@ -529,4 +529,83 @@ describe('ProjectEngine', () => {
       expect(project2.slug).toMatch(/^my-blog(-\d+)?$/);
     });
   });
+
+  describe('Custom dataPath', () => {
+    it('should create project with custom dataPath', async () => {
+      const customPath = '/Users/test/Documents/MyBlog';
+      const project = await projectEngine.createProject({
+        name: 'Custom Path Project',
+        dataPath: customPath,
+      });
+
+      expect(project.dataPath).toBe(customPath);
+    });
+
+    it('should create meta and thumbnails directories in custom dataPath', async () => {
+      const fs = await import('fs/promises');
+      const customPath = '/Users/test/Documents/MyBlog';
+      
+      await projectEngine.createProject({
+        name: 'Custom Dirs Project',
+        dataPath: customPath,
+      });
+
+      const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+      const createdPaths = mkdirCalls.map(call => call[0]);
+      
+      // Should create meta/ and thumbnails/ in custom dataPath
+      expect(createdPaths).toContainEqual(expect.stringContaining(customPath));
+      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('meta'))).toBe(true);
+      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('thumbnails'))).toBe(true);
+    });
+
+    it('should create posts and media directories in custom dataPath', async () => {
+      const fs = await import('fs/promises');
+      const customPath = '/Users/test/Documents/MyBlog';
+      
+      await projectEngine.createProject({
+        name: 'Custom Data Project',
+        dataPath: customPath,
+      });
+
+      const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+      const createdPaths = mkdirCalls.map(call => call[0]);
+      
+      // Should create posts/ and media/ in custom dataPath
+      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('posts'))).toBe(true);
+      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('media'))).toBe(true);
+    });
+
+    it('should create meta and thumbnails in internal storage when no dataPath', async () => {
+      const fs = await import('fs/promises');
+      
+      await projectEngine.createProject({
+        name: 'Default Path Project',
+      });
+
+      const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+      const createdPaths = mkdirCalls.map(call => String(call[0]));
+      
+      // Should create meta/ and thumbnails/ in internal (userData) path
+      expect(createdPaths.some(p => p.includes('meta'))).toBe(true);
+      expect(createdPaths.some(p => p.includes('thumbnails'))).toBe(true);
+    });
+
+    it('should use getDataDir with custom dataPath', () => {
+      const projectId = 'test-id';
+      const customPath = '/Users/test/MyBlog';
+      
+      const dataDir = projectEngine.getDataDir(projectId, customPath);
+      
+      expect(dataDir).toBe(customPath);
+    });
+
+    it('should use internal dir when dataPath is null', () => {
+      const projectId = 'test-id';
+      
+      const dataDir = projectEngine.getDataDir(projectId, null);
+      
+      expect(dataDir).toContain(projectId);
+    });
+  });
 });

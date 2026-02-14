@@ -1,4 +1,6 @@
 import { ipcMain, dialog, shell } from 'electron';
+import * as path from 'path';
+import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
 import { getPostEngine, PostData, PostFilter, PaginationOptions } from '../engine/PostEngine';
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
@@ -32,7 +34,7 @@ function safeHandle(channel: string, handler: (...args: any[]) => Promise<any>):
 export function registerIpcHandlers(): void {
   // ============ Project Handlers ============
 
-  safeHandle('projects:create', async (_, data: { name: string; description?: string; slug?: string }) => {
+  safeHandle('projects:create', async (_, data: { name: string; description?: string; slug?: string; dataPath?: string }) => {
     const engine = getProjectEngine();
     return engine.createProject(data);
   });
@@ -68,16 +70,17 @@ export function registerIpcHandlers(): void {
 
     // Ensure all engines have the correct project context
     if (project) {
-      const internalDir = projectEngine.getInternalBaseDir(project.id);
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+      // For thumbnails and meta: use dataDir (whether custom or internal)
+      // This ensures all project data lives in the same location for backup
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
       const tagEngine = getTagEngine();
       postEngine.setProjectContext(project.id, dataDir);
-      mediaEngine.setProjectContext(project.id, dataDir, internalDir);
-      metaEngine.setProjectContext(project.id);
-      tagEngine.setProjectContext(project.id);
+      mediaEngine.setProjectContext(project.id, dataDir, dataDir);
+      metaEngine.setProjectContext(project.id, dataDir);
+      tagEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
 
@@ -94,16 +97,17 @@ export function registerIpcHandlers(): void {
 
     // Update all engines to use the new project context
     if (project) {
-      const internalDir = projectEngine.getInternalBaseDir(project.id);
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+      // For thumbnails and meta: use dataDir (whether custom or internal)
+      // This ensures all project data lives in the same location for backup
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
       const tagEngine = getTagEngine();
       postEngine.setProjectContext(project.id, dataDir);
-      mediaEngine.setProjectContext(project.id, dataDir, internalDir);
-      metaEngine.setProjectContext(project.id);
-      tagEngine.setProjectContext(project.id);
+      mediaEngine.setProjectContext(project.id, dataDir, dataDir);
+      metaEngine.setProjectContext(project.id, dataDir);
+      tagEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
 
@@ -576,6 +580,23 @@ export function registerIpcHandlers(): void {
 
   safeHandle('app:showItemInFolder', async (_, itemPath: string) => {
     return shell.showItemInFolder(itemPath);
+  });
+
+  safeHandle('app:readProjectMetadata', async (_, folderPath: string) => {
+    const metaPath = path.join(folderPath, 'meta', 'project.json');
+    try {
+      const content = await fsPromises.readFile(metaPath, 'utf-8');
+      const metadata = JSON.parse(content);
+      // Return metadata but exclude dataPath (will be set to selected folder)
+      return {
+        name: metadata.name || undefined,
+        description: metadata.description || undefined,
+        mainLanguage: metadata.mainLanguage || undefined,
+      };
+    } catch {
+      // File doesn't exist or is invalid - return null
+      return null;
+    }
   });
 
   // ============ Meta Handlers ============

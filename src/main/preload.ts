@@ -5,7 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('electronAPI', {
   // Projects
   projects: {
-    create: (data: { name: string; description?: string; slug?: string }) => ipcRenderer.invoke('projects:create', data),
+    create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => ipcRenderer.invoke('projects:create', data),
     update: (id: string, data: unknown) => ipcRenderer.invoke('projects:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('projects:delete', id),
     deleteWithData: (id: string) => ipcRenderer.invoke('projects:deleteWithData', id),
@@ -119,6 +119,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showItemInFolder: (itemPath: string) => ipcRenderer.invoke('app:showItemInFolder', itemPath),
     selectFolder: (title?: string) => ipcRenderer.invoke('app:selectFolder', title),
     getDefaultProjectPath: (projectId: string) => ipcRenderer.invoke('app:getDefaultProjectPath', projectId),
+    readProjectMetadata: (folderPath: string) => ipcRenderer.invoke('app:readProjectMetadata', folderPath),
   },
 
   // Meta (tags, categories, and project metadata)
@@ -248,7 +249,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 // Type definitions for the exposed API
 export interface ElectronAPI {
   projects: {
-    create: (data: { name: string; description?: string; slug?: string }) => Promise<unknown>;
+    create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => Promise<unknown>;
     update: (id: string, data: unknown) => Promise<unknown>;
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<unknown>;

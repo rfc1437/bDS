@@ -268,7 +268,7 @@ export interface ChatTitleUpdate {
 
 export interface ElectronAPI {
   projects: {
-    create: (data: { name: string; description?: string; slug?: string }) => Promise<ProjectData>;
+    create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => Promise<ProjectData>;
     update: (id: string, data: Partial<ProjectData>) => Promise<ProjectData | null>;
     delete: (id: string) => Promise<boolean>;
     deleteWithData: (id: string) => Promise<boolean>;
@@ -367,6 +367,7 @@ export interface ElectronAPI {
     showItemInFolder: (itemPath: string) => Promise<void>;
     selectFolder: (title?: string) => Promise<string | null>;
     getDefaultProjectPath: (projectId: string) => Promise<string>;
+    readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; mainLanguage?: string } | null>;
   };
   meta: {
     getTags: () => Promise<string[]>;
