@@ -6,7 +6,7 @@ const MAX_CHAT_TITLE_LENGTH = 18;
 
 const getTabTitle = (
   tab: Tab,
-  posts: { id: string; title: string }[],
+  postTitles: Map<string, string>,
   media: { id: string; originalName: string }[],
   chatTitles: Map<string, string>,
   importDefTitles: Map<string, string>
@@ -20,8 +20,7 @@ const getTabTitle = (
   }
   
   if (tab.type === 'post') {
-    const post = posts.find(p => p.id === tab.id);
-    return post?.title || 'Untitled';
+    return postTitles.get(tab.id) || 'Loading...';
   }
   
   if (tab.type === 'media') {
@@ -116,7 +115,6 @@ export const TabBar: React.FC = () => {
   const { 
     tabs, 
     activeTabId, 
-    posts, 
     media,
     dirtyPosts,
     sidebarVisible,
@@ -129,8 +127,58 @@ export const TabBar: React.FC = () => {
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+  const [postTitles, setPostTitles] = useState<Map<string, string>>(new Map());
   const [chatTitles, setChatTitles] = useState<Map<string, string>>(new Map());
   const [importDefTitles, setImportDefTitles] = useState<Map<string, string>>(new Map());
+
+  // Fetch post titles from database for post tabs
+  useEffect(() => {
+    const postTabs = tabs.filter(t => t.type === 'post');
+    if (postTabs.length === 0) return;
+
+    const fetchTitles = async () => {
+      const newTitles = new Map(postTitles);
+      let changed = false;
+
+      for (const tab of postTabs) {
+        if (!postTitles.has(tab.id)) {
+          try {
+            const post = await window.electronAPI?.posts.get(tab.id);
+            if (post) {
+              newTitles.set(tab.id, post.title || 'Untitled');
+              changed = true;
+            }
+          } catch (error) {
+            console.error('Failed to fetch post title:', error);
+          }
+        }
+      }
+
+      if (changed) {
+        setPostTitles(newTitles);
+      }
+    };
+
+    fetchTitles();
+  }, [tabs]); // Note: intentionally not including postTitles to avoid infinite loops
+
+  // Listen for post updates to refresh titles
+  useEffect(() => {
+    const unsub = window.electronAPI?.on('post-updated', (...args: unknown[]) => {
+      const post = args[0] as { id: string; title: string } | undefined;
+      if (post) {
+        setPostTitles(prev => {
+          const newTitles = new Map(prev);
+          newTitles.set(post.id, post.title || 'Untitled');
+          return newTitles;
+        });
+      }
+    });
+
+    return () => {
+      unsub?.();
+    };
+  }, []);
 
   // Fetch chat titles for chat tabs
   useEffect(() => {
@@ -349,7 +397,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, posts, media, chatTitles, importDefTitles);
+          const title = getTabTitle(tab, postTitles, media, chatTitles, importDefTitles);
           const icon = getTabIcon(tab);
           
           return (

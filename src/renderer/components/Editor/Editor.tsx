@@ -29,10 +29,8 @@ interface SearchResult {
 const autoSaveManager = new AutoSaveManager({
   idleTimeMs: 3000, // Save after 3 seconds of idle time
   onSave: async (id, changes) => {
-    const state = useAppStore.getState();
-    // Only save if post still exists in store
-    const postExists = state.posts.some(p => p.id === id);
-    if (!postExists) return;
+    // Note: We don't check if post exists in store's posts array since that's limited to 500.
+    // If the post was deleted, the update will fail gracefully.
 
     // Build update payload from changes
     const update: Parameters<typeof window.electronAPI.posts.update>[1] = {};
@@ -666,9 +664,8 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       autoSaveManager.cancel(postId);
       
       const pending = pendingChangesRef.current;
-      // Only auto-save if the post still exists in the store (not deleted/discarded)
-      const postStillExists = useAppStore.getState().posts.some(p => p.id === postId);
-      if (pending && pending.postId === postId && pending.isDirty && postStillExists) {
+      // Auto-save if we have pending changes (the update will fail gracefully if post was deleted)
+      if (pending && pending.postId === postId && pending.isDirty) {
         // Fire and forget auto-save
         window.electronAPI?.posts.update(pending.postId, {
           title: pending.title,
@@ -1257,15 +1254,17 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 };
 
 const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
-  const { media, posts, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
+  const { media, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
   const item = media.find(m => m.id === mediaId);
   
   const [alt, setAlt] = useState(item?.alt || '');
   const [caption, setCaption] = useState(item?.caption || '');
   const [tags, setTags] = useState(item?.tags.join(', ') || '');
   const [linkedPosts, setLinkedPosts] = useState<{ postId: string; sortOrder: number }[]>([]);
+  const [postTitles, setPostTitles] = useState<Map<string, string>>(new Map());
   const [showPostPicker, setShowPostPicker] = useState(false);
   const [postSearchQuery, setPostSearchQuery] = useState('');
+  const [pickerPosts, setPickerPosts] = useState<{ id: string; title: string }[]>([]);
   
   // Quick action menu state
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -1326,7 +1325,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     }
   };
 
-  // Load linked posts for this media
+  // Load linked posts for this media and fetch their titles
   useEffect(() => {
     const loadLinkedPosts = async () => {
       if (!mediaId) return;
@@ -1334,6 +1333,15 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         const links = await window.electronAPI?.postMedia.getForMedia(mediaId);
         if (links) {
           setLinkedPosts(links.map(l => ({ postId: l.postId, sortOrder: l.sortOrder })));
+          // Fetch titles for linked posts
+          const titles = new Map<string, string>();
+          for (const link of links) {
+            const post = await window.electronAPI?.posts.get(link.postId);
+            if (post) {
+              titles.set(link.postId, post.title || 'Untitled');
+            }
+          }
+          setPostTitles(titles);
         }
       } catch (error) {
         console.error('Failed to load linked posts:', error);
@@ -1342,17 +1350,33 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     loadLinkedPosts();
   }, [mediaId]);
 
+  // Fetch posts for the picker when it opens
+  useEffect(() => {
+    if (!showPostPicker) return;
+    const loadPickerPosts = async () => {
+      try {
+        const result = await window.electronAPI?.posts.getAll({ limit: 100, offset: 0 });
+        if (result?.items) {
+          setPickerPosts(result.items.map(p => ({ id: p.id, title: p.title || 'Untitled' })));
+        }
+      } catch (error) {
+        console.error('Failed to load posts for picker:', error);
+      }
+    };
+    loadPickerPosts();
+  }, [showPostPicker]);
+
   // Get post titles for display
   const getPostTitle = (postId: string): string => {
-    const post = posts.find(p => p.id === postId);
-    return post?.title || 'Untitled';
+    return postTitles.get(postId) || 'Loading...';
   };
 
   // Handle linking to a new post
-  const handleLinkToPost = async (postId: string) => {
+  const handleLinkToPost = async (postId: string, postTitle: string) => {
     try {
       await window.electronAPI?.postMedia.link(postId, mediaId);
       setLinkedPosts([...linkedPosts, { postId, sortOrder: linkedPosts.length }]);
+      setPostTitles(prev => new Map(prev).set(postId, postTitle));
       setShowPostPicker(false);
       setPostSearchQuery('');
       showToast.success('Linked to post');
@@ -1380,10 +1404,10 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   };
 
   // Get unlinked posts for picker, filtered by search
-  const unlinkedPosts = posts.filter(
+  const unlinkedPosts = pickerPosts.filter(
     p => !linkedPosts.find(l => l.postId === p.id)
   ).filter(
-    p => !postSearchQuery || (p.title || 'Untitled').toLowerCase().includes(postSearchQuery.toLowerCase())
+    p => !postSearchQuery || p.title.toLowerCase().includes(postSearchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -1428,10 +1452,10 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       // Build references array
       const references: Array<{ id: string; title: string; type: 'post' | 'media' | 'link' }> = [];
 
-      // Add posts that use this media
+      // Add posts that use this media - fetch titles from database
       if (linkedPostsList && linkedPostsList.length > 0) {
-        linkedPostsList.forEach((link: { postId: string }) => {
-          const post = posts.find(p => p.id === link.postId);
+        for (const link of linkedPostsList) {
+          const post = await window.electronAPI?.posts.get(link.postId);
           if (post) {
             references.push({
               id: post.id,
@@ -1439,7 +1463,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
               type: 'post',
             });
           }
-        });
+        }
       }
 
       // Show confirmation modal
@@ -1622,9 +1646,9 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                       <div 
                         key={post.id} 
                         className="post-picker-item"
-                        onClick={() => handleLinkToPost(post.id)}
+                        onClick={() => handleLinkToPost(post.id, post.title)}
                       >
-                        {post.title || 'Untitled'}
+                        {post.title}
                       </div>
                     ))}
                     {unlinkedPosts.length > 10 && (
@@ -1955,12 +1979,13 @@ export const Editor: React.FC = () => {
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
     if (activeView === 'posts' && selectedPostId && !isLoading) {
-      const postExists = posts.some(p => p.id === selectedPostId);
-      if (!postExists) {
-        setSelectedPost(null);
-      }
+      window.electronAPI?.posts.get(selectedPostId).then(post => {
+        if (!post) {
+          setSelectedPost(null);
+        }
+      });
     }
-  }, [activeView, selectedPostId, posts, isLoading, setSelectedPost]);
+  }, [activeView, selectedPostId, isLoading, setSelectedPost]);
 
   // Clear selectedMediaId if the media doesn't exist (e.g., after project switch)
   useEffect(() => {
