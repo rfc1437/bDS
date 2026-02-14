@@ -1017,3 +1017,258 @@
   background: var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background));
   color: var(--vscode-dropdown-foreground);
 }
+
+/* Import Execution Section */
+.import-execute-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: var(--vscode-sideBar-background);
+  border-radius: 6px;
+  border: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+.import-execute-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-count-tag {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.import-execute-btn {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  white-space: nowrap;
+}
+
+.import-execute-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.import-execute-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Import Execution Progress */
+.import-execution-progress {
+  padding: 16px;
+  background: var(--vscode-sideBar-background);
+  border-radius: 6px;
+  border: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+.import-execution-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.import-execution-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.import-eta {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.import-progress-bar {
+  height: 6px;
+  background: var(--vscode-progressBar-background, #0e639c);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  opacity: 0.3;
+}
+
+.import-progress-fill {
+  height: 100%;
+  background: var(--vscode-button-background);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.import-progress-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.import-phase {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.import-detail {
+  flex: 1;
+  color: var(--vscode-descriptionForeground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-counter {
+  color: var(--vscode-descriptionForeground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Execution Complete */
+.import-execution-complete {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: var(--vscode-inputValidation-infoBackground, rgba(0, 127, 212, 0.1));
+  border: 1px solid var(--vscode-inputValidation-infoBorder, #007fd4);
+  border-radius: 6px;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.import-execution-complete svg {
+  fill: var(--vscode-charts-green, #89d185);
+  flex-shrink: 0;
+}
+
+/* Execution Error */
+.import-execution-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: var(--vscode-inputValidation-errorBackground, rgba(243, 70, 70, 0.1));
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #f34646);
+  border-radius: 6px;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+}
+
+.import-execution-error svg {
+  fill: var(--vscode-errorForeground, #f34646);
+  flex-shrink: 0;
+}
+
+/* Date Distribution Card */
+.import-date-distribution {
+  background: var(--vscode-sideBar-background);
+  border-radius: 6px;
+  padding: 16px;
+  border: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+.import-date-distribution h3 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.distribution-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.distribution-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.distribution-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, #3c3c3c);
+}
+
+.distribution-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.distribution-total {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.distribution-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.distribution-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+}
+
+.distribution-year {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-foreground);
+  min-width: 36px;
+  text-align: right;
+}
+
+.distribution-bar-container {
+  flex: 1;
+  height: 12px;
+  background: var(--vscode-input-background);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.distribution-bar {
+  height: 100%;
+  border-radius: 2px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.distribution-bar-posts {
+  background: var(--vscode-charts-blue, #75beff);
+}
+
+.distribution-bar-media {
+  background: var(--vscode-charts-green, #89d185);
+}
+
+.distribution-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+  min-width: 32px;
+  text-align: right;
+}

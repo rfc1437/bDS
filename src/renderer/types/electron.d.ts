@@ -1,5 +1,19 @@
 // Type definitions for the Electron API exposed via preload
 
+export interface ImportExecuteResult {
+  taskId: string;
+  totalItems: number;
+}
+
+export interface ImportExecutionProgress {
+  taskId: string;
+  phase: string;
+  current: number;
+  total: number;
+  detail?: string;
+  eta?: number;
+}
+
 export interface ImportDefinitionData {
   id: string;
   projectId: string;
@@ -365,7 +379,9 @@ export interface ElectronAPI {
     selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
     analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
     selectUploadsFolder: () => Promise<string | null>;
+    execute: (reportJson: string, uploadsFolder?: string) => Promise<ImportExecuteResult>;
     onProgress: (callback: (data: { step: string; detail?: string }) => void) => () => void;
+    onExecutionProgress: (callback: (data: ImportExecutionProgress) => void) => () => void;
   };
   importDefinitions: {
     create: (name?: string) => Promise<ImportDefinitionData>;

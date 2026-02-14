@@ -100,8 +100,9 @@ export class PostEngine extends EventEmitter {
    * Stores the stemmed content (combining title, excerpt, content, tags, categories).
    * Includes project_id for project-scoped search.
    * Only the post ID is returned from searches - actual post data comes from DB/files.
+   * Public to allow ImportExecutionEngine to index imported posts directly.
    */
-  private async updateFTSIndex(post: {
+  async updateFTSIndex(post: {
     id: string;
     projectId: string;
     title: string;

@@ -394,6 +394,168 @@ export function createMockDropboxConflict(overrides?: Partial<DropboxConflict>):
 }
 
 // ============================================
+// Import Analysis Report Mock Factory
+// ============================================
+
+import type {
+  ImportAnalysisReport,
+  AnalyzedPost,
+  AnalyzedMedia,
+  AnalyzedCategory,
+  AnalyzedTag,
+  PostAnalysisStatus,
+  MediaAnalysisStatus,
+} from '../../src/main/engine/ImportAnalysisEngine';
+import type { WxrPost, WxrMedia, WxrSiteInfo } from '../../src/main/engine/WxrParser';
+
+let wxrPostIdCounter = 1;
+let wxrMediaIdCounter = 1;
+
+export function createMockWxrSiteInfo(overrides?: Partial<WxrSiteInfo>): WxrSiteInfo {
+  return {
+    title: 'Test WordPress Site',
+    link: 'https://example.com',
+    description: 'A test WordPress site',
+    language: 'en-US',
+    ...overrides,
+  };
+}
+
+export function createMockWxrPost(overrides?: Partial<WxrPost>): WxrPost {
+  const id = wxrPostIdCounter++;
+  return {
+    wpId: id,
+    title: `Test Post ${id}`,
+    slug: `test-post-${id}`,
+    status: 'publish',
+    content: `<p>Test content for post ${id}</p>`,
+    excerpt: `Excerpt for post ${id}`,
+    pubDate: '2024-01-15T10:00:00Z',
+    postDate: '2024-01-15T10:00:00Z',
+    postModified: '2024-01-16T12:00:00Z',
+    creator: 'testauthor',
+    postType: 'post',
+    categories: ['Test Category'],
+    tags: ['test-tag'],
+    ...overrides,
+  };
+}
+
+export function createMockWxrMedia(overrides?: Partial<WxrMedia>): WxrMedia {
+  const id = wxrMediaIdCounter++;
+  return {
+    wpId: id,
+    title: `Test Media ${id}`,
+    filename: `test-image-${id}.jpg`,
+    url: `https://example.com/wp-content/uploads/2024/01/test-image-${id}.jpg`,
+    relativePath: `2024/01/test-image-${id}.jpg`,
+    pubDate: '2024-01-15T10:00:00Z',
+    parentId: 0,
+    mimeType: 'image/jpeg',
+    description: `Description for media ${id}`,
+    ...overrides,
+  };
+}
+
+export function createMockAnalyzedPost(
+  overrides?: Partial<AnalyzedPost>,
+  wxrOverrides?: Partial<WxrPost>
+): AnalyzedPost {
+  const wxrPost = createMockWxrPost(wxrOverrides);
+  return {
+    wxrPost,
+    status: 'new' as PostAnalysisStatus,
+    contentHash: `hash-${wxrPost.wpId}`,
+    markdownPreview: `# ${wxrPost.title}\n\nTest content for post ${wxrPost.wpId}`,
+    ...overrides,
+  };
+}
+
+export function createMockAnalyzedMedia(
+  overrides?: Partial<AnalyzedMedia>,
+  wxrOverrides?: Partial<WxrMedia>
+): AnalyzedMedia {
+  const wxrMedia = createMockWxrMedia(wxrOverrides);
+  return {
+    wxrMedia,
+    status: 'new' as MediaAnalysisStatus,
+    fileHash: `filehash-${wxrMedia.wpId}`,
+    ...overrides,
+  };
+}
+
+export function createMockAnalyzedCategory(overrides?: Partial<AnalyzedCategory>): AnalyzedCategory {
+  return {
+    name: 'Test Category',
+    slug: 'test-category',
+    existsInProject: false,
+    ...overrides,
+  };
+}
+
+export function createMockAnalyzedTag(overrides?: Partial<AnalyzedTag>): AnalyzedTag {
+  return {
+    name: 'test-tag',
+    slug: 'test-tag',
+    existsInProject: false,
+    ...overrides,
+  };
+}
+
+export function createMockImportAnalysisReport(
+  overrides?: Partial<ImportAnalysisReport>
+): ImportAnalysisReport {
+  const posts = overrides?.posts?.items || [createMockAnalyzedPost()];
+  const pages = overrides?.pages?.items || [];
+  const mediaItems = overrides?.media?.items || [createMockAnalyzedMedia()];
+  const categories = overrides?.categories || [createMockAnalyzedCategory()];
+  const tags = overrides?.tags || [createMockAnalyzedTag()];
+
+  return {
+    sourceFile: '/path/to/export.xml',
+    site: createMockWxrSiteInfo(),
+    analyzedAt: new Date('2024-01-15T12:00:00Z'),
+    posts: {
+      total: posts.length,
+      new: posts.filter(p => p.status === 'new').length,
+      updates: posts.filter(p => p.status === 'update').length,
+      conflicts: posts.filter(p => p.status === 'conflict').length,
+      contentDuplicates: posts.filter(p => p.status === 'content-duplicate').length,
+      items: posts,
+      ...overrides?.posts,
+    },
+    pages: {
+      total: pages.length,
+      new: pages.filter(p => p.status === 'new').length,
+      updates: pages.filter(p => p.status === 'update').length,
+      conflicts: pages.filter(p => p.status === 'conflict').length,
+      contentDuplicates: pages.filter(p => p.status === 'content-duplicate').length,
+      items: pages,
+      ...overrides?.pages,
+    },
+    media: {
+      total: mediaItems.length,
+      new: mediaItems.filter(m => m.status === 'new').length,
+      updates: mediaItems.filter(m => m.status === 'update').length,
+      conflicts: mediaItems.filter(m => m.status === 'conflict').length,
+      contentDuplicates: mediaItems.filter(m => m.status === 'content-duplicate').length,
+      missing: mediaItems.filter(m => m.status === 'missing').length,
+      items: mediaItems,
+      ...overrides?.media,
+    },
+    categories,
+    tags,
+    macros: overrides?.macros || {
+      total: 0,
+      mappedCount: 0,
+      unmappedCount: 0,
+      discovered: [],
+    },
+    ...overrides,
+  };
+}
+
+// ============================================
 // Reset Utilities
 // ============================================
 
@@ -403,6 +565,8 @@ export function resetMockCounters(): void {
   projectIdCounter = 1;
   taskIdCounter = 1;
   dropboxConflictIdCounter = 1;
+  wxrPostIdCounter = 1;
+  wxrMediaIdCounter = 1;
 }
 
 // ============================================
