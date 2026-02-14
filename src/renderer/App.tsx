@@ -37,6 +37,7 @@ const App: React.FC = () => {
     togglePanel,
     setActiveView,
     setSelectedPost,
+    setActiveProject,
     openTab,
     restoreTabState,
   } = useAppStore();
@@ -48,6 +49,9 @@ const App: React.FC = () => {
       try {
         // First, get active project to set the correct context in backend engines
         const activeProject = await window.electronAPI?.projects.getActive();
+        if (activeProject) {
+          setActiveProject(activeProject as import('./store').ProjectData);
+        }
         
         // Load posts (now with correct project context, limited to 500)
         const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
