@@ -775,6 +775,19 @@ export class ImportExecutionEngine extends EventEmitter {
     markdown = markdown.replace(/\[\[([^\]]*?)\]\]/g, (_match, inner: string) => {
       return '[[' + inner.replace(/\\(.)/g, '$1') + ']]';
     });
+    // Normalize non-breaking spaces to regular spaces
+    markdown = markdown.replace(/\u00A0/g, ' ');
+    // Clean up trailing whitespace from each line, but preserve "> " for blockquote continuation
+    markdown = markdown.split('\n').map(line => {
+      const trimmed = line.trimEnd();
+      // Preserve space after ">" for blockquote continuation lines
+      if (trimmed === '>' && line.startsWith('> ')) {
+        return '> ';
+      }
+      return trimmed;
+    }).join('\n');
+    // Normalize multiple blank lines (3+ consecutive newlines → 2 newlines)
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
     return markdown;
   }
 
@@ -849,6 +862,19 @@ export class ImportExecutionEngine extends EventEmitter {
       // Then convert remaining single newlines to <br>
       preserved = preserved.replace(/\n/g, '<br>');
       return '>' + preserved + '<';
+    });
+    
+    // Also handle text at the END of content (after the last tag)
+    // This catches text after closing tags like --> or /> that goes to the end
+    result = result.replace(/>([^<]+)$/g, (match, textContent: string) => {
+      if (!textContent.trim()) {
+        return match;
+      }
+      // First convert double newlines to paragraph breaks
+      let preserved = textContent.replace(/\n\n+/g, '</p><p>');
+      // Then convert remaining single newlines to <br>
+      preserved = preserved.replace(/\n/g, '<br>');
+      return '>' + preserved;
     });
     
     // Restore protected <pre> blocks
