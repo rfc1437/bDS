@@ -82,6 +82,11 @@ function createSelectChain() {
 
 const mockLocalDb = {
   select: vi.fn(() => createSelectChain()),
+  update: vi.fn(() => ({
+    set: vi.fn(() => ({
+      where: vi.fn().mockResolvedValue(undefined),
+    })),
+  })),
 };
 
 // Mock the database module
@@ -347,6 +352,26 @@ describe('MetaEngine', () => {
       const categories = await metaEngine.collectCategoriesFromPosts();
       expect(categories).toEqual(['valid']);
     });
+
+    it('should handle posts with invalid JSON tags (gracefully skip)', async () => {
+      mockPosts = [
+        { tags: 'not-valid-json{[' },
+        { tags: JSON.stringify(['valid-tag']) },
+      ];
+      
+      const tags = await metaEngine.collectTagsFromPosts();
+      expect(tags).toEqual(['valid-tag']);
+    });
+
+    it('should handle posts with invalid JSON categories (gracefully skip)', async () => {
+      mockPosts = [
+        { categories: 'invalid json here}' },
+        { categories: JSON.stringify(['valid-cat']) },
+      ];
+      
+      const categories = await metaEngine.collectCategoriesFromPosts();
+      expect(categories).toEqual(['valid-cat']);
+    });
   });
 
   describe('Event Emission', () => {
@@ -444,6 +469,38 @@ describe('MetaEngine', () => {
       const metadata = await metaEngine.getProjectMetadata();
       expect(metadata?.name).toBe('Loaded Project');
       expect(metadata?.description).toBe('Loaded description');
+    });
+
+    it('should handle ENOENT error when loading project metadata (no file)', async () => {
+      // No file exists, should set metadata to null
+      await metaEngine.loadProjectMetadata();
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata).toBeNull();
+    });
+
+    it('should throw non-ENOENT errors when loading project metadata', async () => {
+      // Mock readFile to throw a non-ENOENT error
+      const originalReadFile = vi.mocked(fs.readFile);
+      originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Permission denied'), { code: 'EACCES' }));
+      
+      await expect(metaEngine.loadProjectMetadata()).rejects.toThrow('Permission denied');
+    });
+
+    it('should handle ENOENT error when loading categories (no file)', async () => {
+      // No file exists, should not throw
+      await metaEngine.loadCategories();
+      
+      const categories = await metaEngine.getCategories();
+      expect(categories).toEqual([]);
+    });
+
+    it('should throw non-ENOENT errors when loading categories', async () => {
+      // Mock readFile to throw a non-ENOENT error
+      const originalReadFile = vi.mocked(fs.readFile);
+      originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Disk full'), { code: 'ENOSPC' }));
+      
+      await expect(metaEngine.loadCategories()).rejects.toThrow('Disk full');
     });
 
     it('should emit projectMetadataChanged event when metadata is modified', async () => {
@@ -559,6 +616,55 @@ describe('MetaEngine', () => {
       expect(categories).toContain('picture');
       expect(categories).toContain('aside');
       expect(categories).toContain('page');
+    });
+
+    it('should report isInitialized as false before syncOnStartup', () => {
+      expect(metaEngine.isInitialized()).toBe(false);
+    });
+
+    it('should report isInitialized as true after syncOnStartup', async () => {
+      await metaEngine.syncOnStartup();
+      expect(metaEngine.isInitialized()).toBe(true);
+    });
+
+    it('should reset initialized flag when project context changes', async () => {
+      await metaEngine.syncOnStartup();
+      expect(metaEngine.isInitialized()).toBe(true);
+      
+      metaEngine.setProjectContext('different-project');
+      expect(metaEngine.isInitialized()).toBe(false);
+    });
+
+    it('should use custom dataDir when provided in setProjectContext', () => {
+      metaEngine.setProjectContext('project-with-custom-dir', '/custom/data/path');
+      
+      const metaDir = metaEngine.getMetaDir();
+      expect(metaDir).toContain('/custom/data/path');
+    });
+
+    it('should sync dataPath from project.json to database if different', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Project',
+        dataPath: '/custom/path/from/file',
+      }));
+      
+      // Database has different or missing dataPath
+      mockProject = {
+        id: 'test-project',
+        name: 'Project',
+        description: null,
+        dataPath: null,
+        slug: 'project',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: true,
+      };
+      
+      await metaEngine.syncOnStartup();
+      
+      // Should have synced (database update called)
+      expect(mockLocalDb.select).toHaveBeenCalled();
     });
   });
 });
