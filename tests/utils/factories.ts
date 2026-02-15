@@ -64,6 +64,7 @@ export function createMockMedia(overrides?: Partial<MediaData>): MediaData {
     size: 1024 * 100, // 100KB
     width: 800,
     height: 600,
+    title: 'Test Image Title',
     alt: 'Test image',
     caption: 'A test image caption',
     createdAt: now,

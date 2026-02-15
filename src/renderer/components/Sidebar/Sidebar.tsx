@@ -5,12 +5,12 @@ import { groupPostsByStatus } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import './Sidebar.css';
 
-/** Get display name for media: caption (truncated to 60 chars) or fallback to filename */
+/** Get display name for media: title (truncated to 60 chars) or fallback to filename */
 function getMediaDisplayName(media: MediaData): string {
-  if (media.caption) {
-    return media.caption.length > 60 
-      ? media.caption.substring(0, 60) + '...' 
-      : media.caption;
+  if (media.title) {
+    return media.title.length > 60 
+      ? media.title.substring(0, 60) + '...' 
+      : media.title;
   }
   return media.originalName;
 }

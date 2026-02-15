@@ -85,6 +85,7 @@ export interface MediaData {
   size: number;
   width?: number;
   height?: number;
+  title?: string;
   alt?: string;
   caption?: string;
   createdAt: string;
@@ -101,6 +102,7 @@ export interface MediaFilter {
 export interface MediaSearchResult {
   id: string;
   originalName: string;
+  title?: string;
   mimeType: string;
   createdAt: string;
 }
@@ -424,7 +426,7 @@ export interface ElectronAPI {
     analyzeTaxonomy: (categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => Promise<{ success: boolean; categoryMappings?: Record<string, string>; tagMappings?: Record<string, string>; error?: string }>;
 
     // Media Analysis
-    analyzeMediaImage: (mediaId: string, language?: string) => Promise<{ success: boolean; alt?: string; caption?: string; error?: string }>;
+    analyzeMediaImage: (mediaId: string, language?: string) => Promise<{ success: boolean; title?: string; alt?: string; caption?: string; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

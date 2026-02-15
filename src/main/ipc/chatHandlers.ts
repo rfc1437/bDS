@@ -333,7 +333,7 @@ export function registerChatHandlers(): void {
 
   // ============ Media Analysis ============
 
-  // Analyze a media image and generate alt text and caption
+  // Analyze a media image and generate title, alt text, and caption
   ipcMain.handle('chat:analyzeMediaImage', async (_, mediaId: string, language?: string) => {
     try {
       const manager = getOpenCodeManager();

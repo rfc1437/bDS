@@ -27,6 +27,7 @@ export interface MediaData {
   size: number;
   width?: number;
   height?: number;
+  title?: string;
   alt?: string;
   caption?: string;
   createdAt: Date;
@@ -42,6 +43,7 @@ export interface MediaMetadata {
   size: number;
   width?: number;
   height?: number;
+  title?: string;
   alt?: string;
   caption?: string;
   createdAt: string;
@@ -61,7 +63,7 @@ export interface MediaFilter {
 export interface MediaSearchResult {
   id: string;
   originalName: string;
-  caption?: string;
+  title?: string;
   mimeType: string;
   createdAt: Date;
 }
@@ -92,12 +94,13 @@ export class MediaEngine extends EventEmitter {
 
   /**
    * Update the FTS index for a media item.
-   * Stores stemmed content from original_name, alt, caption, and tags.
+   * Stores stemmed content from original_name, title, alt, caption, and tags.
    */
   private async updateFTSIndex(item: {
     id: string;
     projectId: string;
     originalName: string;
+    title?: string;
     alt?: string;
     caption?: string;
     tags: string[];
@@ -111,6 +114,7 @@ export class MediaEngine extends EventEmitter {
     // Combine all searchable fields and stem them
     const allText = [
       item.originalName,
+      item.title || '',
       item.alt || '',
       item.caption || '',
       item.tags.join(' '),
@@ -300,6 +304,7 @@ export class MediaEngine extends EventEmitter {
       size: mediaData.size,
       width: mediaData.width,
       height: mediaData.height,
+      title: mediaData.title,
       alt: mediaData.alt,
       caption: mediaData.caption,
       createdAt: mediaData.createdAt.toISOString(),
@@ -319,6 +324,7 @@ export class MediaEngine extends EventEmitter {
 
     if (metadata.width) lines.push(`width: ${metadata.width}`);
     if (metadata.height) lines.push(`height: ${metadata.height}`);
+    if (metadata.title) lines.push(`title: "${metadata.title}"`);
     if (metadata.alt) lines.push(`alt: "${metadata.alt}"`);
     if (metadata.caption) lines.push(`caption: "${metadata.caption}"`);
     
@@ -384,6 +390,9 @@ export class MediaEngine extends EventEmitter {
             break;
           case 'height':
             metadata.height = parseInt(value, 10);
+            break;
+          case 'title':
+            metadata.title = value;
             break;
           case 'alt':
             metadata.alt = value;
@@ -492,6 +501,7 @@ export class MediaEngine extends EventEmitter {
       size: sourceBuffer.length,
       width,
       height,
+      title: metadata?.title,
       alt: metadata?.alt,
       caption: metadata?.caption,
       createdAt,
@@ -518,6 +528,7 @@ export class MediaEngine extends EventEmitter {
       size: mediaData.size,
       width: mediaData.width,
       height: mediaData.height,
+      title: mediaData.title,
       alt: mediaData.alt,
       caption: mediaData.caption,
       filePath: destPath,
@@ -535,6 +546,7 @@ export class MediaEngine extends EventEmitter {
       id: mediaData.id,
       projectId: this.currentProjectId,
       originalName: mediaData.originalName,
+      title: mediaData.title,
       alt: mediaData.alt,
       caption: mediaData.caption,
       tags: mediaData.tags,
@@ -566,6 +578,7 @@ export class MediaEngine extends EventEmitter {
 
     await db.update(media)
       .set({
+        title: updated.title,
         alt: updated.alt,
         caption: updated.caption,
         updatedAt: updated.updatedAt,
@@ -578,6 +591,7 @@ export class MediaEngine extends EventEmitter {
       id: updated.id,
       projectId: this.currentProjectId,
       originalName: updated.originalName,
+      title: updated.title,
       alt: updated.alt,
       caption: updated.caption,
       tags: updated.tags,
@@ -641,6 +655,7 @@ export class MediaEngine extends EventEmitter {
       size: dbMedia.size,
       width: dbMedia.width || undefined,
       height: dbMedia.height || undefined,
+      title: dbMedia.title || undefined,
       alt: dbMedia.alt || undefined,
       caption: dbMedia.caption || undefined,
       createdAt: dbMedia.createdAt,
@@ -666,6 +681,7 @@ export class MediaEngine extends EventEmitter {
       size: dbMedia.size,
       width: dbMedia.width || undefined,
       height: dbMedia.height || undefined,
+      title: dbMedia.title || undefined,
       alt: dbMedia.alt || undefined,
       caption: dbMedia.caption || undefined,
       createdAt: dbMedia.createdAt,
@@ -726,6 +742,7 @@ export class MediaEngine extends EventEmitter {
         size: dbMedia.size,
         width: dbMedia.width || undefined,
         height: dbMedia.height || undefined,
+        title: dbMedia.title || undefined,
         alt: dbMedia.alt || undefined,
         caption: dbMedia.caption || undefined,
         createdAt: dbMedia.createdAt,
@@ -770,7 +787,7 @@ export class MediaEngine extends EventEmitter {
           searchResults.push({
             id: item.id,
             originalName: item.originalName,
-            caption: item.caption || undefined,
+            title: item.title || undefined,
             mimeType: item.mimeType,
             createdAt: item.createdAt,
           });

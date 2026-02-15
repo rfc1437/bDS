@@ -739,11 +739,12 @@ export class OpenCodeManager {
       },
       {
         name: 'update_media_metadata',
-        description: 'Update metadata for a media file (alt text, caption, tags).',
+        description: 'Update metadata for a media file (title, alt text, caption, tags).',
         input_schema: {
           type: 'object',
           properties: {
             mediaId: { type: 'string', description: 'The unique ID of the media to update' },
+            title: { type: 'string', description: 'New title for display in lists and search results' },
             alt: { type: 'string', description: 'New alt text for the image' },
             caption: { type: 'string', description: 'New caption for the image' },
             tags: { type: 'array', items: { type: 'string' }, description: 'New tags for the media' },
@@ -926,7 +927,7 @@ export class OpenCodeManager {
               id: media.id, filename: media.filename,
               originalName: media.originalName, mimeType: media.mimeType,
               size: media.size, width: media.width, height: media.height,
-              alt: media.alt, caption: media.caption, tags: media.tags,
+              title: media.title, alt: media.alt, caption: media.caption, tags: media.tags,
               createdAt: media.createdAt, updatedAt: media.updatedAt,
             },
           };
@@ -945,7 +946,7 @@ export class OpenCodeManager {
             media: mediaList.map(m => ({
               id: m.id, filename: m.filename,
               originalName: m.originalName, mimeType: m.mimeType,
-              alt: m.alt, tags: m.tags,
+              title: m.title, alt: m.alt, tags: m.tags,
             })),
           };
         }
@@ -967,6 +968,7 @@ export class OpenCodeManager {
 
         case 'update_media_metadata': {
           const updates: Record<string, unknown> = {};
+          if (args.title !== undefined) updates.title = args.title;
           if (args.alt !== undefined) updates.alt = args.alt;
           if (args.caption !== undefined) updates.caption = args.caption;
           if (args.tags !== undefined) updates.tags = args.tags;
@@ -1033,6 +1035,7 @@ export class OpenCodeManager {
               originalName: mediaItem.originalName,
               width: mediaItem.width,
               height: mediaItem.height,
+              title: mediaItem.title,
               alt: mediaItem.alt,
               caption: mediaItem.caption,
               size: size,
@@ -1080,6 +1083,7 @@ export class OpenCodeManager {
               filename: link.media.filename,
               originalName: link.media.originalName,
               mimeType: link.media.mimeType,
+              title: link.media.title,
               alt: link.media.alt,
               caption: link.media.caption,
               width: link.media.width,
@@ -1451,11 +1455,12 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
   }
 
   /**
-   * Analyze a media image and generate alt text and caption using AI
+   * Analyze a media image and generate title, alt text, and caption using AI
    * This is a one-shot request that looks at the image and suggests metadata
    */
   async analyzeMediaImage(mediaId: string, language: string = 'en'): Promise<{
     success: boolean;
+    title?: string;
     alt?: string;
     caption?: string;
     error?: string;
@@ -1496,12 +1501,13 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     };
     const languageName = languageNames[language] || language;
 
-    const systemPrompt = `Generate alt text and caption for this image in ${languageName}.
+    const systemPrompt = `Generate title, alt text, and caption for this image in ${languageName}.
 
+TITLE: A short, descriptive title for display in lists and search results (3-8 words). Should identify the main subject.
 ALT: Describe ONLY what is visually present in the image. Be factual, neutral, and concise (5-12 words max). No interpretations, emotions, or "Image of" prefix. Example: "Red bicycle leaning against white brick wall"
 CAPTION: Short, engaging blog caption (5-20 words).
 
-Respond with JSON only: {"alt": "...", "caption": "..."}`;
+Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
 
     try {
       // Using Claude Sonnet 4.5 for best image analysis
@@ -1570,6 +1576,7 @@ Respond with JSON only: {"alt": "...", "caption": "..."}`;
       
       return {
         success: true,
+        title: result.title || undefined,
         alt: result.alt || undefined,
         caption: result.caption || undefined,
       };

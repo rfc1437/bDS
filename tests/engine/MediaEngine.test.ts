@@ -535,9 +535,17 @@ describe('MediaEngine', () => {
     });
   });
 
-  describe('Alt Text and Caption', () => {
+  describe('Title, Alt Text and Caption', () => {
     beforeEach(() => {
       mockFiles.set('/source/image.jpg', Buffer.from('image-data'));
+    });
+
+    it('should store title for display in lists and search', async () => {
+      const media = await mediaEngine.importMedia('/source/image.jpg', {
+        title: 'Mountain Sunrise Photo',
+      });
+
+      expect(media.title).toBe('Mountain Sunrise Photo');
     });
 
     it('should store alt text for accessibility', async () => {
@@ -556,9 +564,10 @@ describe('MediaEngine', () => {
       expect(media.caption).toBe('Photo taken at Mt. Rainier, 2024');
     });
 
-    it('should handle media without alt or caption', async () => {
+    it('should handle media without title, alt or caption', async () => {
       const media = await mediaEngine.importMedia('/source/image.jpg');
 
+      expect(media.title).toBeUndefined();
       expect(media.alt).toBeUndefined();
       expect(media.caption).toBeUndefined();
     });
@@ -847,8 +856,34 @@ linkedPostIds: ["post-a", "post-b", "post-c"]`;
         return chain;
       });
 
-      const result = await mediaEngine.updateMedia('non-existent-id', { caption: 'New caption' });
+      const result = await mediaEngine.updateMedia('non-existent-id', { title: 'New title' });
       expect(result).toBeNull();
+    });
+
+    it('should update media title', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'media-id',
+            projectId: 'default',
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            size: 1024,
+            filePath: '/mock/media/test.jpg',
+            title: 'Old title',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.updateMedia('media-id', { title: 'New title' });
+
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('New title');
     });
 
     it('should update media caption', async () => {

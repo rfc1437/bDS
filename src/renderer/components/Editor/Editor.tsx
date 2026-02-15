@@ -1426,6 +1426,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const { media, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
   const item = media.find(m => m.id === mediaId);
   
+  const [title, setTitle] = useState(item?.title || '');
   const [alt, setAlt] = useState(item?.alt || '');
   const [caption, setCaption] = useState(item?.caption || '');
   const [tags, setTags] = useState(item?.tags.join(', ') || '');
@@ -1474,6 +1475,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       const result = await window.electronAPI?.chat.analyzeMediaImage(item.id, projectLanguage);
       
       if (result?.success) {
+        if (result.title) setTitle(result.title);
         if (result.alt) setAlt(result.alt);
         if (result.caption) setCaption(result.caption);
         showToast.success('AI analysis complete');
@@ -1581,6 +1583,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 
   useEffect(() => {
     if (item) {
+      setTitle(item.title || '');
       setAlt(item.alt || '');
       setCaption(item.caption || '');
       setTags(item.tags.join(', '));
@@ -1594,6 +1597,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const handleSave = async () => {
     try {
       const updated = await window.electronAPI?.media.update(item.id, {
+        title,
         alt,
         caption,
         tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
@@ -1696,8 +1700,8 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                   >
                     <span className="quick-action-icon">🤖</span>
                     <span className="quick-action-text">
-                      <strong>AI: Generate Alt & Caption</strong>
-                      <small>Uses Claude Sonnet 4.5 to analyze the image</small>
+                      <strong>AI: Generate Title, Alt & Caption</strong>
+                      <small>Analyzes the image to suggest metadata</small>
                     </span>
                   </button>
                 </div>
@@ -1754,6 +1758,15 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                 <input type="text" value={`${item.width} × ${item.height}`} disabled className="disabled" />
               </div>
             )}
+          </div>
+          <div className="editor-field">
+            <label>Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title for lists and search results"
+            />
           </div>
           <div className="editor-field">
             <label>Alt Text</label>
