@@ -138,6 +138,16 @@ export function registerIpcHandlers(): void {
   
   safeHandle('posts:create', async (_, data: Partial<PostData>) => {
     const engine = getPostEngine();
+    
+    // If no author provided, use default author from project settings
+    if (!data.author) {
+      const metaEngine = getMetaEngine();
+      const metadata = await metaEngine.getProjectMetadata();
+      if (metadata?.defaultAuthor) {
+        data.author = metadata.defaultAuthor;
+      }
+    }
+    
     return engine.createPost(data);
   });
 
@@ -279,6 +289,17 @@ export function registerIpcHandlers(): void {
 
   safeHandle('media:import', async (_, sourcePath: string, metadata?: Partial<MediaData>) => {
     const engine = getMediaEngine();
+    
+    // If no author provided, use default author from project settings
+    if (!metadata?.author) {
+      const metaEngine = getMetaEngine();
+      const projectMetadata = await metaEngine.getProjectMetadata();
+      if (projectMetadata?.defaultAuthor) {
+        metadata = metadata || {};
+        metadata.author = projectMetadata.defaultAuthor;
+      }
+    }
+    
     return engine.importMedia(sourcePath, metadata);
   });
 
@@ -309,9 +330,14 @@ export function registerIpcHandlers(): void {
 
     const imported: MediaData[] = [];
 
+    // Get default author from project settings
+    const metaEngine = getMetaEngine();
+    const projectMetadata = await metaEngine.getProjectMetadata();
+    const defaultAuthor = projectMetadata?.defaultAuthor;
+
     for (const filePath of result.filePaths) {
       try {
-        const media = await engine.importMedia(filePath);
+        const media = await engine.importMedia(filePath, defaultAuthor ? { author: defaultAuthor } : undefined);
         imported.push(media);
       } catch (error) {
         console.error(`Failed to import ${filePath}:`, error);
@@ -881,8 +907,14 @@ export function registerIpcHandlers(): void {
           executionEngine.setProjectContext(activeProject.id, activeProject.dataPath);
         }
 
+        // Get default author from project settings
+        const metaEngine = getMetaEngine();
+        const projectMetadata = await metaEngine.getProjectMetadata();
+        const defaultAuthor = projectMetadata?.defaultAuthor;
+
         const result = await executionEngine.executeImport(report, {
           uploadsFolder,
+          defaultAuthor,
           onProgress: (phase, current, total, detail) => {
             // Update processed items count based on phase progress
             processedItems++;

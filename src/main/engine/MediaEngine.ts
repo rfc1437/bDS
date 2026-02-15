@@ -30,6 +30,7 @@ export interface MediaData {
   title?: string;
   alt?: string;
   caption?: string;
+  author?: string;
   createdAt: Date;
   updatedAt: Date;
   tags: string[];
@@ -46,6 +47,7 @@ export interface MediaMetadata {
   title?: string;
   alt?: string;
   caption?: string;
+  author?: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];
@@ -317,6 +319,7 @@ export class MediaEngine extends EventEmitter {
       title: mediaData.title,
       alt: mediaData.alt,
       caption: mediaData.caption,
+      author: mediaData.author,
       createdAt: mediaData.createdAt.toISOString(),
       updatedAt: mediaData.updatedAt.toISOString(),
       tags: mediaData.tags,
@@ -337,6 +340,7 @@ export class MediaEngine extends EventEmitter {
     if (metadata.title) lines.push(`title: "${metadata.title}"`);
     if (metadata.alt) lines.push(`alt: "${metadata.alt}"`);
     if (metadata.caption) lines.push(`caption: "${metadata.caption}"`);
+    if (metadata.author) lines.push(`author: "${metadata.author}"`);
     
     lines.push(`createdAt: ${metadata.createdAt}`);
     lines.push(`updatedAt: ${metadata.updatedAt}`);
@@ -409,6 +413,9 @@ export class MediaEngine extends EventEmitter {
             break;
           case 'caption':
             metadata.caption = value;
+            break;
+          case 'author':
+            metadata.author = value;
             break;
           case 'createdAt':
             metadata.createdAt = value;
@@ -514,6 +521,7 @@ export class MediaEngine extends EventEmitter {
       title: metadata?.title,
       alt: metadata?.alt,
       caption: metadata?.caption,
+      author: metadata?.author,
       createdAt,
       updatedAt,
       tags: metadata?.tags || [],
@@ -541,6 +549,7 @@ export class MediaEngine extends EventEmitter {
       title: mediaData.title,
       alt: mediaData.alt,
       caption: mediaData.caption,
+      author: mediaData.author,
       filePath: destPath,
       sidecarPath,
       createdAt: mediaData.createdAt,
@@ -591,6 +600,7 @@ export class MediaEngine extends EventEmitter {
         title: updated.title,
         alt: updated.alt,
         caption: updated.caption,
+        author: updated.author,
         updatedAt: updated.updatedAt,
         tags: JSON.stringify(updated.tags),
       })
@@ -740,6 +750,7 @@ export class MediaEngine extends EventEmitter {
       title: dbMedia.title || undefined,
       alt: dbMedia.alt || undefined,
       caption: dbMedia.caption || undefined,
+      author: dbMedia.author || undefined,
       createdAt: dbMedia.createdAt,
       updatedAt: dbMedia.updatedAt,
       tags: JSON.parse(dbMedia.tags || '[]'),
@@ -766,6 +777,7 @@ export class MediaEngine extends EventEmitter {
       title: dbMedia.title || undefined,
       alt: dbMedia.alt || undefined,
       caption: dbMedia.caption || undefined,
+      author: dbMedia.author || undefined,
       createdAt: dbMedia.createdAt,
       updatedAt: dbMedia.updatedAt,
       tags: JSON.parse(dbMedia.tags || '[]'),
@@ -827,6 +839,7 @@ export class MediaEngine extends EventEmitter {
         title: dbMedia.title || undefined,
         alt: dbMedia.alt || undefined,
         caption: dbMedia.caption || undefined,
+        author: dbMedia.author || undefined,
         createdAt: dbMedia.createdAt,
         updatedAt: dbMedia.updatedAt,
         tags: JSON.parse(dbMedia.tags || '[]'),

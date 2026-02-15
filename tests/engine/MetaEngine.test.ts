@@ -498,6 +498,58 @@ describe('MetaEngine', () => {
       consoleErrorSpy.mockRestore();
     });
 
+    it('should set and get defaultAuthor in project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        description: 'A blog',
+        defaultAuthor: 'John Doe',
+      });
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.defaultAuthor).toBe('John Doe');
+    });
+
+    it('should update defaultAuthor only', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        description: 'A blog',
+      });
+      
+      await metaEngine.updateProjectMetadata({ defaultAuthor: 'Jane Smith' });
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.name).toBe('My Blog');
+      expect(metadata?.defaultAuthor).toBe('Jane Smith');
+    });
+
+    it('should persist defaultAuthor to filesystem', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Test Project',
+        defaultAuthor: 'Author Name',
+      });
+      
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+      expect(parsed.defaultAuthor).toBe('Author Name');
+    });
+
+    it('should load defaultAuthor from filesystem', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      mockFiles.set(projectPath, JSON.stringify({
+        name: 'Loaded Project',
+        defaultAuthor: 'Loaded Author',
+      }));
+      
+      await metaEngine.loadProjectMetadata();
+      
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.defaultAuthor).toBe('Loaded Author');
+    });
+
     it('should handle ENOENT error when loading categories (no file)', async () => {
       // No file exists, should not throw
       await metaEngine.loadCategories();

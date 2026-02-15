@@ -582,6 +582,38 @@ describe('MediaEngine', () => {
     });
   });
 
+  describe('Author Field', () => {
+    beforeEach(() => {
+      mockFiles.set('/source/author-test.jpg', Buffer.from('image-data'));
+    });
+
+    it('should store author when provided during import', async () => {
+      const media = await mediaEngine.importMedia('/source/author-test.jpg', {
+        author: 'John Doe',
+      });
+
+      expect(media.author).toBe('John Doe');
+    });
+
+    it('should handle media without author', async () => {
+      const media = await mediaEngine.importMedia('/source/author-test.jpg');
+
+      expect(media.author).toBeUndefined();
+    });
+
+    it('should include author in database insert', async () => {
+      await mediaEngine.importMedia('/source/author-test.jpg', {
+        author: 'Jane Smith',
+      });
+
+      // Check that the database insert was called with author
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+      // The mock captures the inserted data in mockMedia
+      const insertedMedia = Array.from(mockMedia.values()).pop();
+      expect(insertedMedia?.author).toBe('Jane Smith');
+    });
+  });
+
   describe('Date-based folder structure', () => {
     beforeEach(() => {
       mockFiles.set('/source/dated-image.jpg', Buffer.from('image-data'));

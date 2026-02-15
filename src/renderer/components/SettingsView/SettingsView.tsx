@@ -102,6 +102,7 @@ export const SettingsView: React.FC = () => {
   const [projectDataPath, setProjectDataPath] = useState('');
   const [defaultProjectPath, setDefaultProjectPath] = useState('');
   const [projectMainLanguage, setProjectMainLanguage] = useState('en');
+  const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -136,10 +137,15 @@ export const SettingsView: React.FC = () => {
         setDefaultProjectPath(path);
       });
 
-      // Load project metadata (includes mainLanguage)
+      // Load project metadata (includes mainLanguage and defaultAuthor)
       window.electronAPI?.meta.getProjectMetadata().then(metadata => {
         if (metadata?.mainLanguage) {
           setProjectMainLanguage(metadata.mainLanguage);
+        }
+        if (metadata?.defaultAuthor) {
+          setProjectDefaultAuthor(metadata.defaultAuthor);
+        } else {
+          setProjectDefaultAuthor('');
         }
       });
     }
@@ -233,12 +239,13 @@ export const SettingsView: React.FC = () => {
         setActiveProject(updated as any);
         useAppStore.getState().updateProject(activeProject.id, updated as any);
 
-        // Also update project.json to keep dataPath and mainLanguage in sync
+        // Also update project.json to keep dataPath, mainLanguage, and defaultAuthor in sync
         await window.electronAPI?.meta.updateProjectMetadata({
           name: projectName.trim() || activeProject.name,
           description: projectDescription.trim(),
           dataPath: projectDataPath.trim() || undefined,
           mainLanguage: projectMainLanguage,
+          defaultAuthor: projectDefaultAuthor.trim() || undefined,
         });
       }
       showToast.success('Project settings saved');
@@ -260,7 +267,7 @@ export const SettingsView: React.FC = () => {
   };
 
   // Keywords for each section for search filtering
-  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data', 'language'];
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data', 'language', 'author', 'default'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
@@ -357,6 +364,20 @@ export const SettingsView: React.FC = () => {
           <option value="fi">Finnish (Suomi)</option>
           <option value="cs">Czech (Čeština)</option>
         </select>
+      </SettingRow>
+
+      <SettingRow
+        id="project-author"
+        label="Default Author"
+        description="The default author name for new posts and media. Can be overridden per item."
+      >
+        <input
+          id="project-author"
+          type="text"
+          placeholder="Author Name"
+          value={projectDefaultAuthor}
+          onChange={(e) => setProjectDefaultAuthor(e.target.value)}
+        />
       </SettingRow>
 
       <div className="setting-actions">

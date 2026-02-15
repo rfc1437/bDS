@@ -57,6 +57,7 @@ export const media = sqliteTable('media', {
   title: text('title'),
   alt: text('alt'),
   caption: text('caption'),
+  author: text('author'),
   filePath: text('file_path').notNull(),
   sidecarPath: text('sidecar_path').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),

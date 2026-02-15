@@ -884,7 +884,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         title,
         content,
         tags,
-        categories: category ? [category] : ['article'],
+        categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
       });
       
       if (updated) {
@@ -903,7 +903,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [postId, title, content, tags, category, isDirty, isSaving, updatePost, markClean, showErrorModal]);
+  }, [postId, title, content, tags, selectedCategories, isDirty, isSaving, updatePost, markClean, showErrorModal]);
 
   const handlePublish = async () => {
     await handleSave();

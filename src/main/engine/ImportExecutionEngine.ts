@@ -36,6 +36,8 @@ import type { WxrPost, WxrMedia } from './WxrParser';
 export interface ImportExecutionOptions {
   /** Path to the WordPress uploads folder for media files */
   uploadsFolder?: string;
+  /** Default author to use when WXR post/media has no author */
+  defaultAuthor?: string;
   /** Progress callback */
   onProgress?: (phase: string, current: number, total: number, detail?: string) => void;
 }
@@ -461,7 +463,7 @@ export class ImportExecutionEngine extends EventEmitter {
       excerpt: wxrPost.excerpt || undefined,
       content: transformedContent,
       status,
-      author: wxrPost.creator || undefined,
+      author: wxrPost.creator || options.defaultAuthor || undefined,
       createdAt,
       updatedAt,
       publishedAt,
@@ -634,6 +636,7 @@ export class ImportExecutionEngine extends EventEmitter {
       title: wxrMedia.title || undefined,
       alt: wxrMedia.description || undefined,
       mimeType: wxrMedia.mimeType,
+      author: options.defaultAuthor,
       tags: [],
       linkedPostIds,
       createdAt,
