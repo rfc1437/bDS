@@ -30,7 +30,7 @@ Status of this Memo
 
 Abstract
 
-   A previous document, <A CLASS="externlink" HREF="http://www.faqs.org/rfcs/rfc1341.html">RFC 1341</A>, defines a format and general framework
+   A previous document, RFC 1341, defines a format and general framework
    for the representation of a wide variety of data types in Internet
    mail.  This document defines one particular type of MIME data, the
    matter-transport/sentient-life-form type.  The matter-
@@ -113,8 +113,8 @@ The matter-transport/sentient-life-form MIME type
    The following is a message that gives a somewhat simplified rendition
    of a well-known American politician, starting from the top:
 
-   From:  "Nathaniel S. Borenstein" &lt;<A HREF="mailto:nsb@bellcore.com">nsb@bellcore.com</A>&gt;
-   To: Mark Linimon &lt;<A HREF="mailto:linimon@lonesome.com">linimon@lonesome.com</A>&gt;
+   From:  "Nathaniel S. Borenstein" <nsb@bellcore.com>
+   To: Mark Linimon <linimon@lonesome.com>
    Subject: Think hard before reconstructing
    Content-description:  Dan Quayle, low-res version
    Content-type: matter-transport/sentient-life-form
@@ -258,7 +258,7 @@ Authors' Addresses
    Morristown, NJ 07962-1910
 
    Phone: (201) 829-4270
-   EMail: <A HREF="mailto:nsb@bellcore.com">nsb@bellcore.com</A>
+   EMail: nsb@bellcore.com
 
    Mark Linimon
    Lonesome Dove Computing Services
@@ -266,6 +266,6 @@ Authors' Addresses
    Roanoke, VA 24018
 
    Phone: (703) 776-1004
-   EMail: <A HREF="mailto:linimon@LONESOME.COM">linimon@LONESOME.COM</A>
+   EMail: linimon@LONESOME.COM
 
 ```
