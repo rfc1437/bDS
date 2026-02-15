@@ -170,6 +170,30 @@ export class ImportAnalysisEngine {
       codeBlockStyle: 'fenced',
       bulletListMarker: '-',
     });
+
+    // Custom rule for list items: use single space after marker instead of multiple spaces
+    this.turndown.addRule('listItem', {
+      filter: 'li',
+      replacement: (content, node, options) => {
+        content = content
+          .replace(/^\n+/, '') // Remove leading newlines
+          .replace(/\n+$/, '\n') // Replace trailing newlines with single newline
+          .replace(/\n/gm, '\n  '); // Indent subsequent lines with 2 spaces
+        
+        const parent = node.parentNode as HTMLElement;
+        const isOrdered = parent?.nodeName === 'OL';
+        let prefix = options.bulletListMarker + ' ';
+        
+        if (isOrdered) {
+          const start = parent.getAttribute('start');
+          const index = Array.prototype.indexOf.call(parent.children, node);
+          const startNum = start ? parseInt(start, 10) : 1;
+          prefix = (startNum + index) + '. ';
+        }
+        
+        return prefix + content + (node.nextSibling && !/\n$/.test(content) ? '\n' : '');
+      },
+    });
     
     // Custom rule for linked images: <a><img></a> -> ![alt](src)
     // This handles the common WordPress pattern of wrapping thumbnails in links to full-size images
