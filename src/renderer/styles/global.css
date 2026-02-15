@@ -1,6 +1,17 @@
 /* VS Code-inspired CSS Variables and Global Styles */
 
 :root {
+  /* Simplified variable aliases for component use */
+  --background-primary: #1e1e1e;
+  --background-secondary: #252526;
+  --background-tertiary: #2d2d2d;
+  --background-hover: #2a2d2e;
+  --text-primary: #cccccc;
+  --text-secondary: #858585;
+  --border-color: #454545;
+  --accent-color: #007acc;
+  --accent-color-transparent: rgba(0, 122, 204, 0.25);
+  
   /* Background colors */
   --vscode-editor-background: #1e1e1e;
   --vscode-sideBar-background: #252526;
