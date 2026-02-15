@@ -6,6 +6,13 @@
 import { vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
+// Polyfill for IE-specific event methods that React DOM's input polyfill checks for
+// jsdom doesn't implement these, but React tries to use them for IE compatibility
+if (typeof Element !== 'undefined' && !Element.prototype.attachEvent) {
+  (Element.prototype as any).attachEvent = function() {};
+  (Element.prototype as any).detachEvent = function() {};
+}
+
 // Mock localStorage for Zustand persist middleware
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -65,6 +72,8 @@ Object.defineProperty(globalThis, 'window', {
         rebuildFromFiles: vi.fn(),
         getThumbnail: vi.fn(),
         regenerateThumbnails: vi.fn(),
+        search: vi.fn(),
+        getUrl: vi.fn(),
       },
       sync: {
         configure: vi.fn(),

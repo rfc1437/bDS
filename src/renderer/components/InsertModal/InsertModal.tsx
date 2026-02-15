@@ -34,7 +34,7 @@ type Tab = 'external' | 'internal';
 interface InsertModalProps {
   mode: InsertMode;
   onInsertLink: (url: string, text?: string) => void;
-  onInsertImage: (url: string, alt: string) => void;
+  onInsertImage: (url: string, alt: string, mediaId?: string) => void;
   onClose: () => void;
   initialText?: string; // Selected text in editor
 }
@@ -149,7 +149,8 @@ export const InsertModal: React.FC<InsertModalProps> = ({
       if (url) {
         // Extract filename without extension for alt text
         const altText = result.originalName.replace(/\.[^.]+$/, '');
-        onInsertImage(url, altText);
+        // Pass mediaId so the editor can link this media to the post
+        onInsertImage(url, altText, result.id);
       }
     }
     onClose();
@@ -162,7 +163,8 @@ export const InsertModal: React.FC<InsertModalProps> = ({
     if (mode === 'link') {
       onInsertLink(externalUrl, externalText || undefined);
     } else {
-      onInsertImage(externalUrl, externalAlt || 'Image');
+      // External images don't have a mediaId
+      onInsertImage(externalUrl, externalAlt || 'Image', undefined);
     }
     onClose();
   }, [mode, externalUrl, externalText, externalAlt, onInsertLink, onInsertImage, onClose]);

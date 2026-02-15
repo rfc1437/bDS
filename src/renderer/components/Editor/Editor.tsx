@@ -1065,7 +1065,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   }, []);
 
   // Handle image insertion from InsertModal (for media library)
-  const handleInsertImage = useCallback((url: string, alt: string) => {
+  const handleInsertImage = useCallback(async (url: string, alt: string, mediaId?: string) => {
     const editor = editorRef.current as any;
     if (!editor) return;
 
@@ -1078,8 +1078,18 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       forceMoveMarkers: true
     }]);
 
+    // Link the media to this post if mediaId is provided (from media library)
+    if (mediaId) {
+      try {
+        await window.electronAPI?.postMedia.link(postId, mediaId);
+        console.log(`[Editor] Linked media ${mediaId} to post ${postId}`);
+      } catch (error) {
+        console.error('Failed to link media to post:', error);
+      }
+    }
+
     setShowMediaSearch(false);
-  }, []);
+  }, [postId]);
 
   // Configure Monaco before mount to add macro syntax highlighting
   const handleEditorWillMount = (monaco: Monaco) => {
