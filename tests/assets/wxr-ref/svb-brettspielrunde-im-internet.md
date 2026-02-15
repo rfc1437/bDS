@@ -23,6 +23,7 @@ Installiert haben müsst ihr Google Chrome as Webbrowser. Leider funktioniert da
 Ganz kurz noch ein Hinweis: ihr könnt auf die Bilder klicken, wenn die euch zu klein sind, dann gibt es das Bild in größer und man kann die Texte besser lesen.
 
 Computer, Headset / Kopfhöhrer bereit, bequemer Sessel oder Stuhl und auf ins Abenteuer? Wenn ja, kommt als nächstes der Link zur Brettspielrunde:
+
 [an SVB Brettspielrunde teilnehmen](https://teams.microsoft.com/l/meetup-join/19%3ameeting_ZmJlNGE5YTctYzM0NC00ZTcxLWI0Y2QtMmVkYWFiZTIzODdk%40thread.v2/0?context=%7b%22Tid%22%3a%2231f142f5-df76-4112-80a3-19bce6a47b15%22%2c%22Oid%22%3a%22a4c094bc-29b6-459c-b176-8b01655c7038%22%7d)
 
 Wenn ihr auf den oberen Link klickt, bekommt ihr bei Firefox das folgende Bild, das euch sagt, dass ihr Microsoft Teams installieren müsst. Aber ihr habt ja hoffentlich Google Chrome, also ab zum nächsten Bild.
