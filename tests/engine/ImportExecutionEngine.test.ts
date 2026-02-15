@@ -112,9 +112,10 @@ vi.mock('../../src/main/engine/MediaEngine', () => ({
   getMediaEngine: vi.fn(() => mockMediaEngine),
 }));
 
-// Mock database - track inserts for verification
+// Mock database - track inserts and updates for verification
 const insertedPosts: any[] = [];
 const insertedMedia: any[] = [];
+const updatedPosts: { id: string; data: any }[] = [];
 
 // Create a mock that tracks based on table name property
 const createMockInsert = () => ({
@@ -128,6 +129,24 @@ const createMockInsert = () => ({
   }),
 });
 
+// Create a mock that tracks post updates
+const createMockUpdate = () => {
+  let updateData: any = null;
+  return {
+    set: vi.fn((data: any) => {
+      updateData = data;
+      return {
+        where: vi.fn((condition: any) => {
+          // Track the update with the ID being updated
+          // The condition typically contains the ID
+          updatedPosts.push({ id: 'updated-post-id', data: updateData });
+          return Promise.resolve();
+        }),
+      };
+    }),
+  };
+};
+
 const mockDb = {
   select: vi.fn(() => ({
     from: vi.fn(() => ({
@@ -138,11 +157,7 @@ const mockDb = {
     })),
   })),
   insert: vi.fn(() => createMockInsert()),
-  update: vi.fn(() => ({
-    set: vi.fn(() => ({
-      where: vi.fn().mockResolvedValue(undefined),
-    })),
-  })),
+  update: vi.fn(() => createMockUpdate()),
 };
 
 const mockClient = {
@@ -259,6 +274,7 @@ describe('ImportExecutionEngine', () => {
     vi.clearAllMocks();
     insertedPosts.length = 0;
     insertedMedia.length = 0;
+    updatedPosts.length = 0;
     engine = new ImportExecutionEngine();
     engine.setProjectContext('test-project', '/mock/project/data');
   });
@@ -420,7 +436,7 @@ describe('ImportExecutionEngine', () => {
       expect(result.posts.skipped).toBe(1);
     });
 
-    it('should create draft for conflict resolution "overwrite"', async () => {
+    it('should update existing post for conflict resolution "overwrite"', async () => {
       const wxrPost = createMockWxrPost();
       const analyzed = createMockAnalyzedPost(wxrPost, 'conflict', 'overwrite');
       analyzed.existingPost = {
@@ -446,11 +462,14 @@ describe('ImportExecutionEngine', () => {
         },
       });
 
-      await engine.executeImport(report, {});
+      const result = await engine.executeImport(report, {});
 
-      expect(insertedPosts.length).toBe(1);
-      expect(insertedPosts[0].slug).toBe('test-post');
-      expect(insertedPosts[0].status).toBe('draft');
+      // Should update existing post, not insert new one
+      expect(insertedPosts.length).toBe(0);
+      expect(updatedPosts.length).toBeGreaterThan(0);
+      expect(updatedPosts[0].data.status).toBe('draft');
+      expect(updatedPosts[0].data.title).toBe(wxrPost.title);
+      expect(result.posts.imported).toBe(1);
     });
 
     it('should create new post with new slug for conflict resolution "import"', async () => {
@@ -644,7 +663,7 @@ describe('ImportExecutionEngine', () => {
       expect(insertedPosts[0].publishedAt).toEqual(pubDate);
     });
 
-    it('should not set publishedAt for draft posts', async () => {
+    it('should not set publishedAt for overwrite draft posts', async () => {
       const wxrPost = createMockWxrPost();
       const analyzed = createMockAnalyzedPost(wxrPost, 'conflict', 'overwrite');
       analyzed.existingPost = {
@@ -672,9 +691,11 @@ describe('ImportExecutionEngine', () => {
 
       await engine.executeImport(report, {});
 
-      expect(insertedPosts.length).toBe(1);
-      expect(insertedPosts[0].status).toBe('draft');
-      expect(insertedPosts[0].publishedAt).toBeUndefined();
+      // Should update, not insert
+      expect(insertedPosts.length).toBe(0);
+      expect(updatedPosts.length).toBeGreaterThan(0);
+      expect(updatedPosts[0].data.status).toBe('draft');
+      expect(updatedPosts[0].data.publishedAt).toBeNull();
     });
 
     it('should handle post without optional fields', async () => {
@@ -817,10 +838,11 @@ describe('ImportExecutionEngine', () => {
 
       await engine.executeImport(report, {});
 
-      expect(insertedPosts.length).toBe(1);
+      // Overwrite updates existing post, not inserts
+      expect(updatedPosts.length).toBeGreaterThan(0);
       // Draft posts store content in DB
-      expect(insertedPosts[0].content).toContain('[[gallery ids="1,2"]]');
-      expect(insertedPosts[0].content).toContain('[[video src="test.mp4"]]');
+      expect(updatedPosts[0].data.content).toContain('[[gallery ids="1,2"]]');
+      expect(updatedPosts[0].data.content).toContain('[[video src="test.mp4"]]');
     });
 
     it('should not escape underscores inside macro names during markdown conversion', async () => {
@@ -852,9 +874,10 @@ describe('ImportExecutionEngine', () => {
 
       await engine.executeImport(report, {});
 
-      expect(insertedPosts.length).toBe(1);
-      expect(insertedPosts[0].content).toContain('[[photo_archive]]');
-      expect(insertedPosts[0].content).not.toContain('photo\\_archive');
+      // Overwrite updates existing post, not inserts
+      expect(updatedPosts.length).toBeGreaterThan(0);
+      expect(updatedPosts[0].data.content).toContain('[[photo_archive]]');
+      expect(updatedPosts[0].data.content).not.toContain('photo\\_archive');
     });
 
     it('should not escape underscores in macro attributes during markdown conversion', async () => {
@@ -886,8 +909,9 @@ describe('ImportExecutionEngine', () => {
 
       await engine.executeImport(report, {});
 
-      expect(insertedPosts.length).toBe(1);
-      expect(insertedPosts[0].content).toContain('[[my_gallery type="grid_view" size="large_thumb"]]');
+      // Overwrite updates existing post, not inserts
+      expect(updatedPosts.length).toBeGreaterThan(0);
+      expect(updatedPosts[0].data.content).toContain('[[my_gallery type="grid_view" size="large_thumb"]]');
     });
 
     it('should map tags based on analysis mappings', async () => {
@@ -1489,9 +1513,11 @@ describe('ImportExecutionEngine', () => {
 
       await engine.executeImport(report, {});
 
-      expect(insertedPosts.length).toBe(1);
-      expect(insertedPosts[0].status).toBe('draft');
-      const categories = JSON.parse(insertedPosts[0].categories);
+      // Should update existing page, not insert new one
+      expect(insertedPosts.length).toBe(0);
+      expect(updatedPosts.length).toBeGreaterThan(0);
+      expect(updatedPosts[0].data.status).toBe('draft');
+      const categories = JSON.parse(updatedPosts[0].data.categories);
       expect(categories).toContain('page');
     });
 

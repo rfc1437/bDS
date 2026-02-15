@@ -462,8 +462,12 @@ export class ImportExecutionEngine extends EventEmitter {
     const postEngine = getPostEngine();
 
     if (resolution === 'overwrite') {
-      // Create as draft with the same slug (user needs to review and publish)
-      return await this.createImportedPost(analyzed, tagMapping, categoryMapping, result, options, 'draft');
+      // Update the existing post with new content and set to draft for review
+      if (!analyzed.existingPost?.id) {
+        // Fallback: if no existing post ID, create as new draft
+        return await this.createImportedPost(analyzed, tagMapping, categoryMapping, result, options, 'draft');
+      }
+      return await this.updateExistingPost(analyzed, analyzed.existingPost.id, tagMapping, categoryMapping, result, options);
     }
 
     if (resolution === 'import') {
@@ -473,6 +477,77 @@ export class ImportExecutionEngine extends EventEmitter {
     }
 
     return false;
+  }
+
+  /**
+   * Update an existing post with imported content (for overwrite conflict resolution)
+   * Sets the post to draft status so user can review before publishing
+   */
+  private async updateExistingPost(
+    analyzed: AnalyzedPost,
+    existingPostId: string,
+    tagMapping: Map<string, { resolved: string; needsCreation: boolean }>,
+    categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
+    result: ImportExecutionResult,
+    options: ImportExecutionOptions
+  ): Promise<boolean> {
+    const wxrPost = analyzed.wxrPost;
+    const db = getDatabase().getLocal();
+    const postEngine = getPostEngine();
+
+    // Convert Vimeo iframes to [[vimeo]] macros BEFORE markdown conversion
+    const contentWithVimeo = this.convertVimeoIframes(wxrPost.content);
+
+    // Transform WordPress shortcodes [shortcode] to [[shortcode]] BEFORE markdown conversion
+    const contentWithShortcodes = this.transformShortcodes(contentWithVimeo);
+
+    // Convert HTML content to Markdown
+    let transformedContent = this.convertToMarkdown(contentWithShortcodes);
+
+    // Convert absolute media URLs from the site to relative paths
+    transformedContent = this.convertMediaUrlsToRelative(transformedContent);
+
+    // Resolve tags
+    const resolvedTags = this.resolveTaxonomy(wxrPost.tags, tagMapping);
+
+    // Resolve categories
+    const resolvedCategories = this.resolveTaxonomy(wxrPost.categories, categoryMapping);
+
+    // Calculate checksum
+    const checksum = this.calculateChecksum(transformedContent);
+
+    // Update the existing post in the database
+    // Set to draft status so user can review the imported content
+    await db.update(posts)
+      .set({
+        title: wxrPost.title,
+        excerpt: wxrPost.excerpt || null,
+        content: transformedContent, // Store in DB since it's now a draft
+        status: 'draft',
+        author: wxrPost.creator || options.defaultAuthor || null,
+        updatedAt: new Date(),
+        publishedAt: null, // Clear publishedAt since it's now a draft
+        checksum,
+        tags: JSON.stringify(resolvedTags),
+        categories: JSON.stringify(resolvedCategories),
+      })
+      .where(eq(posts.id, existingPostId));
+
+    // Update FTS index
+    await postEngine.updateFTSIndex({
+      id: existingPostId,
+      projectId: this.currentProjectId,
+      title: wxrPost.title,
+      content: transformedContent,
+      excerpt: wxrPost.excerpt || undefined,
+      tags: resolvedTags,
+      categories: resolvedCategories,
+    });
+
+    // Track wpId to postId mapping (use existing ID)
+    result.wpIdToPostId.set(wxrPost.wpId, existingPostId);
+
+    return true;
   }
 
   /**
@@ -655,11 +730,16 @@ export class ImportExecutionEngine extends EventEmitter {
 
     // Handle conflicts
     if (analyzed.status === 'conflict') {
-      const resolution = (analyzed as any).conflictResolution || 'ignore';
+      const resolution = analyzed.conflictResolution || 'ignore';
       if (resolution === 'ignore') {
         return false;
       }
-      // For 'overwrite' or 'import', proceed with import
+      
+      // For 'overwrite', update the existing media entry
+      if (resolution === 'overwrite' && analyzed.existingMedia?.id) {
+        return await this.updateExistingMedia(analyzed, analyzed.existingMedia.id, result, options);
+      }
+      // For 'import', fall through to create new entry
     }
 
     // Skip updates (same content already exists)
@@ -712,6 +792,65 @@ export class ImportExecutionEngine extends EventEmitter {
       postMediaEngine.setProjectContext(this.currentProjectId);
       for (const postId of linkedPostIds) {
         await postMediaEngine.linkMediaToPost(postId, importedMedia.id);
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Update an existing media entry with imported file (for overwrite conflict resolution)
+   * Replaces the file on disk and updates metadata in the database
+   */
+  private async updateExistingMedia(
+    analyzed: AnalyzedMedia,
+    existingMediaId: string,
+    result: ImportExecutionResult,
+    options: ImportExecutionOptions
+  ): Promise<boolean> {
+    const wxrMedia = analyzed.wxrMedia;
+
+    // Build source path
+    if (!options.uploadsFolder) {
+      return false;
+    }
+
+    const sourcePath = path.join(options.uploadsFolder, wxrMedia.relativePath);
+
+    // Check if file exists
+    try {
+      await fs.access(sourcePath);
+    } catch {
+      return false;
+    }
+
+    const mediaEngine = getMediaEngine();
+
+    // Replace the file on disk and update size/checksum/dimensions in database
+    await mediaEngine.replaceMediaFile(existingMediaId, sourcePath);
+
+    // Update metadata (title, alt, etc.)
+    await mediaEngine.updateMedia(existingMediaId, {
+      title: wxrMedia.title || undefined,
+      alt: wxrMedia.description || undefined,
+      author: options.defaultAuthor,
+    });
+
+    // Resolve parent post ID for linking
+    const linkedPostIds: string[] = [];
+    if (wxrMedia.parentId && wxrMedia.parentId > 0) {
+      const parentPostId = result.wpIdToPostId.get(wxrMedia.parentId);
+      if (parentPostId) {
+        linkedPostIds.push(parentPostId);
+      }
+    }
+
+    // Link media to posts in the postMedia table if needed
+    if (linkedPostIds.length > 0) {
+      const postMediaEngine = getPostMediaEngine();
+      postMediaEngine.setProjectContext(this.currentProjectId);
+      for (const postId of linkedPostIds) {
+        await postMediaEngine.linkMediaToPost(postId, existingMediaId);
       }
     }
 

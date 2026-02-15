@@ -43,6 +43,8 @@ export interface AnalyzedMedia {
   wxrMedia: WxrMedia;
   status: MediaAnalysisStatus;
   fileHash: string | null;
+  /** How to resolve conflict (only relevant when status is 'conflict'). Default is 'ignore'. */
+  conflictResolution?: ImportConflictResolution;
   existingMedia?: {
     id: string;
     originalName: string;
