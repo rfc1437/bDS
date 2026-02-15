@@ -43,6 +43,10 @@ const getTabTitle = (
     return importDefTitles.get(tab.id) || 'Import';
   }
 
+  if (tab.type === 'metadata-diff') {
+    return 'Metadata Diff';
+  }
+
   return 'Unknown';
 };
 
@@ -82,6 +86,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+        </svg>
+      );
+    case 'metadata-diff':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 3h5v1H2V3zm0 3h5v1H2V6zm0 3h5v1H2V9zm0 3h5v1H2v-1zm7-9h5v1H9V3zm0 3h5v1H9V6zm0 3h5v1H9V9zm0 3h5v1H9v-1z"/>
         </svg>
       );
     default:
