@@ -353,8 +353,9 @@ describe('ImportExecutionEngine E2E Tests', () => {
       expect(content).toContain('![Test image](https://example.com/image.jpg)');
       expect(content).toContain('![Photo](https://example.com/photo.png');
 
-      // Verify linked image
-      expect(content).toContain('[![Banner](https://example.com/banner.jpg)](https://example.com)');
+      // Verify linked image - should become a plain image (link is unwrapped)
+      // The link href is not an image URL, so the image src is used
+      expect(content).toContain('![Banner](https://example.com/banner.jpg)');
     });
 
     it('should convert code blocks (inline and fenced)', async () => {
@@ -403,6 +404,63 @@ describe('ImportExecutionEngine E2E Tests', () => {
       // Verify nested blockquote (should have > > for inner quote)
       expect(content).toContain('> Outer quote');
       expect(content).toContain('> > Inner quote');
+    });
+
+    it('should convert linked images with empty alt to plain images with derived alt', async () => {
+      // Post 107: Linked Images with empty/missing alt
+      const post = wxrData.posts.find(p => p.wpId === 107);
+      expect(post).toBeDefined();
+
+      const report = createSinglePostReport(post!);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('html-formatting-linked-images'));
+      expect(writtenFile).toBeDefined();
+
+      const content = writtenFile!.content;
+
+      // Linked image with empty alt should become a plain image with filename-derived alt
+      // The link target is the full-size image, so use that for the image src
+      expect(content).toContain('![full-size.png](http://example.com/wp-content/uploads/2020/03/full-size.png)');
+
+      // Linked image with no alt attribute (link and image different)
+      expect(content).toContain('![photo.jpg](http://example.com/gallery/photo.jpg)');
+
+      // Linked image where link and src are the same
+      expect(content).toContain('![photo.jpg](http://example.com/photo.jpg)');
+
+      // Image with proper alt inside link should preserve the alt text
+      expect(content).toContain('![Company Logo](http://example.com/logo.png)');
+
+      // Should NOT have empty image alt text (the broken pattern we're fixing)
+      expect(content).not.toMatch(/!\[\]\([^)]+\)/);
+    });
+
+    it('should preserve line breaks in paragraph text', async () => {
+      // Post 108: Line Breaks Preservation
+      const post = wxrData.posts.find(p => p.wpId === 108);
+      expect(post).toBeDefined();
+
+      const report = createSinglePostReport(post!);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('html-formatting-line-breaks'));
+      expect(writtenFile).toBeDefined();
+
+      const content = writtenFile!.content;
+
+      // Line breaks within paragraphs should be preserved as markdown line breaks
+      // (either as two trailing spaces + newline, or as actual newlines)
+      // The key is that "inside the text that should" appears on a separate line from 
+      // "This paragraph has line breaks"
+      expect(content).toMatch(/has line breaks\s*\n.*inside the text/);
+      expect(content).toMatch(/inside the text that should\s*\n.*be preserved/);
+
+      // Second paragraph should also preserve line breaks
+      expect(content).toMatch(/another paragraph\s*\n.*with different content/);
+
+      // Single line paragraph should remain intact
+      expect(content).toContain('Single line paragraph for comparison.');
     });
   });
 
