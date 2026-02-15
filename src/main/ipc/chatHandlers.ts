@@ -11,6 +11,7 @@ import { getDatabase } from '../database';
 
 let chatEngine: ChatEngine | null = null;
 let openCodeManager: OpenCodeManager | null = null;
+let openCodeManagerInitPromise: Promise<void> | null = null;
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 
 /**
@@ -31,9 +32,11 @@ function getChatEngine(): ChatEngine {
 }
 
 /**
- * Get or create the OpenCodeManager instance
+ * Get or create the OpenCodeManager instance.
+ * Returns a promise that resolves when the manager is fully initialized
+ * (including loading the API key from settings).
  */
-function getOpenCodeManager(): OpenCodeManager {
+async function getOpenCodeManager(): Promise<OpenCodeManager> {
   if (!openCodeManager) {
     openCodeManager = new OpenCodeManager(
       getChatEngine(),
@@ -42,14 +45,25 @@ function getOpenCodeManager(): OpenCodeManager {
       () => mainWindowGetter?.() || null
     );
 
-    // Load API key from settings
+    // Load API key from settings and await it
     const engine = getChatEngine();
-    engine.getSetting('opencode_api_key').then(key => {
-      if (key) {
-        openCodeManager!.setApiKey(key);
+    openCodeManagerInitPromise = (async () => {
+      try {
+        const key = await engine.getSetting('opencode_api_key');
+        if (key) {
+          openCodeManager!.setApiKey(key);
+        }
+      } catch {
+        // Silently ignore errors loading the key
       }
-    }).catch(() => {});
+    })();
   }
+
+  // Always wait for initialization to complete before returning
+  if (openCodeManagerInitPromise) {
+    await openCodeManagerInitPromise;
+  }
+
   return openCodeManager;
 }
 
@@ -62,7 +76,7 @@ export function registerChatHandlers(): void {
   // Check if service is ready
   ipcMain.handle('chat:checkReady', async () => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       const result = await manager.checkReady();
       return {
         ready: result.ready,
@@ -78,7 +92,7 @@ export function registerChatHandlers(): void {
   // Validate API key
   ipcMain.handle('chat:validateApiKey', async (_, apiKey: string) => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       const result = await manager.validateApiKey(apiKey);
       return result;
     } catch (error) {
@@ -90,7 +104,7 @@ export function registerChatHandlers(): void {
   // Set API key
   ipcMain.handle('chat:setApiKey', async (_, apiKey: string) => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       manager.setApiKey(apiKey);
 
       // Persist to settings
@@ -107,7 +121,7 @@ export function registerChatHandlers(): void {
   // Get API key (masked)
   ipcMain.handle('chat:getApiKey', async () => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       const key = manager.getApiKey();
       if (!key) return { hasKey: false, maskedKey: '' };
       // Mask all but last 4 characters
@@ -124,7 +138,7 @@ export function registerChatHandlers(): void {
   // Get available models
   ipcMain.handle('chat:getAvailableModels', async () => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       const models = await manager.getAvailableModels();
       const engine = getChatEngine();
       const selectedModel = await engine.getSelectedModel();
@@ -244,7 +258,7 @@ export function registerChatHandlers(): void {
   // Send a message
   ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string) => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       const mainWindow = mainWindowGetter?.();
 
       const result = await manager.sendMessage(conversationId, message, {
@@ -275,7 +289,7 @@ export function registerChatHandlers(): void {
   // Abort a running message
   ipcMain.handle('chat:abortMessage', async (_, conversationId: string) => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       return await manager.abortMessage(conversationId);
     } catch (error) {
       console.error('[Chat IPC] Error aborting message:', error);
@@ -323,7 +337,7 @@ export function registerChatHandlers(): void {
   // Analyze taxonomy items (tags/categories) and suggest mappings
   ipcMain.handle('chat:analyzeTaxonomy', async (_, categories: Array<{ name: string; slug: string; existsInProject: boolean }>, tags: Array<{ name: string; slug: string; existsInProject: boolean }>, modelId: string) => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       return await manager.analyzeTaxonomy(categories, tags, modelId);
     } catch (error) {
       console.error('[Chat IPC] Error analyzing taxonomy:', error);
@@ -336,7 +350,7 @@ export function registerChatHandlers(): void {
   // Analyze a media image and generate title, alt text, and caption
   ipcMain.handle('chat:analyzeMediaImage', async (_, mediaId: string, language?: string) => {
     try {
-      const manager = getOpenCodeManager();
+      const manager = await getOpenCodeManager();
       return await manager.analyzeMediaImage(mediaId, language || 'en');
     } catch (error) {
       console.error('[Chat IPC] Error analyzing media image:', error);
@@ -353,5 +367,6 @@ export async function cleanupChatHandlers(): Promise<void> {
     await openCodeManager.stop();
     openCodeManager = null;
   }
+  openCodeManagerInitPromise = null;
   chatEngine = null;
 }
