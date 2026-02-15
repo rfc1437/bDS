@@ -14,6 +14,4 @@ categories:
 author: hugo
 publishedAt: '2011-09-04T14:50:06.000Z'
 ---
-Anstelle die Bilder schon hier hinzupacken gibt es nur einen Verweis auf ein Album von Bildern die meine Schwiegermutter gemacht hat - die offiziellen Fotos warten noch etwas (und ich selber hab ja keine gemacht).
-
-[[Embedded content: https://picasaweb.google.com/s/c/bin/slideshow.swf]]
+Anstelle die Bilder schon hier hinzupacken gibt es nur einen Verweis auf ein Album von Bildern die meine Schwiegermutter gemacht hat - die offiziellen Fotos warten noch etwas (und ich selber hab ja keine gemacht). FLASH PLAYER NOT SUPPORTED

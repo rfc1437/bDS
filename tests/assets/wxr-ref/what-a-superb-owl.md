@@ -13,6 +13,4 @@ categories:
 author: hugo
 publishedAt: '2011-02-06T22:02:46.000Z'
 ---
-![superb owl](http://28.media.tumblr.com/tumblr_lg7mqyuVsE1qzlnwmo1_500.png)
-
-[Warscheinlich von hier](http://jephjacques.tumblr.com/post/3148377589/superb-owl-joeks) (ich habs nur indirekt über Twitter mitbekommen).
+![superb owl](http://28.media.tumblr.com/tumblr_lg7mqyuVsE1qzlnwmo1_500.png) [Warscheinlich von hier](http://jephjacques.tumblr.com/post/3148377589/superb-owl-joeks) (ich habs nur indirekt über Twitter mitbekommen).

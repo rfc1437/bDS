@@ -562,20 +562,62 @@ export class ImportAnalysisEngine {
   }
 
   /**
-   * Preserve line breaks in HTML content by converting \n to <br> tags
-   * Only converts newlines that appear within meaningful text content,
-   * not newlines that are just whitespace between tags
+   * Preserve line breaks and paragraph structure in content.
+   * 
+   * WordPress exports often have:
+   * - Plain text mixed with HTML
+   * - Double newlines representing paragraph breaks
+   * - Single newlines that should become <br>
+   * 
+   * This function converts:
+   * - Double newlines (\n\n) to paragraph breaks (</p><p>)
+   * - Single newlines within text to <br>
+   * - Wraps content in <p> tags if it starts with plain text
    */
   private preserveLineBreaks(html: string): string {
-    // Convert newlines that appear within text content (between > and <)
-    // But only if the text content has actual content before or after the newline
+    if (!html || !html.trim()) return html;
+
+    // Check if content starts with a tag or plain text
+    const startsWithTag = /^\s*</.test(html);
+    
+    // If it starts with plain text, we need to handle the whole content differently
+    if (!startsWithTag) {
+      // First, convert double newlines to paragraph markers
+      let processed = html.replace(/\n\n+/g, '</p>\n<p>');
+      
+      // Convert remaining single newlines within text to <br>
+      // (but not newlines that are just between tags)
+      processed = processed.replace(/>([^<]+)</g, (_match, textContent: string) => {
+        if (!textContent.trim()) {
+          return '>' + textContent + '<';
+        }
+        const preserved = textContent.replace(/\n/g, '<br>');
+        return '>' + preserved + '<';
+      });
+      
+      // Also handle newlines at the start (before any tags)
+      processed = processed.replace(/^([^<]+)/g, (match, textContent: string) => {
+        if (!textContent.trim()) return match;
+        return textContent.replace(/\n/g, '<br>');
+      });
+      
+      // Wrap in <p> if we added paragraph markers
+      if (processed.includes('</p>')) {
+        processed = '<p>' + processed + '</p>';
+      }
+      
+      return processed;
+    }
+
+    // For content that starts with HTML, handle newlines within text content
     return html.replace(/>([^<]+)</g, (_match, textContent: string) => {
-      // Skip if the text content is only whitespace (just formatting between tags)
       if (!textContent.trim()) {
         return '>' + textContent + '<';
       }
-      // Replace all newlines with <br> (the text has actual content)
-      const preserved = textContent.replace(/\n/g, '<br>');
+      // First convert double newlines to paragraph breaks
+      let preserved = textContent.replace(/\n\n+/g, '</p><p>');
+      // Then convert remaining single newlines to <br>
+      preserved = preserved.replace(/\n/g, '<br>');
       return '>' + preserved + '<';
     });
   }
