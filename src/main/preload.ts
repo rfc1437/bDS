@@ -1,8 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { ElectronAPI } from './shared/electronApi';
 
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld('electronAPI', {
+export const electronAPI: ElectronAPI = {
   // Projects
   projects: {
     create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => ipcRenderer.invoke('projects:create', data),
@@ -80,6 +81,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isLinked: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:isLinked', postId, mediaId),
     import: (postId: string, filePath: string) => ipcRenderer.invoke('postMedia:import', postId, filePath),
     rebuild: () => ipcRenderer.invoke('postMedia:rebuild'),
+  },
+
+  // Sync
+  sync: {
+    configure: (config: unknown) => ipcRenderer.invoke('sync:configure', config),
+    start: (direction?: 'push' | 'pull' | 'bidirectional') => ipcRenderer.invoke('sync:start', direction),
+    getStatus: () => ipcRenderer.invoke('sync:getStatus'),
+    isConfigured: () => ipcRenderer.invoke('sync:isConfigured'),
+    getPendingCount: () => ipcRenderer.invoke('sync:getPendingCount'),
+    getLog: (limit?: number) => ipcRenderer.invoke('sync:getLog', limit),
+    stopAutoSync: () => ipcRenderer.invoke('sync:stopAutoSync'),
   },
 
   // Tasks
@@ -242,8 +254,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat-stream-delta', subscription);
       return () => ipcRenderer.removeListener('chat-stream-delta', subscription);
     },
-    onToolCall: (callback: (data: { conversationId: string; toolCall: unknown }) => void) => {
-      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; toolCall: unknown }) => callback(data);
+    onToolCall: (callback: (data: { conversationId: string; toolCall: { name: string; arguments: Record<string, unknown> } }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; toolCall: { name: string; arguments: Record<string, unknown> } }) => callback(data);
       ipcRenderer.on('chat-tool-call', subscription);
       return () => ipcRenderer.removeListener('chat-tool-call', subscription);
     },
@@ -269,192 +281,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   once: (channel: string, callback: (...args: unknown[]) => void) => {
     ipcRenderer.once(channel, (_event, ...args) => callback(...args));
   },
-});
+};
 
-// Type definitions for the exposed API
-export interface ElectronAPI {
-  projects: {
-    create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => Promise<unknown>;
-    update: (id: string, data: unknown) => Promise<unknown>;
-    delete: (id: string) => Promise<boolean>;
-    get: (id: string) => Promise<unknown>;
-    getAll: () => Promise<unknown[]>;
-    getActive: () => Promise<unknown>;
-    setActive: (id: string) => Promise<unknown>;
-  };
-  posts: {
-    create: (data: unknown) => Promise<unknown>;
-    update: (id: string, data: unknown) => Promise<unknown>;
-    delete: (id: string) => Promise<boolean>;
-    get: (id: string) => Promise<unknown>;
-    getAll: () => Promise<unknown[]>;
-    getByStatus: (status: string) => Promise<unknown[]>;
-    publish: (id: string) => Promise<unknown>;
-    unpublish: (id: string) => Promise<unknown>;
-    rebuildFromFiles: () => Promise<void>;
-    search: (query: string) => Promise<unknown[]>;
-    filter: (filter: unknown) => Promise<unknown[]>;
-    getTags: () => Promise<string[]>;
-    getCategories: () => Promise<string[]>;
-    getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
-    getTagsWithCounts: () => Promise<{ tag: string; count: number }[]>;
-    getCategoriesWithCounts: () => Promise<{ category: string; count: number }[]>;
-    getDashboardStats: () => Promise<{ totalPosts: number; draftCount: number; publishedCount: number; archivedCount: number }>;
-    getLinksTo: (id: string) => Promise<{ id: string; title: string; slug: string }[]>;
-    getLinkedBy: (id: string) => Promise<{ id: string; title: string; slug: string }[]>;
-    rebuildLinks: () => Promise<void>;
-  };
-  media: {
-    import: (sourcePath: string, metadata?: unknown) => Promise<unknown>;
-    importDialog: () => Promise<unknown[]>;
-    update: (id: string, data: unknown) => Promise<unknown>;
-    delete: (id: string) => Promise<boolean>;
-    get: (id: string) => Promise<unknown>;
-    getAll: () => Promise<unknown[]>;
-    rebuildFromFiles: () => Promise<void>;
-  };
-  dropbox: {
-    configure: (config: unknown) => Promise<void>;
-    isConfigured: () => Promise<boolean>;
-    getStatus: () => Promise<string>;
-    syncAll: () => Promise<unknown>;
-    startWatching: () => Promise<void>;
-    stopWatching: () => Promise<void>;
-    startPolling: () => Promise<void>;
-    stopPolling: () => Promise<void>;
-    getConflicts: () => Promise<unknown[]>;
-    resolveConflict: (conflictId: string, resolution: string) => Promise<void>;
-    getLastSyncTime: () => Promise<string | null>;
-  };
-  tasks: {
-    getAll: () => Promise<unknown[]>;
-    getRunning: () => Promise<unknown[]>;
-    cancel: (taskId: string) => Promise<boolean>;
-    clearCompleted: () => Promise<void>;
-  };
-  app: {
-    getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;
-    openFolder: (folderPath: string) => Promise<string>;
-    showItemInFolder: (itemPath: string) => Promise<void>;
-    selectFolder: (title?: string) => Promise<string | null>;
-    getDefaultProjectPath: (projectId: string) => Promise<string>;
-  };
-  meta: {
-    getTags: () => Promise<string[]>;
-    getCategories: () => Promise<string[]>;
-    addTag: (tag: string) => Promise<string[]>;
-    removeTag: (tag: string) => Promise<string[]>;
-    addCategory: (category: string) => Promise<string[]>;
-    removeCategory: (category: string) => Promise<string[]>;
-    syncOnStartup: () => Promise<{ tags: string[]; categories: string[] }>;
-  };
-  tags: {
-    getAll: () => Promise<unknown[]>;
-    getWithCounts: () => Promise<unknown[]>;
-    get: (id: string) => Promise<unknown>;
-    getByName: (name: string) => Promise<unknown>;
-    create: (data: { name: string; color?: string }) => Promise<unknown>;
-    update: (id: string, data: { name?: string; color?: string | null }) => Promise<unknown>;
-    delete: (id: string) => Promise<boolean>;
-    merge: (sourceTagIds: string[], targetTagId: string) => Promise<void>;
-    rename: (id: string, newName: string) => Promise<unknown>;
-    getPostsWithTag: (tagId: string) => Promise<unknown[]>;
-    syncFromPosts: () => Promise<void>;
-  };
-  import: {
-    selectAndAnalyze: (uploadsFolder?: string) => Promise<unknown>;
-    analyzeFile: (filePath: string, uploadsFolder?: string) => Promise<unknown>;
-    selectUploadsFolder: () => Promise<string | null>;
-    execute: (reportJson: string, uploadsFolder?: string) => Promise<{ taskId: string; totalItems: number }>;
-    onProgress: (callback: (data: { step: string; detail?: string }) => void) => () => void;
-    onExecutionProgress: (callback: (data: {
-      taskId: string;
-      phase: string;
-      current: number;
-      total: number;
-      detail?: string;
-      eta?: number;
-    }) => void) => () => void;
-  };
-  importDefinitions: {
-    create: (name?: string) => Promise<unknown>;
-    get: (id: string) => Promise<unknown>;
-    getAll: () => Promise<unknown[]>;
-    update: (id: string, updates: unknown) => Promise<unknown>;
-    delete: (id: string) => Promise<boolean>;
-  };
-  metadataDiff: {
-    getStats: () => Promise<{
-      totalPosts: number;
-      publishedPosts: number;
-      draftPosts: number;
-      totalMedia: number;
-    }>;
-    scan: () => Promise<{
-      totalScanned: number;
-      postsWithDifferences: number;
-      differences: Array<{
-        postId: string;
-        title: string;
-        slug: string;
-        filePath?: string;
-        hasDifferences: boolean;
-        differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
-      }>;
-      groups: Array<{
-        field: string;
-        label: string;
-        posts: Array<{
-          postId: string;
-          title: string;
-          slug: string;
-          dbValue: unknown;
-          fileValue: unknown;
-        }>;
-      }>;
-    }>;
-    syncDbToFile: (postIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
-    syncFileToDb: (postIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
-  };
-  chat: {
-    // API Key Management
-    checkReady: () => Promise<{ ready: boolean; error?: string; backend?: string }>;
-    validateApiKey: (apiKey: string) => Promise<{ isValid: boolean; models: Array<{ id: string; name: string }> }>;
-    setApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
-    getApiKey: () => Promise<{ hasKey: boolean; maskedKey: string }>;
-
-    // Settings
-    getAvailableModels: () => Promise<{ success: boolean; models?: Array<{ id: string; name: string }>; selectedModel?: string; error?: string }>;
-    setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
-    getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
-    setSystemPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
-
-    // Conversations
-    getConversations: () => Promise<unknown[]>;
-    createConversation: (title?: string, model?: string) => Promise<unknown>;
-    getConversation: (id: string) => Promise<unknown>;
-    updateConversation: (id: string, updates: { title?: string; model?: string }) => Promise<unknown>;
-    deleteConversation: (id: string) => Promise<boolean>;
-
-    // Messaging
-    sendMessage: (conversationId: string, message: string) => Promise<string>;
-    abortMessage: (conversationId: string) => Promise<void>;
-    getHistory: (conversationId: string) => Promise<unknown[]>;
-    clearMessages: (conversationId: string) => Promise<void>;
-    setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
-
-    // Event listeners
-    onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => () => void;
-    onToolCall: (callback: (data: { conversationId: string; toolCall: unknown }) => void) => () => void;
-    onToolResult: (callback: (data: { conversationId: string; result: unknown }) => void) => () => void;
-    onTitleUpdated: (callback: (data: { conversationId: string; title: string }) => void) => () => void;
-  };
-  on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
-  once: (channel: string, callback: (...args: unknown[]) => void) => void;
-}
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
