@@ -16,7 +16,8 @@
      - Post ID 104: Links and images
      - Post ID 105: Code blocks (inline and fenced)
      - Post ID 106: Blockquotes
-     - Post ID 107: Tables
+     - Post ID 107: Linked images with empty/missing alt
+     - Post ID 108: Line breaks preservation
      
   2. WORDPRESS SHORTCODE/MACRO CONVERSION
      - Post ID 201: [gallery] shortcode → [[gallery]] macro
@@ -292,6 +293,59 @@ with multiple lines</pre>]]></content:encoded>
       <wp:post_modified>2024-01-06 10:00:00</wp:post_modified>
       <wp:post_modified_gmt>2024-01-06 10:00:00</wp:post_modified_gmt>
       <wp:post_name>html-formatting-quotes</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 107: Linked Images with empty/missing alt -->
+    <item>
+      <title>HTML Formatting Test: Linked Images</title>
+      <link>https://testblog.example.com/html-formatting-linked-images/</link>
+      <pubDate>Sun, 07 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>Here is an image inside a link with empty alt (common WordPress pattern):</p>
+<a href="http://example.com/wp-content/uploads/2020/03/full-size.png"><img class="size-medium wp-image-7801 aligncenter" src="http://example.com/wp-content/uploads/2020/03/thumbnail.png" alt="" width="300" height="223" /></a>
+<p>Another linked image with no alt attribute at all:</p>
+<a href="http://example.com/gallery/photo.jpg"><img src="http://example.com/gallery/photo-thumb.jpg" /></a>
+<p>Linked image where link and image src are the same:</p>
+<a href="http://example.com/photo.jpg"><img src="http://example.com/photo.jpg" alt="" /></a>
+<p>For comparison, an image with proper alt inside a link should preserve the alt:</p>
+<a href="http://example.com/about"><img src="http://example.com/logo.png" alt="Company Logo" /></a>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing linked images conversion]]></excerpt:encoded>
+      <wp:post_id>107</wp:post_id>
+      <wp:post_date>2024-01-07 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-07 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-07 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-07 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-linked-images</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+    </item>
+    
+    <!-- Post 108: Line Breaks Preservation -->
+    <item>
+      <title>HTML Formatting Test: Line Breaks</title>
+      <link>https://testblog.example.com/html-formatting-line-breaks/</link>
+      <pubDate>Mon, 08 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[testauthor]]></dc:creator>
+      <category domain="category" nicename="technology"><![CDATA[Technology]]></category>
+      <content:encoded><![CDATA[<p>This paragraph has line breaks
+inside the text that should
+be preserved in markdown.</p>
+<p>Here is another paragraph
+with different content
+on multiple lines.</p>
+<p>Single line paragraph for comparison.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Testing line break preservation]]></excerpt:encoded>
+      <wp:post_id>108</wp:post_id>
+      <wp:post_date>2024-01-08 10:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-08 10:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-08 10:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-08 10:00:00</wp:post_modified_gmt>
+      <wp:post_name>html-formatting-line-breaks</wp:post_name>
       <wp:status>publish</wp:status>
       <wp:post_type>post</wp:post_type>
       <wp:post_parent>0</wp:post_parent>

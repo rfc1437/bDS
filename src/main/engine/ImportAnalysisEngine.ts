@@ -171,6 +171,53 @@ export class ImportAnalysisEngine {
       bulletListMarker: '-',
     });
     
+    // Custom rule for linked images: <a><img></a> -> ![alt](src)
+    // This handles the common WordPress pattern of wrapping thumbnails in links to full-size images
+    this.turndown.addRule('linkedImage', {
+      filter: (node) => {
+        // Match <a> tags that contain only an <img> (possibly with whitespace)
+        if (node.nodeName !== 'A') return false;
+        const children = Array.from(node.childNodes).filter(
+          child => !(child.nodeType === 3 && !child.textContent?.trim())
+        );
+        return children.length === 1 && children[0].nodeName === 'IMG';
+      },
+      replacement: (_content, node) => {
+        const anchor = node as HTMLAnchorElement;
+        const img = anchor.querySelector('img');
+        if (!img) return '';
+
+        const href = anchor.getAttribute('href') || '';
+        const imgSrc = img.getAttribute('src') || '';
+        const imgAlt = img.getAttribute('alt') || '';
+        const imgTitle = img.getAttribute('title') || '';
+
+        // Check if the link href points to an image (common WordPress pattern for "click for larger")
+        const imageExtensions = /\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(\?.*)?$/i;
+        const hrefIsImage = imageExtensions.test(href);
+
+        // Determine which URL to use:
+        // - If href is an image URL (WordPress "click for full-size" pattern), use the href
+        // - Otherwise, use the original image src
+        const imageUrl = hrefIsImage ? href : imgSrc;
+
+        // Derive alt text: use image alt if not empty, otherwise extract filename from the URL
+        let altText = imgAlt.trim();
+        if (!altText) {
+          // Extract filename from the image URL
+          const urlPath = imageUrl.split('?')[0]; // Remove query string
+          const filename = urlPath.split('/').pop() || '';
+          altText = filename;
+        }
+
+        // Build the markdown image link
+        if (imgTitle) {
+          return `![${altText}](${imageUrl} "${imgTitle}")`;
+        }
+        return `![${altText}](${imageUrl})`;
+      },
+    });
+    
     // Load macro definitions from shared config
     this.loadMacroConfigsFromShared();
   }
@@ -482,7 +529,28 @@ export class ImportAnalysisEngine {
 
   private convertToMarkdown(html: string): string {
     if (!html || !html.trim()) return '';
-    return this.turndown.turndown(html);
+    // Preprocess: Convert newlines within text to <br> tags to preserve line breaks
+    const preprocessed = this.preserveLineBreaks(html);
+    return this.turndown.turndown(preprocessed);
+  }
+
+  /**
+   * Preserve line breaks in HTML content by converting \n to <br> tags
+   * Only converts newlines that appear within meaningful text content,
+   * not newlines that are just whitespace between tags
+   */
+  private preserveLineBreaks(html: string): string {
+    // Convert newlines that appear within text content (between > and <)
+    // But only if the text content has actual content before or after the newline
+    return html.replace(/>([^<]+)</g, (_match, textContent: string) => {
+      // Skip if the text content is only whitespace (just formatting between tags)
+      if (!textContent.trim()) {
+        return '>' + textContent + '<';
+      }
+      // Replace all newlines with <br> (the text has actual content)
+      const preserved = textContent.replace(/\n/g, '<br>');
+      return '>' + preserved + '<';
+    });
   }
 
   private calculateChecksum(content: string): string {
