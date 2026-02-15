@@ -62,6 +62,7 @@ function createSelectChain(mockData: any[] = []) {
 let insertedValues: any[] = [];
 let updateCalls: any[] = [];
 let deleteCalled = false;
+let deleteCallCount = 0;
 let selectMockData: any[] = [];
 
 function createDrizzleMock() {
@@ -87,6 +88,7 @@ function createDrizzleMock() {
     delete: vi.fn(() => ({
       where: vi.fn(() => {
         deleteCalled = true;
+        deleteCallCount++;
         return Promise.resolve();
       }),
     })),
@@ -126,6 +128,7 @@ describe('PostMediaEngine', () => {
     insertedValues = [];
     updateCalls = [];
     deleteCalled = false;
+    deleteCallCount = 0;
     selectMockData = [];
     resetMockCounters();
     
@@ -236,6 +239,7 @@ describe('PostMediaEngine', () => {
       await engine.unlinkMediaFromPost(postId, mediaId);
 
       expect(deleteCalled).toBe(true);
+      expect(deleteCallCount).toBe(1);
     });
 
     it('should update media sidecar to remove postId', async () => {
@@ -407,6 +411,7 @@ describe('PostMediaEngine', () => {
       expect(result.unlinked).toHaveLength(3);
       // deleteCalled flag is set to true when any delete is called
       expect(deleteCalled).toBe(true);
+      expect(deleteCallCount).toBe(3);
     });
 
     it('should emit mediaBatchUnlinked event once at the end', async () => {
@@ -473,6 +478,7 @@ describe('PostMediaEngine', () => {
       const result = await engine.unlinkManyFromPost(postId, mediaIds);
 
       expect(result.unlinked).toEqual(['media-1', 'media-2']);
+      expect(deleteCallCount).toBe(2);
       expect(mockUpdateMedia).toHaveBeenCalledTimes(2);
     });
   });

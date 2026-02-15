@@ -192,7 +192,10 @@ export class TagEngine extends EventEmitter {
     tagName: string,
     transform: (postTags: string[]) => string[]
   ): Promise<{ total: number; process: (onEachUpdated: (updated: number, total: number) => void) => Promise<number> }> {
-    const postsToUpdate = await this.queryPostsContainingTag(tagName);
+    const rawPostsToUpdate = await this.queryPostsContainingTag(tagName);
+    const postsToUpdate = Array.from(
+      new Map(rawPostsToUpdate.map((row) => [row.postId, row])).values()
+    );
     const total = postsToUpdate.length;
 
     return {

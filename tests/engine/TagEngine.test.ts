@@ -302,6 +302,24 @@ describe('TagEngine', () => {
 
       await expect(tagEngine.deleteTag('non-existent')).rejects.toThrow('Tag not found');
     });
+
+    it('should only update each post once when query returns duplicate rows', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { id: 'post-1', tags: '["react", "typescript"]' },
+          { id: 'post-1', tags: '["react", "typescript"]' },
+        ],
+      });
+
+      const result = await tagEngine.deleteTag('tag-1');
+
+      expect(result.postsUpdated).toBe(1);
+      expect(mockPostEngine.syncPublishedPostFile).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('mergeTags', () => {
@@ -402,6 +420,25 @@ describe('TagEngine', () => {
         oldName: 'old-name',
         newName: 'new-name',
       }));
+    });
+
+    it('should only update each post once when query returns duplicate rows', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'old-name', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [], // no duplicate target tag
+      ];
+
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { id: 'post-1', tags: '["old-name"]' },
+          { id: 'post-1', tags: '["old-name"]' },
+        ],
+      });
+
+      const result = await tagEngine.renameTag('tag-1', 'new-name');
+
+      expect(result.postsUpdated).toBe(1);
+      expect(mockPostEngine.syncPublishedPostFile).toHaveBeenCalledTimes(1);
     });
   });
 
