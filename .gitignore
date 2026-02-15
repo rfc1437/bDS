@@ -92,6 +92,9 @@ crash-reports/
 # Testing
 # ===================
 coverage/
+.jscpd-report/
+.jscpd-report-*/
+.jscpd*.json
 .nyc_output/
 *.lcov
 test-results/
