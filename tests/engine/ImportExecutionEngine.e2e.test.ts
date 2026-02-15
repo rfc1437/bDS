@@ -52,7 +52,7 @@ const insertedPosts: Array<{
 const insertedMedia: Array<{
   id: string;
   linkedPostIds: string[];
-  caption?: string;
+  title?: string;
 }> = [];
 
 const createdTags: string[] = [];
@@ -167,7 +167,7 @@ const mockMediaEngine = {
       id: `media-${Math.random().toString(36).substr(2, 9)}`,
       filename: path.basename(sourcePath),
       originalName: metadata?.originalName || path.basename(sourcePath),
-      caption: metadata?.caption,
+      title: metadata?.title,
       linkedPostIds: metadata?.linkedPostIds || [],
     };
     insertedMedia.push(result);
@@ -1044,9 +1044,9 @@ describe('ImportExecutionEngine E2E Tests', () => {
 
       expect(result.media.imported).toBe(1);
 
-      // Should be imported with caption from WXR title
+      // Should be imported with title from WXR title
       expect(insertedMedia.length).toBe(1);
-      expect(insertedMedia[0].caption).toBe('standalone-logo');
+      expect(insertedMedia[0].title).toBe('standalone-logo');
 
       // No linked posts (standalone)
       expect(insertedMedia[0].linkedPostIds.length).toBe(0);

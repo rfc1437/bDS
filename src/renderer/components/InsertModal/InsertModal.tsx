@@ -11,17 +11,17 @@ interface PostSearchResult {
 interface MediaSearchResult {
   id: string;
   originalName: string;
-  caption?: string;
+  title?: string;
   mimeType: string;
   createdAt: string;
 }
 
-/** Get display name for media: caption (truncated to 60 chars) or fallback to filename */
+/** Get display name for media: title (truncated to 60 chars) or fallback to filename */
 function getMediaDisplayName(media: MediaSearchResult): string {
-  if (media.caption) {
-    return media.caption.length > 60 
-      ? media.caption.substring(0, 60) + '...' 
-      : media.caption;
+  if (media.title) {
+    return media.title.length > 60 
+      ? media.title.substring(0, 60) + '...' 
+      : media.title;
   }
   return media.originalName;
 }
@@ -187,7 +187,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   const externalLabel = mode === 'link' ? 'External URL' : 'External Image';
   const searchPlaceholder = mode === 'link' 
     ? 'Search posts by title or content...' 
-    : 'Search media by name, caption, or alt text...';
+    : 'Search media by name, title, or alt text...';
 
   return (
     <div className="insert-modal-backdrop" onClick={handleBackdropClick}>

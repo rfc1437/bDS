@@ -54,6 +54,7 @@ export const media = sqliteTable('media', {
   size: integer('size').notNull(),
   width: integer('width'),
   height: integer('height'),
+  title: text('title'),
   alt: text('alt'),
   caption: text('caption'),
   filePath: text('file_path').notNull(),

@@ -573,7 +573,7 @@ export class ImportExecutionEngine extends EventEmitter {
     // Import the media file
     const mediaEngine = getMediaEngine();
     await mediaEngine.importMedia(sourcePath, {
-      caption: wxrMedia.title || undefined,
+      title: wxrMedia.title || undefined,
       alt: wxrMedia.description || undefined,
       mimeType: wxrMedia.mimeType,
       tags: [],

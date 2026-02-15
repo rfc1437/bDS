@@ -1016,7 +1016,7 @@ describe('ImportExecutionEngine', () => {
       );
     });
 
-    it('should set caption from WXR title', async () => {
+    it('should set title from WXR title', async () => {
       const wxrMedia = createMockWxrMedia({ title: 'Beautiful Sunset' });
       const report = createMockAnalysisReport({
         media: {
@@ -1035,7 +1035,7 @@ describe('ImportExecutionEngine', () => {
       expect(mockMediaEngine.importMedia).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          caption: 'Beautiful Sunset',
+          title: 'Beautiful Sunset',
         })
       );
     });

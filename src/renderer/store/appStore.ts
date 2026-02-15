@@ -54,6 +54,7 @@ export interface MediaData {
   size: number;
   width?: number;
   height?: number;
+  title?: string;
   alt?: string;
   caption?: string;
   createdAt: string;

@@ -313,7 +313,7 @@ Available Tools:
 - list_media: List media files with optional MIME type filtering.
 - view_image: View an image to analyze its visual content. Use this when you need to describe or analyze what an image looks like.
 - update_post_metadata: Update a post's title, excerpt, tags, or categories.
-- update_media_metadata: Update a media file's alt text, caption, or tags.
+- update_media_metadata: Update a media file's title, alt text, caption, or tags.
 - list_tags: List all tags with post counts.
 - list_categories: List all categories with post counts.
 - get_post_backlinks: Get posts that link TO a given post (backlinks). Use to discover what references a post.

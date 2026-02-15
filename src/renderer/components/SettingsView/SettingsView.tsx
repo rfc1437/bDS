@@ -329,7 +329,7 @@ export const SettingsView: React.FC = () => {
       <SettingRow
         id="project-language"
         label="Main Language"
-        description="The primary language for your blog content. AI-generated alt text and captions will use this language."
+        description="The primary language for your blog content. AI-generated titles, alt text, and captions will use this language."
       >
         <select
           id="project-language"
