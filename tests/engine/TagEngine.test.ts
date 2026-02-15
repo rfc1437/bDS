@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TagEngine, TagData, TagWithCount, MergeTagsResult, DeleteTagResult } from '../../src/main/engine/TagEngine';
 import { resetMockCounters } from '../utils/factories';
+import { getDatabase } from '../../src/main/database';
 
 // Create mock data stores
 const mockTags = new Map<string, any>();
@@ -485,6 +486,165 @@ describe('TagEngine', () => {
       const result = await tagEngine.syncTagsFromPosts();
 
       expect(result.discovered).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('loadTagsFromFile', () => {
+    it('should load tags from filesystem in portable format', async () => {
+      // Mock fs.readFile to return valid JSON
+      const fs = await import('fs/promises');
+      vi.mocked(fs.readFile).mockResolvedValueOnce(
+        JSON.stringify([
+          { name: 'tag1', color: '#ff0000' },
+          { name: 'tag2' },
+        ])
+      );
+
+      // Mock select to return empty (no existing tags)
+      mockSelectDataQueue = [[], []];
+
+      await tagEngine.loadTagsFromFile();
+
+      // Verify insert was called for the new tags
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should handle ENOENT error gracefully (file not found)', async () => {
+      const fs = await import('fs/promises');
+      const error = new Error('ENOENT');
+      (error as NodeJS.ErrnoException).code = 'ENOENT';
+      vi.mocked(fs.readFile).mockRejectedValueOnce(error);
+
+      // Should not throw
+      await expect(tagEngine.loadTagsFromFile()).resolves.toBeUndefined();
+    });
+
+    it('should log non-ENOENT errors when loading', async () => {
+      const fs = await import('fs/promises');
+      const error = new Error('Permission denied');
+      (error as NodeJS.ErrnoException).code = 'EACCES';
+      vi.mocked(fs.readFile).mockRejectedValueOnce(error);
+
+      // Should not throw, but should log error
+      await expect(tagEngine.loadTagsFromFile()).resolves.toBeUndefined();
+    });
+
+    it('should skip tags with empty names', async () => {
+      const fs = await import('fs/promises');
+      vi.mocked(fs.readFile).mockResolvedValueOnce(
+        JSON.stringify([
+          { name: '' },
+          { name: '  ' },
+          { name: 'valid' },
+        ])
+      );
+
+      mockSelectDataQueue = [[]]; // no existing tags
+
+      await tagEngine.loadTagsFromFile();
+
+      // Only 'valid' should be processed
+      const insertedTags = mockLocalDb.insert.mock.calls;
+      expect(insertedTags.length).toBeGreaterThan(0);
+    });
+
+    it('should update color for existing tag when loading', async () => {
+      const fs = await import('fs/promises');
+      vi.mocked(fs.readFile).mockResolvedValueOnce(
+        JSON.stringify([
+          { name: 'existing-tag', color: '#ff0000' },
+        ])
+      );
+
+      // Existing tag found
+      mockSelectDataQueue = [[{ id: 'tag-1' }]];
+
+      await tagEngine.loadTagsFromFile();
+
+      // Should update existing tag with color
+      expect(mockLocalDb.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('renameTag error cases', () => {
+    it('should throw error when new name is empty', async () => {
+      await expect(tagEngine.renameTag('tag-1', '')).rejects.toThrow('New name is required');
+    });
+
+    it('should throw error when new name is whitespace only', async () => {
+      await expect(tagEngine.renameTag('tag-1', '   ')).rejects.toThrow('New name is required');
+    });
+
+    it('should throw error when tag not found', async () => {
+      mockSelectDataDefault = [];
+      await expect(tagEngine.renameTag('non-existent', 'new-name')).rejects.toThrow('Tag not found');
+    });
+
+    it('should return success with 0 posts updated when renaming to same name', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'same-name', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+
+      const result = await tagEngine.renameTag('tag-1', 'same-name');
+
+      expect(result.success).toBe(true);
+      expect(result.postsUpdated).toBe(0);
+      expect(result.oldName).toBe('same-name');
+      expect(result.newName).toBe('same-name');
+    });
+
+    it('should throw error when target name already exists', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'old-name', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-2' }], // duplicate found
+      ];
+
+      await expect(tagEngine.renameTag('tag-1', 'existing-name')).rejects.toThrow('already exists');
+    });
+  });
+
+  describe('getPostsWithTag edge cases', () => {
+    it('should return empty array when tag not found', async () => {
+      mockSelectDataQueue = [[]]; // tag not found
+
+      const result = await tagEngine.getPostsWithTag('non-existent-tag');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array when client is not available', async () => {
+      // Store original mock implementation
+      const originalMock = vi.mocked(getDatabase).getMockImplementation();
+      
+      // Mock getClient to return null
+      vi.mocked(getDatabase).mockReturnValue({
+        getLocal: vi.fn(() => mockLocalDb),
+        getLocalClient: vi.fn().mockReturnValue(null),
+      } as any);
+
+      const result = await tagEngine.getPostsWithTag('tag-1');
+
+      expect(result).toEqual([]);
+      
+      // Restore original mock
+      if (originalMock) {
+        vi.mocked(getDatabase).mockImplementation(originalMock);
+      } else {
+        // Restore to standard mock
+        vi.mocked(getDatabase).mockReturnValue({
+          getLocal: vi.fn(() => mockLocalDb),
+          getLocalClient: vi.fn(() => mockLocalClient),
+          getRemote: vi.fn(() => null),
+          getDataPaths: vi.fn(() => ({
+            database: '/mock/userData/bds.db',
+            posts: '/mock/userData/posts',
+            media: '/mock/userData/media',
+          })),
+          initializeLocal: vi.fn(),
+          initializeRemote: vi.fn(),
+          close: vi.fn(),
+        } as any);
+      }
     });
   });
 });
