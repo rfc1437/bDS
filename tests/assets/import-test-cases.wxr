@@ -312,7 +312,9 @@ with multiple lines</pre>]]></content:encoded>
 <p>Linked image where link and image src are the same:</p>
 <a href="http://example.com/photo.jpg"><img src="http://example.com/photo.jpg" alt="" /></a>
 <p>For comparison, an image with proper alt inside a link should preserve the alt:</p>
-<a href="http://example.com/about"><img src="http://example.com/logo.png" alt="Company Logo" /></a>]]></content:encoded>
+<a href="http://example.com/about"><img src="http://example.com/logo.png" alt="Company Logo" /></a>
+<p>Image with title but empty alt should use title as alt text:</p>
+<a href="http://example.com/wp-content/uploads/2020/03/dish.jpg"><img src="http://example.com/wp-content/uploads/2020/03/dish-thumb.jpg" alt="" title="Delicious Piroggen" /></a>]]></content:encoded>
       <excerpt:encoded><![CDATA[Testing linked images conversion]]></excerpt:encoded>
       <wp:post_id>107</wp:post_id>
       <wp:post_date>2024-01-07 10:00:00</wp:post_date>
