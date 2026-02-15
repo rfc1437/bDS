@@ -326,6 +326,43 @@ export function registerIpcHandlers(): void {
     return engine.updateMedia(id, data);
   });
 
+  safeHandle('media:replaceFile', async (_, id: string, newSourcePath: string) => {
+    const engine = getMediaEngine();
+    return engine.replaceMediaFile(id, newSourcePath);
+  });
+
+  safeHandle('media:replaceFileDialog', async (_, id: string) => {
+    // Get the current media to determine file type filter
+    const engine = getMediaEngine();
+    const currentMedia = await engine.getMedia(id);
+    if (!currentMedia) {
+      return null;
+    }
+
+    // Build filter based on current media type
+    let filters: { name: string; extensions: string[] }[] = [];
+    if (currentMedia.mimeType.startsWith('image/')) {
+      filters = [
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'] },
+        { name: 'All Files', extensions: ['*'] },
+      ];
+    } else {
+      filters = [{ name: 'All Files', extensions: ['*'] }];
+    }
+
+    const result = await dialog.showOpenDialog({
+      title: 'Replace Media File',
+      filters,
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    return engine.replaceMediaFile(id, result.filePaths[0]);
+  });
+
   safeHandle('media:delete', async (_, id: string) => {
     const engine = getMediaEngine();
     return engine.deleteMedia(id);
@@ -979,6 +1016,7 @@ export function registerIpcHandlers(): void {
   mediaEngine.on('mediaImported', forwardEvent('media:imported'));
   mediaEngine.on('mediaUpdated', forwardEvent('media:updated'));
   mediaEngine.on('mediaDeleted', forwardEvent('media:deleted'));
+  mediaEngine.on('mediaFileReplaced', forwardEvent('media:fileReplaced'));
   mediaEngine.on('rebuildStarted', forwardEvent('media:rebuildStarted'));
   mediaEngine.on('databaseRebuilt', forwardEvent('media:databaseRebuilt'));
 

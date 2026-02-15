@@ -1644,6 +1644,25 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     }
   };
 
+  const handleReplaceFile = async () => {
+    try {
+      const updated = await window.electronAPI?.media.replaceFileDialog(item.id);
+      if (updated) {
+        updateMedia(item.id, updated as Partial<typeof item>);
+        showToast.success('File replaced (thumbnails regenerated)');
+      }
+      // null means user cancelled or file unchanged - no action needed
+    } catch (error) {
+      console.error('Failed to replace media file:', error);
+      const err = error as Error;
+      showErrorModal({
+        title: 'Replace Failed',
+        message: err.message || 'Failed to replace media file',
+        stack: err.stack,
+      });
+    }
+  };
+
   const handleDelete = async () => {
     try {
       // Fetch posts that link to this media
@@ -1735,6 +1754,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
               )}
             </div>
           )}
+          <button onClick={handleReplaceFile} className="secondary">Replace File</button>
           <button onClick={handleSave}>Save</button>
           <button onClick={handleDelete} className="secondary danger">Delete</button>
         </div>
@@ -1745,7 +1765,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           {item.mimeType.startsWith('image/') ? (
             <div className="media-preview-image">
               <img 
-                src={`bds-media://${item.id}`} 
+                src={`bds-media://${item.id}?t=${item.updatedAt instanceof Date ? item.updatedAt.getTime() : item.updatedAt}`} 
                 alt={item.alt || item.originalName}
                 onError={(e) => {
                   // Fallback to placeholder if image fails to load

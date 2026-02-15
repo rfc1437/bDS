@@ -480,11 +480,22 @@ describe('MetaEngine', () => {
     });
 
     it('should throw non-ENOENT errors when loading project metadata', async () => {
+      // Spy on console.error to suppress expected error output
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
       // Mock readFile to throw a non-ENOENT error
       const originalReadFile = vi.mocked(fs.readFile);
       originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Permission denied'), { code: 'EACCES' }));
       
       await expect(metaEngine.loadProjectMetadata()).rejects.toThrow('Permission denied');
+      
+      // Verify error was logged before rethrowing
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[MetaEngine] Failed to load project metadata:',
+        expect.any(Error)
+      );
+      
+      consoleErrorSpy.mockRestore();
     });
 
     it('should handle ENOENT error when loading categories (no file)', async () => {
@@ -496,11 +507,22 @@ describe('MetaEngine', () => {
     });
 
     it('should throw non-ENOENT errors when loading categories', async () => {
+      // Spy on console.error to suppress expected error output
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
       // Mock readFile to throw a non-ENOENT error
       const originalReadFile = vi.mocked(fs.readFile);
       originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Disk full'), { code: 'ENOSPC' }));
       
       await expect(metaEngine.loadCategories()).rejects.toThrow('Disk full');
+      
+      // Verify error was logged before rethrowing
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[MetaEngine] Failed to load categories:',
+        expect.any(Error)
+      );
+      
+      consoleErrorSpy.mockRestore();
     });
 
     it('should emit projectMetadataChanged event when metadata is modified', async () => {

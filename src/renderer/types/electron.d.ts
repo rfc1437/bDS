@@ -302,6 +302,8 @@ export interface ElectronAPI {
     import: (sourcePath: string, metadata?: Partial<MediaData>) => Promise<MediaData>;
     importDialog: () => Promise<MediaData[]>;
     update: (id: string, data: Partial<MediaData>) => Promise<MediaData | null>;
+    replaceFile: (id: string, newSourcePath: string) => Promise<MediaData | null>;
+    replaceFileDialog: (id: string) => Promise<MediaData | null>;
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<MediaData | null>;
     getUrl: (id: string) => Promise<string | null>;

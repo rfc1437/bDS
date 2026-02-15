@@ -237,10 +237,19 @@ describe('MediaEngine', () => {
   });
 
   describe('Media Import', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+    
     beforeEach(() => {
+      // Spy on console.error to suppress expected error output (sharp can't read mock files)
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
       // Setup a source file for import
       const imageBuffer = Buffer.from('fake-image-data');
       mockFiles.set('/source/image.jpg', imageBuffer);
+    });
+    
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
     });
 
     it('should import media from source path', async () => {
@@ -1434,6 +1443,9 @@ tags: ["nature", "sunset"]`;
     it('should skip non-image media', async () => {
       const fs = await import('fs/promises');
       
+      // Spy on console.error to suppress expected error output
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
         const chain = createSelectChain();
         chain.where = vi.fn().mockReturnValue({
@@ -1455,6 +1467,14 @@ tags: ["nature", "sunset"]`;
         call => String(call[0]).includes('thumbnail')
       );
       expect(thumbnailWrites).toHaveLength(0);
+      
+      // Verify error was logged (graceful degradation behavior)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to generate thumbnails:',
+        expect.any(Error)
+      );
+      
+      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -1495,6 +1515,259 @@ tags: ["nature", "sunset"]`;
       expect(paths.small).toContain(`${mediaId}-small.webp`);
       expect(paths.medium).toBeNull();
       expect(paths.large).toBeNull();
+    });
+  });
+
+  describe('replaceMediaFile', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+    
+    beforeEach(() => {
+      // Spy on console.error to suppress expected error output (sharp can't read mock files)
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+    
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should return null for non-existent media', async () => {
+      // Mock database to return nothing
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(undefined),
+        });
+        return chain;
+      });
+
+      const result = await mediaEngine.replaceMediaFile('non-existent-id', '/source/new-image.jpg');
+      expect(result).toBeNull();
+    });
+
+    it('should replace file and update database when checksum differs', async () => {
+      const fs = await import('fs/promises');
+
+      // Spy on console.error to suppress expected error output (sharp can't read mock file)
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Setup new source file with different content
+      const newImageBuffer = Buffer.from('new-image-data-different');
+      mockFiles.set('/source/new-image.jpg', newImageBuffer);
+
+      // Setup existing media in database with different checksum
+      const existingMedia = {
+        id: 'media-id-123',
+        projectId: 'default',
+        filename: 'media-id-123.jpg',
+        originalName: 'original.jpg',
+        mimeType: 'image/jpeg',
+        size: 100,
+        width: 800,
+        height: 600,
+        filePath: '/mock/media/2025/01/media-id-123.jpg',
+        sidecarPath: '/mock/media/2025/01/media-id-123.jpg.meta',
+        createdAt: new Date('2025-01-15'),
+        updatedAt: new Date('2025-01-15'),
+        checksum: 'old-checksum',
+        tags: '[]',
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingMedia),
+        });
+        return chain;
+      });
+
+      // Clear any previous mock calls
+      vi.mocked(fs.copyFile).mockClear();
+
+      const result = await mediaEngine.replaceMediaFile('media-id-123', '/source/new-image.jpg');
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('media-id-123');
+      // File should be copied to the existing location
+      expect(fs.copyFile).toHaveBeenCalledWith('/source/new-image.jpg', existingMedia.filePath);
+      
+      // Verify error was logged (graceful degradation for image dimensions)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to get image dimensions:',
+        expect.any(Error)
+      );
+      
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should not replace file when checksum is the same', async () => {
+      const fs = await import('fs/promises');
+      const crypto = await import('crypto');
+
+      // Create content that we know the checksum of
+      const imageBuffer = Buffer.from('same-content');
+      const checksum = crypto.createHash('md5').update(imageBuffer).digest('hex');
+      mockFiles.set('/source/same-image.jpg', imageBuffer);
+
+      // Setup existing media with same checksum
+      const existingMedia = {
+        id: 'media-id-456',
+        projectId: 'default',
+        filename: 'media-id-456.jpg',
+        originalName: 'original.jpg',
+        mimeType: 'image/jpeg',
+        size: imageBuffer.length,
+        width: 800,
+        height: 600,
+        filePath: '/mock/media/2025/01/media-id-456.jpg',
+        sidecarPath: '/mock/media/2025/01/media-id-456.jpg.meta',
+        createdAt: new Date('2025-01-15'),
+        updatedAt: new Date('2025-01-15'),
+        checksum: checksum, // Same checksum as the source file
+        tags: '[]',
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingMedia),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.copyFile).mockClear();
+
+      const result = await mediaEngine.replaceMediaFile('media-id-456', '/source/same-image.jpg');
+
+      // Should return null because file hasn't changed
+      expect(result).toBeNull();
+      // File should NOT be copied
+      expect(fs.copyFile).not.toHaveBeenCalled();
+    });
+
+    it('should emit mediaFileReplaced event when file is replaced', async () => {
+      const fs = await import('fs/promises');
+
+      const newImageBuffer = Buffer.from('event-test-data');
+      mockFiles.set('/source/event-test.jpg', newImageBuffer);
+
+      const existingMedia = {
+        id: 'media-event-id',
+        projectId: 'default',
+        filename: 'media-event-id.jpg',
+        originalName: 'original.jpg',
+        mimeType: 'image/jpeg',
+        size: 100,
+        width: 800,
+        height: 600,
+        filePath: '/mock/media/2025/01/media-event-id.jpg',
+        sidecarPath: '/mock/media/2025/01/media-event-id.jpg.meta',
+        createdAt: new Date('2025-01-15'),
+        updatedAt: new Date('2025-01-15'),
+        checksum: 'different-checksum',
+        tags: '[]',
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingMedia),
+        });
+        return chain;
+      });
+
+      const eventHandler = vi.fn();
+      mediaEngine.on('mediaFileReplaced', eventHandler);
+
+      await mediaEngine.replaceMediaFile('media-event-id', '/source/event-test.jpg');
+
+      expect(eventHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'media-event-id' })
+      );
+    });
+
+    it('should call generateThumbnails for image files when checksum differs', async () => {
+      const newImageBuffer = Buffer.from('thumbnail-test-data');
+      mockFiles.set('/source/thumb-test.jpg', newImageBuffer);
+
+      const existingMedia = {
+        id: 'media-thumb-id',
+        projectId: 'default',
+        filename: 'media-thumb-id.jpg',
+        originalName: 'original.jpg',
+        mimeType: 'image/jpeg',
+        size: 100,
+        width: 800,
+        height: 600,
+        filePath: '/mock/media/2025/01/media-thumb-id.jpg',
+        sidecarPath: '/mock/media/2025/01/media-thumb-id.jpg.meta',
+        createdAt: new Date('2025-01-15'),
+        updatedAt: new Date('2025-01-15'),
+        checksum: 'old-checksum-different',
+        tags: '[]',
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingMedia),
+        });
+        return chain;
+      });
+
+      // Spy on generateThumbnails
+      const generateThumbnailsSpy = vi.spyOn(mediaEngine, 'generateThumbnails').mockResolvedValue({
+        small: '/mock/thumbnails/media-thumb-id-small.webp',
+        medium: '/mock/thumbnails/media-thumb-id-medium.webp',
+        large: '/mock/thumbnails/media-thumb-id-large.webp',
+      });
+
+      await mediaEngine.replaceMediaFile('media-thumb-id', '/source/thumb-test.jpg');
+
+      expect(generateThumbnailsSpy).toHaveBeenCalledWith('media-thumb-id', existingMedia.filePath);
+
+      generateThumbnailsSpy.mockRestore();
+    });
+
+    it('should not generate thumbnails for non-image files', async () => {
+      const pdfBuffer = Buffer.from('pdf-content');
+      mockFiles.set('/source/document.pdf', pdfBuffer);
+
+      const existingMedia = {
+        id: 'media-pdf-id',
+        projectId: 'default',
+        filename: 'media-pdf-id.pdf',
+        originalName: 'document.pdf',
+        mimeType: 'application/pdf',
+        size: 100,
+        filePath: '/mock/media/2025/01/media-pdf-id.pdf',
+        sidecarPath: '/mock/media/2025/01/media-pdf-id.pdf.meta',
+        createdAt: new Date('2025-01-15'),
+        updatedAt: new Date('2025-01-15'),
+        checksum: 'old-pdf-checksum',
+        tags: '[]',
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(existingMedia),
+        });
+        return chain;
+      });
+
+      const generateThumbnailsSpy = vi.spyOn(mediaEngine, 'generateThumbnails');
+
+      await mediaEngine.replaceMediaFile('media-pdf-id', '/source/document.pdf');
+
+      expect(generateThumbnailsSpy).not.toHaveBeenCalled();
+
+      generateThumbnailsSpy.mockRestore();
     });
   });
 });

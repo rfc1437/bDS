@@ -611,6 +611,78 @@ export class MediaEngine extends EventEmitter {
     return updated;
   }
 
+  /**
+   * Replace the actual file content for an existing media item.
+   * This will:
+   * - Check if the new file has a different checksum
+   * - Replace the file if checksum differs
+   * - Update size, dimensions (for images), and checksum in database
+   * - Regenerate thumbnails for images
+   * 
+   * @returns The updated MediaData if file was replaced, null if media not found or checksum unchanged
+   */
+  async replaceMediaFile(id: string, newSourcePath: string): Promise<MediaData | null> {
+    const db = getDatabase().getLocal();
+    const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
+    
+    if (!dbMedia) {
+      return null;
+    }
+
+    // Read the new source file
+    const newBuffer = await fs.readFile(newSourcePath);
+    const newChecksum = this.calculateChecksum(newBuffer);
+
+    // If checksum is the same, no need to replace
+    if (dbMedia.checksum === newChecksum) {
+      return null;
+    }
+
+    // Copy new file to existing location
+    await fs.copyFile(newSourcePath, dbMedia.filePath);
+
+    // Get new dimensions for images
+    let width = dbMedia.width;
+    let height = dbMedia.height;
+    if (dbMedia.mimeType.startsWith('image/') && !dbMedia.mimeType.includes('svg')) {
+      try {
+        const sharp = (await import('sharp')).default;
+        const imageMetadata = await sharp(dbMedia.filePath).metadata();
+        width = imageMetadata.width ?? width;
+        height = imageMetadata.height ?? height;
+      } catch (error) {
+        console.error('Failed to get image dimensions:', error);
+      }
+    }
+
+    const now = new Date();
+
+    // Update database
+    await db.update(media)
+      .set({
+        size: newBuffer.length,
+        width,
+        height,
+        checksum: newChecksum,
+        updatedAt: now,
+      })
+      .where(eq(media.id, id));
+
+    // Regenerate thumbnails for images
+    if (dbMedia.mimeType.startsWith('image/') && !dbMedia.mimeType.includes('svg')) {
+      // Await thumbnail generation to ensure it completes before returning
+      await this.generateThumbnails(id, dbMedia.filePath);
+    }
+
+    // Get the updated media data
+    const updated = await this.getMedia(id);
+    if (updated) {
+      this.emit('mediaFileReplaced', updated);
+    }
+
+    return updated;
+  }
+
   async deleteMedia(id: string): Promise<boolean> {
     const db = getDatabase().getLocal();
     const existing = await db.select().from(media).where(eq(media.id, id)).get();

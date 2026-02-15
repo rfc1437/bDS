@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     import: (sourcePath: string, metadata?: unknown) => ipcRenderer.invoke('media:import', sourcePath, metadata),
     importDialog: () => ipcRenderer.invoke('media:importDialog'),
     update: (id: string, data: unknown) => ipcRenderer.invoke('media:update', id, data),
+    replaceFile: (id: string, newSourcePath: string) => ipcRenderer.invoke('media:replaceFile', id, newSourcePath),
+    replaceFileDialog: (id: string) => ipcRenderer.invoke('media:replaceFileDialog', id),
     delete: (id: string) => ipcRenderer.invoke('media:delete', id),
     get: (id: string) => ipcRenderer.invoke('media:get', id),
     getUrl: (id: string) => ipcRenderer.invoke('media:getUrl', id),
