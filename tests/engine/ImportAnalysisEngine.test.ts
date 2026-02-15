@@ -805,8 +805,8 @@ describe('ImportAnalysisEngine', () => {
 
       const report = await engine.analyzeWxr(wxrData, '/test.xml');
 
-      // Should use title as alt text and include title in markdown
-      expect(report.posts.items[0].markdownPreview).toContain('![My Title](http://example.com/full.jpg "My Title")');
+      // Should use title as alt text (but not include title in markdown - cleaner output)
+      expect(report.posts.items[0].markdownPreview).toContain('![My Title](http://example.com/full.jpg)');
     });
 
     it('should extract filename as alt text when both alt and title are empty', async () => {

@@ -169,6 +169,7 @@ export class ImportAnalysisEngine {
       headingStyle: 'atx',
       codeBlockStyle: 'fenced',
       bulletListMarker: '-',
+      emDelimiter: '*',
     });
 
     // Custom rule for list items: use single space after marker instead of multiple spaces

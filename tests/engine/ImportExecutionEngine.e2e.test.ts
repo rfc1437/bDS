@@ -440,13 +440,14 @@ describe('ImportExecutionEngine E2E Tests', () => {
 
       // Linked image with empty alt should become a plain image with filename-derived alt
       // The link target is the full-size image, so use that for the image src
-      expect(content).toContain('![full-size.png](http://example.com/wp-content/uploads/2020/03/full-size.png)');
+      // Note: extension is stripped from alt text for cleaner output
+      expect(content).toContain('![full-size](http://example.com/wp-content/uploads/2020/03/full-size.png)');
 
       // Linked image with no alt attribute (link and image different)
-      expect(content).toContain('![photo.jpg](http://example.com/gallery/photo.jpg)');
+      expect(content).toContain('![photo](http://example.com/gallery/photo.jpg)');
 
       // Linked image where link and src are the same
-      expect(content).toContain('![photo.jpg](http://example.com/photo.jpg)');
+      expect(content).toContain('![photo](http://example.com/photo.jpg)');
 
       // Image with proper alt inside link should preserve the alt text
       expect(content).toContain('![Company Logo](http://example.com/logo.png)');
