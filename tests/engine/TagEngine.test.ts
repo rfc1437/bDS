@@ -124,10 +124,12 @@ vi.mock('../../src/main/engine/TaskManager', () => ({
 }));
 
 // Mock PostEngine - only mock the syncPublishedPostFile method used by TagEngine
+const mockPostEngine = {
+  syncPublishedPostFile: vi.fn(async () => true),
+};
+
 vi.mock('../../src/main/engine/PostEngine', () => ({
-  getPostEngine: vi.fn(() => ({
-    syncPublishedPostFile: vi.fn(async () => true),
-  })),
+  getPostEngine: vi.fn(() => mockPostEngine),
 }));
 
 describe('TagEngine', () => {
@@ -140,6 +142,7 @@ describe('TagEngine', () => {
     mockExecuteArgs = [];
     mockSelectDataQueue = [];
     mockSelectDataDefault = [];
+    mockPostEngine.syncPublishedPostFile.mockClear();
     resetMockCounters();
     tagEngine = new TagEngine();
   });
@@ -347,6 +350,23 @@ describe('TagEngine', () => {
       ];
 
       await expect(tagEngine.mergeTags(['tag-1'], 'non-existent')).rejects.toThrow('Target tag not found');
+    });
+
+    it('should only update each post once when multiple source tags exist on the same post', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'js', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-2', name: 'javascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-3', name: 'ecmascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+
+      mockLocalClient.execute
+        .mockResolvedValueOnce({ rows: [{ id: 'post-1', tags: '["js", "javascript"]' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'post-1', tags: '["js", "javascript"]' }] });
+
+      const result = await tagEngine.mergeTags(['tag-1', 'tag-2'], 'tag-3');
+
+      expect(result.postsUpdated).toBe(1);
+      expect(mockPostEngine.syncPublishedPostFile).toHaveBeenCalledTimes(1);
     });
   });
 

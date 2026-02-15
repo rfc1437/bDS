@@ -137,6 +137,81 @@ export class TagEngine extends EventEmitter {
     return getDatabase().getLocalClient();
   }
 
+  private async getTagRowOrThrow(tagId: string): Promise<typeof tags.$inferSelect> {
+    const db = this.getDb();
+
+    const tagRows = await db
+      .select()
+      .from(tags)
+      .where(and(
+        eq(tags.id, tagId),
+        eq(tags.projectId, this.currentProjectId)
+      ));
+
+    if (tagRows.length === 0) {
+      throw new Error('Tag not found');
+    }
+
+    return tagRows[0];
+  }
+
+  private async queryPostsContainingTag(tagName: string): Promise<Array<{ postId: string; postTags: string[] }>> {
+    const client = this.getClient();
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
+
+    const postsResult = await client.execute({
+      sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
+      args: [this.currentProjectId, `%"${tagName}"%`],
+    });
+
+    return postsResult.rows
+      .map((row: any) => ({
+        postId: row.id as string,
+        postTags: JSON.parse(row.tags || '[]') as string[],
+      }))
+      .filter((row) => row.postTags.includes(tagName));
+  }
+
+  private async updatePostTagsAndSync(postId: string, updatedTags: string[]): Promise<void> {
+    const db = this.getDb();
+
+    await db
+      .update(posts)
+      .set({
+        tags: JSON.stringify(updatedTags),
+        updatedAt: new Date(),
+      })
+      .where(eq(posts.id, postId));
+
+    await getPostEngine().syncPublishedPostFile(postId);
+  }
+
+  private async updateMatchingPosts(
+    tagName: string,
+    transform: (postTags: string[]) => string[]
+  ): Promise<{ total: number; process: (onEachUpdated: (updated: number, total: number) => void) => Promise<number> }> {
+    const postsToUpdate = await this.queryPostsContainingTag(tagName);
+    const total = postsToUpdate.length;
+
+    return {
+      total,
+      process: async (onEachUpdated) => {
+        let updated = 0;
+
+        for (const row of postsToUpdate) {
+          const updatedTags = transform(row.postTags);
+          await this.updatePostTagsAndSync(row.postId, updatedTags);
+          updated++;
+          onEachUpdated(updated, total);
+        }
+
+        return updated;
+      },
+    };
+  }
+
   /**
    * Returns the default internal project directory (in userData).
    */
@@ -327,23 +402,7 @@ export class TagEngine extends EventEmitter {
    */
   async deleteTag(id: string): Promise<DeleteTagResult> {
     const db = this.getDb();
-    const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
-
-    // Get tag
-    const tagRows = await db
-      .select()
-      .from(tags)
-      .where(and(
-        eq(tags.id, id),
-        eq(tags.projectId, this.currentProjectId)
-      ));
-
-    if (tagRows.length === 0) {
-      throw new Error('Tag not found');
-    }
-
-    const tag = tagRows[0];
+    const tag = await this.getTagRowOrThrow(id);
     const tagName = tag.name;
 
     // Run the deletion as a background task
@@ -353,39 +412,14 @@ export class TagEngine extends EventEmitter {
       execute: async (onProgress) => {
         onProgress(0, `Finding posts with tag "${tagName}"...`);
 
-        // Find all posts with this tag - requires raw SQL for JSON
-        const postsResult = await client.execute({
-          sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
-          args: [this.currentProjectId, `%"${tagName}"%`],
+        const updateOperation = await this.updateMatchingPosts(
+          tagName,
+          (postTags) => postTags.filter((tagEntry) => tagEntry !== tagName)
+        );
+
+        const updated = await updateOperation.process((updatedCount, totalCount) => {
+          onProgress((updatedCount / totalCount) * 80, `Updated ${updatedCount}/${totalCount} posts...`);
         });
-
-        const postsToUpdate = postsResult.rows.filter((row: any) => {
-          const postTags: string[] = JSON.parse(row.tags || '[]');
-          return postTags.includes(tagName);
-        });
-
-        const total = postsToUpdate.length;
-        let updated = 0;
-
-        for (const row of postsToUpdate) {
-          const postId = row.id as string;
-          const postTags: string[] = JSON.parse((row as any).tags || '[]');
-          const newTags = postTags.filter(t => t !== tagName);
-
-          await db
-            .update(posts)
-            .set({
-              tags: JSON.stringify(newTags),
-              updatedAt: new Date(),
-            })
-            .where(eq(posts.id, postId));
-
-          // Sync published post's file with updated tags
-          await getPostEngine().syncPublishedPostFile(postId);
-
-          updated++;
-          onProgress((updated / total) * 80, `Updated ${updated}/${total} posts...`);
-        }
 
         onProgress(90, 'Deleting tag...');
 
@@ -412,8 +446,6 @@ export class TagEngine extends EventEmitter {
    */
   async mergeTags(sourceTagIds: string[], targetTagId: string): Promise<MergeTagsResult> {
     const db = this.getDb();
-    const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
 
     if (sourceTagIds.length === 0) {
       throw new Error('Source tags are required');
@@ -458,45 +490,34 @@ export class TagEngine extends EventEmitter {
       execute: async (onProgress) => {
         onProgress(0, 'Finding posts to update...');
 
-        let totalPostsUpdated = 0;
+        const updatedPostTagsById = new Map<string, string[]>();
 
-        // For each source tag, update posts and delete the tag
-        for (let i = 0; i < sourceNames.length; i++) {
-          const sourceName = sourceNames[i];
-          onProgress((i / sourceNames.length) * 80, `Processing tag "${sourceName}"...`);
+        // For each source tag, compute final post tags per post ID
+        for (let index = 0; index < sourceNames.length; index++) {
+          const sourceName = sourceNames[index];
+          onProgress((index / sourceNames.length) * 80, `Processing tag "${sourceName}"...`);
 
-          // Find posts with this source tag
-          const postsResult = await client.execute({
-            sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
-            args: [this.currentProjectId, `%"${sourceName}"%`],
-          });
-
-          for (const row of postsResult.rows) {
-            const postId = row.id as string;
-            const postTags: string[] = JSON.parse((row as any).tags || '[]');
-            
-            if (postTags.includes(sourceName)) {
-              // Remove source tag and add target if not already present
-              const newTags = postTags.filter(t => t !== sourceName);
-              if (!newTags.includes(targetName)) {
-                newTags.push(targetName);
-              }
-
-              await db
-                .update(posts)
-                .set({
-                  tags: JSON.stringify(newTags),
-                  updatedAt: new Date(),
-                })
-                .where(eq(posts.id, postId));
-
-              // Sync published post's file with updated tags
-              await getPostEngine().syncPublishedPostFile(postId);
-
-              totalPostsUpdated++;
+          const postsWithSourceTag = await this.queryPostsContainingTag(sourceName);
+          for (const row of postsWithSourceTag) {
+            const currentTags = updatedPostTagsById.get(row.postId) ?? row.postTags;
+            if (!currentTags.includes(sourceName)) {
+              continue;
             }
+
+            const transformedTags = currentTags.filter((tagEntry) => tagEntry !== sourceName);
+            if (!transformedTags.includes(targetName)) {
+              transformedTags.push(targetName);
+            }
+
+            updatedPostTagsById.set(row.postId, transformedTags);
           }
         }
+
+        for (const [postId, updatedTags] of updatedPostTagsById.entries()) {
+          await this.updatePostTagsAndSync(postId, updatedTags);
+        }
+
+        const totalPostsUpdated = updatedPostTagsById.size;
 
         onProgress(90, 'Deleting source tags...');
 
@@ -532,8 +553,6 @@ export class TagEngine extends EventEmitter {
    */
   async renameTag(id: string, newName: string): Promise<RenameTagResult> {
     const db = this.getDb();
-    const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
 
     newName = newName.trim().toLowerCase();
     if (!newName) {
@@ -581,39 +600,14 @@ export class TagEngine extends EventEmitter {
       execute: async (onProgress) => {
         onProgress(0, 'Finding posts to update...');
 
-        // Find posts with this tag
-        const postsResult = await client.execute({
-          sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
-          args: [this.currentProjectId, `%"${oldName}"%`],
+        const updateOperation = await this.updateMatchingPosts(
+          oldName,
+          (postTags) => postTags.map((tagEntry) => tagEntry === oldName ? newName : tagEntry)
+        );
+
+        const updated = await updateOperation.process((updatedCount, totalCount) => {
+          onProgress((updatedCount / totalCount) * 80, `Updated ${updatedCount}/${totalCount} posts...`);
         });
-
-        const postsToUpdate = postsResult.rows.filter((row: any) => {
-          const postTags: string[] = JSON.parse(row.tags || '[]');
-          return postTags.includes(oldName);
-        });
-
-        const total = postsToUpdate.length;
-        let updated = 0;
-
-        for (const row of postsToUpdate) {
-          const postId = row.id as string;
-          const postTags: string[] = JSON.parse((row as any).tags || '[]');
-          const updatedTags = postTags.map(t => t === oldName ? newName : t);
-
-          await db
-            .update(posts)
-            .set({
-              tags: JSON.stringify(updatedTags),
-              updatedAt: new Date(),
-            })
-            .where(eq(posts.id, postId));
-
-          // Sync published post's file with updated tags
-          await getPostEngine().syncPublishedPostFile(postId);
-
-          updated++;
-          onProgress((updated / total) * 80, `Updated ${updated}/${total} posts...`);
-        }
 
         onProgress(90, 'Updating tag record...');
 
