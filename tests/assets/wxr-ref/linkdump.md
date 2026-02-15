@@ -3,7 +3,7 @@ id: 783692aa-8bec-4665-ba51-96395ec19790
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Linkdump
 slug: linkdump
-status: publish
+status: published
 createdAt: '2010-12-28T19:38:24.000Z'
 updatedAt: '2010-12-28T20:17:21.000Z'
 categories:

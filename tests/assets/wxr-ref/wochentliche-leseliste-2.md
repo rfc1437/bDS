@@ -3,7 +3,7 @@ id: a5099d66-a85b-445d-92ce-fb2dd42cdb97
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Wöchentliche Leseliste
 slug: wochentliche-leseliste-2
-status: publish
+status: published
 createdAt: '2013-04-14T18:49:57.000Z'
 updatedAt: '2013-04-14T18:50:37.000Z'
 tags:
@@ -13,7 +13,6 @@ tags:
   - politik
 categories:
   - asides
-  - article
 author: hugo
 publishedAt: '2013-04-14T16:49:57.000Z'
 ---

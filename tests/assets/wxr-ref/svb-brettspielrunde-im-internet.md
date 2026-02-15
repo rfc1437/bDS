@@ -3,7 +3,7 @@ id: 0375a895-da45-4ab5-b554-30ea41096526
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: SVB Brettspielrunde im Internet
 slug: svb-brettspielrunde-im-internet
-status: publish
+status: published
 createdAt: '2020-03-24T13:48:33.000Z'
 updatedAt: '2021-05-30T13:33:18.000Z'
 categories:

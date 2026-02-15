@@ -3,7 +3,7 @@ id: 9e8ec9f3-f974-45b3-93ba-da716a000ee3
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Rinderrouladen
 slug: rinderrouladen
-status: publish
+status: published
 createdAt: '2012-03-17T19:34:48.000Z'
 updatedAt: '2012-03-17T19:34:48.000Z'
 tags:
@@ -11,7 +11,6 @@ tags:
 categories:
   - galerie
   - kochbuch
-  - article
 author: hugo
 publishedAt: '2012-03-17T18:34:48.000Z'
 ---

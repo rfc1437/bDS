@@ -3,7 +3,7 @@ id: 5614c28f-ec24-467d-a265-c91d1ff95364
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: jQuery lightBox plugin
 slug: jquery-lightbox-plugin
-status: publish
+status: published
 createdAt: '2010-11-14T16:51:48.000Z'
 updatedAt: '2011-02-28T15:20:12.000Z'
 tags:
@@ -12,7 +12,6 @@ tags:
   - wordpress
 categories:
   - asides
-  - article
 author: hugo
 publishedAt: '2010-11-14T15:51:48.000Z'
 ---

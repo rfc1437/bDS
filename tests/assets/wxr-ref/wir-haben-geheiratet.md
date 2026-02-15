@@ -3,7 +3,7 @@ id: ecd3eb2d-bfec-452f-8bba-63378953337a
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Wir haben geheiratet
 slug: wir-haben-geheiratet
-status: publish
+status: published
 createdAt: '2011-09-04T16:50:06.000Z'
 updatedAt: '2011-09-04T16:52:20.000Z'
 tags:
@@ -11,7 +11,6 @@ tags:
   - hochzeit
 categories:
   - artikel
-  - article
 author: hugo
 publishedAt: '2011-09-04T14:50:06.000Z'
 ---

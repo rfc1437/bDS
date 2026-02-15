@@ -3,7 +3,7 @@ id: 432af9b5-0143-4c03-93d5-5ecc3db61936
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: '/dev/random - Random Thoughts On Programming In Parentheses - Coops - An introduction to chicken scheme''s object system'
 slug: devrandom-random-thoughts-on-programming-in-parentheses-coops-an-introduction-to-chicken-schemes-object-system
-status: publish
+status: published
 createdAt: '2011-01-21T14:03:36.000Z'
 updatedAt: '2011-02-28T15:18:35.000Z'
 tags:
@@ -12,7 +12,6 @@ tags:
   - scheme
 categories:
   - asides
-  - article
 author: hugo
 publishedAt: '2011-01-21T13:03:36.000Z'
 ---

@@ -3,7 +3,7 @@ id: e772081f-6021-4231-b0e4-5c4ff7196386
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Türfiguren
 slug: turfiguren
-status: publish
+status: published
 createdAt: '2011-03-15T14:23:23.000Z'
 updatedAt: '2011-04-16T21:39:08.000Z'
 tags:
@@ -11,7 +11,6 @@ tags:
   - münster
 categories:
   - galerie
-  - article
 author: hugo
 publishedAt: '2011-03-15T13:23:23.000Z'
 ---

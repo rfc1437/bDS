@@ -3,7 +3,7 @@ id: 1be432f9-6db1-40a9-8ef5-23e390e9896d
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Impressum
 slug: impressum
-status: publish
+status: published
 createdAt: '2010-11-13T13:39:06.000Z'
 updatedAt: '2018-05-25T13:03:51.000Z'
 categories:

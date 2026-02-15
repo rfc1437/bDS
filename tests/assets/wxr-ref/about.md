@@ -3,7 +3,7 @@ id: 0c31ccbe-51b7-46df-8b7a-418fe4193428
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: About
 slug: about
-status: publish
+status: published
 createdAt: '2010-11-13T10:27:56.000Z'
 updatedAt: '2010-11-13T12:19:15.000Z'
 categories:

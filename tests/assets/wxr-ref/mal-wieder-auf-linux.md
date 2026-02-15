@@ -3,12 +3,11 @@ id: 10b4560f-fbb2-42de-b411-2434b89e5686
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Mal wieder auf Linux ...
 slug: mal-wieder-auf-linux
-status: publish
+status: published
 createdAt: '2023-08-19T15:26:04.000Z'
 updatedAt: '2023-08-19T15:28:14.000Z'
 categories:
   - artikel
-  - article
 author: hugo
 publishedAt: '2023-08-19T13:26:04.000Z'
 ---

@@ -3,7 +3,7 @@ id: f6d26648-016d-4cd6-a889-debde902b7f7
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: 'Ihr seid Helden!'
 slug: ihr-seid-helden
-status: publish
+status: published
 createdAt: '2011-02-25T12:55:46.000Z'
 updatedAt: '2011-02-25T12:56:52.000Z'
 tags:
@@ -11,7 +11,6 @@ tags:
   - medien
 categories:
   - artikel
-  - article
 author: hugo
 publishedAt: '2011-02-25T11:55:46.000Z'
 ---

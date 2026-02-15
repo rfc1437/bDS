@@ -3,7 +3,7 @@ id: b49e03d2-ca4a-4427-9970-81272f5ef317
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Kochen mit rfc1437 - Schweinegeschnetzeltes Mediterran
 slug: rfc1437-on-the-road
-status: publish
+status: published
 createdAt: '2011-02-26T16:03:08.000Z'
 updatedAt: '2011-03-19T20:52:27.000Z'
 tags:
@@ -11,7 +11,6 @@ tags:
 categories:
   - artikel
   - kochbuch
-  - article
 author: hugo
 publishedAt: '2011-02-26T15:03:08.000Z'
 ---
