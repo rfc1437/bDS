@@ -18,6 +18,11 @@ import { parseMacros, getMacro } from '../../macros/registry';
 import { InsertModal } from '../InsertModal';
 import './Editor.css';
 
+/** Get display name for media: prefer title over originalName */
+function getMediaDisplayName(media: { title?: string; originalName: string }): string {
+  return media.title || media.originalName;
+}
+
 // Module-level AutoSaveManager for idle-time based auto-saving
 const autoSaveManager = new AutoSaveManager({
   idleTimeMs: 3000, // Save after 3 seconds of idle time
@@ -207,7 +212,7 @@ const hydrateGalleries = async (
           <img 
             src="bds-media://${link.media.id}" 
             alt="${link.media.alt || link.media.originalName}" 
-            title="${link.media.originalName}"
+            title="${link.media.title || link.media.originalName}"
           />
         </div>
       `).join('');
@@ -558,7 +563,7 @@ function buildMonthGallery(
             <img 
               src="bds-media://${img.id}" 
               alt="${img.alt || img.originalName}" 
-              title="${img.originalName}"
+              title="${img.title || img.originalName}"
             />
           </div>
         `).join('')}
@@ -976,7 +981,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           if (mediaItem) {
             references.push({
               id: mediaItem.id,
-              title: mediaItem.originalName,
+              title: getMediaDisplayName(mediaItem),
               type: 'media',
             });
           }
@@ -1642,7 +1647,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       // Show confirmation modal
       showConfirmDeleteModal({
         itemType: 'media',
-        itemTitle: item.originalName,
+        itemTitle: getMediaDisplayName(item),
         references,
         onConfirm: async () => {
           try {
@@ -1676,7 +1681,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       <div className="editor-header">
         <div className="editor-tabs">
           <div className="editor-tab active">
-            <span className="editor-tab-title">{item.originalName}</span>
+            <span className="editor-tab-title">{getMediaDisplayName(item)}</span>
           </div>
         </div>
         <div className="editor-actions">

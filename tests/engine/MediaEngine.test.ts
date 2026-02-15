@@ -774,6 +774,43 @@ linkedPostIds: ["post-a", "post-b", "post-c"]`;
       expect(postMediaInserts[1].sortOrder).toBe(1);
       expect(postMediaInserts[2].sortOrder).toBe(2);
     });
+
+    it('should restore title from sidecar metadata during rebuild', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.readdir).mockImplementation(async (dir: string, options?: any) => {
+        if (typeof dir === 'string' && dir.includes('media')) {
+          return [
+            { name: 'media-1.jpg', isFile: () => true, isDirectory: () => false },
+            { name: 'media-1.jpg.meta', isFile: () => true, isDirectory: () => false },
+          ] as any;
+        }
+        return [];
+      });
+
+      // Sidecar with title field
+      const sidecarContent = `id: media-1
+originalName: test-image.jpg
+mimeType: image/jpeg
+size: 1024
+title: My Beautiful Sunset Photo
+alt: A sunset over the ocean
+caption: Taken during vacation
+createdAt: 2024-01-15T10:00:00.000Z
+updatedAt: 2024-01-15T10:00:00.000Z
+tags: ["nature", "sunset"]`;
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg.meta', sidecarContent);
+      mockFiles.set('/mock/userData/projects/test-project/media/media-1.jpg', Buffer.from('image-data'));
+
+      await mediaEngine.rebuildDatabaseFromFiles();
+
+      // Verify title is stored in database
+      const insertedMedia = mockMedia.get('media-1');
+      expect(insertedMedia).toBeDefined();
+      expect(insertedMedia.title).toBe('My Beautiful Sunset Photo');
+      expect(insertedMedia.alt).toBe('A sunset over the ocean');
+      expect(insertedMedia.caption).toBe('Taken during vacation');
+    });
   });
 
   describe('Full-Text Search', () => {
