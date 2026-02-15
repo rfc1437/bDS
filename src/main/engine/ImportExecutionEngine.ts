@@ -178,6 +178,21 @@ export class ImportExecutionEngine extends EventEmitter {
         return `![${altText}](${imageUrl})`;
       },
     });
+
+    // Custom rule for Flash embeds - replace with placeholder text
+    this.turndown.addRule('flashEmbed', {
+      filter: (node) => {
+        if (node.nodeName !== 'EMBED') return false;
+        const embed = node as HTMLEmbedElement;
+        const type = embed.getAttribute('type') || '';
+        const src = embed.getAttribute('src') || '';
+        // Match Flash content by type or file extension
+        return type.toLowerCase().includes('flash') ||
+               type.toLowerCase().includes('shockwave') ||
+               src.toLowerCase().endsWith('.swf');
+      },
+      replacement: () => 'FLASH PLAYER NOT SUPPORTED',
+    });
   }
 
   setProjectContext(projectId: string, dataDir?: string): void {
