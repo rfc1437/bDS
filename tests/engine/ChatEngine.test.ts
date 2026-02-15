@@ -130,7 +130,7 @@ describe('ChatEngine', () => {
 
       expect(result.id).toMatch(/^chat_mock-uuid-/);
       expect(result.title).toBe('New Chat');
-      expect(result.model).toBe('claude-sonnet-4');
+      expect(result.model).toBe('claude-sonnet-4-5');
       expect(result.createdAt).toBeInstanceOf(Date);
       expect(result.updatedAt).toBeInstanceOf(Date);
     });
@@ -768,7 +768,7 @@ describe('ChatEngine', () => {
 
       const result = await chatEngine.getSelectedModel();
 
-      expect(result).toBe('claude-sonnet-4');
+      expect(result).toBe('claude-sonnet-4-5');
     });
   });
 

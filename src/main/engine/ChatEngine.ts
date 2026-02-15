@@ -50,7 +50,7 @@ export class ChatEngine {
     const drizzle = this.db.getLocal();
     const id = `chat_${uuidv4()}`;
     const title = input.title || 'New Chat';
-    const model = input.model || 'claude-sonnet-4';
+    const model = input.model || 'claude-sonnet-4-5';
     const now = new Date();
 
     await drizzle.insert(chatConversations).values({
@@ -383,7 +383,7 @@ When answering questions:
       return rows[0].value;
     }
 
-    return 'claude-sonnet-4';
+    return 'claude-sonnet-4-5';
   }
 
   /**
