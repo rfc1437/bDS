@@ -18,6 +18,7 @@ export { PostLinks } from './PostLinks';
 export { LinkedMediaPanel } from './LinkedMediaPanel';
 export { ErrorModal, type ErrorDetails } from './ErrorModal';
 export { ConfirmDeleteModal, type ConfirmDeleteDetails, type DeleteReference } from './ConfirmDeleteModal';
+export { AISuggestionsModal, type AISuggestions, type CurrentValues } from './AISuggestionsModal/AISuggestionsModal';
 export { ChatPanel } from './ChatPanel';
 export { ImportAnalysisView } from './ImportAnalysisView';
 export { InsertModal } from './InsertModal';

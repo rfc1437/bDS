@@ -16,6 +16,7 @@ import { ImportAnalysisView } from '../ImportAnalysisView';
 import { AutoSaveManager } from '../../utils';
 import { parseMacros, getMacro } from '../../macros/registry';
 import { InsertModal } from '../InsertModal';
+import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
 import './Editor.css';
 
 /** Get display name for media: prefer title over originalName */
@@ -1443,9 +1444,14 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   
   // Quick action menu state
   const [showQuickActions, setShowQuickActions] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [projectLanguage, setProjectLanguage] = useState('en');
   const quickActionsRef = useRef<HTMLDivElement>(null);
+
+  // AI suggestions modal state
+  const [showAISuggestionsModal, setShowAISuggestionsModal] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiSuggestions, setAISuggestions] = useState<AISuggestions | null>(null);
+  const [aiError, setAIError] = useState<string | undefined>(undefined);
 
   // Load project language setting
   useEffect(() => {
@@ -1474,31 +1480,47 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     if (!item || isAnalyzing) return;
     
     setShowQuickActions(false);
+    setShowAISuggestionsModal(true);
     setIsAnalyzing(true);
+    setAISuggestions(null);
+    setAIError(undefined);
     
     try {
       const result = await window.electronAPI?.chat.analyzeMediaImage(item.id, projectLanguage);
       
       if (result?.success) {
-        if (result.title) setTitle(result.title);
-        if (result.alt) setAlt(result.alt);
-        if (result.caption) setCaption(result.caption);
-        showToast.success('AI analysis complete');
-      } else {
-        showErrorModal({
-          title: 'AI Analysis Failed',
-          message: result?.error || 'Failed to analyze image',
+        setAISuggestions({
+          title: result.title,
+          alt: result.alt,
+          caption: result.caption,
         });
+      } else {
+        setAIError(result?.error || 'Failed to analyze image');
       }
     } catch (error) {
       console.error('Failed to analyze image:', error);
-      showErrorModal({
-        title: 'AI Analysis Error',
-        message: (error as Error).message || 'Failed to analyze image',
-      });
+      setAIError((error as Error).message || 'Failed to analyze image');
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Handle applying AI suggestions
+  const handleApplyAISuggestions = (values: Partial<AISuggestions>) => {
+    if (values.title) setTitle(values.title);
+    if (values.alt) setAlt(values.alt);
+    if (values.caption) setCaption(values.caption);
+    setShowAISuggestionsModal(false);
+    if (Object.keys(values).length > 0) {
+      showToast.success('AI suggestions applied');
+    }
+  };
+
+  // Close AI suggestions modal
+  const handleCloseAISuggestionsModal = () => {
+    setShowAISuggestionsModal(false);
+    setAISuggestions(null);
+    setAIError(undefined);
   };
 
   // Load linked posts for this media and fetch their titles
@@ -1875,6 +1897,17 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           </div>
         </div>
       </div>
+
+      {/* AI Suggestions Modal */}
+      <AISuggestionsModal
+        isOpen={showAISuggestionsModal}
+        isLoading={isAnalyzing}
+        suggestions={aiSuggestions}
+        currentValues={{ title, alt, caption }}
+        error={aiError}
+        onConfirm={handleApplyAISuggestions}
+        onClose={handleCloseAISuggestionsModal}
+      />
     </div>
   );
 };
