@@ -613,16 +613,38 @@ describe('TagEngine', () => {
     });
 
     it('should return empty array when client is not available', async () => {
+      // Store original mock implementation
+      const originalMock = vi.mocked(getDatabase).getMockImplementation();
+      
       // Mock getClient to return null
-      const mockGetClient = vi.fn().mockReturnValue(null);
       vi.mocked(getDatabase).mockReturnValue({
         getLocal: vi.fn(() => mockLocalDb),
-        getLocalClient: mockGetClient,
+        getLocalClient: vi.fn().mockReturnValue(null),
       } as any);
 
       const result = await tagEngine.getPostsWithTag('tag-1');
 
       expect(result).toEqual([]);
+      
+      // Restore original mock
+      if (originalMock) {
+        vi.mocked(getDatabase).mockImplementation(originalMock);
+      } else {
+        // Restore to standard mock
+        vi.mocked(getDatabase).mockReturnValue({
+          getLocal: vi.fn(() => mockLocalDb),
+          getLocalClient: vi.fn(() => mockLocalClient),
+          getRemote: vi.fn(() => null),
+          getDataPaths: vi.fn(() => ({
+            database: '/mock/userData/bds.db',
+            posts: '/mock/userData/posts',
+            media: '/mock/userData/media',
+          })),
+          initializeLocal: vi.fn(),
+          initializeRemote: vi.fn(),
+          close: vi.fn(),
+        } as any);
+      }
     });
   });
 });
