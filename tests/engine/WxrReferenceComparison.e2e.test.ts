@@ -461,9 +461,9 @@ describe('WXR Reference Comparison E2E Tests', () => {
     console.log(`Unmatched generated: ${unmatchedGenerated.length}`);
     console.log(`Total differences: ${allDifferences.length}`);
 
-    // The test expects differences - we're reporting them, not failing on them
-    // The purpose is to analyze the current state of the conversion
-    expect(true).toBe(true);
+    // The test MUST fail if there are any differences
+    // All issues must be addressed before this test can pass
+    expect(allDifferences.length).toBe(0);
   });
 
   it('should report detailed differences for each post/page', async () => {
