@@ -140,6 +140,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     if (!message || isStreaming) return;
 
     setInputValue('');
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     setIsStreaming(true);
     streamingRef.current = '';
     setStreamingContent('');
@@ -480,7 +484,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             ref={inputRef}
             className="chat-input"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              // Auto-grow the textarea
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             rows={1}
