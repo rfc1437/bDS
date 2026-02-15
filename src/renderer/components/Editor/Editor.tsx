@@ -643,6 +643,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [author, setAuthor] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
   const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
@@ -831,6 +832,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     if (post) {
       setTitle(post.title);
       setContent(post.content);
+      setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
       markClean(postId);
@@ -845,9 +847,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     if (!post || !isInitialized) return;
     const tagsChanged = JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort());
     const categoriesChanged = JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
+    const authorChanged = author !== (post.author || '');
     const hasChanges = 
       title !== post.title ||
       content !== post.content ||
+      authorChanged ||
       tagsChanged ||
       categoriesChanged;
     
@@ -858,13 +862,14 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       autoSaveManager.notifyChange(postId, {
         title,
         content,
+        author,
         tags: tags.join(', '),
         categories: selectedCategories,
       });
     } else {
       markClean(postId);
     }
-  }, [title, content, tags, selectedCategories, post, postId, isInitialized, markDirty, markClean]);
+  }, [title, content, author, tags, selectedCategories, post, postId, isInitialized, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -883,6 +888,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const updated = await window.electronAPI?.posts.update(postId, {
         title,
         content,
+        author: author || undefined,
         tags,
         categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
       });
@@ -903,7 +909,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [postId, title, content, tags, selectedCategories, isDirty, isSaving, updatePost, markClean, showErrorModal]);
+  }, [postId, title, content, author, tags, selectedCategories, isDirty, isSaving, updatePost, markClean, showErrorModal]);
 
   const handlePublish = async () => {
     await handleSave();
@@ -943,6 +949,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         if (reverted) {
           setTitle(reverted.title);
           setContent(reverted.content);
+          setAuthor(reverted.author || '');
           setTags(reverted.tags);
           setSelectedCategories(reverted.categories.length > 0 ? reverted.categories : ['article']);
           // Update local post state so UI reflects the published status
@@ -1267,6 +1274,15 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 placeholder="Add tags..."
               />
             </div>
+            <div className="editor-field">
+              <label>Author</label>
+              <input
+                type="text"
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                placeholder="Author name"
+              />
+            </div>
             <div className="editor-field-row">
               <div className="editor-field">
                 <label>Slug</label>
@@ -1511,6 +1527,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const [title, setTitle] = useState(item?.title || '');
   const [alt, setAlt] = useState(item?.alt || '');
   const [caption, setCaption] = useState(item?.caption || '');
+  const [author, setAuthor] = useState(item?.author || '');
   const [tags, setTags] = useState(item?.tags.join(', ') || '');
   const [linkedPosts, setLinkedPosts] = useState<{ postId: string; sortOrder: number }[]>([]);
   const [postTitles, setPostTitles] = useState<Map<string, string>>(new Map());
@@ -1689,6 +1706,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       setTitle(item.title || '');
       setAlt(item.alt || '');
       setCaption(item.caption || '');
+      setAuthor(item.author || '');
       setTags(item.tags.join(', '));
     }
   }, [item?.id]);
@@ -1703,6 +1721,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         title,
         alt,
         caption,
+        author: author || undefined,
         tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
       });
       if (updated) {
@@ -1916,6 +1935,15 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               placeholder="tag1, tag2, tag3"
+            />
+          </div>
+          <div className="editor-field">
+            <label>Author</label>
+            <input
+              type="text"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder="Author name"
             />
           </div>
           

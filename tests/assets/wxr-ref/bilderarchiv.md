@@ -1,5 +1,5 @@
 ---
-id: 07f27b4a-d40b-4cf2-a521-4c8ffb4b3d92
+id: ffe762f1-6d45-4ea5-bc73-a7064a4039a3
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Bilderarchiv
 slug: bilderarchiv

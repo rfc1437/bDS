@@ -1,5 +1,5 @@
 ---
-id: 6df104d0-41c5-4216-8c7f-44312c336c01
+id: 793221fd-4c49-4053-bb20-739de5776a6e
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: 'Sweet, so sweet'
 slug: sweet-so-sweet
@@ -10,6 +10,7 @@ tags:
   - photography
 categories:
   - galerie
+  - article
 author: hugo
 publishedAt: '2022-11-05T07:08:12.000Z'
 ---

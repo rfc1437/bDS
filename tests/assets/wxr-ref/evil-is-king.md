@@ -1,5 +1,5 @@
 ---
-id: 0d80f2f8-65a9-4b0a-a211-dbb42e45cf00
+id: 1ecf84f0-b1fb-498a-9e59-5a517aecfeba
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: EVIL is King
 slug: evil-is-king
@@ -10,6 +10,7 @@ tags:
   - fotografie
 categories:
   - artikel
+  - article
 author: hugo
 publishedAt: '2011-07-24T14:26:31.000Z'
 ---

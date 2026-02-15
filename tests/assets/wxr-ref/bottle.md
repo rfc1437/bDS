@@ -1,5 +1,5 @@
 ---
-id: b6b46502-b793-4f20-b884-548b6b3181f7
+id: 0df0a274-fbc0-4d90-8c4c-a4ad6ea70981
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Bottle
 slug: bottle
@@ -10,6 +10,7 @@ tags:
   - film
 categories:
   - artikel
+  - article
 author: hugo
 publishedAt: '2010-11-19T07:14:36.000Z'
 ---

@@ -1,5 +1,5 @@
 ---
-id: 6403fd62-364e-48ae-bbbc-c9f9db5e9c6f
+id: b410e924-6e3d-4f20-8512-41095b9fd4d0
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: The Art and Science of Smalltalk
 slug: the-art-and-science-of-smalltalk
@@ -11,6 +11,7 @@ tags:
   - smalltalk
 categories:
   - asides
+  - article
 author: hugo
 publishedAt: '2010-12-26T09:32:08.000Z'
 ---

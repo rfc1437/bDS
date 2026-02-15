@@ -1,5 +1,5 @@
 ---
-id: 774b3656-591b-4e7f-9874-2e1c9ee5142a
+id: 49c4c9f2-5c46-47d0-ae16-be13f81b6696
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: 'Ohne Display: Leica M-D ist eine analoge Digitalkamera - Golem.de'
 slug: ohne-display-leica-m-d-ist-eine-analoge-digitalkamera-golem-de
@@ -12,6 +12,7 @@ tags:
 categories:
   - artikel
   - asides
+  - article
 author: hugo
 publishedAt: '2016-04-29T10:05:22.000Z'
 ---

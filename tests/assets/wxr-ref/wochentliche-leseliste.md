@@ -1,5 +1,5 @@
 ---
-id: 9655cf77-637e-4fa7-85ad-22963dd07be2
+id: 7a4168f4-f3bf-4a72-8bd8-fc9714c50f03
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Wöchentliche Leseliste
 slug: wochentliche-leseliste
@@ -8,6 +8,7 @@ createdAt: '2013-04-08T14:10:27.000Z'
 updatedAt: '2013-04-08T14:13:29.000Z'
 categories:
   - asides
+  - article
 author: hugo
 publishedAt: '2013-04-08T12:10:27.000Z'
 ---

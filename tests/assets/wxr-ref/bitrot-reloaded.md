@@ -1,5 +1,5 @@
 ---
-id: 3ae57ebe-a622-45c8-91c1-36a4fd33b350
+id: aedbc32a-39d7-4aec-8969-cfef38469262
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Bitrot reloaded
 slug: bitrot-reloaded
@@ -11,6 +11,7 @@ tags:
   - wordpress
 categories:
   - artikel
+  - article
 author: hugo
 publishedAt: '2010-11-13T11:11:34.000Z'
 ---

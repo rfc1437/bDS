@@ -1,5 +1,5 @@
 ---
-id: eca2084d-a088-4c00-8067-bfb66f69dcc6
+id: 64ab1b8f-89fb-4dda-b2db-5955dbdcbd34
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: what a superb owl
 slug: what-a-superb-owl
@@ -10,6 +10,7 @@ tags:
   - sport
 categories:
   - artikel
+  - article
 author: hugo
 publishedAt: '2011-02-06T22:02:46.000Z'
 ---

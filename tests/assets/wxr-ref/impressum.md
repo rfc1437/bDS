@@ -1,5 +1,5 @@
 ---
-id: ad27c81e-2839-4419-9369-ffb61575ae7d
+id: 1be432f9-6db1-40a9-8ef5-23e390e9896d
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Impressum
 slug: impressum

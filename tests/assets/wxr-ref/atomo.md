@@ -1,5 +1,5 @@
 ---
-id: fe6a775b-f8af-4a0f-a6de-816cc9d5b986
+id: db4b98d7-0611-4258-b558-2357314b640f
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: atomo
 slug: atomo
@@ -10,6 +10,7 @@ tags:
   - programmieren
 categories:
   - asides
+  - article
 author: hugo
 publishedAt: '2010-11-14T10:41:25.000Z'
 ---

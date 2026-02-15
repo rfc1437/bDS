@@ -1,5 +1,5 @@
 ---
-id: b772a82b-26f1-40ac-9168-7adc1237ac9f
+id: 59d159ed-75a2-41bc-99db-0043f86b6f4a
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Social Networks und meine Nutzung von denselben
 slug: social-networks-und-meine-nutzung-von-denselben
@@ -10,6 +10,7 @@ tags:
   - web
 categories:
   - artikel
+  - article
 author: hugo
 publishedAt: '2011-07-25T09:01:43.000Z'
 ---

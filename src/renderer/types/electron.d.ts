@@ -97,6 +97,7 @@ export interface MediaData {
   title?: string;
   alt?: string;
   caption?: string;
+  author?: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];

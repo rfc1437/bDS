@@ -1,5 +1,5 @@
 ---
-id: 1ad87820-8856-4ff6-9a99-058ef087d780
+id: 74fa9a89-0d76-4299-9e83-b0e97a0260ad
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: WordPress › WordPress Nginx proxy cache integrator « WordPress Plugins
 slug: wordpress-%e2%80%ba-wordpress-nginx-proxy-cache-integrator-%c2%ab-wordpress-plugins
@@ -11,6 +11,7 @@ tags:
   - wordpress
 categories:
   - asides
+  - article
 author: hugo
 publishedAt: '2010-11-13T11:15:48.000Z'
 ---

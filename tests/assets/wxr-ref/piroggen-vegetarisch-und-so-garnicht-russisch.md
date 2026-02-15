@@ -1,5 +1,5 @@
 ---
-id: bc35ef89-7e7a-4736-82ab-6971494bf69e
+id: 8825edef-ccea-4931-b880-e84ec50c007d
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: 'Piroggen (vegetarisch, und so garnicht russisch)'
 slug: piroggen-vegetarisch-und-so-garnicht-russisch
@@ -11,6 +11,7 @@ tags:
 categories:
   - artikel
   - kochbuch
+  - article
 author: hugo
 publishedAt: '2011-04-26T18:16:32.000Z'
 ---

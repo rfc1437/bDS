@@ -1,5 +1,5 @@
 ---
-id: 3429c486-9b4b-48d2-ac58-9f6f4b699a9c
+id: 375ec97e-479b-49ee-9a5b-209269418c43
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Sommerkonzert Millima Mabonde
 slug: millima-mabonde
@@ -12,6 +12,7 @@ tags:
   - musik
 categories:
   - galerie
+  - article
 author: hugo
 publishedAt: '2011-07-03T20:05:56.000Z'
 ---

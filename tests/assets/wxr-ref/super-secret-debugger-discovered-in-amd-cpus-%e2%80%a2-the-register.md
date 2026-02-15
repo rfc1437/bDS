@@ -1,5 +1,5 @@
 ---
-id: 0a77d82d-4a64-4cc6-b0b9-ecf4fdb094b9
+id: cd1c7500-0041-4767-93f3-eaefc1d8131a
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: '''Super-secret'' debugger discovered in AMD CPUs • The Register'
 slug: super-secret-debugger-discovered-in-amd-cpus-%e2%80%a2-the-register
@@ -11,6 +11,7 @@ tags:
   - sysadmin
 categories:
   - asides
+  - article
 author: hugo
 publishedAt: '2010-11-15T21:02:32.000Z'
 ---

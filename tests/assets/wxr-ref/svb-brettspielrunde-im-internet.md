@@ -1,5 +1,5 @@
 ---
-id: 172bf08a-978b-487b-add9-a582ff0c4972
+id: 0375a895-da45-4ab5-b554-30ea41096526
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: SVB Brettspielrunde im Internet
 slug: svb-brettspielrunde-im-internet

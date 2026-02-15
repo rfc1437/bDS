@@ -1,5 +1,5 @@
 ---
-id: c220aba5-70d2-4059-bac0-d75489f4a0c6
+id: a6c5c6c1-0c11-49b1-bd52-2c698de0e640
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: 'Mit Sicherheit: Rufe nach schärferen Gesetzen | tagesschau.de'
 slug: mit-sicherheit-rufe-nach-scharferen-gesetzen-tagesschau-de
@@ -12,6 +12,7 @@ tags:
 categories:
   - asides
   - metaowl
+  - article
 author: hugo
 publishedAt: '2010-11-18T19:32:15.000Z'
 ---

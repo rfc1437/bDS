@@ -1,5 +1,5 @@
 ---
-id: 54ff6273-4c56-4da9-8979-a49dd9a6b41d
+id: dd79e799-155a-4043-b8b8-dd1242a6a5ab
 projectId: f2d5e497-5a16-4033-864a-0df066e05e17
 title: Pferderouladen mit Ratatouille
 slug: pferderouladen-mit-ratatouille
@@ -11,6 +11,7 @@ tags:
 categories:
   - artikel
   - kochbuch
+  - article
 author: hugo
 publishedAt: '2011-03-05T19:39:56.000Z'
 ---
