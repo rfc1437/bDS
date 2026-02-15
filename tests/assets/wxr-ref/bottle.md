@@ -15,5 +15,5 @@ publishedAt: '2010-11-19T07:14:36.000Z'
 ---
 Sehr netter Stopmotion Film mit zwei Haufen Dreck.
 
-[[Embedded content: http://player.vimeo.com/video/12155835]]
+[[vimeo id=12155835]]
 [Bottle](http://vimeo.com/12155835) from [Kirsten Lepore](http://vimeo.com/kirstenlepore) on [Vimeo](http://vimeo.com).
