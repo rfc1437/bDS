@@ -8,6 +8,7 @@ createdAt: '2023-08-19T15:26:04.000Z'
 updatedAt: '2023-08-19T15:28:14.000Z'
 categories:
   - artikel
+tags: []
 author: hugo
 publishedAt: '2023-08-19T13:26:04.000Z'
 ---

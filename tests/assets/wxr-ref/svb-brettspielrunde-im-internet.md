@@ -8,6 +8,7 @@ createdAt: '2020-03-24T13:48:33.000Z'
 updatedAt: '2021-05-30T13:33:18.000Z'
 categories:
   - page
+tags: []
 author: hugo
 publishedAt: '2020-03-24T12:48:33.000Z'
 ---

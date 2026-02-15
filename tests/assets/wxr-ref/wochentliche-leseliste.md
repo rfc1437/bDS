@@ -8,6 +8,7 @@ createdAt: '2013-04-08T14:10:27.000Z'
 updatedAt: '2013-04-08T14:13:29.000Z'
 categories:
   - asides
+tags: []
 author: hugo
 publishedAt: '2013-04-08T12:10:27.000Z'
 ---

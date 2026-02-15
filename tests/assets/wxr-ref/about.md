@@ -8,6 +8,7 @@ createdAt: '2010-11-13T10:27:56.000Z'
 updatedAt: '2010-11-13T12:19:15.000Z'
 categories:
   - page
+tags: []
 author: hugo
 publishedAt: '2010-11-13T10:27:56.000Z'
 ---
