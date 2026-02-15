@@ -12,14 +12,14 @@ tags: []
 author: hugo
 publishedAt: '2010-11-13T12:39:06.000Z'
 ---
-Diese Website ist rein privat betrieben und dient ausschließlich der Darstellung von Ideen und Inhalten des Inhabers. Es besteht kein kommerzielles Interesse. Alle von mir erstellten Inhalte (nicht also z.B. Kommentare, wohl aber meine eigenen Texte und Bilder) sind urheberrechtlich geschützt und [unterliegen einer Creative Commons Lizenz zur nicht-kommerziellen Nutzung](http://creativecommons.org/licenses/by-nc-sa/2.0/de/deed.de).
+Diese Website ist rein privat betrieben und dient ausschließlich der Darstellung von Ideen und Inhalten des Inhabers. Es besteht kein kommerzielles Interesse. Alle von mir erstellten Inhalte (nicht also z.B. Kommentare, wohl aber meine eigenen Texte und Bilder) sind urheberrechtlich geschützt und [unterliegen einer Creative Commons Lizenz zur nicht-kommerziellen Nutzung](http://creativecommons.org/licenses/by-nc-sa/2.0/de/deed.de "Lizenz für Inhalte").
 
 Inhaber und Verantwortlicher im Sinne des Presserechts ist:
 
 > Georg Bauer
 > Am Krug 40
 > 48151 Münster
-> eMail: [gb at rfc1437.de](http://hugo.rfc1437.de/kontakt/)
+> eMail: [gb at rfc1437.de](http://hugo.rfc1437.de/kontakt/ "Kontaktformular")
 > Telefon: +49 251 4143619
 
 ## Daten und deren Protokollierung
