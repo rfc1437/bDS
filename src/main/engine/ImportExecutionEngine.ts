@@ -430,9 +430,12 @@ export class ImportExecutionEngine extends EventEmitter {
     const wxrPost = analyzed.wxrPost;
     const db = getDatabase().getLocal();
 
+    // Convert Vimeo iframes to [[vimeo]] macros BEFORE markdown conversion
+    const contentWithVimeo = this.convertVimeoIframes(wxrPost.content);
+
     // Transform WordPress shortcodes [shortcode] to [[shortcode]] BEFORE markdown conversion
     // (TurndownService escapes brackets, so we must transform first)
-    const contentWithShortcodes = this.transformShortcodes(wxrPost.content);
+    const contentWithShortcodes = this.transformShortcodes(contentWithVimeo);
 
     // Convert HTML content to Markdown
     let transformedContent = this.convertToMarkdown(contentWithShortcodes);
@@ -777,6 +780,16 @@ export class ImportExecutionEngine extends EventEmitter {
 
     // Replace with relative media path
     return markdown.replace(uploadsUrlPattern, 'media/$1');
+  }
+
+  /**
+   * Convert Vimeo iframes to [[vimeo id=...]] macros.
+   * Matches <iframe src="...player.vimeo.com/video/ID..."> and converts to [[vimeo id=ID]]
+   */
+  private convertVimeoIframes(content: string): string {
+    // Match Vimeo iframe embeds: <iframe src="http(s)://player.vimeo.com/video/12345...">
+    const vimeoIframeRegex = /<iframe[^>]*src=["']https?:\/\/player\.vimeo\.com\/video\/(\d+)[^"']*["'][^>]*><\/iframe>/gi;
+    return content.replace(vimeoIframeRegex, '[[vimeo id=$1]]');
   }
 
   /**

@@ -12,6 +12,7 @@
 // Import all macro definitions - they self-register on import
 import './gallery';
 import './youtube';
+import './vimeo';
 import './photo_archive';
 
 // Add new macro imports here:

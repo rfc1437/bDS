@@ -40,6 +40,21 @@ export const macroConfigs: MacroConfig[] = [
     },
   },
   {
+    name: 'vimeo',
+    description: 'Embeds a Vimeo video player',
+    requiredParams: ['id'],
+    validate: (params) => {
+      if (!params.id) {
+        return 'Vimeo macro requires an "id" parameter (the video ID)';
+      }
+      // Vimeo IDs are numeric
+      if (!/^\d+$/.test(params.id)) {
+        return 'Invalid Vimeo video ID format (should be numeric)';
+      }
+      return undefined;
+    },
+  },
+  {
     name: 'gallery',
     description: 'Renders an image gallery from linked media files',
     validate: (params) => {
