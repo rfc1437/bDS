@@ -39,9 +39,8 @@ const autoSaveManager = new AutoSaveManager({
       const tagsStr = changes.tags as string;
       update.tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
     }
-    if ('category' in changes) {
-      const cat = changes.category as string;
-      update.categories = cat ? [cat] : ['article'];
+    if ('categories' in changes) {
+      update.categories = changes.categories as string[];
     }
 
     const updated = await window.electronAPI?.posts.update(id, update);
@@ -645,8 +644,10 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [category, setCategory] = useState('article');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
   const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
+  const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
+  const categoriesDropdownRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
   const hydrationOverlayRef = useRef<HTMLDivElement>(null);
@@ -694,6 +695,19 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     };
     loadCategories();
   }, []);
+
+  // Close categories dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoriesDropdownRef.current && !categoriesDropdownRef.current.contains(event.target as Node)) {
+        setCategoriesDropdownOpen(false);
+      }
+    };
+    if (categoriesDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [categoriesDropdownOpen]);
 
   // Resolve media URLs in content for display
   const resolvedContent = useMemo(() => resolveMediaUrls(content, media), [content, media]);
@@ -767,7 +781,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     title: string;
     content: string;
     tags: string[];
-    category: string;
+    categories: string[];
     postId: string;
     isDirty: boolean;
   } | null>(null);
@@ -778,11 +792,11 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       title,
       content,
       tags,
-      category,
+      categories: selectedCategories,
       postId,
       isDirty,
     };
-  }, [title, content, tags, category, postId, isDirty]);
+  }, [title, content, tags, selectedCategories, postId, isDirty]);
 
   // Auto-save when switching away from a post or unmounting
   useEffect(() => {
@@ -798,7 +812,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           title: pending.title,
           content: pending.content,
           tags: pending.tags,
-          categories: pending.category ? [pending.category] : ['article'],
+          categories: pending.categories.length > 0 ? pending.categories : ['article'],
         }).then((updated) => {
           if (updated) {
             useAppStore.getState().updatePost(pending.postId, updated as Partial<PostData>);
@@ -818,7 +832,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setTitle(post.title);
       setContent(post.content);
       setTags(post.tags);
-      setCategory(post.categories[0] || 'article');
+      setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
       markClean(postId);
       // Mark as initialized AFTER setting local state
       setIsInitialized(true);
@@ -829,13 +843,13 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   // Only run after form has been initialized from post data
   useEffect(() => {
     if (!post || !isInitialized) return;
-    const currentCategory = post.categories[0] || 'article';
     const tagsChanged = JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort());
+    const categoriesChanged = JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
     const hasChanges = 
       title !== post.title ||
       content !== post.content ||
       tagsChanged ||
-      category !== currentCategory;
+      categoriesChanged;
     
     if (hasChanges) {
       markDirty(postId);
@@ -845,12 +859,12 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         title,
         content,
         tags: tags.join(', '),
-        category,
+        categories: selectedCategories,
       });
     } else {
       markClean(postId);
     }
-  }, [title, content, tags, category, post, postId, isInitialized, markDirty, markClean]);
+  }, [title, content, tags, selectedCategories, post, postId, isInitialized, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -930,7 +944,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           setTitle(reverted.title);
           setContent(reverted.content);
           setTags(reverted.tags);
-          setCategory(reverted.categories[0] || 'article');
+          setSelectedCategories(reverted.categories.length > 0 ? reverted.categories : ['article']);
           // Update local post state so UI reflects the published status
           setPost(reverted as PostData);
           updatePost(postId, reverted as Partial<PostData>);
@@ -1264,15 +1278,67 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 />
               </div>
               <div className="editor-field">
-                <label>Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  {availableCategories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                <label>Categories</label>
+                <div className="multi-select-dropdown" ref={categoriesDropdownRef}>
+                  <button
+                    type="button"
+                    className="multi-select-trigger"
+                    onClick={() => setCategoriesDropdownOpen(!categoriesDropdownOpen)}
+                  >
+                    <span className="multi-select-value">
+                      {selectedCategories.length === 0
+                        ? 'Select categories...'
+                        : selectedCategories.length === 1
+                          ? selectedCategories[0]
+                          : `${selectedCategories.length} categories`}
+                    </span>
+                    <span className="multi-select-arrow">{categoriesDropdownOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {categoriesDropdownOpen && (
+                    <div className="multi-select-menu">
+                      {availableCategories.map((cat) => (
+                        <label key={cat} className="multi-select-option">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.includes(cat)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCategories([...selectedCategories, cat]);
+                              } else {
+                                // Don't allow unchecking if it's the last category
+                                if (selectedCategories.length > 1) {
+                                  setSelectedCategories(selectedCategories.filter(c => c !== cat));
+                                }
+                              }
+                            }}
+                          />
+                          <span>{cat}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {selectedCategories.length > 1 && (
+                  <div className="multi-select-pills">
+                    {selectedCategories.map((cat) => (
+                      <span key={cat} className="multi-select-pill">
+                        {cat}
+                        <button
+                          type="button"
+                          className="multi-select-pill-remove"
+                          onClick={() => {
+                            if (selectedCategories.length > 1) {
+                              setSelectedCategories(selectedCategories.filter(c => c !== cat));
+                            }
+                          }}
+                          title="Remove category"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             
