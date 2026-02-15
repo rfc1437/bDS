@@ -59,7 +59,17 @@ export {
 export {
   ImportDefinitionEngine,
   type ImportDefinitionData,
-} from './ImportDefinitionEngine';export {
+} from './ImportDefinitionEngine';
+export {
   readPostFile,
   type PostFileData,
 } from './postFileUtils';
+export {
+  MetadataDiffEngine,
+  getMetadataDiffEngine,
+  type PostMetadataDiff,
+  type DiffGroup,
+  type DiffField,
+  type ScanResult,
+  type TableStats,
+} from './MetadataDiffEngine';

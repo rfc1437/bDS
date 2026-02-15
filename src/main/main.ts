@@ -253,6 +253,13 @@ function createApplicationMenu(): Menu {
             mainWindow?.webContents.send('menu:reindexText');
           },
         },
+        { type: 'separator' },
+        {
+          label: 'Metadata Diff Tool',
+          click: () => {
+            mainWindow?.webContents.send('menu:metadataDiff');
+          },
+        },
       ],
     },
     {

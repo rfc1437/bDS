@@ -6,7 +6,7 @@ import type { DeleteReference, ConfirmDeleteDetails } from '../components/Confir
 const STORAGE_KEY = 'bds-app-state';
 
 // Tab types
-export type TabType = 'post' | 'media' | 'settings' | 'tags' | 'chat' | 'import';
+export type TabType = 'post' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'metadata-diff';
 
 export interface Tab {
   type: TabType;

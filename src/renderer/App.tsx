@@ -276,6 +276,13 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:metadataDiff', () => {
+        // Open metadata diff tool tab
+        openTab({ id: 'metadata-diff', type: 'metadata-diff', title: 'Metadata Diff' });
+      }) || (() => {})
+    );
+
     // Import completion event - refresh posts and media stores
     unsubscribers.push(
       window.electronAPI?.import.onComplete(async (data) => {

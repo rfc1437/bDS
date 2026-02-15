@@ -13,6 +13,7 @@ import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
 import { ImportAnalysisView } from '../ImportAnalysisView';
+import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { AutoSaveManager } from '../../utils';
 import { parseMacros, getMacro } from '../../macros/registry';
 import { InsertModal } from '../InsertModal';
@@ -2319,6 +2320,7 @@ export const Editor: React.FC = () => {
   const showTags = activeTab?.type === 'tags';
   const showChat = activeTab?.type === 'chat';
   const showImport = activeTab?.type === 'import';
+  const showMetadataDiff = activeTab?.type === 'metadata-diff';
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
@@ -2401,6 +2403,17 @@ export const Editor: React.FC = () => {
     return (
       <div className="editor">
         <ImportAnalysisView key={activeTabId} definitionId={activeTabId} />
+        {renderErrorModal()}
+        {renderConfirmDeleteModal()}
+      </div>
+    );
+  }
+
+  // Show metadata diff if metadata-diff tab is active
+  if (showMetadataDiff) {
+    return (
+      <div className="editor">
+        <MetadataDiffPanel />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

@@ -194,6 +194,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Metadata Diff Tool
+  metadataDiff: {
+    getStats: () => ipcRenderer.invoke('metadataDiff:getStats'),
+    scan: () => ipcRenderer.invoke('metadataDiff:scan'),
+    syncDbToFile: (postIds: string[], groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncDbToFile', postIds, groupLabel),
+    syncFileToDb: (postIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncFileToDb', postIds, field, groupLabel),
+  },
+
   // AI Chat (OpenCode Zen API integration)
   chat: {
     // API Key Management
@@ -374,6 +382,39 @@ export interface ElectronAPI {
     getAll: () => Promise<unknown[]>;
     update: (id: string, updates: unknown) => Promise<unknown>;
     delete: (id: string) => Promise<boolean>;
+  };
+  metadataDiff: {
+    getStats: () => Promise<{
+      totalPosts: number;
+      publishedPosts: number;
+      draftPosts: number;
+      totalMedia: number;
+    }>;
+    scan: () => Promise<{
+      totalScanned: number;
+      postsWithDifferences: number;
+      differences: Array<{
+        postId: string;
+        title: string;
+        slug: string;
+        filePath?: string;
+        hasDifferences: boolean;
+        differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
+      }>;
+      groups: Array<{
+        field: string;
+        label: string;
+        posts: Array<{
+          postId: string;
+          title: string;
+          slug: string;
+          dbValue: unknown;
+          fileValue: unknown;
+        }>;
+      }>;
+    }>;
+    syncDbToFile: (postIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
+    syncFileToDb: (postIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
   };
   chat: {
     // API Key Management
