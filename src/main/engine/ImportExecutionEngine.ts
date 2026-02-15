@@ -161,7 +161,7 @@ export class ImportExecutionEngine extends EventEmitter {
         // - Otherwise, use the original image src
         const imageUrl = hrefIsImage ? href : imgSrc;
 
-        // Derive alt text: prefer alt, then title, then filename
+        // Derive alt text: prefer alt, then title, then cleaned filename
         let altText = imgAlt.trim();
         if (!altText) {
           altText = imgTitle.trim();
@@ -170,13 +170,11 @@ export class ImportExecutionEngine extends EventEmitter {
           // Extract filename from the image URL as last resort
           const urlPath = imageUrl.split('?')[0]; // Remove query string
           const filename = urlPath.split('/').pop() || '';
-          altText = filename;
+          // Clean the filename: remove extension and replace underscores with spaces
+          altText = filename.replace(/\.[^.]+$/, '').replace(/_/g, ' ');
         }
 
-        // Build the markdown image link
-        if (imgTitle) {
-          return `![${altText}](${imageUrl} "${imgTitle}")`;
-        }
+        // Build the markdown image link (without title attribute)
         return `![${altText}](${imageUrl})`;
       },
     });
