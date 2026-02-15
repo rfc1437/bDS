@@ -359,6 +359,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
         await window.electronAPI?.importDefinitions.update(definitionId, {
           lastAnalysisResult: JSON.stringify(result),
           wxrFilePath: result.sourceFile,
+          name: result.site.link || result.site.title || undefined,
         });
       }
     } catch (error) {

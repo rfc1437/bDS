@@ -179,6 +179,25 @@ vi.mock('../../src/main/engine/MediaEngine', () => ({
   getMediaEngine: vi.fn(() => mockMediaEngine),
 }));
 
+// Mock PostMediaEngine
+const mockPostMediaEngine = {
+  setProjectContext: vi.fn(),
+  linkMediaToPost: vi.fn().mockImplementation(async (postId: string, mediaId: string) => {
+    return {
+      id: `link-${postId}-${mediaId}`,
+      projectId: 'test-project',
+      postId,
+      mediaId,
+      sortOrder: 0,
+      createdAt: new Date(),
+    };
+  }),
+};
+
+vi.mock('../../src/main/engine/PostMediaEngine', () => ({
+  getPostMediaEngine: vi.fn(() => mockPostMediaEngine),
+}));
+
 // Import after mocks are set up
 import { ImportExecutionEngine } from '../../src/main/engine/ImportExecutionEngine';
 
@@ -1071,6 +1090,12 @@ describe('ImportExecutionEngine E2E Tests', () => {
       expect(insertedMedia.length).toBe(1);
       expect(insertedMedia[0].linkedPostIds.length).toBe(1);
       expect(insertedMedia[0].linkedPostIds[0]).toBe(result.wpIdToPostId.get(201));
+
+      // CRITICAL: Verify PostMediaEngine.linkMediaToPost was called to create the DB link
+      expect(mockPostMediaEngine.linkMediaToPost).toHaveBeenCalledWith(
+        result.wpIdToPostId.get(201),  // postId
+        insertedMedia[0].id             // mediaId
+      );
     });
 
     it('should import standalone media without parent link', async () => {
@@ -1576,6 +1601,209 @@ describe('ImportExecutionEngine E2E Tests', () => {
       expect(result.posts.skipped).toBe(2);
       expect(result.posts.errors).toBe(0);
       expect(insertedPosts.length).toBe(0);
+    });
+  });
+
+  // ==========================================================================
+  // SECTION 8: MEDIA URL CONVERSION TO RELATIVE PATHS
+  // ==========================================================================
+
+  describe('Media URL Conversion to Relative Paths', () => {
+    /**
+     * Creates a custom post with specific content for URL conversion testing
+     */
+    function createPostWithContent(content: string, siteUrl: string = 'https://testblog.example.com'): ImportAnalysisReport {
+      const customPost: WxrPost = {
+        wpId: 9001,
+        title: 'URL Conversion Test Post',
+        slug: 'url-conversion-test',
+        content: content,
+        excerpt: '',
+        pubDate: new Date('2024-01-15T10:00:00Z'),
+        postDate: new Date('2024-01-15T10:00:00Z'),
+        postModified: new Date('2024-01-15T10:00:00Z'),
+        creator: 'testauthor',
+        status: 'publish',
+        postType: 'post',
+        categories: [],
+        tags: [],
+      };
+
+      return {
+        wxrData: wxrData,
+        posts: {
+          total: 1,
+          new: 1,
+          update: 0,
+          conflict: 0,
+          items: [{
+            wxrPost: customPost,
+            status: 'new' as PostAnalysisStatus,
+            contentHash: 'test-hash',
+            markdownPreview: '',
+          }],
+        },
+        pages: { total: 0, new: 0, update: 0, conflict: 0, items: [] },
+        media: { total: 0, new: 0, update: 0, conflict: 0, missing: 0, items: [] },
+        tags: [],
+        categories: [],
+        site: { ...wxrData.site, link: siteUrl },
+        macros: { totalUniqueMacros: 0, totalMacroUsages: 0, allMapped: true, macros: [] },
+      };
+    }
+
+    it('should convert absolute media URLs from site domain to relative paths', async () => {
+      // Post with image URL pointing to the site's own media
+      const content = `<p>Check out this image:</p>
+<img src="https://testblog.example.com/wp-content/uploads/2022/11/P1010853_01.jpg" alt="My Photo" />
+<p>Nice, right?</p>`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+
+      // Should convert to relative media URL
+      expect(fileContent).toContain('![My Photo](media/2022/11/P1010853_01.jpg)');
+      // Should NOT contain the absolute URL
+      expect(fileContent).not.toContain('https://testblog.example.com/wp-content/uploads');
+    });
+
+    it('should convert linked images with absolute media URLs to relative paths', async () => {
+      // Linked image pattern common in WordPress - thumbnail links to full-size
+      const content = `<a href="https://testblog.example.com/wp-content/uploads/2022/11/full-size.jpg">
+<img src="https://testblog.example.com/wp-content/uploads/2022/11/thumb.jpg" alt="Gallery Image" />
+</a>`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+
+      // The linked image rule uses the href (full-size) as the image URL
+      expect(fileContent).toContain('media/2022/11/full-size.jpg');
+      // Should NOT contain absolute URLs
+      expect(fileContent).not.toContain('https://testblog.example.com/wp-content/uploads');
+    });
+
+    it('should preserve external image URLs that are not from the site', async () => {
+      // Mix of site-owned and external images
+      const content = `<p>Own image:</p>
+<img src="https://testblog.example.com/wp-content/uploads/2024/01/local.jpg" alt="Local" />
+<p>External image:</p>
+<img src="https://external-site.com/images/photo.jpg" alt="External" />`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+
+      // Local image should become relative
+      expect(fileContent).toContain('![Local](media/2024/01/local.jpg)');
+      // External image should remain absolute
+      expect(fileContent).toContain('![External](https://external-site.com/images/photo.jpg)');
+    });
+
+    it('should handle site URLs with trailing slash', async () => {
+      const content = `<img src="https://hugo.rfc1437.de/wp-content/uploads/2022/11/image.jpg" alt="Test" />`;
+
+      const report = createPostWithContent(content, 'https://hugo.rfc1437.de/');
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+      expect(fileContent).toContain('![Test](media/2022/11/image.jpg)');
+    });
+
+    it('should handle site URLs without trailing slash', async () => {
+      const content = `<img src="https://hugo.rfc1437.de/wp-content/uploads/2022/11/image.jpg" alt="Test" />`;
+
+      const report = createPostWithContent(content, 'https://hugo.rfc1437.de');
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+      expect(fileContent).toContain('![Test](media/2022/11/image.jpg)');
+    });
+
+    it('should convert media URLs in markdown image syntax after HTML conversion', async () => {
+      // Sometimes WordPress content already has markdown-like syntax in HTML
+      const content = `<p>Image with title:</p>
+<img src="https://testblog.example.com/wp-content/uploads/2024/02/sunset.png" alt="Sunset" title="Beautiful Sunset" />`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+      // Image with title should still get relative URL
+      expect(fileContent).toContain('media/2024/02/sunset.png');
+      expect(fileContent).toContain('Beautiful Sunset');
+    });
+
+    it('should handle multiple images in same post', async () => {
+      const content = `<p>Gallery:</p>
+<img src="https://testblog.example.com/wp-content/uploads/2024/01/img1.jpg" alt="Image 1" />
+<img src="https://testblog.example.com/wp-content/uploads/2024/01/img2.jpg" alt="Image 2" />
+<img src="https://testblog.example.com/wp-content/uploads/2024/02/img3.jpg" alt="Image 3" />`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+      expect(fileContent).toContain('![Image 1](media/2024/01/img1.jpg)');
+      expect(fileContent).toContain('![Image 2](media/2024/01/img2.jpg)');
+      expect(fileContent).toContain('![Image 3](media/2024/02/img3.jpg)');
+    });
+
+    it('should handle deep nested upload paths', async () => {
+      const content = `<img src="https://testblog.example.com/wp-content/uploads/sites/2/2024/03/nested/deep/image.jpg" alt="Deep" />`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+      // Even complex paths should work, preserving path after wp-content/uploads/
+      expect(fileContent).toContain('media/sites/2/2024/03/nested/deep/image.jpg');
+    });
+
+    it('should NOT convert wp-content/themes or wp-content/plugins URLs', async () => {
+      // Assets from themes/plugins should stay absolute (they're not imported media)
+      const content = `<img src="https://testblog.example.com/wp-content/themes/mytheme/images/logo.png" alt="Theme Logo" />
+<img src="https://testblog.example.com/wp-content/plugins/myplugin/assets/icon.png" alt="Plugin Icon" />`;
+
+      const report = createPostWithContent(content);
+      await engine.executeImport(report, {});
+
+      const writtenFile = writtenFiles.find(f => f.path.includes('url-conversion-test'));
+      expect(writtenFile).toBeDefined();
+
+      const fileContent = writtenFile!.content;
+      // Theme assets should remain absolute
+      expect(fileContent).toContain('https://testblog.example.com/wp-content/themes/');
+      // Plugin assets should remain absolute  
+      expect(fileContent).toContain('https://testblog.example.com/wp-content/plugins/');
     });
   });
 });

@@ -14,6 +14,15 @@ export interface ImportExecutionProgress {
   eta?: number;
 }
 
+export interface ImportCompleteResult {
+  taskId: string;
+  success: boolean;
+  posts: { imported: number; skipped: number; errors: number };
+  media: { imported: number; skipped: number; errors: number };
+  pages: { imported: number; skipped: number; errors: number };
+  tags: { created: number; skipped: number };
+}
+
 export interface ImportDefinitionData {
   id: string;
   projectId: string;
@@ -388,6 +397,7 @@ export interface ElectronAPI {
     execute: (reportJson: string, uploadsFolder?: string) => Promise<ImportExecuteResult>;
     onProgress: (callback: (data: { step: string; detail?: string }) => void) => () => void;
     onExecutionProgress: (callback: (data: ImportExecutionProgress) => void) => () => void;
+    onComplete: (callback: (data: ImportCompleteResult) => void) => () => void;
   };
   importDefinitions: {
     create: (name?: string) => Promise<ImportDefinitionData>;

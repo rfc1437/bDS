@@ -159,6 +159,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('import:executionProgress', subscription);
       return () => ipcRenderer.removeListener('import:executionProgress', subscription);
     },
+    onComplete: (callback: (data: {
+      taskId: string;
+      success: boolean;
+      posts: { imported: number; skipped: number; errors: number };
+      media: { imported: number; skipped: number; errors: number };
+      pages: { imported: number; skipped: number; errors: number };
+      tags: { created: number; skipped: number };
+    }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: {
+        taskId: string;
+        success: boolean;
+        posts: { imported: number; skipped: number; errors: number };
+        media: { imported: number; skipped: number; errors: number };
+        pages: { imported: number; skipped: number; errors: number };
+        tags: { created: number; skipped: number };
+      }) => callback(data);
+      ipcRenderer.on('import:complete', subscription);
+      return () => ipcRenderer.removeListener('import:complete', subscription);
+    },
   },
 
   // Import Definition CRUD

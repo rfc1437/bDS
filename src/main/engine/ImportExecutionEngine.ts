@@ -22,6 +22,7 @@ import { eq } from 'drizzle-orm';
 import { getTagEngine } from './TagEngine';
 import { getPostEngine, PostData } from './PostEngine';
 import { getMediaEngine, MediaData } from './MediaEngine';
+import { getPostMediaEngine } from './PostMediaEngine';
 import type {
   ImportAnalysisReport,
   AnalyzedPost,
@@ -72,6 +73,7 @@ export class ImportExecutionEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private dataDir: string | null = null;
   private turndown: TurndownService;
+  private siteBaseUrl: string | null = null; // Base URL for media URL conversion
 
   constructor() {
     super();
@@ -193,6 +195,9 @@ export class ImportExecutionEngine extends EventEmitter {
     };
 
     const progress = options.onProgress || (() => {});
+
+    // Store site URL for media URL conversion
+    this.siteBaseUrl = report.site.link || null;
 
     try {
       // Build tag/category mappings
@@ -428,7 +433,10 @@ export class ImportExecutionEngine extends EventEmitter {
     const contentWithShortcodes = this.transformShortcodes(wxrPost.content);
 
     // Convert HTML content to Markdown
-    const transformedContent = this.convertToMarkdown(contentWithShortcodes);
+    let transformedContent = this.convertToMarkdown(contentWithShortcodes);
+
+    // Convert absolute media URLs from the site to relative paths
+    transformedContent = this.convertMediaUrlsToRelative(transformedContent);
 
     // Resolve tags
     const resolvedTags = this.resolveTaxonomy(wxrPost.tags, tagMapping);
@@ -622,7 +630,7 @@ export class ImportExecutionEngine extends EventEmitter {
 
     // Import the media file
     const mediaEngine = getMediaEngine();
-    await mediaEngine.importMedia(sourcePath, {
+    const importedMedia = await mediaEngine.importMedia(sourcePath, {
       title: wxrMedia.title || undefined,
       alt: wxrMedia.description || undefined,
       mimeType: wxrMedia.mimeType,
@@ -631,6 +639,15 @@ export class ImportExecutionEngine extends EventEmitter {
       createdAt,
       updatedAt: createdAt,
     });
+
+    // Link media to posts in the postMedia table
+    if (linkedPostIds.length > 0) {
+      const postMediaEngine = getPostMediaEngine();
+      postMediaEngine.setProjectContext(this.currentProjectId);
+      for (const postId of linkedPostIds) {
+        await postMediaEngine.linkMediaToPost(postId, importedMedia.id);
+      }
+    }
 
     return true;
   }
@@ -723,6 +740,40 @@ export class ImportExecutionEngine extends EventEmitter {
       const preserved = textContent.replace(/\n/g, '<br>');
       return '>' + preserved + '<';
     });
+  }
+
+  /**
+   * Convert absolute media URLs from the WordPress site to relative paths.
+   * 
+   * Converts URLs like:
+   *   https://site.com/wp-content/uploads/2022/11/image.jpg
+   * To:
+   *   media/2022/11/image.jpg
+   * 
+   * Only converts URLs from the site being imported (based on site.link).
+   * Does NOT convert:
+   *   - URLs from external sites
+   *   - URLs from wp-content/themes/ or wp-content/plugins/ (not imported media)
+   */
+  private convertMediaUrlsToRelative(markdown: string): string {
+    if (!this.siteBaseUrl || !markdown) return markdown;
+
+    // Normalize the site URL (remove trailing slash)
+    const siteUrl = this.siteBaseUrl.replace(/\/$/, '');
+
+    // Escape special regex characters in URL
+    const escapedSiteUrl = siteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Match URLs pointing to wp-content/uploads/ on the site
+    // This pattern matches both HTTP and HTTPS versions
+    // Pattern: {siteUrl}/wp-content/uploads/{path}
+    const uploadsUrlPattern = new RegExp(
+      `${escapedSiteUrl}/wp-content/uploads/([^\\s)"']+)`,
+      'gi'
+    );
+
+    // Replace with relative media path
+    return markdown.replace(uploadsUrlPattern, 'media/$1');
   }
 
   /**

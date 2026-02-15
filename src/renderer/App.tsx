@@ -276,6 +276,35 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    // Import completion event - refresh posts and media stores
+    unsubscribers.push(
+      window.electronAPI?.import.onComplete(async (data) => {
+        // Refresh posts store if any posts were imported
+        if (data.posts.imported > 0 || data.pages.imported > 0) {
+          const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
+          if (postsResult) {
+            const { items, hasMore, total } = postsResult as { items: PostData[]; hasMore: boolean; total: number };
+            setPosts(items, hasMore, total);
+          }
+        }
+
+        // Refresh media store if any media was imported
+        if (data.media.imported > 0) {
+          const mediaResult = await window.electronAPI?.media.getAll();
+          if (mediaResult) {
+            setMedia(mediaResult as MediaData[]);
+          }
+        }
+
+        // Show success toast
+        const importedCount = data.posts.imported + data.pages.imported;
+        const importedMedia = data.media.imported;
+        if (data.success) {
+          showToast.success(`Import complete: ${importedCount} posts, ${importedMedia} media files`);
+        }
+      }) || (() => {})
+    );
+
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };

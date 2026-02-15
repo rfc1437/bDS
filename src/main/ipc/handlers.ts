@@ -912,6 +912,16 @@ export function registerIpcHandlers(): void {
           wpIdToPostId: Object.fromEntries(result.wpIdToPostId),
         };
 
+        // Emit import:complete event to notify UI to refresh
+        ipcMain.emit('forward-to-renderer', 'import:complete', {
+          taskId,
+          success: result.success,
+          posts: result.posts,
+          media: result.media,
+          pages: result.pages,
+          tags: result.tags,
+        });
+
         return serializedResult;
       },
     };
