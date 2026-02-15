@@ -1496,9 +1496,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     };
     const languageName = languageNames[language] || language;
 
-    const systemPrompt = `Generate concise alt text and caption for this image in ${languageName}.
+    const systemPrompt = `Generate alt text and caption for this image in ${languageName}.
 
-ALT: Brief, objective description for screen readers (5-15 words). No "Image of" prefix.
+ALT: Describe ONLY what is visually present in the image. Be factual, neutral, and concise (5-12 words max). No interpretations, emotions, or "Image of" prefix. Example: "Red bicycle leaning against white brick wall"
 CAPTION: Short, engaging blog caption (5-20 words).
 
 Respond with JSON only: {"alt": "...", "caption": "..."}`;
