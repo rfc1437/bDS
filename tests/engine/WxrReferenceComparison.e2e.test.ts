@@ -293,6 +293,29 @@ function compareBody(expected: string, actual: string, slug: string): string[] {
         differences.push(`[${slug}] Body: line ${i + 1} differs`);
         differences.push(`  expected: "${expectedLines[i].substring(0, 100)}${expectedLines[i].length > 100 ? '...' : ''}"`);
         differences.push(`  actual:   "${actualLines[i].substring(0, 100)}${actualLines[i].length > 100 ? '...' : ''}"`);
+        
+        // Show byte-level differences for invisible character issues
+        const expLine = expectedLines[i];
+        const actLine = actualLines[i];
+        const minLen = Math.min(expLine.length, actLine.length);
+        let firstDiffPos = -1;
+        for (let j = 0; j < minLen; j++) {
+          if (expLine.charCodeAt(j) !== actLine.charCodeAt(j)) {
+            firstDiffPos = j;
+            break;
+          }
+        }
+        if (firstDiffPos === -1 && expLine.length !== actLine.length) {
+          firstDiffPos = minLen;
+        }
+        if (firstDiffPos >= 0) {
+          const expCode = firstDiffPos < expLine.length ? expLine.charCodeAt(firstDiffPos) : -1;
+          const actCode = firstDiffPos < actLine.length ? actLine.charCodeAt(firstDiffPos) : -1;
+          const expChar = firstDiffPos < expLine.length ? expLine[firstDiffPos] : '(end)';
+          const actChar = firstDiffPos < actLine.length ? actLine[firstDiffPos] : '(end)';
+          differences.push(`  BYTE DIFF at pos ${firstDiffPos}: expected '${expChar}' (0x${expCode.toString(16)}) vs actual '${actChar}' (0x${actCode.toString(16)})`);
+          differences.push(`  context: ...${expLine.substring(Math.max(0, firstDiffPos - 10), firstDiffPos)}[HERE]${expLine.substring(firstDiffPos, firstDiffPos + 10)}...`);
+        }
         break; // Only report first difference for conciseness
       }
     }
