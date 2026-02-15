@@ -301,9 +301,10 @@ export function registerIpcHandlers(): void {
     const project = await projectEngine.getActiveProject();
     const engine = getMediaEngine();
     if (project) {
-      const internalDir = projectEngine.getInternalBaseDir(project.id);
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
-      engine.setProjectContext(project.id, dataDir, internalDir);
+      // For thumbnails and meta: use dataDir (whether custom or internal)
+      // This ensures all project data lives in the same location for backup
+      engine.setProjectContext(project.id, dataDir, dataDir);
     }
 
     const imported: MediaData[] = [];
@@ -386,9 +387,10 @@ export function registerIpcHandlers(): void {
     const project = await projectEngine.getActiveProject();
     const engine = getMediaEngine();
     if (project) {
-      const internalDir = projectEngine.getInternalBaseDir(project.id);
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
-      engine.setProjectContext(project.id, dataDir, internalDir);
+      // For thumbnails and meta: use dataDir (whether custom or internal)
+      // This ensures all project data lives in the same location for backup
+      engine.setProjectContext(project.id, dataDir, dataDir);
     }
     // Fire and forget - don't await, let it run in background
     engine.rebuildDatabaseFromFiles().catch(err => {
@@ -427,9 +429,10 @@ export function registerIpcHandlers(): void {
     const project = await projectEngine.getActiveProject();
     const engine = getMediaEngine();
     if (project) {
-      const internalDir = projectEngine.getInternalBaseDir(project.id);
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
-      engine.setProjectContext(project.id, dataDir, internalDir);
+      // For thumbnails and meta: use dataDir (whether custom or internal)
+      // This ensures all project data lives in the same location for backup
+      engine.setProjectContext(project.id, dataDir, dataDir);
     }
     return engine.regenerateMissingThumbnails();
   });
