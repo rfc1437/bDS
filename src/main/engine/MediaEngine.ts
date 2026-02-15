@@ -204,11 +204,21 @@ export class MediaEngine extends EventEmitter {
   }
 
   /**
+   * Get the thumbnail subdirectory for a media item.
+   * Uses first 2 characters of the media ID for organization.
+   * Returns: thumbnails/xx/ where xx is the first 2 chars of mediaId
+   */
+  private getThumbnailSubDir(mediaId: string): string {
+    const prefix = mediaId.substring(0, 2).toLowerCase();
+    return path.join(this.getThumbnailsDir(), prefix);
+  }
+
+  /**
    * Generate thumbnails for an image file
    */
   async generateThumbnails(mediaId: string, sourcePath: string): Promise<Record<ThumbnailSize, string>> {
-    const thumbnailsDir = this.getThumbnailsDir();
-    await fs.mkdir(thumbnailsDir, { recursive: true });
+    const thumbnailSubDir = this.getThumbnailSubDir(mediaId);
+    await fs.mkdir(thumbnailSubDir, { recursive: true });
 
     const thumbnails: Record<ThumbnailSize, string> = {} as Record<ThumbnailSize, string>;
 
@@ -217,7 +227,7 @@ export class MediaEngine extends EventEmitter {
       const sharp = (await import('sharp')).default;
 
       for (const [size, dimensions] of Object.entries(THUMBNAIL_SIZES) as [ThumbnailSize, { width: number; height: number }][]) {
-        const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+        const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
 
         await sharp(sourcePath)
           .resize(dimensions.width, dimensions.height, {
@@ -243,7 +253,7 @@ export class MediaEngine extends EventEmitter {
    * Get existing thumbnail paths for a media item
    */
   async getThumbnailPaths(mediaId: string): Promise<Record<ThumbnailSize, string | null>> {
-    const thumbnailsDir = this.getThumbnailsDir();
+    const thumbnailSubDir = this.getThumbnailSubDir(mediaId);
     const result: Record<ThumbnailSize, string | null> = {
       small: null,
       medium: null,
@@ -251,7 +261,7 @@ export class MediaEngine extends EventEmitter {
     };
 
     for (const size of Object.keys(THUMBNAIL_SIZES) as ThumbnailSize[]) {
-      const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+      const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
       try {
         await fs.access(thumbnailPath);
         result[size] = thumbnailPath;
@@ -267,8 +277,8 @@ export class MediaEngine extends EventEmitter {
    * Get thumbnail as base64 data URL for renderer
    */
   async getThumbnailDataUrl(mediaId: string, size: ThumbnailSize = 'small'): Promise<string | null> {
-    const thumbnailsDir = this.getThumbnailsDir();
-    const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+    const thumbnailSubDir = this.getThumbnailSubDir(mediaId);
+    const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
 
     try {
       const data = await fs.readFile(thumbnailPath);
@@ -282,10 +292,10 @@ export class MediaEngine extends EventEmitter {
    * Delete thumbnails for a media item
    */
   private async deleteThumbnails(mediaId: string): Promise<void> {
-    const thumbnailsDir = this.getThumbnailsDir();
+    const thumbnailSubDir = this.getThumbnailSubDir(mediaId);
 
     for (const size of Object.keys(THUMBNAIL_SIZES) as ThumbnailSize[]) {
-      const thumbnailPath = path.join(thumbnailsDir, `${mediaId}-${size}.webp`);
+      const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
       try {
         await fs.unlink(thumbnailPath);
       } catch {
