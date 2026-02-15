@@ -23,6 +23,25 @@ export class ProjectEngine extends EventEmitter {
     super();
   }
 
+  private assertDeletableProject(id: string): void {
+    if (id === 'default') {
+      throw new Error('Cannot delete the default project');
+    }
+  }
+
+  private mapDbProjectToProjectData(dbProject: Project): ProjectData {
+    return {
+      id: dbProject.id,
+      name: dbProject.name,
+      slug: dbProject.slug,
+      description: dbProject.description || undefined,
+      dataPath: dbProject.dataPath || undefined,
+      createdAt: dbProject.createdAt,
+      updatedAt: dbProject.updatedAt,
+      isActive: dbProject.isActive ?? false,
+    };
+  }
+
   private generateSlug(name: string): string {
     return name
       .toLowerCase()
@@ -160,10 +179,7 @@ export class ProjectEngine extends EventEmitter {
   }
 
   async deleteProject(id: string): Promise<boolean> {
-    // Prevent deleting the default project
-    if (id === 'default') {
-      throw new Error('Cannot delete the default project');
-    }
+    this.assertDeletableProject(id);
 
     const db = getDatabase().getLocal();
     const existing = await db.select().from(projects).where(eq(projects.id, id)).get();
@@ -182,10 +198,7 @@ export class ProjectEngine extends EventEmitter {
   }
 
   async deleteProjectWithData(id: string): Promise<boolean> {
-    // Prevent deleting the default project
-    if (id === 'default') {
-      throw new Error('Cannot delete the default project');
-    }
+    this.assertDeletableProject(id);
 
     const db = getDatabase().getLocal();
     const existing = await db.select().from(projects).where(eq(projects.id, id)).get();
@@ -224,32 +237,14 @@ export class ProjectEngine extends EventEmitter {
       return null;
     }
 
-    return {
-      id: dbProject.id,
-      name: dbProject.name,
-      slug: dbProject.slug,
-      description: dbProject.description || undefined,
-      dataPath: dbProject.dataPath || undefined,
-      createdAt: dbProject.createdAt,
-      updatedAt: dbProject.updatedAt,
-      isActive: dbProject.isActive ?? false,
-    };
+    return this.mapDbProjectToProjectData(dbProject);
   }
 
   async getAllProjects(): Promise<ProjectData[]> {
     const db = getDatabase().getLocal();
     const dbProjects = await db.select().from(projects).all();
 
-    return dbProjects.map(p => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      description: p.description || undefined,
-      dataPath: p.dataPath || undefined,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-      isActive: p.isActive ?? false,
-    }));
+    return dbProjects.map(p => this.mapDbProjectToProjectData(p));
   }
 
   async getActiveProject(): Promise<ProjectData | null> {
@@ -261,16 +256,7 @@ export class ProjectEngine extends EventEmitter {
       return this.getProject('default');
     }
 
-    return {
-      id: dbProject.id,
-      name: dbProject.name,
-      slug: dbProject.slug,
-      description: dbProject.description || undefined,
-      dataPath: dbProject.dataPath || undefined,
-      createdAt: dbProject.createdAt,
-      updatedAt: dbProject.updatedAt,
-      isActive: dbProject.isActive ?? false,
-    };
+    return this.mapDbProjectToProjectData(dbProject);
   }
 
   async setActiveProject(id: string): Promise<ProjectData | null> {

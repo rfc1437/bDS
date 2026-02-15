@@ -215,6 +215,15 @@ describe('ProjectEngine', () => {
       );
     });
 
+    it('should short-circuit before database access when deleting default project', async () => {
+      await expect(projectEngine.deleteProject('default')).rejects.toThrow(
+        'Cannot delete the default project'
+      );
+
+      expect(mockLocalDb.select).not.toHaveBeenCalled();
+      expect(mockLocalDb.delete).not.toHaveBeenCalled();
+    });
+
     it('should return false for non-existent project', async () => {
       const result = await projectEngine.deleteProject('non-existent-id');
       expect(result).toBe(false);
@@ -258,6 +267,15 @@ describe('ProjectEngine', () => {
       await expect(projectEngine.deleteProjectWithData('default')).rejects.toThrow(
         'Cannot delete the default project'
       );
+    });
+
+    it('should short-circuit before database access when deleting default project', async () => {
+      await expect(projectEngine.deleteProjectWithData('default')).rejects.toThrow(
+        'Cannot delete the default project'
+      );
+
+      expect(mockLocalDb.select).not.toHaveBeenCalled();
+      expect(mockLocalDb.delete).not.toHaveBeenCalled();
     });
 
     it('should return false for non-existent project', async () => {
@@ -989,6 +1007,35 @@ describe('ProjectEngine', () => {
       expect(result).not.toBeNull();
       expect(result?.id).toBe('active-project');
       expect(result?.isActive).toBe(true);
+    });
+
+    it('should normalize nullable fields in active project mapping', async () => {
+      const activeProject = {
+        id: 'active-nullable',
+        name: 'Active Nullable',
+        slug: 'active-nullable',
+        description: null,
+        dataPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: null,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(activeProject),
+        });
+        return chain;
+      });
+
+      const result = await projectEngine.getActiveProject();
+
+      expect(result).not.toBeNull();
+      expect(result?.description).toBeUndefined();
+      expect(result?.dataPath).toBeUndefined();
+      expect(result?.isActive).toBe(false);
     });
   });
 
