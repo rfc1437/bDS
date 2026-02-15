@@ -123,6 +123,13 @@ vi.mock('../../src/main/engine/TaskManager', () => ({
   },
 }));
 
+// Mock PostEngine - only mock the syncPublishedPostFile method used by TagEngine
+vi.mock('../../src/main/engine/PostEngine', () => ({
+  getPostEngine: vi.fn(() => ({
+    syncPublishedPostFile: vi.fn(async () => true),
+  })),
+}));
+
 describe('TagEngine', () => {
   let tagEngine: TagEngine;
 

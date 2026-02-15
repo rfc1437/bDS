@@ -7,6 +7,7 @@ import { eq, and, asc, sql, like } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { tags, posts } from '../database/schema';
 import { taskManager } from './TaskManager';
+import { getPostEngine } from './PostEngine';
 
 /**
  * Tag data stored in the database
@@ -379,6 +380,9 @@ export class TagEngine extends EventEmitter {
             })
             .where(eq(posts.id, postId));
 
+          // Sync published post's file with updated tags
+          await getPostEngine().syncPublishedPostFile(postId);
+
           updated++;
           onProgress((updated / total) * 80, `Updated ${updated}/${total} posts...`);
         }
@@ -485,6 +489,9 @@ export class TagEngine extends EventEmitter {
                   updatedAt: new Date(),
                 })
                 .where(eq(posts.id, postId));
+
+              // Sync published post's file with updated tags
+              await getPostEngine().syncPublishedPostFile(postId);
 
               totalPostsUpdated++;
             }
@@ -600,6 +607,9 @@ export class TagEngine extends EventEmitter {
               updatedAt: new Date(),
             })
             .where(eq(posts.id, postId));
+
+          // Sync published post's file with updated tags
+          await getPostEngine().syncPublishedPostFile(postId);
 
           updated++;
           onProgress((updated / total) * 80, `Updated ${updated}/${total} posts...`);

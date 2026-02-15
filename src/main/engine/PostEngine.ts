@@ -519,6 +519,38 @@ export class PostEngine extends EventEmitter {
     return this.dbRowToPostData(dbPost, '');
   }
 
+  /**
+   * Sync a published post's file with current database metadata (e.g., tags).
+   * This is needed when metadata changes outside of normal post editing flow,
+   * such as tag merge or rename operations.
+   *
+   * @param postId - The post ID to sync
+   * @returns true if file was updated, false if post is not published or doesn't exist
+   */
+  async syncPublishedPostFile(postId: string): Promise<boolean> {
+    const db = getDatabase().getLocal();
+    const dbPost = await db.select().from(posts).where(eq(posts.id, postId)).get();
+
+    if (!dbPost || !dbPost.filePath) {
+      // Not a published post or doesn't exist
+      return false;
+    }
+
+    // Read content from the existing file
+    const fileData = await this.readPostFile(dbPost.filePath);
+    if (!fileData) {
+      return false;
+    }
+
+    // Build the full post data with DB metadata (tags) and file content
+    const postData = this.dbRowToPostData(dbPost, fileData.content);
+
+    // Re-write the file with updated metadata
+    await this.writePostFile(postData);
+
+    return true;
+  }
+
   async getAllPosts(options?: PaginationOptions): Promise<PaginatedResult<PostData>> {
     const db = getDatabase().getLocal();
     const limit = options?.limit ?? 500;
