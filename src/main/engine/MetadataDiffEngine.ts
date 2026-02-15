@@ -77,6 +77,45 @@ export interface TableStats {
 export class MetadataDiffEngine extends EventEmitter {
   private currentProjectId = 'default';
 
+  private async runSyncLoop(
+    postIds: string[],
+    onProgress: ((percent: number, message: string) => void) | undefined,
+    processPost: (postId: string) => Promise<boolean>,
+    errorMessage: (postId: string) => string
+  ): Promise<{ success: number; failed: number }> {
+    const total = postIds.length;
+    let success = 0;
+    let failed = 0;
+
+    for (let i = 0; i < postIds.length; i++) {
+      const postId = postIds[i];
+      try {
+        const processed = await processPost(postId);
+        if (processed) {
+          success++;
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        console.error(errorMessage(postId), error);
+        failed++;
+      }
+
+      // Report progress every 10 posts or on last post
+      if (onProgress && (i % 10 === 0 || i === postIds.length - 1)) {
+        const percent = Math.round(((i + 1) / total) * 100);
+        onProgress(percent, `Synced ${i + 1} of ${total} posts...`);
+      }
+
+      // Yield to event loop every 20 posts
+      if (i % 20 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+
+    return { success, failed };
+  }
+
   setProjectContext(projectId: string): void {
     this.currentProjectId = projectId;
   }
@@ -325,37 +364,12 @@ export class MetadataDiffEngine extends EventEmitter {
     onProgress?: (percent: number, message: string) => void
   ): Promise<{ success: number; failed: number }> {
     const postEngine = getPostEngine();
-    const total = postIds.length;
-    let success = 0;
-    let failed = 0;
-
-    for (let i = 0; i < postIds.length; i++) {
-      const postId = postIds[i];
-      try {
-        const synced = await postEngine.syncPublishedPostFile(postId);
-        if (synced) {
-          success++;
-        } else {
-          failed++;
-        }
-      } catch (error) {
-        console.error(`[MetadataDiffEngine] Failed to sync post ${postId} to file:`, error);
-        failed++;
-      }
-
-      // Report progress every 10 posts or on last post
-      if (onProgress && (i % 10 === 0 || i === postIds.length - 1)) {
-        const percent = Math.round(((i + 1) / total) * 100);
-        onProgress(percent, `Synced ${i + 1} of ${total} posts...`);
-      }
-
-      // Yield to event loop every 20 posts
-      if (i % 20 === 0) {
-        await new Promise(resolve => setImmediate(resolve));
-      }
-    }
-
-    return { success, failed };
+    return this.runSyncLoop(
+      postIds,
+      onProgress,
+      async (postId) => postEngine.syncPublishedPostFile(postId),
+      (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to file:`
+    );
   }
 
   /**
@@ -368,13 +382,10 @@ export class MetadataDiffEngine extends EventEmitter {
     onProgress?: (percent: number, message: string) => void
   ): Promise<{ success: number; failed: number }> {
     const db = this.getDb();
-    const total = postIds.length;
-    let success = 0;
-    let failed = 0;
-
-    for (let i = 0; i < postIds.length; i++) {
-      const postId = postIds[i];
-      try {
+    return this.runSyncLoop(
+      postIds,
+      onProgress,
+      async (postId) => {
         // Get the post from DB to get file path
         const dbPost = await db
           .select()
@@ -383,15 +394,13 @@ export class MetadataDiffEngine extends EventEmitter {
           .get();
 
         if (!dbPost || !dbPost.filePath) {
-          failed++;
-          continue;
+          return false;
         }
 
         // Read file metadata
         const fileData = await readPostFile(dbPost.filePath);
         if (!fileData) {
-          failed++;
-          continue;
+          return false;
         }
 
         // Build update object based on field or all fields
@@ -421,25 +430,10 @@ export class MetadataDiffEngine extends EventEmitter {
           .set(updateData)
           .where(eq(posts.id, postId));
 
-        success++;
-      } catch (error) {
-        console.error(`[MetadataDiffEngine] Failed to sync post ${postId} to DB:`, error);
-        failed++;
-      }
-
-      // Report progress every 10 posts or on last post
-      if (onProgress && (i % 10 === 0 || i === postIds.length - 1)) {
-        const percent = Math.round(((i + 1) / total) * 100);
-        onProgress(percent, `Synced ${i + 1} of ${total} posts...`);
-      }
-
-      // Yield to event loop every 20 posts
-      if (i % 20 === 0) {
-        await new Promise(resolve => setImmediate(resolve));
-      }
-    }
-
-    return { success, failed };
+        return true;
+      },
+      (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to DB:`
+    );
   }
 
   /**

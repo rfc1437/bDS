@@ -491,6 +491,29 @@ Content`);
       expect(mockSyncPublishedPostFile).toHaveBeenCalledWith('post-1');
       expect(mockSyncPublishedPostFile).toHaveBeenCalledWith('post-2');
     });
+
+    it('should report progress on first and final items based on cadence', async () => {
+      const postIds = Array.from({ length: 11 }, (_, i) => `post-${i + 1}`);
+      const onProgress = vi.fn();
+
+      await engine.syncDbToFile(postIds, onProgress);
+
+      expect(onProgress).toHaveBeenCalledTimes(2);
+      expect(onProgress).toHaveBeenNthCalledWith(1, 9, 'Synced 1 of 11 posts...');
+      expect(onProgress).toHaveBeenNthCalledWith(2, 100, 'Synced 11 of 11 posts...');
+    });
+
+    it('should keep processing and count failures when sync throws or returns false', async () => {
+      mockSyncPublishedPostFile
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+        .mockRejectedValueOnce(new Error('sync failure'));
+
+      const result = await engine.syncDbToFile(['post-1', 'post-2', 'post-3']);
+
+      expect(result).toEqual({ success: 1, failed: 2 });
+      expect(mockSyncPublishedPostFile).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('syncFileToDb', () => {
@@ -528,6 +551,84 @@ Content here`);
 
       // Verify the database update was called
       expect(mockLocalDb.update).toHaveBeenCalled();
+    });
+
+    it('should report progress on first and final items based on cadence', async () => {
+      const postIds = Array.from({ length: 11 }, (_, i) => `post-${i + 1}`);
+
+      mockPostsGetQueue = postIds.map((postId) => ({
+        id: postId,
+        projectId: 'test-project',
+        title: `Post ${postId}`,
+        slug: postId,
+        status: 'published',
+        filePath: `/mock/userData/posts/2024/01/${postId}.md`,
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+      }));
+
+      for (const postId of postIds) {
+        mockFileData.set(`/mock/userData/posts/2024/01/${postId}.md`, `---\nid: ${postId}\nprojectId: test-project\ntitle: "${postId}"\nslug: ${postId}\nstatus: published\ntags: []\ncategories: []\n---\nContent`);
+      }
+
+      const onProgress = vi.fn();
+      await engine.syncFileToDb(postIds, undefined, onProgress);
+
+      expect(onProgress).toHaveBeenCalledTimes(2);
+      expect(onProgress).toHaveBeenNthCalledWith(1, 9, 'Synced 1 of 11 posts...');
+      expect(onProgress).toHaveBeenNthCalledWith(2, 100, 'Synced 11 of 11 posts...');
+    });
+
+    it('should continue after missing file path and file read failures', async () => {
+      const postIds = ['post-1', 'post-2', 'post-3'];
+
+      mockPostsGetQueue = [
+        {
+          id: 'post-1',
+          projectId: 'test-project',
+          title: 'Post 1',
+          slug: 'post-1',
+          status: 'published',
+          filePath: null,
+          tags: '[]',
+          categories: '[]',
+          createdAt: new Date('2024-01-15'),
+          updatedAt: new Date('2024-01-15'),
+        },
+        {
+          id: 'post-2',
+          projectId: 'test-project',
+          title: 'Post 2',
+          slug: 'post-2',
+          status: 'published',
+          filePath: '/mock/userData/posts/2024/01/post-2.md',
+          tags: '[]',
+          categories: '[]',
+          createdAt: new Date('2024-01-15'),
+          updatedAt: new Date('2024-01-15'),
+        },
+        {
+          id: 'post-3',
+          projectId: 'test-project',
+          title: 'Post 3',
+          slug: 'post-3',
+          status: 'published',
+          filePath: '/mock/userData/posts/2024/01/post-3.md',
+          tags: '[]',
+          categories: '[]',
+          createdAt: new Date('2024-01-15'),
+          updatedAt: new Date('2024-01-15'),
+        },
+      ];
+
+      mockFileData.set('/mock/userData/posts/2024/01/post-3.md', `---\nid: post-3\nprojectId: test-project\ntitle: "Post 3"\nslug: post-3\nstatus: published\ntags: ["from-file"]\ncategories: []\n---\nContent`);
+
+      const result = await engine.syncFileToDb(postIds, 'tags');
+
+      expect(result).toEqual({ success: 1, failed: 2 });
+      expect(mockLocalDb.update).toHaveBeenCalledTimes(1);
     });
   });
 });
