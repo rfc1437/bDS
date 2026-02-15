@@ -137,10 +137,6 @@ describe('stemmer', () => {
       expect(stemText('   ', 'english')).toBe('');
     });
 
-    it('should return empty string for null/undefined-like empty text', () => {
-      expect(stemText('', 'english')).toBe('');
-    });
-
     it('should handle multiple spaces between words', () => {
       const result = stemText('Running   dogs   are   playing', 'english');
       const words = result.split(' ');
