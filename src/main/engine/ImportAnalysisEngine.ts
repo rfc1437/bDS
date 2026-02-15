@@ -201,10 +201,13 @@ export class ImportAnalysisEngine {
         // - Otherwise, use the original image src
         const imageUrl = hrefIsImage ? href : imgSrc;
 
-        // Derive alt text: use image alt if not empty, otherwise extract filename from the URL
+        // Derive alt text: prefer alt, then title, then filename
         let altText = imgAlt.trim();
         if (!altText) {
-          // Extract filename from the image URL
+          altText = imgTitle.trim();
+        }
+        if (!altText) {
+          // Extract filename from the image URL as last resort
           const urlPath = imageUrl.split('?')[0]; // Remove query string
           const filename = urlPath.split('/').pop() || '';
           altText = filename;

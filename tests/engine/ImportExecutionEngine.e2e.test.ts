@@ -432,6 +432,9 @@ describe('ImportExecutionEngine E2E Tests', () => {
       // Image with proper alt inside link should preserve the alt text
       expect(content).toContain('![Company Logo](http://example.com/logo.png)');
 
+      // Image with title but empty alt should use title as alt text (title takes precedence over filename)
+      expect(content).toContain('![Delicious Piroggen](http://example.com/wp-content/uploads/2020/03/dish.jpg');
+
       // Should NOT have empty image alt text (the broken pattern we're fixing)
       expect(content).not.toMatch(/!\[\]\([^)]+\)/);
     });
