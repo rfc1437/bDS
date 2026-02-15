@@ -35,6 +35,82 @@ export class PostMediaEngine extends EventEmitter {
     super();
   }
 
+  private getDb() {
+    return getDatabase().getLocal();
+  }
+
+  private getUniqueMediaIds(mediaIds: string[]): string[] {
+    return Array.from(new Set(mediaIds));
+  }
+
+  private async addPostToMediaSidecar(mediaId: string, postId: string): Promise<void> {
+    const media = await getMediaEngine().getMedia(mediaId);
+    if (!media) {
+      return;
+    }
+
+    const linkedPostIds = media.linkedPostIds || [];
+    if (linkedPostIds.includes(postId)) {
+      return;
+    }
+
+    await getMediaEngine().updateMedia(mediaId, {
+      linkedPostIds: [...linkedPostIds, postId],
+    });
+  }
+
+  private async removePostFromMediaSidecar(mediaId: string, postId: string): Promise<void> {
+    const media = await getMediaEngine().getMedia(mediaId);
+    if (!media) {
+      return;
+    }
+
+    const linkedPostIds = (media.linkedPostIds || []).filter(id => id !== postId);
+    await getMediaEngine().updateMedia(mediaId, { linkedPostIds });
+  }
+
+  private createLinkData(link: NewPostMediaLink): PostMediaLinkData {
+    return {
+      id: link.id,
+      projectId: link.projectId,
+      postId: link.postId,
+      mediaId: link.mediaId,
+      sortOrder: link.sortOrder ?? 0,
+      createdAt: link.createdAt,
+    };
+  }
+
+  private async createPostMediaLink(postId: string, mediaId: string, sortOrder: number, createdAt: Date): Promise<PostMediaLinkData> {
+    const db = this.getDb();
+
+    const link: NewPostMediaLink = {
+      id: uuidv4(),
+      projectId: this.currentProjectId,
+      postId,
+      mediaId,
+      sortOrder,
+      createdAt,
+    };
+
+    await db.insert(postMedia).values(link);
+    await this.addPostToMediaSidecar(mediaId, postId);
+
+    return this.createLinkData(link);
+  }
+
+  private async removePostMediaLink(postId: string, mediaId: string): Promise<void> {
+    const db = this.getDb();
+
+    await db.delete(postMedia).where(
+      and(
+        eq(postMedia.postId, postId),
+        eq(postMedia.mediaId, mediaId)
+      )
+    );
+
+    await this.removePostFromMediaSidecar(mediaId, postId);
+  }
+
   /**
    * Set the current project context
    */
@@ -47,45 +123,19 @@ export class PostMediaEngine extends EventEmitter {
    * Link a media file to a post
    */
   async linkMediaToPost(postId: string, mediaId: string): Promise<PostMediaLinkData> {
-    const db = getDatabase().getLocal();
+    const existingLinks = await this.getLinkedMediaForPost(postId);
+    const existing = existingLinks.find(link => link.mediaId === mediaId);
+    if (existing) {
+      return existing;
+    }
 
     // Get current highest sortOrder for this post
-    const existingLinks = await this.getLinkedMediaForPost(postId);
     const maxSortOrder = existingLinks.length > 0
       ? Math.max(...existingLinks.map(l => l.sortOrder))
       : -1;
 
     const now = new Date();
-    const link: NewPostMediaLink = {
-      id: uuidv4(),
-      projectId: this.currentProjectId,
-      postId,
-      mediaId,
-      sortOrder: maxSortOrder + 1,
-      createdAt: now,
-    };
-
-    await db.insert(postMedia).values(link);
-
-    // Update the media sidecar to include this post
-    const media = await getMediaEngine().getMedia(mediaId);
-    if (media) {
-      const linkedPostIds = media.linkedPostIds || [];
-      if (!linkedPostIds.includes(postId)) {
-        await getMediaEngine().updateMedia(mediaId, {
-          linkedPostIds: [...linkedPostIds, postId],
-        });
-      }
-    }
-
-    const linkData: PostMediaLinkData = {
-      id: link.id,
-      projectId: link.projectId,
-      postId: link.postId,
-      mediaId: link.mediaId,
-      sortOrder: link.sortOrder ?? 0,
-      createdAt: now,
-    };
+    const linkData = await this.createPostMediaLink(postId, mediaId, maxSortOrder + 1, now);
 
     this.emit('mediaLinked', linkData);
     return linkData;
@@ -95,21 +145,7 @@ export class PostMediaEngine extends EventEmitter {
    * Unlink a media file from a post
    */
   async unlinkMediaFromPost(postId: string, mediaId: string): Promise<void> {
-    const db = getDatabase().getLocal();
-
-    await db.delete(postMedia).where(
-      and(
-        eq(postMedia.postId, postId),
-        eq(postMedia.mediaId, mediaId)
-      )
-    );
-
-    // Update the media sidecar to remove this post
-    const media = await getMediaEngine().getMedia(mediaId);
-    if (media) {
-      const linkedPostIds = (media.linkedPostIds || []).filter(id => id !== postId);
-      await getMediaEngine().updateMedia(mediaId, { linkedPostIds });
-    }
+    await this.removePostMediaLink(postId, mediaId);
 
     this.emit('mediaUnlinked', { postId, mediaId });
   }
@@ -120,9 +156,9 @@ export class PostMediaEngine extends EventEmitter {
    * Skips media that are already linked.
    */
   async linkManyToPost(postId: string, mediaIds: string[]): Promise<{ linked: string[]; skipped: string[] }> {
-    const db = getDatabase().getLocal();
     const linked: string[] = [];
     const skipped: string[] = [];
+    const uniqueMediaIds = this.getUniqueMediaIds(mediaIds);
 
     // Get all existing links for this post to check what's already linked
     const existingLinks = await this.getLinkedMediaForPost(postId);
@@ -134,7 +170,7 @@ export class PostMediaEngine extends EventEmitter {
 
     const now = new Date();
 
-    for (const mediaId of mediaIds) {
+    for (const mediaId of uniqueMediaIds) {
       // Skip if already linked
       if (existingMediaIds.has(mediaId)) {
         skipped.push(mediaId);
@@ -142,27 +178,7 @@ export class PostMediaEngine extends EventEmitter {
       }
 
       maxSortOrder++;
-      const link: NewPostMediaLink = {
-        id: uuidv4(),
-        projectId: this.currentProjectId,
-        postId,
-        mediaId,
-        sortOrder: maxSortOrder,
-        createdAt: now,
-      };
-
-      await db.insert(postMedia).values(link);
-
-      // Update the media sidecar to include this post
-      const media = await getMediaEngine().getMedia(mediaId);
-      if (media) {
-        const linkedPostIds = media.linkedPostIds || [];
-        if (!linkedPostIds.includes(postId)) {
-          await getMediaEngine().updateMedia(mediaId, {
-            linkedPostIds: [...linkedPostIds, postId],
-          });
-        }
-      }
+      await this.createPostMediaLink(postId, mediaId, maxSortOrder, now);
 
       linked.push(mediaId);
       existingMediaIds.add(mediaId); // Track to avoid duplicates within batch
@@ -181,23 +197,11 @@ export class PostMediaEngine extends EventEmitter {
    * Only emits a single event at the end instead of per-item events.
    */
   async unlinkManyFromPost(postId: string, mediaIds: string[]): Promise<{ unlinked: string[] }> {
-    const db = getDatabase().getLocal();
     const unlinked: string[] = [];
+    const uniqueMediaIds = this.getUniqueMediaIds(mediaIds);
 
-    for (const mediaId of mediaIds) {
-      await db.delete(postMedia).where(
-        and(
-          eq(postMedia.postId, postId),
-          eq(postMedia.mediaId, mediaId)
-        )
-      );
-
-      // Update the media sidecar to remove this post
-      const media = await getMediaEngine().getMedia(mediaId);
-      if (media) {
-        const linkedPostIds = (media.linkedPostIds || []).filter(id => id !== postId);
-        await getMediaEngine().updateMedia(mediaId, { linkedPostIds });
-      }
+    for (const mediaId of uniqueMediaIds) {
+      await this.removePostMediaLink(postId, mediaId);
 
       unlinked.push(mediaId);
     }
@@ -214,7 +218,7 @@ export class PostMediaEngine extends EventEmitter {
    * Get all media linked to a post, ordered by sortOrder
    */
   async getLinkedMediaForPost(postId: string): Promise<PostMediaLinkData[]> {
-    const db = getDatabase().getLocal();
+    const db = this.getDb();
 
     const links = await db
       .select()
@@ -234,7 +238,7 @@ export class PostMediaEngine extends EventEmitter {
    * Get all posts linked to a media file
    */
   async getLinkedPostsForMedia(mediaId: string): Promise<PostMediaLinkData[]> {
-    const db = getDatabase().getLocal();
+    const db = this.getDb();
 
     const links = await db
       .select()
@@ -255,7 +259,7 @@ export class PostMediaEngine extends EventEmitter {
    * @param mediaIds Array of media IDs in the new desired order
    */
   async reorderMediaForPost(postId: string, mediaIds: string[]): Promise<void> {
-    const db = getDatabase().getLocal();
+    const db = this.getDb();
 
     // Update each media's sortOrder based on its position in the array
     for (let i = 0; i < mediaIds.length; i++) {
@@ -278,7 +282,7 @@ export class PostMediaEngine extends EventEmitter {
    * reconstructed from filesystem source of truth.
    */
   async rebuildFromSidecars(): Promise<void> {
-    const db = getDatabase().getLocal();
+    const db = this.getDb();
 
     console.log('[PostMediaEngine] Rebuilding post-media links from sidecars...');
 
@@ -346,7 +350,7 @@ export class PostMediaEngine extends EventEmitter {
    * Check if a media is linked to a post
    */
   async isMediaLinkedToPost(postId: string, mediaId: string): Promise<boolean> {
-    const db = getDatabase().getLocal();
+    const db = this.getDb();
 
     const link = await db
       .select()

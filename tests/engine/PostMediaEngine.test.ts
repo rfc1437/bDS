@@ -205,6 +205,23 @@ describe('PostMediaEngine', () => {
         expect.objectContaining({ postId, mediaId })
       );
     });
+
+    it('should not create a duplicate link when media is already linked to the post', async () => {
+      const postId = 'post-1';
+      const mediaId = 'media-1';
+
+      selectMockData = [
+        { id: 'existing-link', projectId: 'test-project', postId, mediaId, sortOrder: 2, createdAt: new Date() },
+      ];
+
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: mediaId, linkedPostIds: [postId] }));
+
+      const result = await engine.linkMediaToPost(postId, mediaId);
+
+      expect(insertedValues).toHaveLength(0);
+      expect(result.id).toBe('existing-link');
+      expect(result.sortOrder).toBe(2);
+    });
   });
 
   describe('unlinkMediaFromPost', () => {
@@ -443,6 +460,20 @@ describe('PostMediaEngine', () => {
         'media-2',
         expect.objectContaining({ linkedPostIds: ['other-post'] })
       );
+    });
+
+    it('should process duplicate media IDs only once in a single batch', async () => {
+      const postId = 'post-1';
+      const mediaIds = ['media-1', 'media-1', 'media-2'];
+
+      mockGetMedia.mockImplementation((id: string) =>
+        Promise.resolve(createMockMedia({ id, linkedPostIds: [postId, 'other-post'] }))
+      );
+
+      const result = await engine.unlinkManyFromPost(postId, mediaIds);
+
+      expect(result.unlinked).toEqual(['media-1', 'media-2']);
+      expect(mockUpdateMedia).toHaveBeenCalledTimes(2);
     });
   });
 
