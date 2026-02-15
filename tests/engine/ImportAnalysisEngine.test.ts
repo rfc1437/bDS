@@ -762,6 +762,97 @@ describe('ImportAnalysisEngine', () => {
       expect(youtubeMacro?.usages[0].params.id).toBe('wordpress');
     });
   });
+
+  describe('HTML to Markdown Conversion - Linked Images', () => {
+    it('should convert linked images with image href (WordPress full-size pattern)', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '<a href="http://example.com/full-image.jpg"><img src="http://example.com/thumb.jpg" alt="My Image" /></a>',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      // Should use the href URL (the full-size image) in markdown
+      expect(report.posts.items[0].markdownPreview).toContain('![My Image](http://example.com/full-image.jpg)');
+    });
+
+    it('should convert linked images with non-image href (use img src)', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '<a href="http://example.com/article"><img src="http://example.com/image.jpg" alt="Article Image" /></a>',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      // Should use the img src since href is not an image
+      expect(report.posts.items[0].markdownPreview).toContain('![Article Image](http://example.com/image.jpg)');
+    });
+
+    it('should use img title as alt text when alt is empty', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '<a href="http://example.com/full.jpg"><img src="http://example.com/thumb.jpg" alt="" title="My Title" /></a>',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      // Should use title as alt text and include title in markdown
+      expect(report.posts.items[0].markdownPreview).toContain('![My Title](http://example.com/full.jpg "My Title")');
+    });
+
+    it('should extract filename as alt text when both alt and title are empty', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '<a href="http://example.com/beautiful-sunset.jpg"><img src="http://example.com/thumb.jpg" alt="" title="" /></a>',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      // Should extract filename from URL as alt text
+      expect(report.posts.items[0].markdownPreview).toContain('beautiful-sunset.jpg');
+    });
+
+    it('should handle empty/whitespace content gracefully', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '   ',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      expect(report.posts.items[0].markdownPreview).toBe('');
+    });
+
+    it('should preserve line breaks in text content', async () => {
+      setupDbReturns([], [], []);
+
+      const wxrData = createWxrData({
+        posts: [createWxrPost({
+          content: '<p>Line one\nLine two\nLine three</p>',
+        })],
+      });
+
+      const report = await engine.analyzeWxr(wxrData, '/test.xml');
+
+      // Line breaks within text should be preserved
+      expect(report.posts.items[0].markdownPreview).toContain('Line one');
+    });
+  });
 });
 
 /**

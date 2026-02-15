@@ -538,4 +538,126 @@ describe('PostMediaEngine', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('importMediaForPost', () => {
+    it('should import media and link it to the post', async () => {
+      const postId = 'post-1';
+      const sourcePath = '/path/to/image.jpg';
+      const importedMediaId = 'imported-media-123';
+
+      mockImportMedia.mockResolvedValue({ id: importedMediaId });
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: importedMediaId, linkedPostIds: [] }));
+
+      const result = await engine.importMediaForPost(postId, sourcePath);
+
+      expect(mockImportMedia).toHaveBeenCalledWith(sourcePath);
+      expect(result.postId).toBe(postId);
+      expect(result.mediaId).toBe(importedMediaId);
+    });
+  });
+
+  describe('getLinkedMediaDataForPost', () => {
+    it('should return linked media with full media data', async () => {
+      const postId = 'post-1';
+      const media1 = createMockMedia({ id: 'media-1', title: 'Image 1' });
+      const media2 = createMockMedia({ id: 'media-2', title: 'Image 2' });
+
+      selectMockData = [
+        { id: 'link-1', projectId: 'test-project', postId, mediaId: 'media-1', sortOrder: 0, createdAt: new Date() },
+        { id: 'link-2', projectId: 'test-project', postId, mediaId: 'media-2', sortOrder: 1, createdAt: new Date() },
+      ];
+
+      mockGetMedia.mockImplementation((id: string) => {
+        if (id === 'media-1') return Promise.resolve(media1);
+        if (id === 'media-2') return Promise.resolve(media2);
+        return Promise.resolve(null);
+      });
+
+      const result = await engine.getLinkedMediaDataForPost(postId);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].media.title).toBe('Image 1');
+      expect(result[1].media.title).toBe('Image 2');
+    });
+
+    it('should skip links where media is not found', async () => {
+      const postId = 'post-1';
+      const media1 = createMockMedia({ id: 'media-1', title: 'Image 1' });
+
+      selectMockData = [
+        { id: 'link-1', projectId: 'test-project', postId, mediaId: 'media-1', sortOrder: 0, createdAt: new Date() },
+        { id: 'link-2', projectId: 'test-project', postId, mediaId: 'media-deleted', sortOrder: 1, createdAt: new Date() },
+      ];
+
+      mockGetMedia.mockImplementation((id: string) => {
+        if (id === 'media-1') return Promise.resolve(media1);
+        return Promise.resolve(null); // media-deleted not found
+      });
+
+      const result = await engine.getLinkedMediaDataForPost(postId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].media.title).toBe('Image 1');
+    });
+
+    it('should return empty array when no links exist', async () => {
+      selectMockData = [];
+
+      const result = await engine.getLinkedMediaDataForPost('post-no-links');
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('edge cases for linkMediaToPost', () => {
+    it('should not add duplicate postId to linkedPostIds', async () => {
+      const postId = 'post-1';
+      const mediaId = 'media-1';
+
+      // Media already has this post linked
+      mockGetMedia.mockResolvedValue(createMockMedia({
+        id: mediaId,
+        linkedPostIds: [postId] // Already linked
+      }));
+
+      await engine.linkMediaToPost(postId, mediaId);
+
+      // updateMedia should not be called since post is already in linkedPostIds
+      expect(mockUpdateMedia).not.toHaveBeenCalled();
+    });
+
+    it('should calculate correct sortOrder when existing links present', async () => {
+      const postId = 'post-1';
+      const mediaId = 'media-new';
+
+      // Existing links with specific sort orders
+      selectMockData = [
+        { id: 'link-1', projectId: 'test-project', postId, mediaId: 'media-1', sortOrder: 5, createdAt: new Date() },
+        { id: 'link-2', projectId: 'test-project', postId, mediaId: 'media-2', sortOrder: 10, createdAt: new Date() },
+      ];
+
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: mediaId, linkedPostIds: [] }));
+
+      const result = await engine.linkMediaToPost(postId, mediaId);
+
+      // sortOrder should be max + 1 = 11
+      expect(result.sortOrder).toBe(11);
+    });
+
+    it('should handle null media when linking', async () => {
+      const postId = 'post-1';
+      const mediaId = 'media-nonexistent';
+
+      // Media not found
+      mockGetMedia.mockResolvedValue(null);
+
+      const result = await engine.linkMediaToPost(postId, mediaId);
+
+      // Should still create the link
+      expect(result.postId).toBe(postId);
+      expect(result.mediaId).toBe(mediaId);
+      // But updateMedia shouldn't be called
+      expect(mockUpdateMedia).not.toHaveBeenCalled();
+    });
+  });
 });
