@@ -12,7 +12,6 @@ tags: []
 author: hugo
 publishedAt: '2023-08-19T13:26:04.000Z'
 ---
-<!-- wp:paragraph -->
 ... und natürlich tuts Surround-Sound meines Notebooks nicht mehr, aus Gründen. Und Fingerprint-Login macht weitaus weniger Sinn, wenn man nach Login dann doch das Passwort für den Keyring eingeben muss. Wenn der wenigstens erst beim ersten Bedarf nach einem Passwort käme, dann wärs ja ok, aber der geht direkt nach Login auf. Bah.
 
 Ansonsten bin ich allerdings angenehm überrascht davon, wie gut die Linux-Unterstützung für das Lenovo T480 ist. Alles andere funktioniert bisher tadellos.

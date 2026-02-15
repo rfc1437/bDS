@@ -15,8 +15,6 @@ publishedAt: '2011-07-24T14:26:31.000Z'
 ---
 ![evil-sony](media/2011/07/evil-sony-150x150.jpg) Nein, das ist jetzt nicht die Anbetung des Bösen, sondern einfach nur meine Überlegungen über die Kameratechnik, die in der letzten Zeit die größten Veränderungen durchmacht hat und bei der die meisten neuen Systeme herauskamen - EVIL Kameras, also Kameras mit Electronic Viewfinder und Interchangeable Lenzes. Sei es das Micro-4/3 System von Panasonic oder Olympus, oder das NEX System von Sony, oder eines der anderen neuen Systeme in der Kategorie. Ich bin immer wieder erstaunt, wie viel das für mich in der Fotografie geändert hat - einfach durch die Verfügbarkeit von wirklich kompakten Kameras, die ich tatsächlich dabei habe.
 
-<!--more-->
-
 Bis vor wenigen Jahren hatte ich ja noch eine Canon EOS 10D - ein wirklich klasse Gerät mit guter Bildqualität und der Leistungsfähigkeit der üblichen digitalen SLR. Ok, zum Ende hin nicht mehr auf der Höhe der Zeit, da gabs schon mehrere neue Generationen (als ich sie verkauft habe, war gerade die 50D erschienen), aber das war für mich egal - die Bildqualität liess nichts zu wünschen übrig.
 
 Aber die Größe! Die Kamera selber war schon nicht gerade klein (wenn auch nicht so ein Monster wie die üblichen Profi-Geräte), aber die Objektive waren dann wirklich heftig. Ich hatte nur wenige Objektive - hauptsächlich das 35/1.4L und das 100/2.8 Macro (meine Autokorrektur wollte das gerade auf Macho korrigieren - Anbetracht des Gewichts vielleicht nicht ganz falsch). Die Kamera mit beiden Objektiven mitnehmen? Äh, nein danke, lieber nicht.  Und wenn ich sie dabei hatte, war es eben nur ein Fotoapparat mit recht klassischen Funktionen. Video, nur weil man was witziges sieht das man als Filmchen festhalten will? Nö.

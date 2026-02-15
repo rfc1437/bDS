@@ -15,8 +15,6 @@ publishedAt: '2011-07-25T09:01:43.000Z'
 ---
 Irgendwann fällt einem mal auf, dass man einfach viel zu viele Stellen im Netz hat, wo was passiert und wo man irgendwie vertreten ist. Aus diesem Grund hier mal eine Aufstellung von den aktuellen Netzwerken in denen ich auftauche und wie ich diese dann tatsächlich nutze (bzw. plane zu nutzen - nicht immer klappt das mit dem was ich will und dem was ich mache).
 
-<!--more-->
-
 - meine digitale Heimat ist hier im [Blog](http://hugo.rfc1437.de/). Hier landet alles mögliche, Links, Bilder, Artikel, sonstwas. Wenn es mir wichtig genug ist, dass ich da was zu sagen will, dann pack ich es hier hin - denn nur hier habe ich tatsächlich volle Kontrolle über meine Inhalte. Ein paar meiner Inhalte werden nach [Metaowl](http://metaowl.de/) - unserem kleinen Datenschutz Aggregator - gepostet.
 - Ich habe nebenbei noch ein kleines [Tumblelog bei Tumblr](http://rfc1437.tumblr.com/). Das benutze ich eigentlich nur um da Fotos oder ab und an mal Kommentare oder so zu posten, wenn ich unterwegs bin. Wird also primär von meinem iPhone befüttert.
 - Auf [Twitter](http://twitter.com/rfc1437/) ist das, was Dave Winer als "Firehose" bezeichnet. Wer also wissen will was überhaupt wie auch immer wo auch immer von mir so veranstaltet wird, der kann meinem Stream dort folgen. Vorsicht, das ist wirklich viel - denn jeder neue Dienst, der mir wie auch immer Zugriff auf meine Aktivitäten dort liefert, wird eingehängt.
