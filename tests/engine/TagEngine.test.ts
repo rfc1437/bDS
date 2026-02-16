@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TagEngine, TagData, TagWithCount, MergeTagsResult, DeleteTagResult } from '../../src/main/engine/TagEngine';
 import { resetMockCounters } from '../utils/factories';
 import { getDatabase } from '../../src/main/database';
+import { taskManager } from '../../src/main/engine/TaskManager';
 
 // Create mock data stores
 const mockTags = new Map<string, any>();
@@ -134,6 +135,18 @@ vi.mock('../../src/main/engine/PostEngine', () => ({
 
 describe('TagEngine', () => {
   let tagEngine: TagEngine;
+
+  const captureProgressForNextTask = (): Array<{ progress: number; message: string }> => {
+    const progressCalls: Array<{ progress: number; message: string }> = [];
+
+    vi.mocked(taskManager.runTask).mockImplementationOnce(async (task: any) => {
+      return task.execute((progress: number, message: string) => {
+        progressCalls.push({ progress, message });
+      });
+    });
+
+    return progressCalls;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -320,6 +333,29 @@ describe('TagEngine', () => {
       expect(result.postsUpdated).toBe(1);
       expect(mockPostEngine.syncPublishedPostFile).toHaveBeenCalledTimes(1);
     });
+
+    it('should report stable progress checkpoints during delete', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'react', color: null, projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { id: 'post-1', tags: '["react", "typescript"]' },
+          { id: 'post-2', tags: '["react"]' },
+        ],
+      });
+
+      const progressCalls = captureProgressForNextTask();
+      await tagEngine.deleteTag('tag-1');
+
+      expect(progressCalls).toEqual([
+        { progress: 0, message: 'Finding posts with tag "react"...' },
+        { progress: 40, message: 'Updated 1/2 posts...' },
+        { progress: 80, message: 'Updated 2/2 posts...' },
+        { progress: 90, message: 'Deleting tag...' },
+        { progress: 100, message: 'Complete' },
+      ]);
+    });
   });
 
   describe('mergeTags', () => {
@@ -386,6 +422,29 @@ describe('TagEngine', () => {
       expect(result.postsUpdated).toBe(1);
       expect(mockPostEngine.syncPublishedPostFile).toHaveBeenCalledTimes(1);
     });
+
+    it('should report stable progress checkpoints during merge', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'js', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-2', name: 'javascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [{ id: 'tag-3', name: 'ecmascript', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+      ];
+
+      mockLocalClient.execute
+        .mockResolvedValueOnce({ rows: [{ id: 'post-1', tags: '["js"]' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'post-2', tags: '["javascript"]' }] });
+
+      const progressCalls = captureProgressForNextTask();
+      await tagEngine.mergeTags(['tag-1', 'tag-2'], 'tag-3');
+
+      expect(progressCalls).toEqual([
+        { progress: 0, message: 'Finding posts to update...' },
+        { progress: 40, message: 'Processing tag "js"...' },
+        { progress: 80, message: 'Processing tag "javascript"...' },
+        { progress: 90, message: 'Deleting source tags...' },
+        { progress: 100, message: 'Complete' },
+      ]);
+    });
   });
 
   describe('renameTags (batch rename)', () => {
@@ -439,6 +498,30 @@ describe('TagEngine', () => {
 
       expect(result.postsUpdated).toBe(1);
       expect(mockPostEngine.syncPublishedPostFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should report stable progress checkpoints during rename', async () => {
+      mockSelectDataQueue = [
+        [{ id: 'tag-1', name: 'old-name', projectId: 'default', createdAt: new Date(), updatedAt: new Date() }],
+        [],
+      ];
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { id: 'post-1', tags: '["old-name"]' },
+          { id: 'post-2', tags: '["old-name", "other"]' },
+        ],
+      });
+
+      const progressCalls = captureProgressForNextTask();
+      await tagEngine.renameTag('tag-1', 'new-name');
+
+      expect(progressCalls).toEqual([
+        { progress: 0, message: 'Finding posts to update...' },
+        { progress: 40, message: 'Updated 1/2 posts...' },
+        { progress: 80, message: 'Updated 2/2 posts...' },
+        { progress: 90, message: 'Updating tag record...' },
+        { progress: 100, message: 'Complete' },
+      ]);
     });
   });
 

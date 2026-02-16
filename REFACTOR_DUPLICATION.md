@@ -8,7 +8,7 @@ Scope: Reduce high-impact code duplication in production and test-adjacent areas
 | Phase | Area | Status | Notes |
 |---|---|---|---|
 | 1 | Electron API contract | ✅ Completed | Shared contract now covers renderer store data interfaces too. |
-| 2 | Tag mutation workflow | ⚠️ Partial | Helpers exist; duplicate blocks still present in task flows. |
+| 2 | Tag mutation workflow | ✅ Completed | Shared task workflow now used by delete/merge/rename paths. |
 | 3 | Post-media single/batch ops | ⚠️ Partial | Core primitives extracted; some duplicate link/unlink logic remains. |
 | 4 | Project mapping + delete guards | ✅ Completed | Guard + mapper extracted and used in target methods. |
 | 5 | Metadata sync loop scaffolding | ✅ Completed | `runSyncLoop` extracted and reused by both sync directions. |
@@ -82,7 +82,7 @@ Create one canonical API contract and consume it from both preload and renderer 
 
 ## Phase 2 — Extract Common Tag Mutation Workflow
 
-Status: ⚠️ Partially complete
+Status: ✅ Completed
 
 ### Problem
 `TagEngine` repeats similar logic in:
@@ -106,7 +106,7 @@ Refactor shared behavior into private helpers while preserving all task/event se
 
 ### Progress Check
 - Completed: helper extraction has started (`queryPostsContainingTag`, `updatePostTagsAndSync`, and shared update path usage).
-- Remaining: duplicate progress/task scaffolding still exists across `deleteTag` / `mergeTags` / `renameTag`.
+- Completed: duplicate progress/task scaffolding was consolidated across `deleteTag` / `mergeTags` / `renameTag` via shared task workflow.
 
 ### Acceptance Criteria
 - Public method behavior and events unchanged.

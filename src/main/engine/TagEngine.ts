@@ -215,6 +215,38 @@ export class TagEngine extends EventEmitter {
     };
   }
 
+  private async runTagMutationTask<TResult>(options: {
+    taskId: string;
+    taskName: string;
+    startMessage: string;
+    runUpdates: (onProgress: (progress: number, message: string) => void) => Promise<number>;
+    finalizeMessage: string;
+    finalize: () => Promise<void>;
+    buildResult: (postsUpdated: number) => TResult;
+    onComplete: (result: TResult) => Promise<void>;
+  }): Promise<TResult> {
+    return taskManager.runTask({
+      id: options.taskId,
+      name: options.taskName,
+      execute: async (onProgress) => {
+        onProgress(0, options.startMessage);
+
+        const postsUpdated = await options.runUpdates(onProgress);
+
+        onProgress(90, options.finalizeMessage);
+        await options.finalize();
+
+        onProgress(100, 'Complete');
+
+        const result = options.buildResult(postsUpdated);
+        await options.onComplete(result);
+        await this.saveTagsToFile();
+
+        return result;
+      },
+    });
+  }
+
   /**
    * Returns the default internal project directory (in userData).
    */
@@ -408,38 +440,32 @@ export class TagEngine extends EventEmitter {
     const tag = await this.getTagRowOrThrow(id);
     const tagName = tag.name;
 
-    // Run the deletion as a background task
-    return taskManager.runTask({
-      id: `delete-tag-${id}-${Date.now()}`,
-      name: `Delete tag "${tagName}"`,
-      execute: async (onProgress) => {
-        onProgress(0, `Finding posts with tag "${tagName}"...`);
-
+    return this.runTagMutationTask({
+      taskId: `delete-tag-${id}-${Date.now()}`,
+      taskName: `Delete tag "${tagName}"`,
+      startMessage: `Finding posts with tag "${tagName}"...`,
+      runUpdates: async (onProgress) => {
         const updateOperation = await this.updateMatchingPosts(
           tagName,
           (postTags) => postTags.filter((tagEntry) => tagEntry !== tagName)
         );
 
-        const updated = await updateOperation.process((updatedCount, totalCount) => {
+        return updateOperation.process((updatedCount, totalCount) => {
           onProgress((updatedCount / totalCount) * 80, `Updated ${updatedCount}/${totalCount} posts...`);
         });
-
-        onProgress(90, 'Deleting tag...');
-
-        // Delete the tag
+      },
+      finalizeMessage: 'Deleting tag...',
+      finalize: async () => {
         await db
           .delete(tags)
           .where(and(
             eq(tags.id, id),
             eq(tags.projectId, this.currentProjectId)
           ));
-
-        onProgress(100, 'Complete');
-
+      },
+      buildResult: (postsUpdated) => ({ success: true, postsUpdated }),
+      onComplete: async () => {
         this.emit('tagDeleted', id);
-        await this.saveTagsToFile();
-
-        return { success: true, postsUpdated: updated };
       },
     });
   }
@@ -486,19 +512,16 @@ export class TagEngine extends EventEmitter {
     const targetName = targetTag.name;
     const sourceNames = sourceTags.map(t => t.name);
 
-    // Run as background task
-    return taskManager.runTask({
-      id: `merge-tags-${Date.now()}`,
-      name: `Merge tags into "${targetName}"`,
-      execute: async (onProgress) => {
-        onProgress(0, 'Finding posts to update...');
-
+    return this.runTagMutationTask({
+      taskId: `merge-tags-${Date.now()}`,
+      taskName: `Merge tags into "${targetName}"`,
+      startMessage: 'Finding posts to update...',
+      runUpdates: async (onProgress) => {
         const updatedPostTagsById = new Map<string, string[]>();
 
-        // For each source tag, compute final post tags per post ID
         for (let index = 0; index < sourceNames.length; index++) {
           const sourceName = sourceNames[index];
-          onProgress((index / sourceNames.length) * 80, `Processing tag "${sourceName}"...`);
+          onProgress(((index + 1) / sourceNames.length) * 80, `Processing tag "${sourceName}"...`);
 
           const postsWithSourceTag = await this.queryPostsContainingTag(sourceName);
           for (const row of postsWithSourceTag) {
@@ -520,33 +543,27 @@ export class TagEngine extends EventEmitter {
           await this.updatePostTagsAndSync(postId, updatedTags);
         }
 
-        const totalPostsUpdated = updatedPostTagsById.size;
-
-        onProgress(90, 'Deleting source tags...');
-
-        // Delete source tags
-        for (const id of sourceTagIds) {
+        return updatedPostTagsById.size;
+      },
+      finalizeMessage: 'Deleting source tags...',
+      finalize: async () => {
+        for (const sourceId of sourceTagIds) {
           await db
             .delete(tags)
             .where(and(
-              eq(tags.id, id),
+              eq(tags.id, sourceId),
               eq(tags.projectId, this.currentProjectId)
             ));
         }
-
-        onProgress(100, 'Complete');
-
-        const result: MergeTagsResult = {
-          success: true,
-          postsUpdated: totalPostsUpdated,
-          tagsDeleted: sourceTagIds.length,
-          targetTag: targetName,
-        };
-
+      },
+      buildResult: (postsUpdated) => ({
+        success: true,
+        postsUpdated,
+        tagsDeleted: sourceTagIds.length,
+        targetTag: targetName,
+      }),
+      onComplete: async (result) => {
         this.emit('tagsMerged', result);
-        await this.saveTagsToFile();
-
-        return result;
       },
     });
   }
@@ -596,25 +613,22 @@ export class TagEngine extends EventEmitter {
       throw new Error(`Tag "${newName}" already exists`);
     }
 
-    // Run as background task
-    return taskManager.runTask({
-      id: `rename-tag-${id}-${Date.now()}`,
-      name: `Rename tag "${oldName}" to "${newName}"`,
-      execute: async (onProgress) => {
-        onProgress(0, 'Finding posts to update...');
-
+    return this.runTagMutationTask({
+      taskId: `rename-tag-${id}-${Date.now()}`,
+      taskName: `Rename tag "${oldName}" to "${newName}"`,
+      startMessage: 'Finding posts to update...',
+      runUpdates: async (onProgress) => {
         const updateOperation = await this.updateMatchingPosts(
           oldName,
           (postTags) => postTags.map((tagEntry) => tagEntry === oldName ? newName : tagEntry)
         );
 
-        const updated = await updateOperation.process((updatedCount, totalCount) => {
+        return updateOperation.process((updatedCount, totalCount) => {
           onProgress((updatedCount / totalCount) * 80, `Updated ${updatedCount}/${totalCount} posts...`);
         });
-
-        onProgress(90, 'Updating tag record...');
-
-        // Update the tag name
+      },
+      finalizeMessage: 'Updating tag record...',
+      finalize: async () => {
         await db
           .update(tags)
           .set({
@@ -625,20 +639,15 @@ export class TagEngine extends EventEmitter {
             eq(tags.id, id),
             eq(tags.projectId, this.currentProjectId)
           ));
-
-        onProgress(100, 'Complete');
-
-        const result: RenameTagResult = {
-          success: true,
-          postsUpdated: updated,
-          oldName,
-          newName,
-        };
-
+      },
+      buildResult: (postsUpdated) => ({
+        success: true,
+        postsUpdated,
+        oldName,
+        newName,
+      }),
+      onComplete: async (result) => {
         this.emit('tagRenamed', result);
-        await this.saveTagsToFile();
-
-        return result;
       },
     });
   }
