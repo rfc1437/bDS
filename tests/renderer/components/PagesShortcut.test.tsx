@@ -77,6 +77,9 @@ describe('Pages shortcut UI', () => {
 
   it('shows only page-category posts when pages view is active', async () => {
     useAppStore.setState({ activeView: 'pages', sidebarVisible: true });
+    window.electronAPI.posts.filter = vi.fn().mockResolvedValue([
+      createMockPost({ id: 'post-page', title: 'About Page', categories: ['page'] }),
+    ]);
 
     render(<Sidebar />);
 
@@ -86,5 +89,71 @@ describe('Pages shortcut UI', () => {
     expect(pagesPanel).not.toBeNull();
     expect(within(pagesPanel as HTMLElement).getByText('About Page')).toBeInTheDocument();
     expect(within(pagesPanel as HTMLElement).queryByText('Regular Article')).not.toBeInTheDocument();
+  });
+
+  it('loads pages subset from full table and does not require load-more pagination', async () => {
+    useAppStore.setState({
+      activeView: 'pages',
+      sidebarVisible: true,
+      posts: [
+        createMockPost({
+          id: 'post-article-only',
+          title: 'Loaded Article',
+          categories: ['article'],
+        }),
+      ],
+      hasMorePosts: true,
+      totalPosts: 1200,
+    });
+
+    window.electronAPI.posts.filter = vi.fn().mockResolvedValue([
+      createMockPost({ id: 'post-page-remote', title: 'Remote Page', categories: ['page'] }),
+    ]);
+
+    render(<Sidebar />);
+
+    const pagesHeader = await screen.findByText('PAGES');
+    const pagesPanel = pagesHeader.closest('.sidebar-content') as HTMLElement;
+
+    expect(within(pagesPanel).getByText('Remote Page')).toBeInTheDocument();
+    expect(within(pagesPanel).queryByText('Loaded Article')).not.toBeInTheDocument();
+    expect(within(pagesPanel).queryByText(/Load more/i)).not.toBeInTheDocument();
+    expect(window.electronAPI.posts.filter).toHaveBeenCalledWith({ categories: ['page'] });
+  });
+
+  it('does not prefetch pages subset while posts view is active', async () => {
+    useAppStore.setState({
+      activeView: 'posts',
+      sidebarVisible: true,
+      posts: [
+        createMockPost({ id: 'post-1', title: 'Loaded Post', categories: ['article'] }),
+      ],
+      hasMorePosts: true,
+      totalPosts: 1200,
+    });
+
+    window.electronAPI.posts.filter = vi.fn().mockResolvedValue([
+      createMockPost({ id: 'post-page-remote', title: 'Remote Page', categories: ['page'] }),
+    ]);
+
+    render(<Sidebar />);
+
+    expect(await screen.findByText('POSTS')).toBeInTheDocument();
+    expect(window.electronAPI.posts.filter).not.toHaveBeenCalledWith({ categories: ['page'] });
+  });
+
+  it('uses a flex-height wrapper for active posts/pages sidebar view', async () => {
+    useAppStore.setState({
+      activeView: 'posts',
+      sidebarVisible: true,
+      posts: [createMockPost({ id: 'post-1', title: 'Loaded Post', categories: ['article'] })],
+    });
+
+    const { container } = render(<Sidebar />);
+    expect(await screen.findByText('POSTS')).toBeInTheDocument();
+
+    const wrappers = container.querySelectorAll('.sidebar > div');
+    expect(wrappers.length).toBeGreaterThanOrEqual(2);
+    expect((wrappers[0] as HTMLElement).style.display).toBe('flex');
   });
 });

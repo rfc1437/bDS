@@ -747,7 +747,7 @@ export class PostEngine extends EventEmitter {
       
       // Search the stemmed content, filtered by project_id for project isolation
       const result = await client.execute({
-        sql: `SELECT id FROM posts_fts WHERE project_id = ? AND posts_fts MATCH ? ORDER BY rank LIMIT 50`,
+        sql: `SELECT id FROM posts_fts WHERE project_id = ? AND posts_fts MATCH ? ORDER BY rank LIMIT 500`,
         args: [this.currentProjectId, stemmedQuery],
       });
 

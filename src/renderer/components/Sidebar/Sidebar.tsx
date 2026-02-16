@@ -483,12 +483,14 @@ type PostsListMode = 'posts' | 'pages';
 
 interface PostsListProps {
   mode: PostsListMode;
+  isActive: boolean;
 }
 
-const PostsList: React.FC<PostsListProps> = ({ mode }) => {
+const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
   const { posts, hasMorePosts, totalPosts, appendPosts, openTab, activeTabId } = useAppStore();
   const isPagesMode = mode === 'pages';
   const postSubset = useMemo(() => applyPageFilter(posts, isPagesMode), [posts, isPagesMode]);
+  const [pageBasePosts, setPageBasePosts] = useState<PostData[] | null>(null);
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -533,6 +535,35 @@ const PostsList: React.FC<PostsListProps> = ({ mode }) => {
     };
     loadFilters();
   }, [posts]);
+
+  // In pages mode, load the full pages subset from backend filtering,
+  // independent of currently paged post list in the store.
+  useEffect(() => {
+    if (!isPagesMode || !isActive) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadPagesBase = async () => {
+      try {
+        const results = await window.electronAPI?.posts.filter({ categories: [PAGE_CATEGORY] });
+        if (!isCancelled && results) {
+          setPageBasePosts(results as PostData[]);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error('Failed to load pages subset:', error);
+        }
+      }
+    };
+
+    loadPagesBase();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isPagesMode, isActive, posts]);
 
   // Handle search
   const handleSearch = async (query: string) => {
@@ -725,15 +756,17 @@ const PostsList: React.FC<PostsListProps> = ({ mode }) => {
 
   // Determine which posts to display
   // Filters only apply to published/archived posts — drafts are always shown unfiltered
-  const filteredDisplayPosts = searchResults ?? filteredPosts ?? null;
+  const filteredDisplayPosts = searchResults ?? filteredPosts ?? (isPagesMode ? pageBasePosts : null);
   const isFiltered = filteredDisplayPosts !== null;
   const hasActiveFilters = searchQuery || selectedYear || selectedTags.length > 0 || selectedCategories.length > 0;
+
+  const baseDisplayPosts = isPagesMode ? (pageBasePosts ?? postSubset) : postSubset;
 
   // Memoized grouping that freshens cached filter results with current store data
   // This ensures status changes are reflected even when filters are active
   const groupedPosts = useMemo(
-    () => groupPostsByStatus(postSubset, filteredDisplayPosts),
-    [postSubset, filteredDisplayPosts]
+    () => groupPostsByStatus(baseDisplayPosts, filteredDisplayPosts),
+    [baseDisplayPosts, filteredDisplayPosts]
   );
 
   const clearAllFilters = () => {
@@ -896,7 +929,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode }) => {
         </div>
       )}
 
-      {postSubset.length === 0 && !isFiltered && (
+      {baseDisplayPosts.length === 0 && !isFiltered && (
         <div className="sidebar-empty">
           <p>{isPagesMode ? 'No pages yet' : 'No posts yet'}</p>
           <button onClick={handleCreatePost}>Create your first post</button>
@@ -1582,11 +1615,25 @@ export const Sidebar: React.FC = () => {
 
   return (
     <div className="sidebar">
-      <div style={{ display: activeView === 'posts' ? 'block' : 'none' }}>
-        <PostsList mode="posts" />
+      <div
+        style={{
+          display: activeView === 'posts' ? 'flex' : 'none',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
+        <PostsList mode="posts" isActive={activeView === 'posts'} />
       </div>
-      <div style={{ display: activeView === 'pages' ? 'block' : 'none' }}>
-        <PostsList mode="pages" />
+      <div
+        style={{
+          display: activeView === 'pages' ? 'flex' : 'none',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
+        <PostsList mode="pages" isActive={activeView === 'pages'} />
       </div>
       {activeView === 'media' && <MediaList />}
       {activeView === 'settings' && <SettingsNav />}

@@ -2175,6 +2175,19 @@ Published content`);
       const result = await postEngine.searchPosts('nonexistent');
       expect(result).toEqual([]);
     });
+
+    it('should cap search results at 500', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.searchPosts('term');
+
+      expect(mockLocalClient.execute).toHaveBeenCalled();
+      const call = vi.mocked(mockLocalClient.execute).mock.calls[0]?.[0] as { sql?: string } | undefined;
+      expect(call?.sql).toBeDefined();
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('limit 500');
+      expect(sql).not.toMatch(/\blimit\s+50\b/);
+    });
   });
 
   describe('getTagsWithCounts', () => {
