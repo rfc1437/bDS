@@ -23,6 +23,7 @@ This plan is scoped to the existing Electron architecture:
 ## 1) Runtime Dependencies
 - **Primary library**: `simple-git`
 - **System requirement**: `git` CLI installed and available in PATH
+- **System requirement**: `git-lfs` CLI installed and available in PATH
 - **Optional later**: fallback to bundled Git binary for users without system Git
 
 ## 2) OS / Packaging
@@ -57,8 +58,9 @@ This plan is scoped to the existing Electron architecture:
 ## No Repository State
 - If current project is not a git repo:
   - show `Initialize Git` button.
-  - action runs `git init`.
+  - action runs `git init`, then enables Git LFS and tracks image file types (e.g. `*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.webp`, `*.svg`, `*.avif`, `*.heic`) so binary image assets are excluded from normal Git object/version storage.
   - if git executable not found, show explicit install guidance message.
+  - if Git LFS executable not found, show explicit install guidance message and block completion of initialization.
 
 ## Diff Behavior
 - Diff views open in tabs in the editor area.
