@@ -135,7 +135,7 @@ export class GitEngine {
   }
 
   private async existingStageTargets(projectPath: string): Promise<string[]> {
-    const targets = ['posts', 'media', 'meta', '.gitattributes'];
+    const targets = ['posts', 'media', 'meta', 'thumbnails', '.gitattributes', '.gitignore'];
     const existing: string[] = [];
 
     for (const target of targets) {
@@ -382,6 +382,8 @@ export class GitEngine {
         await git.raw(['lfs', 'track', pattern]);
       }
     }
+
+    await this.ensureGitignore(projectPath);
 
     const stageTargets = await this.existingStageTargets(projectPath);
     if (stageTargets.length === 0) {

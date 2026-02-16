@@ -49,8 +49,6 @@ export const GitSidebar: React.FC = () => {
         return;
       }
 
-      await window.electronAPI.git.ensureGitignore(resolvedProjectPath);
-
       const repoState = await window.electronAPI.git.getRepoState(resolvedProjectPath);
       setIsRepo(repoState.isRepo);
       setCurrentBranch(repoState.currentBranch || null);

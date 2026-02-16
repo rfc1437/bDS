@@ -35,12 +35,12 @@ describe('GitSidebar', () => {
     };
   });
 
-  it('checks gitignore defaults when sidebar loads', async () => {
+  it('does not modify gitignore when sidebar loads', async () => {
     render(<GitSidebar />);
 
     await screen.findByRole('button', { name: /initialize git/i });
 
-    expect((window as any).electronAPI.git.ensureGitignore).toHaveBeenCalledWith('/repo/path');
+    expect((window as any).electronAPI.git.ensureGitignore).not.toHaveBeenCalled();
   });
 
   it('shows Initialize Git button when active project is not a git repository', async () => {
