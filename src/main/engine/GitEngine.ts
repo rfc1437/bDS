@@ -239,18 +239,79 @@ export class GitEngine {
     ];
   }
 
+  /**
+   * Extracts the host portion from common Git URL formats.
+   *
+   * Supports:
+   *   - HTTPS/HTTP: https://host/owner/repo.git
+   *   - SSH:        git@host:owner/repo.git
+   *   - SSH URL:    ssh://git@host/owner/repo.git
+   */
+  private getHostFromGitUrl(value: string): string | null {
+    const trimmed = value.trim();
+
+    // Try standard URL parsing for HTTP(S) and ssh:// URLs
+    try {
+      const url = new URL(trimmed);
+      if (url.hostname) {
+        return url.hostname.toLowerCase();
+      }
+    } catch {
+      // Fall through to manual parsing for scp-like SSH syntax
+    }
+
+    // Match scp-like SSH syntax: [user@]host:owner/repo.git
+    // Examples:
+    //   git@github.com:owner/repo.git
+    //   git@gitlab.example.com:owner/repo.git
+    const sshLikeMatch = trimmed.match(/^[^@]+@([^:]+):.+$/);
+    if (sshLikeMatch && sshLikeMatch[1]) {
+      return sshLikeMatch[1].toLowerCase();
+    }
+
+    return null;
+  }
+
   private isGitHubUrl(value: string): boolean {
-    const normalized = value.toLowerCase();
-    return normalized.includes('github.com') || normalized.includes('git@github.com:');
+    const host = this.getHostFromGitUrl(value);
+    if (host) {
+      // Accept github.com and common www-prefixed variant.
+      return host === 'github.com' || host === 'www.github.com';
+    }
+
+    // Fallback for non-standard patterns like "github.com:owner/repo"
+    const normalized = value.trim().toLowerCase();
+    return normalized.startsWith('github.com:') || normalized.startsWith('ssh://github.com/');
   }
 
   private isGitLabUrl(value: string): boolean {
-    const normalized = value.toLowerCase();
-    return normalized.includes('gitlab.com') || normalized.includes('git@gitlab.com:') || normalized.includes('gitlab');
+    const host = this.getHostFromGitUrl(value);
+    if (host) {
+      // Hosted GitLab
+      if (host === 'gitlab.com' || host === 'www.gitlab.com') {
+        return true;
+      }
+      // Self-hosted GitLab: many instances include "gitlab" in the hostname.
+      if (host.includes('gitlab')) {
+        return true;
+      }
+    }
+
+    // Fallback for non-standard patterns like "gitlab.com:owner/repo"
+    const normalized = value.trim().toLowerCase();
+    return normalized.startsWith('gitlab.com:') || normalized.startsWith('ssh://gitlab.com/');
   }
 
   private isGiteaForgejoUrl(value: string): boolean {
-    const normalized = value.toLowerCase();
+    const host = this.getHostFromGitUrl(value);
+    if (host) {
+      if (host.includes('gitea') || host.includes('forgejo')) {
+        return true;
+      }
+    }
+
+    // Fallback: if we cannot parse a host, fall back to substring detection.
+    const normalized = value.trim().toLowerCase();
     return normalized.includes('gitea') || normalized.includes('forgejo');
   }
 
