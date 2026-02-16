@@ -514,7 +514,7 @@ interface PostEditorProps {
   postId: string;
 }
 
-const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
+export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const {
     updatePost,
     markDirty,

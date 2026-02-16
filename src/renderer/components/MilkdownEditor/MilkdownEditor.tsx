@@ -55,8 +55,40 @@ interface MilkdownEditorProps {
   placeholder?: string;
 }
 
+interface MilkdownChangePropagationInput {
+  markdown: string;
+  prevMarkdown: string;
+  externalContent: string;
+  hasUserInteracted: boolean;
+}
+
+export const shouldPropagateMilkdownChange = ({
+  markdown,
+  prevMarkdown,
+  externalContent,
+  hasUserInteracted,
+}: MilkdownChangePropagationInput): boolean => {
+  const unescaped = unescapeMacroSyntax(markdown);
+  const prevUnescaped = unescapeMacroSyntax(prevMarkdown);
+  const externalUnescaped = unescapeMacroSyntax(externalContent);
+
+  if (unescaped === prevUnescaped) {
+    return false;
+  }
+
+  if (!hasUserInteracted) {
+    return false;
+  }
+
+  return unescaped !== externalUnescaped;
+};
+
+interface EditorToolbarProps {
+  onUserInteraction: () => void;
+}
+
 // Toolbar component that uses the editor instance
-const EditorToolbar: React.FC = () => {
+const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
   const [loading, getEditor] = useInstance();
   const [insertMode, setInsertMode] = useState<InsertModalMode>(null);
   const [selectedText, setSelectedText] = useState('');
@@ -67,14 +99,16 @@ const EditorToolbar: React.FC = () => {
     if (loading) return;
     const editor = getEditor();
     if (editor) {
+      onUserInteraction();
       editor.action(callCommand(commandKey, payload));
     }
-  }, [loading, getEditor]);
+  }, [loading, getEditor, onUserInteraction]);
 
   const insertHeading = useCallback((level: number) => {
     if (loading) return;
     const editor = getEditor();
     if (!editor) return;
+    onUserInteraction();
     
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
@@ -95,7 +129,7 @@ const EditorToolbar: React.FC = () => {
       );
       dispatch(tr);
     });
-  }, [loading, getEditor]);
+  }, [loading, getEditor, onUserInteraction]);
 
   // Get current selection text from editor
   const getSelectionText = useCallback(() => {
@@ -114,15 +148,17 @@ const EditorToolbar: React.FC = () => {
   }, [getEditor]);
 
   const openLinkModal = useCallback(() => {
+    onUserInteraction();
     const text = getSelectionText();
     setSelectedText(text);
     setInsertMode('link');
-  }, [getSelectionText]);
+  }, [getSelectionText, onUserInteraction]);
 
   const openImageModal = useCallback(() => {
+    onUserInteraction();
     setSelectedText('');
     setInsertMode('image');
-  }, []);
+  }, [onUserInteraction]);
 
   // Add keyboard shortcut listener for Ctrl/Cmd+K (link)
   useEffect(() => {
@@ -141,6 +177,7 @@ const EditorToolbar: React.FC = () => {
   const handleInsertLink = useCallback((url: string, text?: string) => {
     const editor = getEditor();
     if (!editor) return;
+    onUserInteraction();
 
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
@@ -166,13 +203,14 @@ const EditorToolbar: React.FC = () => {
     });
 
     setInsertMode(null);
-  }, [getEditor]);
+  }, [getEditor, onUserInteraction]);
 
   // Handle image insertion from modal
   const handleInsertImage = useCallback((url: string, alt: string) => {
+    onUserInteraction();
     runCommand(insertImageCommand.key, { src: url, alt });
     setInsertMode(null);
-  }, [runCommand]);
+  }, [onUserInteraction, runCommand]);
 
   if (loading) return null;
 
@@ -257,9 +295,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
   const isInternalChange = useRef(false);
   const onChangeRef = useRef(onChange);
   const contentRef = useRef(content);
-  // Store the normalized markdown after Milkdown's initial round-trip
-  // Only trigger onChange if the markdown differs from this baseline
-  const normalizedBaseline = useRef<string | null>(null);
+  const hasUserInteractedRef = useRef(false);
   
   // Keep refs updated
   useEffect(() => {
@@ -284,24 +320,16 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
         // Add custom remark plugin to force tight lists
         ctx.set(remarkPluginsCtx, [remarkTightLists]);
         ctx.get(listenerCtx).markdownUpdated((_ctx: Ctx, markdown: string, prevMarkdown: string) => {
-          // Unescape brackets and underscores to preserve macro syntax like [[photo_gallery]]
-          const unescaped = unescapeMacroSyntax(markdown);
-          const prevUnescaped = unescapeMacroSyntax(prevMarkdown);
-          
-          if (unescaped !== prevUnescaped) {
-            // On first update after load, store the normalized baseline
-            // This captures Milkdown's round-trip formatting
-            if (normalizedBaseline.current === null) {
-              normalizedBaseline.current = unescaped;
-              return; // Don't trigger onChange for initial normalization
-            }
-            // Only trigger onChange if content differs from the baseline
-            // (meaning the user actually edited something)
-            if (unescaped !== normalizedBaseline.current) {
-              isInternalChange.current = true;
-              normalizedBaseline.current = unescaped; // Update baseline
-              onChangeRef.current(unescaped);
-            }
+          const shouldEmit = shouldPropagateMilkdownChange({
+            markdown,
+            prevMarkdown,
+            externalContent: contentRef.current,
+            hasUserInteracted: hasUserInteractedRef.current,
+          });
+
+          if (shouldEmit) {
+            isInternalChange.current = true;
+            onChangeRef.current(unescapeMacroSyntax(markdown));
           }
         });
       })
@@ -324,8 +352,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
     if (!editor) return;
 
     if (content !== lastExternalContent.current && !isInternalChange.current) {
-      // Reset baseline so next markdownUpdated captures new normalized content
-      normalizedBaseline.current = null;
+      hasUserInteractedRef.current = false;
       editor.action(replaceAll(content));
       lastExternalContent.current = content;
     } else if (isInternalChange.current) {
@@ -335,9 +362,19 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
     isInternalChange.current = false;
   }, [content, loading, getEditor]);
 
+  const markUserInteraction = useCallback(() => {
+    hasUserInteractedRef.current = true;
+  }, []);
+
   return (
-    <div className="milkdown-editor">
-      <EditorToolbar />
+    <div
+      className="milkdown-editor"
+      onMouseDownCapture={markUserInteraction}
+      onKeyDownCapture={markUserInteraction}
+      onPasteCapture={markUserInteraction}
+      onInputCapture={markUserInteraction}
+    >
+      <EditorToolbar onUserInteraction={markUserInteraction} />
       <div className="milkdown-content" data-placeholder={placeholder}>
         <Milkdown />
       </div>
