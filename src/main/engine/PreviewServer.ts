@@ -8,6 +8,8 @@ import { getProjectEngine } from './ProjectEngine';
 interface ActiveProjectContext {
   projectId: string;
   dataDir?: string;
+  projectName?: string;
+  projectDescription?: string;
 }
 
 interface PostEngineContract {
@@ -55,6 +57,30 @@ function clampMaxPostsPerPage(value: unknown): number {
   if (normalized < MIN_MAX_POSTS_PER_PAGE) return DEFAULT_MAX_POSTS_PER_PAGE;
   if (normalized > MAX_MAX_POSTS_PER_PAGE) return MAX_MAX_POSTS_PER_PAGE;
   return normalized;
+}
+
+function resolvePageTitle(metadata: ProjectMetadata | null, fallbackProjectName?: string, fallbackProjectDescription?: string): string {
+  const candidate = metadata?.description?.trim();
+  if (candidate) {
+    return candidate;
+  }
+
+  const metadataName = metadata?.name?.trim();
+  if (metadataName) {
+    return metadataName;
+  }
+
+  const descriptionFallback = fallbackProjectDescription?.trim();
+  if (descriptionFallback) {
+    return descriptionFallback;
+  }
+
+  const fallback = fallbackProjectName?.trim();
+  if (fallback) {
+    return fallback;
+  }
+
+  return 'Blog Preview';
 }
 
 function escapeHtml(value: string): string {
@@ -162,7 +188,12 @@ export class PreviewServer {
       const activeProject = await projectEngine.getActiveProject();
       const projectId = activeProject?.id ?? 'default';
       const dataDir = projectEngine.getDataDir(projectId, activeProject?.dataPath);
-      return { projectId, dataDir };
+      return {
+        projectId,
+        dataDir,
+        projectName: activeProject?.name,
+        projectDescription: activeProject?.description ?? undefined,
+      };
     });
   }
 
@@ -267,7 +298,7 @@ export class PreviewServer {
         return;
       }
 
-      this.respond(res, 200, getPageHtml(result, 'Blog Preview'));
+      this.respond(res, 200, getPageHtml(result, resolvePageTitle(metadata, context.projectName, context.projectDescription)));
     } catch (error) {
       console.error('[PreviewServer] Request failed:', error);
       this.respond(res, 500, 'Internal Server Error');

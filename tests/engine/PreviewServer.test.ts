@@ -275,4 +275,57 @@ describe('PreviewServer', () => {
     const renderedPosts = (html.match(/<div class="post">/g) || []).length;
     expect(renderedPosts).toBe(7);
   });
+
+  it('uses project description from metadata in page title', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            name: 'My Great Blog',
+            description: 'A wonderful publication',
+            maxPostsPerPage: 50,
+          };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('<title>A wonderful publication</title>');
+    expect(html).not.toContain('<title>My Great Blog</title>');
+    expect(html).not.toContain('<title>Blog Preview</title>');
+  });
+
+  it('falls back to active project name in page title when metadata is unavailable', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return null;
+        },
+      },
+      getActiveProjectContext: async () => ({
+        projectId: 'default',
+        dataDir: '/tmp/default',
+        projectName: 'Configured Project Name',
+      } as any),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('<title>Configured Project Name</title>');
+    expect(html).not.toContain('<title>Blog Preview</title>');
+  });
 });

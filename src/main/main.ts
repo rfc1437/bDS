@@ -109,6 +109,14 @@ async function openPreviewInBrowser(): Promise<void> {
   await shell.openExternal(`${previewServer.getBaseUrl()}/`);
 }
 
+async function startPreviewServerOnAppStart(): Promise<void> {
+  if (!previewServer) {
+    previewServer = new PreviewServer();
+  }
+
+  await previewServer.start(PREVIEW_SERVER_PORT);
+}
+
 function createApplicationMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -445,6 +453,11 @@ async function initialize(): Promise<void> {
 // App lifecycle
 app.whenReady().then(async () => {
   await initialize();
+  try {
+    await startPreviewServerOnAppStart();
+  } catch (error) {
+    console.error('Failed to start preview server on app startup:', error);
+  }
   createWindow();
 
   app.on('activate', () => {
