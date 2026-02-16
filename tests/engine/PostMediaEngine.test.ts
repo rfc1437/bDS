@@ -395,6 +395,32 @@ describe('PostMediaEngine', () => {
       const sortOrders = insertedValues.map(v => v.sortOrder);
       expect(sortOrders).toEqual([0, 1, 2]);
     });
+
+    it('should produce same persisted link state as single-link path for one media item', async () => {
+      const postId = 'post-1';
+      const mediaId = 'media-1';
+
+      selectMockData = [];
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: mediaId, linkedPostIds: [] }));
+
+      await engine.linkMediaToPost(postId, mediaId);
+      const singleInsert = insertedValues[0];
+      const singleUpdateArgs = mockUpdateMedia.mock.calls[0][1];
+
+      insertedValues = [];
+      mockUpdateMedia.mockClear();
+      selectMockData = [];
+
+      const batchResult = await engine.linkManyToPost(postId, [mediaId]);
+      const batchInsert = insertedValues[0];
+      const batchUpdateArgs = mockUpdateMedia.mock.calls[0][1];
+
+      expect(batchResult).toEqual({ linked: [mediaId], skipped: [] });
+      expect(singleInsert.postId).toBe(batchInsert.postId);
+      expect(singleInsert.mediaId).toBe(batchInsert.mediaId);
+      expect(singleInsert.sortOrder).toBe(batchInsert.sortOrder);
+      expect(singleUpdateArgs).toEqual(batchUpdateArgs);
+    });
   });
 
   describe('unlinkManyFromPost', () => {
@@ -480,6 +506,30 @@ describe('PostMediaEngine', () => {
       expect(result.unlinked).toEqual(['media-1', 'media-2']);
       expect(deleteCallCount).toBe(2);
       expect(mockUpdateMedia).toHaveBeenCalledTimes(2);
+    });
+
+    it('should produce same sidecar and delete effects as single-unlink path for one media item', async () => {
+      const postId = 'post-1';
+      const mediaId = 'media-1';
+
+      mockGetMedia.mockResolvedValue(createMockMedia({ id: mediaId, linkedPostIds: [postId, 'other-post'] }));
+
+      await engine.unlinkMediaFromPost(postId, mediaId);
+      const singleDeleteCount = deleteCallCount;
+      const singleUpdateArgs = mockUpdateMedia.mock.calls[0][1];
+
+      deleteCallCount = 0;
+      deleteCalled = false;
+      mockUpdateMedia.mockClear();
+
+      const batchResult = await engine.unlinkManyFromPost(postId, [mediaId]);
+      const batchDeleteCount = deleteCallCount;
+      const batchUpdateArgs = mockUpdateMedia.mock.calls[0][1];
+
+      expect(batchResult).toEqual({ unlinked: [mediaId] });
+      expect(singleDeleteCount).toBe(1);
+      expect(batchDeleteCount).toBe(1);
+      expect(singleUpdateArgs).toEqual(batchUpdateArgs);
     });
   });
 

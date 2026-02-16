@@ -9,7 +9,7 @@ Scope: Reduce high-impact code duplication in production and test-adjacent areas
 |---|---|---|---|
 | 1 | Electron API contract | ✅ Completed | Shared contract now covers renderer store data interfaces too. |
 | 2 | Tag mutation workflow | ✅ Completed | Shared task workflow now used by delete/merge/rename paths. |
-| 3 | Post-media single/batch ops | ⚠️ Partial | Core primitives extracted; some duplicate link/unlink logic remains. |
+| 3 | Post-media single/batch ops | ✅ Completed | Single/batch link and unlink now share common internals. |
 | 4 | Project mapping + delete guards | ✅ Completed | Guard + mapper extracted and used in target methods. |
 | 5 | Metadata sync loop scaffolding | ✅ Completed | `runSyncLoop` extracted and reused by both sync directions. |
 | 6 | Shared color utility | ✅ Completed | Shared `getContrastColor` utility is in use. |
@@ -128,7 +128,7 @@ Refactor shared behavior into private helpers while preserving all task/event se
 
 ## Phase 3 — Unify Single/Batch Post-Media Operations
 
-Status: ⚠️ Partially complete
+Status: ✅ Completed
 
 ### Problem
 `PostMediaEngine` duplicates linking/unlinking logic across single and batch methods:
@@ -148,7 +148,7 @@ Create common primitives and make single/batch methods compose them.
 
 ### Progress Check
 - Completed: shared primitives exist (`createPostMediaLink`, `removePostMediaLink`, sidecar helpers).
-- Remaining: small duplicate segments remain between single/batch paths and can still be collapsed further.
+- Completed: remaining single/batch duplicate link/unlink segments were collapsed into shared internal paths.
 
 ### Acceptance Criteria
 - No behavior regressions in link/unlink semantics.

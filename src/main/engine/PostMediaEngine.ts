@@ -98,6 +98,47 @@ export class PostMediaEngine extends EventEmitter {
     return this.createLinkData(link);
   }
 
+  private async getLinkState(postId: string): Promise<{
+    existingByMediaId: Map<string, PostMediaLinkData>;
+    nextSortOrder: number;
+  }> {
+    const existingLinks = await this.getLinkedMediaForPost(postId);
+    const existingByMediaId = new Map(existingLinks.map((link) => [link.mediaId, link]));
+    const maxSortOrder = existingLinks.length > 0
+      ? Math.max(...existingLinks.map((link) => link.sortOrder))
+      : -1;
+
+    return {
+      existingByMediaId,
+      nextSortOrder: maxSortOrder + 1,
+    };
+  }
+
+  private async tryLinkMediaToPost(
+    postId: string,
+    mediaId: string,
+    state: {
+      existingByMediaId: Map<string, PostMediaLinkData>;
+      nextSortOrder: number;
+    },
+    createdAt: Date
+  ): Promise<{ linked: true; link: PostMediaLinkData } | { linked: false; existing: PostMediaLinkData }> {
+    const existing = state.existingByMediaId.get(mediaId);
+    if (existing) {
+      return { linked: false, existing };
+    }
+
+    const link = await this.createPostMediaLink(postId, mediaId, state.nextSortOrder, createdAt);
+    state.nextSortOrder++;
+    state.existingByMediaId.set(mediaId, link);
+
+    return { linked: true, link };
+  }
+
+  private async unlinkMediaFromPostCore(postId: string, mediaId: string): Promise<void> {
+    await this.removePostMediaLink(postId, mediaId);
+  }
+
   private async removePostMediaLink(postId: string, mediaId: string): Promise<void> {
     const db = this.getDb();
 
@@ -123,19 +164,14 @@ export class PostMediaEngine extends EventEmitter {
    * Link a media file to a post
    */
   async linkMediaToPost(postId: string, mediaId: string): Promise<PostMediaLinkData> {
-    const existingLinks = await this.getLinkedMediaForPost(postId);
-    const existing = existingLinks.find(link => link.mediaId === mediaId);
-    if (existing) {
-      return existing;
+    const state = await this.getLinkState(postId);
+    const result = await this.tryLinkMediaToPost(postId, mediaId, state, new Date());
+
+    if (!result.linked) {
+      return result.existing;
     }
 
-    // Get current highest sortOrder for this post
-    const maxSortOrder = existingLinks.length > 0
-      ? Math.max(...existingLinks.map(l => l.sortOrder))
-      : -1;
-
-    const now = new Date();
-    const linkData = await this.createPostMediaLink(postId, mediaId, maxSortOrder + 1, now);
+    const linkData = result.link;
 
     this.emit('mediaLinked', linkData);
     return linkData;
@@ -145,7 +181,7 @@ export class PostMediaEngine extends EventEmitter {
    * Unlink a media file from a post
    */
   async unlinkMediaFromPost(postId: string, mediaId: string): Promise<void> {
-    await this.removePostMediaLink(postId, mediaId);
+    await this.unlinkMediaFromPostCore(postId, mediaId);
 
     this.emit('mediaUnlinked', { postId, mediaId });
   }
@@ -160,28 +196,17 @@ export class PostMediaEngine extends EventEmitter {
     const skipped: string[] = [];
     const uniqueMediaIds = this.getUniqueMediaIds(mediaIds);
 
-    // Get all existing links for this post to check what's already linked
-    const existingLinks = await this.getLinkedMediaForPost(postId);
-    const existingMediaIds = new Set(existingLinks.map(l => l.mediaId));
-    
-    let maxSortOrder = existingLinks.length > 0
-      ? Math.max(...existingLinks.map(l => l.sortOrder))
-      : -1;
-
+    const state = await this.getLinkState(postId);
     const now = new Date();
 
     for (const mediaId of uniqueMediaIds) {
-      // Skip if already linked
-      if (existingMediaIds.has(mediaId)) {
+      const result = await this.tryLinkMediaToPost(postId, mediaId, state, now);
+      if (!result.linked) {
         skipped.push(mediaId);
         continue;
       }
 
-      maxSortOrder++;
-      await this.createPostMediaLink(postId, mediaId, maxSortOrder, now);
-
       linked.push(mediaId);
-      existingMediaIds.add(mediaId); // Track to avoid duplicates within batch
     }
 
     // Emit a single batch event instead of per-item events
@@ -201,7 +226,7 @@ export class PostMediaEngine extends EventEmitter {
     const uniqueMediaIds = this.getUniqueMediaIds(mediaIds);
 
     for (const mediaId of uniqueMediaIds) {
-      await this.removePostMediaLink(postId, mediaId);
+      await this.unlinkMediaFromPostCore(postId, mediaId);
 
       unlinked.push(mediaId);
     }
