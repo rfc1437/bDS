@@ -1324,6 +1324,32 @@ Content 2`;
       expect(mockLocalDb.insert).toHaveBeenCalled();
     });
 
+    it('should include .markdown files during rebuild', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        mockDirent('legacy-post.markdown'),
+      ] as any);
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockResolvedValueOnce(`---
+id: legacy-post-id
+projectId: default
+title: Legacy Post
+slug: legacy-post
+status: published
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Legacy content`);
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
     it('should emit databaseRebuilt event on completion', async () => {
       const fs = await import('fs/promises');
       const handler = vi.fn();
@@ -1510,6 +1536,99 @@ Valid content`;
 
       // Should not throw
       await postEngine.rebuildDatabaseFromFiles();
+    });
+
+    it('should import posts with duplicate slugs by auto-deduplicating slugs', async () => {
+      const fs = await import('fs/promises');
+      const insertedSlugs: string[] = [];
+
+      vi.mocked(mockLocalDb.insert).mockImplementation(() => ({
+        values: vi.fn((data: any) => {
+          insertedSlugs.push(data.slug);
+          if (data?.id) {
+            mockPosts.set(data.id, data);
+          }
+          return Promise.resolve();
+        }),
+      }));
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        mockDirent('post-a.md'),
+        mockDirent('post-b.md'),
+      ] as any);
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (filePath: any) => {
+        if (filePath.includes('post-a.md')) {
+          return `---
+id: post-a-id
+projectId: default
+title: Post A
+slug: same-slug
+status: published
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Content A`;
+        }
+        return `---
+id: post-b-id
+projectId: default
+title: Post B
+slug: same-slug
+status: published
+createdAt: 2024-01-02T00:00:00.000Z
+updatedAt: 2024-01-02T00:00:00.000Z
+tags: []
+categories: []
+---
+Content B`;
+      });
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      const uniqueSlugs = new Set(insertedSlugs);
+      expect(uniqueSlugs.has('same-slug')).toBe(true);
+      expect(uniqueSlugs.has('same-slug-2')).toBe(true);
+    });
+
+    it('should ignore frontmatter projectId and import into current project', async () => {
+      const fs = await import('fs/promises');
+      const insertedProjects: string[] = [];
+
+      postEngine.setProjectContext('current-project-id');
+
+      vi.mocked(mockLocalDb.insert).mockImplementation(() => ({
+        values: vi.fn((data: any) => {
+          insertedProjects.push(data.projectId);
+          if (data?.id) {
+            mockPosts.set(data.id, data);
+          }
+          return Promise.resolve();
+        }),
+      }));
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([mockDirent('post-with-old-project.md')] as any);
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockResolvedValueOnce(`---
+id: post-old-project
+projectId: old-project-id
+title: Old Project Post
+slug: old-project-post
+status: published
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-01T00:00:00.000Z
+tags: []
+categories: []
+---
+Content`);
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      expect(insertedProjects).toHaveLength(1);
+      expect(insertedProjects[0]).toBe('current-project-id');
     });
   });
 
@@ -1699,6 +1818,44 @@ Valid content`;
       await postEngine.publishPost(created.id);
 
       expect(fs.writeFile).toHaveBeenCalled();
+    });
+
+    it('should not write projectId to frontmatter when publishing', async () => {
+      const fs = await import('fs/promises');
+      postEngine.setProjectContext('my-project-id');
+      const created = await postEngine.createPost({
+        title: 'No ProjectId Frontmatter',
+        content: 'Published content',
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: created.content,
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      await postEngine.publishPost(created.id);
+
+      const writeCalls = vi.mocked(fs.writeFile).mock.calls;
+      expect(writeCalls.length).toBeGreaterThan(0);
+      const writtenContent = writeCalls[0][1] as string;
+      expect(writtenContent).not.toContain('projectId:');
     });
 
     it('should emit postUpdated event', async () => {

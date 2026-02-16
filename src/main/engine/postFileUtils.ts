@@ -8,7 +8,6 @@ import matter from 'gray-matter';
 
 export interface PostFileData {
   id: string;
-  projectId?: string;
   title: string;
   slug: string;
   excerpt?: string;
@@ -24,7 +23,6 @@ export interface PostFileData {
 
 interface PostFileMetadata {
   id: string;
-  projectId?: string;
   title: string;
   slug: string;
   excerpt?: string;
@@ -58,7 +56,6 @@ export async function readPostFile(filePath: string): Promise<PostFileData | nul
 
     return {
       id: metadata.id,
-      projectId: metadata.projectId,
       title: metadata.title,
       slug: metadata.slug,
       excerpt: metadata.excerpt,

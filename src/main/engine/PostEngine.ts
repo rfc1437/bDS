@@ -250,7 +250,6 @@ export class PostEngine extends EventEmitter {
   private async writePostFile(post: PostData): Promise<string> {
     const metadata: Record<string, unknown> = {
       id: post.id,
-      projectId: post.projectId,
       title: post.title,
       slug: post.slug,
       status: post.status,
@@ -279,10 +278,40 @@ export class PostEngine extends EventEmitter {
   private async readPostFile(filePath: string): Promise<PostData | null> {
     const data = await readPostFileShared(filePath);
     if (!data) return null;
+
+    const fileStem = path.parse(filePath).name;
+    const normalizedTitle = typeof data.title === 'string' && data.title.trim().length > 0
+      ? data.title.trim()
+      : fileStem;
+    const baseSlugSource = typeof data.slug === 'string' && data.slug.trim().length > 0
+      ? data.slug.trim()
+      : normalizedTitle;
+    const normalizedSlug = this.generateSlug(baseSlugSource) || this.generateSlug(fileStem) || uuidv4();
+
+    const createdAt = data.createdAt instanceof Date && !Number.isNaN(data.createdAt.getTime())
+      ? data.createdAt
+      : (data.updatedAt instanceof Date && !Number.isNaN(data.updatedAt.getTime()) ? data.updatedAt : new Date());
+    const updatedAt = data.updatedAt instanceof Date && !Number.isNaN(data.updatedAt.getTime())
+      ? data.updatedAt
+      : createdAt;
+
+    const normalizedTags = Array.isArray(data.tags)
+      ? data.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [];
+    const normalizedCategories = Array.isArray(data.categories)
+      ? data.categories.filter((category): category is string => typeof category === 'string')
+      : [];
     
     return {
       ...data,
-      projectId: data.projectId || this.currentProjectId,
+      id: typeof data.id === 'string' && data.id.trim().length > 0 ? data.id : uuidv4(),
+      projectId: this.currentProjectId,
+      title: normalizedTitle,
+      slug: normalizedSlug,
+      createdAt,
+      updatedAt,
+      tags: normalizedTags,
+      categories: normalizedCategories,
     };
   }
 
@@ -1125,8 +1154,9 @@ export class PostEngine extends EventEmitter {
 
         onProgress(5, 'Scanning posts directory...');
 
-        // Recursively find all .md files in the posts directory tree
-        const mdFiles: string[] = [];
+        // Recursively find markdown files in the posts directory tree
+        const markdownFiles: string[] = [];
+        const markdownExtensions = new Set(['.md', '.markdown', '.mdx']);
         const scanDir = async (dir: string) => {
           try {
             const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -1134,8 +1164,11 @@ export class PostEngine extends EventEmitter {
               const fullPath = path.join(dir, entry.name);
               if (entry.isDirectory()) {
                 await scanDir(fullPath);
-              } else if (entry.name.endsWith('.md')) {
-                mdFiles.push(fullPath);
+              } else {
+                const extension = path.extname(entry.name).toLowerCase();
+                if (markdownExtensions.has(extension)) {
+                  markdownFiles.push(fullPath);
+                }
               }
             }
           } catch {
@@ -1150,62 +1183,87 @@ export class PostEngine extends EventEmitter {
         }
         await scanDir(postsBaseDir);
 
-        onProgress(10, `Found ${mdFiles.length} post files`);
+        onProgress(10, `Found ${markdownFiles.length} post files`);
 
-        // Track slugs to detect duplicates
-        const insertedSlugs = new Map<string, string>(); // slug -> filePath
+        // Track slugs and ids to avoid collisions while still importing all files
+        const insertedSlugs = new Set<string>(); // projectId:slug
+        const insertedIds = new Set<string>();
+        let importedCount = 0;
+        let parseFailedCount = 0;
+        let deduplicatedSlugCount = 0;
+        let deduplicatedIdCount = 0;
+        let insertFailedCount = 0;
 
-        for (let i = 0; i < mdFiles.length; i++) {
-          const filePath = mdFiles[i];
+        for (let i = 0; i < markdownFiles.length; i++) {
+          const filePath = markdownFiles[i];
           const fileName = path.basename(filePath);
 
-          onProgress(10 + (80 * (i / mdFiles.length)), `Processing ${i + 1}/${mdFiles.length}: ${fileName}`);
+          onProgress(10 + (80 * (i / markdownFiles.length)), `Processing ${i + 1}/${markdownFiles.length}: ${fileName}`);
 
           const postData = await this.readPostFile(filePath);
 
-          if (postData) {
-            try {
-              const projectId = postData.projectId || this.currentProjectId;
-              const slugKey = `${projectId}:${postData.slug}`;
+          if (!postData) {
+            parseFailedCount++;
+            continue;
+          }
 
-              // Check for duplicate slugs
-              if (insertedSlugs.has(slugKey)) {
-                console.error(`Duplicate slug "${postData.slug}" found. File "${filePath}" duplicates "${insertedSlugs.get(slugKey)}". Skipping.`);
-                continue;
-              }
+          try {
+            const projectId = this.currentProjectId;
 
-              const checksum = this.calculateChecksum(postData.content);
+            let postId = postData.id;
+            while (insertedIds.has(postId)) {
+              postId = uuidv4();
+              deduplicatedIdCount++;
+            }
 
-              // Insert fresh - we deleted all records at the start
-              await db.insert(posts).values({
-                id: postData.id,
-                projectId,
-                title: postData.title,
-                slug: postData.slug,
-                excerpt: postData.excerpt,
-                content: null, // Content lives in the file, not DB
-                status: 'published', // Files on disk = published
-                author: postData.author,
-                createdAt: postData.createdAt,
-                updatedAt: postData.updatedAt,
-                publishedAt: postData.publishedAt || postData.updatedAt,
-                filePath,
-                checksum,
-                tags: JSON.stringify(postData.tags),
-                categories: JSON.stringify(postData.categories),
-              });
+            let slug = postData.slug;
+            const baseSlug = slug;
+            let slugAttempt = 2;
+            while (insertedSlugs.has(`${projectId}:${slug}`)) {
+              slug = `${baseSlug}-${slugAttempt}`;
+              slugAttempt++;
+              deduplicatedSlugCount++;
+            }
 
-              insertedSlugs.set(slugKey, filePath);
+            const checksum = this.calculateChecksum(postData.content);
 
-              // Update FTS index (use file content for search)
-              await this.updateFTSIndex(postData);
-            } catch (error: any) {
-              // Handle constraint violations and other errors gracefully
-              if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-                console.error(`Failed to insert post "${postData.title}" from ${filePath}: Unique constraint violation (likely slug conflict)`);
-              } else {
-                console.error(`Failed to process post from ${filePath}:`, error);
-              }
+            await db.insert(posts).values({
+              id: postId,
+              projectId,
+              title: postData.title,
+              slug,
+              excerpt: postData.excerpt,
+              content: null,
+              status: 'published',
+              author: postData.author,
+              createdAt: postData.createdAt,
+              updatedAt: postData.updatedAt,
+              publishedAt: postData.publishedAt || postData.updatedAt,
+              filePath,
+              checksum,
+              tags: JSON.stringify(postData.tags),
+              categories: JSON.stringify(postData.categories),
+            });
+
+            insertedIds.add(postId);
+            insertedSlugs.add(`${projectId}:${slug}`);
+            importedCount++;
+
+            await this.updateFTSIndex({
+              id: postId,
+              projectId,
+              title: postData.title,
+              content: postData.content,
+              excerpt: postData.excerpt,
+              tags: postData.tags,
+              categories: postData.categories,
+            });
+          } catch (error: any) {
+            insertFailedCount++;
+            if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+              console.error(`Failed to insert post "${postData.title}" from ${filePath}: Unique constraint violation`);
+            } else {
+              console.error(`Failed to process post from ${filePath}:`, error);
             }
           }
 
@@ -1215,7 +1273,8 @@ export class PostEngine extends EventEmitter {
           }
         }
 
-        onProgress(100, 'Database rebuild complete');
+        onProgress(100, `Database rebuild complete: imported ${importedCount}/${markdownFiles.length} files`);
+        console.log(`[PostEngine] rebuildDatabaseFromFiles complete. scanned=${markdownFiles.length}, imported=${importedCount}, parseFailed=${parseFailedCount}, insertFailed=${insertFailedCount}, deduplicatedSlugs=${deduplicatedSlugCount}, deduplicatedIds=${deduplicatedIdCount}`);
         this.emit('databaseRebuilt');
       },
     };
