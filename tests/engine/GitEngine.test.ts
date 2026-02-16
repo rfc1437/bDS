@@ -4,6 +4,7 @@ const mockVersion = vi.fn();
 const mockCheckIsRepo = vi.fn();
 const mockRevparse = vi.fn();
 const mockStatus = vi.fn();
+const mockDiff = vi.fn();
 const mockInit = vi.fn();
 const mockRaw = vi.fn();
 const mockAdd = vi.fn();
@@ -30,6 +31,7 @@ vi.mock('simple-git', () => ({
     checkIsRepo: mockCheckIsRepo,
     revparse: mockRevparse,
     status: mockStatus,
+    diff: mockDiff,
     init: mockInit,
     raw: mockRaw,
     add: mockAdd,
@@ -136,6 +138,20 @@ describe('GitEngine', () => {
         { path: 'new.md', status: 'renamed', previousPath: 'old.md' },
         { path: 'staged.md', status: 'staged' },
       ]);
+    });
+  });
+
+  describe('getDiff', () => {
+    it('should return patch output for a repository file', async () => {
+      mockDiff.mockResolvedValue('diff --git a/posts/first.md b/posts/first.md\n+hello');
+
+      const result = await gitEngine.getDiff('/tmp/project', 'posts/first.md');
+
+      expect(mockDiff).toHaveBeenCalledWith(['--', 'posts/first.md']);
+      expect(result).toEqual({
+        filePath: 'posts/first.md',
+        patch: 'diff --git a/posts/first.md b/posts/first.md\n+hello',
+      });
     });
   });
 

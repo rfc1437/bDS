@@ -12,7 +12,7 @@ import type {
 const STORAGE_KEY = 'bds-app-state';
 
 // Tab types
-export type TabType = 'post' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'metadata-diff';
+export type TabType = 'post' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'metadata-diff' | 'git-diff';
 
 export interface Tab {
   type: TabType;

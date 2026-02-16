@@ -11,6 +11,12 @@ const getTabTitle = (
   chatTitles: Map<string, string>,
   importDefTitles: Map<string, string>
 ): string => {
+  if (tab.type === 'git-diff') {
+    const filePath = tab.id.startsWith('git-diff:') ? tab.id.slice('git-diff:'.length) : tab.id;
+    const filename = filePath.split('/').pop();
+    return filename || filePath;
+  }
+
   if (tab.type === 'settings') {
     return 'Settings';
   }
@@ -52,6 +58,12 @@ const getTabTitle = (
 
 const getTabIcon = (tab: Tab): React.ReactNode => {
   switch (tab.type) {
+    case 'git-diff':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M9 3H5a2 2 0 0 0-2 2v4h2V5h4V3zm10 6h2V5a2 2 0 0 0-2-2h-4v2h4v4zM5 15H3v4a2 2 0 0 0 2 2h4v-2H5v-4zm16 0h-2v4h-4v2h4a2 2 0 0 0 2-2v-4zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h10v2H7v-2z"/>
+        </svg>
+      );
     case 'post':
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">

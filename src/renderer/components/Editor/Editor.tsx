@@ -14,6 +14,7 @@ import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
 import { ImportAnalysisView } from '../ImportAnalysisView';
 import { MetadataDiffPanel } from '../MetadataDiffPanel';
+import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
 import { parseMacros, getMacro } from '../../macros/registry';
 import { InsertModal } from '../InsertModal';
@@ -2214,6 +2215,7 @@ export const Editor: React.FC = () => {
   const showChat = activeTab?.type === 'chat';
   const showImport = activeTab?.type === 'import';
   const showMetadataDiff = activeTab?.type === 'metadata-diff';
+  const showGitDiff = activeTab?.type === 'git-diff';
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {
@@ -2307,6 +2309,18 @@ export const Editor: React.FC = () => {
     return (
       <div className="editor">
         <MetadataDiffPanel />
+        {renderErrorModal()}
+        {renderConfirmDeleteModal()}
+      </div>
+    );
+  }
+
+  // Show git diff view if git-diff tab is active
+  if (showGitDiff && activeTabId) {
+    const filePath = activeTabId.startsWith('git-diff:') ? activeTabId.slice('git-diff:'.length) : activeTabId;
+    return (
+      <div className="editor">
+        <GitDiffView key={activeTabId} filePath={filePath} />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

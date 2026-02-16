@@ -4,17 +4,32 @@ import type { GitInitProgress } from '../../../main/shared/electronApi';
 import './GitSidebar.css';
 
 export const GitSidebar: React.FC = () => {
-  const { activeProject } = useAppStore();
+  const { activeProject, openTab } = useAppStore();
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRepo, setIsRepo] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
+  const [statusFiles, setStatusFiles] = useState<Array<{ path: string; status: string }>>([]);
   const [initProgress, setInitProgress] = useState<GitInitProgress | null>(null);
   const [initTranscript, setInitTranscript] = useState<GitInitProgress[]>([]);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const remoteUrlInputRef = useRef<HTMLInputElement | null>(null);
+
+  const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
+
+  const openDiffTab = useCallback(
+    (filePath: string, isTransient: boolean) => {
+      openTab({
+        type: 'git-diff',
+        id: getDiffTabId(filePath),
+        isTransient,
+      });
+    },
+    [openTab],
+  );
 
   const resolveProjectPath = useCallback(async (): Promise<string | null> => {
     if (!activeProject) {
@@ -52,9 +67,22 @@ export const GitSidebar: React.FC = () => {
       const repoState = await window.electronAPI.git.getRepoState(resolvedProjectPath);
       setIsRepo(repoState.isRepo);
       setCurrentBranch(repoState.currentBranch || null);
+
+      if (repoState.isRepo) {
+        setStatusLoading(true);
+        try {
+          const status = await window.electronAPI.git.getStatus(resolvedProjectPath);
+          setStatusFiles(status.files);
+        } finally {
+          setStatusLoading(false);
+        }
+      } else {
+        setStatusFiles([]);
+      }
     } catch {
       setError('Unable to load repository status.');
       setIsRepo(false);
+      setStatusFiles([]);
     } finally {
       setLoading(false);
     }
@@ -146,10 +174,37 @@ export const GitSidebar: React.FC = () => {
     return (
       <div className="git-sidebar">
         <div className="git-sidebar-header">SOURCE CONTROL</div>
-        <div className="git-sidebar-empty">
-          <div className="git-sidebar-main">
-            <p>Git repository ready</p>
-            {currentBranch && <p>Branch: {currentBranch}</p>}
+        <div className="git-sidebar-content">
+          <div className="git-sidebar-section">
+            <div className="git-sidebar-section-header">OPEN CHANGES</div>
+            {statusLoading ? (
+              <div className="git-sidebar-empty-state">Loading changes...</div>
+            ) : statusFiles.length === 0 ? (
+              <div className="git-sidebar-empty-state">No changes</div>
+            ) : (
+              <div className="git-sidebar-file-list" role="list" aria-label="Open Changes">
+                {statusFiles.map((file) => (
+                  <button
+                    key={file.path}
+                    type="button"
+                    className="git-sidebar-file-item"
+                    onClick={() => openDiffTab(file.path, true)}
+                    onDoubleClick={() => openDiffTab(file.path, false)}
+                    title={`${file.status}: ${file.path}`}
+                  >
+                    <span className="git-sidebar-file-path">{file.path}</span>
+                    <span className="git-sidebar-file-status">{file.status}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="git-sidebar-section git-sidebar-history">
+            <div className="git-sidebar-section-header">VERSION HISTORY</div>
+            <div className="git-sidebar-empty-state">
+              {currentBranch ? `Branch: ${currentBranch}` : 'No branch information'}
+            </div>
           </div>
           {transcriptSection}
         </div>

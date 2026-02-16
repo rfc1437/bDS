@@ -22,6 +22,80 @@
   font-size: 12px;
 }
 
+.git-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 0 0;
+}
+
+.git-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.git-sidebar-history {
+  margin-top: 12px;
+  border-top: 1px solid var(--vscode-editorWidget-border);
+  padding-top: 8px;
+}
+
+.git-sidebar-section-header {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vscode-sideBar-foreground);
+  letter-spacing: 0.3px;
+}
+
+.git-sidebar-empty-state {
+  padding: 0 12px 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.git-sidebar-file-list {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.git-sidebar-file-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--vscode-sideBar-foreground);
+  text-align: left;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.git-sidebar-file-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.git-sidebar-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.git-sidebar-file-status {
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
 .git-sidebar-main {
   min-height: 0;
 }

@@ -236,6 +236,11 @@ export interface GitStatusDto {
   counts: GitStatusCounts;
 }
 
+export interface GitDiffDto {
+  filePath: string;
+  patch: string;
+}
+
 export type GitInitPhase =
   | 'checking-git'
   | 'initializing-repo'
@@ -348,6 +353,7 @@ export interface ElectronAPI {
     checkAvailability: () => Promise<GitAvailability>;
     getRepoState: (projectPath: string) => Promise<GitRepoState>;
     getStatus: (projectPath: string) => Promise<GitStatusDto>;
+    getDiff: (projectPath: string, filePath: string) => Promise<GitDiffDto>;
     ensureGitignore: (projectPath: string) => Promise<GitIgnoreEnsureResult>;
     pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => Promise<GitLfsPruneResult>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;

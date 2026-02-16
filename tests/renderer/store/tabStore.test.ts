@@ -147,6 +147,40 @@ describe('Tab Management', () => {
       expect(getStore().tabs).toHaveLength(2);
       expect(getStore().activeTabId).toBe('post-1');
     });
+
+    it('should open git diff in a transient tab on single click', () => {
+      getStore().openTab({ type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: true });
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().tabs[0]).toMatchObject({
+        type: 'git-diff',
+        id: 'git-diff:posts/first.md',
+        isTransient: true,
+      });
+    });
+
+    it('should reuse transient git diff tab on subsequent single click', () => {
+      getStore().openTab({ type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: true });
+      getStore().openTab({ type: 'git-diff', id: 'git-diff:posts/second.md', isTransient: true });
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().tabs[0]).toMatchObject({
+        type: 'git-diff',
+        id: 'git-diff:posts/second.md',
+        isTransient: true,
+      });
+    });
+
+    it('should open git diff in a persistent tab on double click', () => {
+      getStore().openTab({ type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: false });
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().tabs[0]).toMatchObject({
+        type: 'git-diff',
+        id: 'git-diff:posts/first.md',
+        isTransient: false,
+      });
+    });
   });
 
   describe('Closing Tabs', () => {

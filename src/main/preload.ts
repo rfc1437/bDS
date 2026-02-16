@@ -10,6 +10,7 @@ export const electronAPI: ElectronAPI = {
     checkAvailability: () => ipcRenderer.invoke('git:checkAvailability'),
     getRepoState: (projectPath: string) => ipcRenderer.invoke('git:getRepoState', projectPath),
     getStatus: (projectPath: string) => ipcRenderer.invoke('git:status', projectPath),
+    getDiff: (projectPath: string, filePath: string) => ipcRenderer.invoke('git:diff', projectPath, filePath),
     ensureGitignore: (projectPath: string) => ipcRenderer.invoke('git:ensureGitignore', projectPath),
     pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => ipcRenderer.invoke('git:pruneLfs', projectPath, options),
     init: (projectPath: string, remoteUrl?: string) => {

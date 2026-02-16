@@ -4,6 +4,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GitSidebar } from '../../../src/renderer/components/GitSidebar/GitSidebar';
 import { useAppStore } from '../../../src/renderer/store';
 
+const getStore = () => useAppStore.getState();
+
 describe('GitSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -17,6 +19,8 @@ describe('GitSidebar', () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
+      tabs: [],
+      activeTabId: null,
     });
 
     (window as any).electronAPI = {
@@ -28,6 +32,8 @@ describe('GitSidebar', () => {
       git: {
         checkAvailability: vi.fn().mockResolvedValue({ gitFound: true, version: '2.49.0' }),
         getRepoState: vi.fn().mockResolvedValue({ isRepo: false, hasRemote: false }),
+        getStatus: vi.fn().mockResolvedValue({ files: [], counts: { untracked: 0, modified: 0, deleted: 0, renamed: 0, staged: 0, total: 0 } }),
+        getDiff: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', patch: 'diff --git a/posts/a.md b/posts/a.md' }),
         init: vi.fn().mockResolvedValue({ success: true }),
         ensureGitignore: vi.fn().mockResolvedValue({ updated: false, created: false, addedEntries: [] }),
         onInitProgress: vi.fn().mockImplementation(() => () => {}),
@@ -47,6 +53,88 @@ describe('GitSidebar', () => {
     render(<GitSidebar />);
 
     expect(await screen.findByRole('button', { name: /initialize git/i })).toBeInTheDocument();
+  });
+
+  it('renders open changes list when repository exists', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getStatus = vi.fn().mockResolvedValue({
+      files: [
+        { path: 'posts/first.md', status: 'modified' },
+        { path: 'posts/second.md', status: 'untracked' },
+      ],
+      counts: { untracked: 1, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 2 },
+    });
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText(/open changes/i)).toBeInTheDocument();
+    expect(screen.getByText('posts/first.md')).toBeInTheDocument();
+    expect(screen.getByText('posts/second.md')).toBeInTheDocument();
+    expect(screen.getByText(/version history/i)).toBeInTheDocument();
+  });
+
+  it('single click opens and reuses a transient git-diff tab', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getStatus = vi.fn().mockResolvedValue({
+      files: [
+        { path: 'posts/first.md', status: 'modified' },
+        { path: 'posts/second.md', status: 'untracked' },
+      ],
+      counts: { untracked: 1, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 2 },
+    });
+
+    render(<GitSidebar />);
+
+    const first = await screen.findByRole('button', { name: /posts\/first\.md/i });
+    const second = screen.getByRole('button', { name: /posts\/second\.md/i });
+
+    await act(async () => {
+      fireEvent.click(first);
+    });
+
+    expect(getStore().tabs).toHaveLength(1);
+    expect(getStore().tabs[0]).toMatchObject({ type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: true });
+
+    await act(async () => {
+      fireEvent.click(second);
+    });
+
+    expect(getStore().tabs).toHaveLength(1);
+    expect(getStore().tabs[0]).toMatchObject({ type: 'git-diff', id: 'git-diff:posts/second.md', isTransient: true });
+  });
+
+  it('double click opens a persistent git-diff tab', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getStatus = vi.fn().mockResolvedValue({
+      files: [{ path: 'posts/first.md', status: 'modified' }],
+      counts: { untracked: 0, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 1 },
+    });
+
+    render(<GitSidebar />);
+
+    const first = await screen.findByRole('button', { name: /posts\/first\.md/i });
+
+    await act(async () => {
+      fireEvent.doubleClick(first);
+    });
+
+    expect(getStore().tabs).toHaveLength(1);
+    expect(getStore().tabs[0]).toMatchObject({ type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: false });
   });
 
   it('initializes repository and refreshes repo state after clicking Initialize Git', async () => {
@@ -70,7 +158,7 @@ describe('GitSidebar', () => {
     });
 
     await vi.waitFor(() => {
-      expect(screen.getByText(/git repository ready/i)).toBeInTheDocument();
+      expect(screen.getByText(/open changes/i)).toBeInTheDocument();
     });
   });
 

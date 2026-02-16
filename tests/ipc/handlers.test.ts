@@ -144,6 +144,7 @@ const mockGitEngine = {
   checkAvailability: vi.fn(),
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
+  getDiff: vi.fn(),
   initializeRepo: vi.fn(),
   ensureGitignore: vi.fn(),
   pruneLfsCache: vi.fn(),
@@ -315,6 +316,23 @@ describe('IPC Handlers', () => {
 
         expect(mockGitEngine.getStatus).toHaveBeenCalledWith('/repo');
         expect(result.counts.total).toBe(1);
+      });
+    });
+
+    describe('git:diff', () => {
+      it('should pass project path and file path to GitEngine.getDiff', async () => {
+        mockGitEngine.getDiff.mockResolvedValue({
+          filePath: 'posts/first.md',
+          patch: 'diff --git a/posts/first.md b/posts/first.md',
+        });
+
+        const result = await invokeHandler('git:diff', '/repo', 'posts/first.md');
+
+        expect(mockGitEngine.getDiff).toHaveBeenCalledWith('/repo', 'posts/first.md');
+        expect(result).toEqual({
+          filePath: 'posts/first.md',
+          patch: 'diff --git a/posts/first.md b/posts/first.md',
+        });
       });
     });
 

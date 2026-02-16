@@ -36,6 +36,11 @@ export interface GitStatusDto {
   counts: GitStatusCounts;
 }
 
+export interface GitDiffDto {
+  filePath: string;
+  patch: string;
+}
+
 export type GitInitPhase =
   | 'checking-git'
   | 'initializing-repo'
@@ -214,6 +219,16 @@ export class GitEngine {
     return {
       files,
       counts,
+    };
+  }
+
+  async getDiff(projectPath: string, filePath: string): Promise<GitDiffDto> {
+    const git = simpleGit(projectPath);
+    const patch = await git.diff(['--', filePath]);
+
+    return {
+      filePath,
+      patch,
     };
   }
 

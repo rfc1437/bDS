@@ -79,6 +79,7 @@ export {
   type GitAvailability,
   type RepoState,
   type GitStatusDto,
+  type GitDiffDto,
   type GitStatusFile,
   type GitStatusCounts,
   type GitInitResult,
