@@ -1630,7 +1630,7 @@ describe('ImportExecutionEngine E2E Tests', () => {
     /**
      * Creates a custom post with specific content for URL conversion testing
      */
-    function createPostWithContent(content: string, siteUrl: string = 'https://testblog.example.com'): ImportAnalysisReport {
+    function createPostWithContent(content: string, siteUrl: string = 'https://testblog'): ImportAnalysisReport {
       const customPost: WxrPost = {
         wpId: 9001,
         title: 'URL Conversion Test Post',
