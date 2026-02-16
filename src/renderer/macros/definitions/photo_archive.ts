@@ -3,7 +3,6 @@
  * 
  * Creates a photo gallery organized by year and month.
  * Images are discovered dynamically from the media library based on their creation date.
- * When rendered, images are automatically linked to the post.
  * 
  * Usage:
  *   [[photo_archive]]                       - Newest 10 months with images (month + year label)
@@ -37,7 +36,7 @@ function getMonthName(month: number): string {
 
 const photoArchiveMacro: MacroDefinition = {
   name: 'photo_archive',
-  description: 'Creates a photo archive gallery organized by year and month, automatically linking discovered images to the post',
+  description: 'Creates a photo archive gallery organized by year and month',
 
   validate(params: MacroParams): string | undefined {
     // Year is optional - if not provided, shows recent 10 months
@@ -76,7 +75,7 @@ const photoArchiveMacro: MacroDefinition = {
     return `📅 Photo Archive: ${year}`;
   },
 
-  render(params: MacroParams, context: MacroRenderContext): string {
+  render(params: MacroParams, _context: MacroRenderContext): string {
     const { year, month } = params;
     
     // Build data attributes for hydration
@@ -92,10 +91,6 @@ const photoArchiveMacro: MacroDefinition = {
       }
     }
     
-    if (context.postId) {
-      dataAttrs.push(`data-post-id="${context.postId}"`);
-    }
-
     // CSS classes
     const classes = ['macro-photo-archive'];
     if (!year) {

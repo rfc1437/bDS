@@ -129,13 +129,13 @@ describe('photo_archive macro', () => {
       expect(html).not.toContain('data-month=');
     });
 
-    it('should include post-id data attribute when available', () => {
+    it('should not include post-id data attribute when available', () => {
       const macro = getMacro('photo_archive');
       const context: MacroRenderContext = { isPreview: true, postId: 'post-123' };
       
       const html = macro!.render({ year: '2024' }, context);
       
-      expect(html).toContain('data-post-id="post-123"');
+      expect(html).not.toContain('data-post-id="post-123"');
     });
 
     it('should include loading placeholder', () => {
@@ -213,13 +213,13 @@ describe('photo_archive macro', () => {
       expect(preview).toBe('📅 Photo Archive: Recent');
     });
 
-    it('should include post-id data attribute in recent mode', () => {
+    it('should not include post-id data attribute in recent mode', () => {
       const macro = getMacro('photo_archive');
       const context: MacroRenderContext = { isPreview: true, postId: 'post-123' };
       
       const html = macro!.render({}, context);
       
-      expect(html).toContain('data-post-id="post-123"');
+      expect(html).not.toContain('data-post-id="post-123"');
     });
   });
 

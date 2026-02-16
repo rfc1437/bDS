@@ -261,6 +261,20 @@ describe('photo_archive hydration', () => {
       expect(monthKeys[0]).toBe('2020-06');
       expect(monthKeys[monthKeys.length - 1]).toBe('2019-09');
     });
+
+    it('should not require post-media linking side effects during preview hydration', async () => {
+      const linkMany = vi.fn();
+      const unlinkMany = vi.fn();
+
+      const result = await hydratePhotoArchive(
+        { recent: '10' },
+        mockMediaFilter
+      );
+
+      expect(result.mode).toBe('recent');
+      expect(linkMany).not.toHaveBeenCalled();
+      expect(unlinkMany).not.toHaveBeenCalled();
+    });
   });
 
   describe('year mode (year parameter only)', () => {

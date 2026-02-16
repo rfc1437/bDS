@@ -242,77 +242,34 @@ const FULL_MONTH_NAMES = [
 ];
 
 // Track photo_archive hydration state to prevent duplicate runs
-const photoArchiveHydratingCache = new Map<string, boolean>();
-
-/**
- * Get the storage key for photo_archive linked media IDs for a post
- */
-function getPhotoArchiveLinkedKey(postId: string): string {
-  return `photoArchive:${postId}:linkedIds`;
-}
-
-/**
- * Load previously linked media IDs from localStorage
- */
-function loadPreviouslyLinkedIds(postId: string): Set<string> {
-  try {
-    const stored = localStorage.getItem(getPhotoArchiveLinkedKey(postId));
-    if (stored) {
-      const ids = JSON.parse(stored) as string[];
-      return new Set(ids);
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return new Set();
-}
-
-/**
- * Save currently linked media IDs to localStorage
- */
-function saveLinkedIds(postId: string, ids: Set<string>): void {
-  try {
-    localStorage.setItem(getPhotoArchiveLinkedKey(postId), JSON.stringify([...ids]));
-  } catch {
-    // Ignore storage errors
-  }
-}
+const photoArchiveHydratingCache = new WeakSet<HTMLElement>();
 
 /**
  * Hydrate photo_archive elements in the preview with actual media from the given year/month.
- * Also manages linking/unlinking of media based on what the macros cover.
  */
 const hydratePhotoArchive = async (
   container: HTMLElement,
-  postId: string,
   onImageClick: (index: number, images: { src: string; alt: string }[]) => void
 ) => {
   // Match both year-based and recent-based archives
   const archives = container.querySelectorAll('.macro-photo-archive[data-year], .macro-photo-archive[data-recent]');
   
   if (archives.length === 0) {
-    // No photo_archive macros - unlink any previously linked and clear state
-    const previouslyLinked = loadPreviouslyLinkedIds(postId);
-    if (previouslyLinked.size > 0) {
-      console.log(`[photo_archive] No macros found, batch unlinking ${previouslyLinked.size} previously linked media`);
-      await window.electronAPI?.postMedia.unlinkMany(postId, Array.from(previouslyLinked));
-      localStorage.removeItem(getPhotoArchiveLinkedKey(postId));
-    }
     return;
   }
   
   // Check if we're already hydrating (prevent duplicate runs)
-  if (photoArchiveHydratingCache.get(postId)) {
-    console.log(`[photo_archive] Skipping duplicate hydration for ${postId}`);
+  if (photoArchiveHydratingCache.has(container)) {
+    console.log('[photo_archive] Skipping duplicate hydration for container');
     return;
   }
-  photoArchiveHydratingCache.set(postId, true);
+  photoArchiveHydratingCache.add(container);
   
   try {
-    await doHydratePhotoArchive(container, postId, onImageClick, archives);
+    await doHydratePhotoArchive(container, onImageClick, archives);
   } finally {
     // Clear the hydrating flag after a delay to allow for content changes
-    setTimeout(() => photoArchiveHydratingCache.delete(postId), 500);
+    setTimeout(() => photoArchiveHydratingCache.delete(container), 500);
   }
 };
 
@@ -321,15 +278,10 @@ const hydratePhotoArchive = async (
  */
 const doHydratePhotoArchive = async (
   _container: HTMLElement,
-  postId: string,
   onImageClick: (index: number, images: { src: string; alt: string }[]) => void,
   archives: NodeListOf<Element>
 ) => {
-  // Load previously linked IDs to detect what needs unlinking
-  const previouslyLinkedIds = loadPreviouslyLinkedIds(postId);
-  
-  // Phase 1: Collect all media IDs that should be linked based on current macros
-  const shouldBeLinkedIds = new Set<string>();
+  // Collect media for archive rendering based on current macros.
   type ImageData = { id: string; originalName: string; alt?: string; mimeType: string; createdAt?: Date };
   const archiveData: Array<{
     element: Element;
@@ -342,7 +294,7 @@ const doHydratePhotoArchive = async (
     showYearInLabel?: boolean;
   }> = [];
   
-  console.log(`[photo_archive] Processing ${archives.length} archive macro(s), previously linked: ${previouslyLinkedIds.size} IDs`);
+  console.log(`[photo_archive] Processing ${archives.length} archive macro(s)`);
   
   for (const archive of archives) {
     const recentStr = archive.getAttribute('data-recent');
@@ -371,21 +323,15 @@ const doHydratePhotoArchive = async (
           monthlyMap.set(key, []);
         }
         monthlyMap.get(key)!.push(img);
-        shouldBeLinkedIds.add(img.id);
       }
       
       // Sort by key descending (newest first) and take top N
       const sortedKeys = Array.from(monthlyMap.keys()).sort().reverse().slice(0, recentCount);
       const recentMonthlyImages = new Map<string, ImageData[]>();
       
-      // Clear shouldBeLinkedIds and only add ones that are in top N months
-      shouldBeLinkedIds.clear();
       for (const key of sortedKeys) {
         const images = monthlyMap.get(key)!;
         recentMonthlyImages.set(key, images);
-        for (const img of images) {
-          shouldBeLinkedIds.add(img.id);
-        }
       }
       
       const totalImages = Array.from(recentMonthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
@@ -411,11 +357,6 @@ const doHydratePhotoArchive = async (
         });
         const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
         
-        // Add to the set of IDs that should be linked
-        for (const img of images) {
-          shouldBeLinkedIds.add(img.id);
-        }
-        
         archiveData.push({ element: archive, mode: 'single-month', year, month, images });
         console.log(`[photo_archive] Year ${year} month ${month}: ${images.length} images`);
       } else {
@@ -431,11 +372,6 @@ const doHydratePhotoArchive = async (
           
           if (images.length > 0) {
             monthlyImages.set(m + 1, images); // Store with 1-based month key
-            
-            // Add to the set of IDs that should be linked
-            for (const img of images) {
-              shouldBeLinkedIds.add(img.id);
-            }
           }
         }
         
@@ -445,34 +381,8 @@ const doHydratePhotoArchive = async (
       }
     }
   }
-  
-  console.log(`[photo_archive] Should link ${shouldBeLinkedIds.size} media IDs`);
-  
-  // Phase 2: Batch unlink media that was previously linked but is no longer needed
-  const idsToUnlink: string[] = [];
-  for (const mediaId of previouslyLinkedIds) {
-    if (!shouldBeLinkedIds.has(mediaId)) {
-      idsToUnlink.push(mediaId);
-    }
-  }
-  
-  if (idsToUnlink.length > 0) {
-    console.log(`[photo_archive] Batch unlinking ${idsToUnlink.length} media items`);
-    await window.electronAPI?.postMedia.unlinkMany(postId, idsToUnlink);
-  }
-  
-  // Save current linked IDs for next hydration
-  saveLinkedIds(postId, shouldBeLinkedIds);
-  
-  // Phase 3: Batch link all media that should be linked and render
-  // Use linkMany which internally skips already linked items
-  const idsToLink = Array.from(shouldBeLinkedIds);
-  if (idsToLink.length > 0) {
-    console.log(`[photo_archive] Batch linking ${idsToLink.length} media items`);
-    await window.electronAPI?.postMedia.linkMany(postId, idsToLink);
-  }
-  
-  // Phase 4: Render galleries (no more link/unlink calls here)
+
+  // Render galleries
   for (const { element, mode, year, month, images, monthlyImages, showYearInLabel } of archiveData) {
     const archiveContainer = element.querySelector('.photo-archive-container');
     if (!archiveContainer) continue;
@@ -532,7 +442,7 @@ const doHydratePhotoArchive = async (
     }
   }
   
-  console.log(`[photo_archive] Hydration complete. ${shouldBeLinkedIds.size} images should be linked.`);
+  console.log('[photo_archive] Hydration complete.');
 };
 
 /**
@@ -763,7 +673,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       try {
         await hydrateGalleries(previewRef.current, postId, lightboxHandler);
         if (!cancelled) {
-          await hydratePhotoArchive(previewRef.current, postId, lightboxHandler);
+          await hydratePhotoArchive(previewRef.current, lightboxHandler);
         }
       } finally {
         // Always reset hydration state when complete - the ref is global to the component
@@ -1466,7 +1376,7 @@ const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               <div className="preview-hydrating-overlay" ref={hydrationOverlayRef} style={{ display: 'none' }}>
                 <div className="preview-hydrating-content">
                   <div className="preview-hydrating-spinner" />
-                  <span>Linking images to post...</span>
+                  <span>Loading photo archive...</span>
                 </div>
               </div>
               <div
