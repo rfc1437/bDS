@@ -1,21 +1,8 @@
 import React, { useEffect } from 'react';
 import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel } from './components';
-import { useAppStore, PostData, MediaData, TaskProgress, TabState } from './store';
+import { useAppStore, PostData, MediaData, TaskProgress } from './store';
+import { loadTabsForProject, saveTabsForProject } from './utils';
 import './App.css';
-
-// Helper to load tabs for a project from localStorage
-const TAB_STATE_PREFIX = 'bds-tabs-';
-const loadTabsForProject = (projectId: string): TabState | null => {
-  try {
-    const stored = localStorage.getItem(`${TAB_STATE_PREFIX}${projectId}`);
-    if (stored) {
-      return JSON.parse(stored) as TabState;
-    }
-  } catch (error) {
-    console.error('Failed to load tab state:', error);
-  }
-  return null;
-};
 
 const App: React.FC = () => {
   const {
@@ -93,11 +80,7 @@ const App: React.FC = () => {
       const projectId = state.activeProject?.id;
       if (projectId) {
         const tabState = state.getTabState();
-        try {
-          localStorage.setItem(`${TAB_STATE_PREFIX}${projectId}`, JSON.stringify(tabState));
-        } catch (error) {
-          console.error('Failed to save tab state on unload:', error);
-        }
+        saveTabsForProject(projectId, tabState);
       }
     };
 

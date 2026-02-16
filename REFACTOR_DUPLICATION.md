@@ -398,6 +398,7 @@ Reduce repeated local code with tiny helpers while preserving readability.
 ### Progress Check
 - Completed: consolidated repeated suggestion item rendering in `AISuggestionsModal` into one shared rendering path.
 - Completed: added focused component tests to guard selection/apply and empty-suggestions behavior.
+- Completed: extracted shared tab-state persistence utility and replaced duplicate local-storage logic in `App` and `ProjectSelector`.
 
 ### Coverage & Test Quality (fresh run: `npm run test:coverage`)
 - `src/renderer/components/ProjectSelector/ProjectSelector.tsx`: 0% statements/functions/branches.

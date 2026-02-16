@@ -1,30 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useAppStore, ProjectData, PostData, MediaData, TabState } from '../../store';
+import { useAppStore, ProjectData, PostData, MediaData } from '../../store';
+import { loadTabsForProject, saveTabsForProject } from '../../utils';
 import { showToast } from '../Toast';
 import './ProjectSelector.css';
-
-// Helper functions for project-specific tab persistence
-const TAB_STATE_PREFIX = 'bds-tabs-';
-
-const saveTabsForProject = (projectId: string, tabState: TabState): void => {
-  try {
-    localStorage.setItem(`${TAB_STATE_PREFIX}${projectId}`, JSON.stringify(tabState));
-  } catch (error) {
-    console.error('Failed to save tab state:', error);
-  }
-};
-
-const loadTabsForProject = (projectId: string): TabState | null => {
-  try {
-    const stored = localStorage.getItem(`${TAB_STATE_PREFIX}${projectId}`);
-    if (stored) {
-      return JSON.parse(stored) as TabState;
-    }
-  } catch (error) {
-    console.error('Failed to load tab state:', error);
-  }
-  return null;
-};
 
 export const ProjectSelector: React.FC = () => {
   const { projects, activeProject, setProjects, setActiveProject, setPosts, setMedia, setSelectedPost, setSelectedMedia, removeProject, getTabState, restoreTabState, clearTabs } = useAppStore();
