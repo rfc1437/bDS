@@ -4,6 +4,28 @@ import type { GitInitProgress, GitHistoryEntry } from '../../../main/shared/elec
 import './GitSidebar.css';
 import '../Sidebar/Sidebar.css';
 
+type GitSidebarStatusFile = { path: string; status: string };
+
+const mergeStatusFilesIncremental = (
+  previous: GitSidebarStatusFile[],
+  next: GitSidebarStatusFile[],
+): GitSidebarStatusFile[] => {
+  const previousByPath = new Map(previous.map((entry) => [entry.path, entry]));
+
+  return next.map((entry) => {
+    const existing = previousByPath.get(entry.path);
+    if (!existing) {
+      return entry;
+    }
+
+    if (existing.status === entry.status) {
+      return existing;
+    }
+
+    return entry;
+  });
+};
+
 export const GitSidebar: React.FC = () => {
   const { activeProject, openTab, tabs, closeTab } = useAppStore();
   const [projectPath, setProjectPath] = useState<string | null>(null);
@@ -24,6 +46,39 @@ export const GitSidebar: React.FC = () => {
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const remoteUrlInputRef = useRef<HTMLInputElement | null>(null);
   const commitMessageInputRef = useRef<HTMLInputElement | null>(null);
+  const statusRefreshInFlightRef = useRef(false);
+
+  const refreshRepoDetails = useCallback(
+    async (targetProjectPath: string, options?: { background?: boolean }) => {
+      if (statusRefreshInFlightRef.current) {
+        return;
+      }
+
+      const background = options?.background ?? false;
+
+      statusRefreshInFlightRef.current = true;
+      if (!background) {
+        setStatusLoading(true);
+        setHistoryLoading(true);
+      }
+
+      try {
+        const [status, history] = await Promise.all([
+          window.electronAPI.git.getStatus(targetProjectPath),
+          window.electronAPI.git.getHistory(targetProjectPath, 20),
+        ]);
+        setStatusFiles((previous) => mergeStatusFilesIncremental(previous, status.files));
+        setHistoryEntries(history);
+      } finally {
+        statusRefreshInFlightRef.current = false;
+        if (!background) {
+          setStatusLoading(false);
+          setHistoryLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
   const getCommitDiffTabId = (commitHash: string): string => `git-diff:commit:${commitHash}`;
@@ -115,19 +170,7 @@ export const GitSidebar: React.FC = () => {
       setCurrentBranch(repoState.currentBranch || null);
 
       if (repoState.isRepo) {
-        setStatusLoading(true);
-        setHistoryLoading(true);
-        try {
-          const [status, history] = await Promise.all([
-            window.electronAPI.git.getStatus(resolvedProjectPath),
-            window.electronAPI.git.getHistory(resolvedProjectPath, 20),
-          ]);
-          setStatusFiles(status.files);
-          setHistoryEntries(history);
-        } finally {
-          setStatusLoading(false);
-          setHistoryLoading(false);
-        }
+        await refreshRepoDetails(resolvedProjectPath);
       } else {
         setStatusFiles([]);
         setHistoryEntries([]);
@@ -140,7 +183,7 @@ export const GitSidebar: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [resolveProjectPath]);
+  }, [refreshRepoDetails, resolveProjectPath]);
 
   useEffect(() => {
     void loadRepoState();
@@ -159,6 +202,20 @@ export const GitSidebar: React.FC = () => {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isRepo || !projectPath) {
+      return;
+    }
+
+    const intervalId = globalThis.setInterval(() => {
+      void refreshRepoDetails(projectPath, { background: true });
+    }, 2000);
+
+    return () => {
+      globalThis.clearInterval(intervalId);
+    };
+  }, [isRepo, projectPath, refreshRepoDetails]);
 
   const handleInitialize = async () => {
     if (!projectPath) {

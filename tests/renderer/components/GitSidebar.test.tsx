@@ -636,4 +636,114 @@ describe('GitSidebar', () => {
       resolvePush?.({ success: true });
     });
   });
+
+  it('polls repository status on an interval and prevents overlapping in-flight requests', async () => {
+    vi.useFakeTimers();
+
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    let resolveStatus: ((value: { files: Array<{ path: string; status: string }>; counts: { untracked: number; modified: number; deleted: number; renamed: number; staged: number; total: number } }) => void) | null = null;
+    (window as any).electronAPI.git.getStatus = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }),
+    );
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([]);
+
+    try {
+      render(<GitSidebar />);
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect((window as any).electronAPI.git.getStatus).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(8000);
+      });
+
+      expect((window as any).electronAPI.git.getStatus).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveStatus?.({
+          files: [{ path: 'posts/first.md', status: 'modified' }],
+          counts: { untracked: 0, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 1 },
+        });
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+      });
+
+      expect((window as any).electronAPI.git.getStatus).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('applies incremental open-changes updates while preserving unchanged item identity and scroll position', async () => {
+    vi.useFakeTimers();
+
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    (window as any).electronAPI.git.getStatus = vi
+      .fn()
+      .mockResolvedValueOnce({
+        files: [
+          { path: 'posts/first.md', status: 'modified' },
+          { path: 'posts/second.md', status: 'untracked' },
+        ],
+        counts: { untracked: 1, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 2 },
+      })
+      .mockResolvedValueOnce({
+        files: [
+          { path: 'posts/first.md', status: 'modified' },
+          { path: 'posts/third.md', status: 'deleted' },
+        ],
+        counts: { untracked: 0, modified: 1, deleted: 1, renamed: 0, staged: 0, total: 2 },
+      });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([]);
+
+    try {
+      render(<GitSidebar />);
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const firstBefore = screen.getByRole('button', { name: /posts\/first\.md/i });
+      const list = screen.getByRole('list', { name: /open changes/i });
+      list.scrollTop = 120;
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole('button', { name: /posts\/third\.md/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /posts\/second\.md/i })).not.toBeInTheDocument();
+      const firstAfter = screen.getByRole('button', { name: /posts\/first\.md/i });
+      expect(firstAfter).toBe(firstBefore);
+      expect(list.scrollTop).toBe(120);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
