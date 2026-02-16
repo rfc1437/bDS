@@ -10,6 +10,7 @@ export const electronAPI: ElectronAPI = {
     checkAvailability: () => ipcRenderer.invoke('git:checkAvailability'),
     getRepoState: (projectPath: string) => ipcRenderer.invoke('git:getRepoState', projectPath),
     getStatus: (projectPath: string) => ipcRenderer.invoke('git:status', projectPath),
+    ensureGitignore: (projectPath: string) => ipcRenderer.invoke('git:ensureGitignore', projectPath),
     init: (projectPath: string, remoteUrl?: string) => {
       if (remoteUrl) {
         return ipcRenderer.invoke('git:init', projectPath, remoteUrl);

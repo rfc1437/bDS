@@ -11,14 +11,16 @@ const mockCommit = vi.fn();
 const mockGetRemotes = vi.fn();
 const mockAddRemote = vi.fn();
 const mockRemote = vi.fn();
-const { mockReadFile, mockStat } = vi.hoisted(() => ({
+const { mockReadFile, mockStat, mockWriteFile } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockStat: vi.fn(),
+  mockWriteFile: vi.fn(),
 }));
 
 vi.mock('fs/promises', () => ({
   readFile: mockReadFile,
   stat: mockStat,
+  writeFile: mockWriteFile,
   default: {},
 }));
 
@@ -47,6 +49,7 @@ describe('GitEngine', () => {
     vi.clearAllMocks();
     mockReadFile.mockRejectedValue(new Error('ENOENT'));
     mockStat.mockResolvedValue({});
+    mockWriteFile.mockResolvedValue(undefined);
     mockCheckIsRepo.mockResolvedValue(false);
     gitEngine = new GitEngine();
   });
@@ -133,6 +136,48 @@ describe('GitEngine', () => {
         { path: 'new.md', status: 'renamed', previousPath: 'old.md' },
         { path: 'staged.md', status: 'staged' },
       ]);
+    });
+  });
+
+  describe('ensureGitignore', () => {
+    it('should create .gitignore with default system metadata entries when missing', async () => {
+      mockReadFile.mockRejectedValue(new Error('ENOENT'));
+
+      const result = await gitEngine.ensureGitignore('/tmp/project');
+
+      expect(result.updated).toBe(true);
+      expect(result.created).toBe(true);
+      expect(result.addedEntries.length).toBeGreaterThan(0);
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should append missing entries when .gitignore exists but is incomplete', async () => {
+      mockReadFile.mockResolvedValue('node_modules/\n.DS_Store\n');
+
+      const result = await gitEngine.ensureGitignore('/tmp/project');
+
+      expect(result.updated).toBe(true);
+      expect(result.created).toBe(false);
+      expect(result.addedEntries).toContain('Thumbs.db');
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not rewrite .gitignore when all default entries already exist', async () => {
+      mockReadFile.mockResolvedValue([
+        '.DS_Store',
+        'Thumbs.db',
+        'Desktop.ini',
+        '$RECYCLE.BIN/',
+        '.Spotlight-V100/',
+        '.Trashes/',
+        '._*',
+        '.fseventsd',
+      ].join('\n'));
+
+      const result = await gitEngine.ensureGitignore('/tmp/project');
+
+      expect(result).toEqual({ updated: false, created: false, addedEntries: [] });
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
   });
 

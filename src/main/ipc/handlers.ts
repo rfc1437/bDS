@@ -55,6 +55,11 @@ export function registerIpcHandlers(): void {
     });
   });
 
+  safeHandle('git:ensureGitignore', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.ensureGitignore(projectPath);
+  });
+
   // ============ Project Handlers ============
 
   safeHandle('projects:create', async (_, data: { name: string; description?: string; slug?: string; dataPath?: string }) => {

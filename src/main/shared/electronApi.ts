@@ -260,6 +260,12 @@ export interface GitInitResult {
   code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed' | 'commit-failed';
 }
 
+export interface GitIgnoreEnsureResult {
+  updated: boolean;
+  created: boolean;
+  addedEntries: string[];
+}
+
 // Post-Media Link types
 export interface MediaLinkData {
   id: string;
@@ -334,6 +340,7 @@ export interface ElectronAPI {
     checkAvailability: () => Promise<GitAvailability>;
     getRepoState: (projectPath: string) => Promise<GitRepoState>;
     getStatus: (projectPath: string) => Promise<GitStatusDto>;
+    ensureGitignore: (projectPath: string) => Promise<GitIgnoreEnsureResult>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;
     onInitProgress: (callback: (progress: GitInitProgress) => void) => () => void;
   };

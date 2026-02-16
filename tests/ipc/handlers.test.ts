@@ -145,6 +145,7 @@ const mockGitEngine = {
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
   initializeRepo: vi.fn(),
+  ensureGitignore: vi.fn(),
 };
 
 const mockTaskManager = {
@@ -356,6 +357,25 @@ describe('IPC Handlers', () => {
           phase: 'completed',
           progress: 100,
           message: 'Repository initialized.',
+        });
+      });
+    });
+
+    describe('git:ensureGitignore', () => {
+      it('should pass project path to GitEngine.ensureGitignore', async () => {
+        mockGitEngine.ensureGitignore.mockResolvedValue({
+          updated: true,
+          created: false,
+          addedEntries: ['Thumbs.db'],
+        });
+
+        const result = await invokeHandler('git:ensureGitignore', '/repo');
+
+        expect(mockGitEngine.ensureGitignore).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({
+          updated: true,
+          created: false,
+          addedEntries: ['Thumbs.db'],
         });
       });
     });

@@ -29,9 +29,18 @@ describe('GitSidebar', () => {
         checkAvailability: vi.fn().mockResolvedValue({ gitFound: true, version: '2.49.0' }),
         getRepoState: vi.fn().mockResolvedValue({ isRepo: false, hasRemote: false }),
         init: vi.fn().mockResolvedValue({ success: true }),
+        ensureGitignore: vi.fn().mockResolvedValue({ updated: false, created: false, addedEntries: [] }),
         onInitProgress: vi.fn().mockImplementation(() => () => {}),
       },
     };
+  });
+
+  it('checks gitignore defaults when sidebar loads', async () => {
+    render(<GitSidebar />);
+
+    await screen.findByRole('button', { name: /initialize git/i });
+
+    expect((window as any).electronAPI.git.ensureGitignore).toHaveBeenCalledWith('/repo/path');
   });
 
   it('shows Initialize Git button when active project is not a git repository', async () => {
@@ -139,7 +148,7 @@ describe('GitSidebar', () => {
       subscription({ message: 'Staging project files...', progress: 75 });
     });
 
-    expect(screen.getByText(/75% — staging project files/i)).toBeInTheDocument();
+    expect(screen.getByText(/staging project files\.\.\.\s*\(75%\)/i)).toBeInTheDocument();
 
     await act(async () => {
       resolveInit?.({ success: true });
@@ -170,12 +179,36 @@ describe('GitSidebar', () => {
       subscription({ message: 'Initializing repository...', progress: 15 });
     });
 
-    expect(screen.getByText(/initialization transcript/i)).toBeInTheDocument();
+    const transcriptToggle = screen.getByRole('button', { name: /initialization transcript/i });
+    expect(transcriptToggle).toBeInTheDocument();
+    expect(transcriptToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/5% — checking git availability/i)).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(transcriptToggle);
+    });
+
+    expect(transcriptToggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText(/5% — checking git availability/i)).toBeInTheDocument();
     expect(screen.getByText(/15% — initializing repository/i)).toBeInTheDocument();
 
     await act(async () => {
       resolveInit?.({ success: true });
     });
+  });
+
+  it('auto-expands transcript when a failed progress event is received', async () => {
+    render(<GitSidebar />);
+
+    const onInitProgressMock = (window as any).electronAPI.git.onInitProgress as ReturnType<typeof vi.fn>;
+    const subscription = onInitProgressMock.mock.calls[0][0] as (payload: { phase: string; message: string; progress: number }) => void;
+
+    await act(async () => {
+      subscription({ phase: 'failed', message: 'Failed to configure remote repository.', progress: 100 });
+    });
+
+    const transcriptToggle = screen.getByRole('button', { name: /initialization transcript/i });
+    expect(transcriptToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/100% — failed to configure remote repository/i)).toBeInTheDocument();
   });
 });

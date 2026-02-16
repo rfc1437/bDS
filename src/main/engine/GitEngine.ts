@@ -1,5 +1,5 @@
 import { simpleGit } from 'simple-git';
-import { readFile, stat } from 'fs/promises';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 export interface GitAvailability {
@@ -60,6 +60,12 @@ export interface GitInitResult {
   code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed' | 'commit-failed';
 }
 
+export interface GitIgnoreEnsureResult {
+  updated: boolean;
+  created: boolean;
+  addedEntries: string[];
+}
+
 let gitEngineInstance: GitEngine | null = null;
 
 export function getGitEngine(): GitEngine {
@@ -70,10 +76,21 @@ export function getGitEngine(): GitEngine {
 }
 
 export class GitEngine {
+  private readonly defaultGitignoreEntries = [
+    '.DS_Store',
+    'Thumbs.db',
+    'Desktop.ini',
+    '$RECYCLE.BIN/',
+    '.Spotlight-V100/',
+    '.Trashes/',
+    '._*',
+    '.fseventsd',
+  ];
+
   private async readLfsTrackedPatterns(projectPath: string): Promise<Set<string>> {
     try {
       const attributesPath = path.join(projectPath, '.gitattributes');
-      const content = await readFile(attributesPath, 'utf8');
+      const content = await fsPromises.readFile(attributesPath, 'utf8');
       const patterns = content
         .split('\n')
         .map((line) => line.trim())
@@ -110,7 +127,7 @@ export class GitEngine {
 
     for (const target of targets) {
       try {
-        await stat(path.join(projectPath, target));
+        await fsPromises.stat(path.join(projectPath, target));
         existing.push(target);
       } catch {
         continue;
@@ -184,6 +201,52 @@ export class GitEngine {
     return {
       files,
       counts,
+    };
+  }
+
+  async ensureGitignore(projectPath: string): Promise<GitIgnoreEnsureResult> {
+    const gitignorePath = path.join(projectPath, '.gitignore');
+
+    let existingContent = '';
+    let created = false;
+
+    try {
+      existingContent = await fsPromises.readFile(gitignorePath, 'utf8');
+    } catch {
+      created = true;
+    }
+
+    const existingEntries = new Set(
+      existingContent
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('#')),
+    );
+
+    const addedEntries = this.defaultGitignoreEntries.filter((entry) => !existingEntries.has(entry));
+
+    if (addedEntries.length === 0) {
+      return {
+        updated: false,
+        created: false,
+        addedEntries: [],
+      };
+    }
+
+    const sections: string[] = [];
+    if (existingContent.trim().length > 0) {
+      sections.push(existingContent.trimEnd());
+    }
+
+    sections.push('# System metadata');
+    sections.push(...addedEntries);
+
+    await fsPromises.writeFile(gitignorePath, `${sections.join('\n')}\n`, 'utf8');
+
+    return {
+      updated: true,
+      created,
+      addedEntries,
     };
   }
 
