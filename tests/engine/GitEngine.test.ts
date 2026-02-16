@@ -289,6 +289,13 @@ describe('GitEngine', () => {
       expect(result).toEqual({ success: true });
       expect(mockInit).toHaveBeenCalled();
       expect(mockRaw).toHaveBeenCalledWith(['lfs', 'install', '--local']);
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'track', '*.webp']);
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'track', '*.heif']);
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'track', '*.tiff']);
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'track', '*.bmp']);
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'track', '*.ico']);
+      expect(mockAdd).toHaveBeenNthCalledWith(1, ['posts', 'media', 'meta', '.gitattributes']);
+      expect(mockAdd).toHaveBeenNthCalledWith(2, ['--renormalize', 'posts', 'media', 'meta', '.gitattributes']);
       expect(mockCommit).toHaveBeenCalledWith('initial commit');
       expect(mockAddRemote).not.toHaveBeenCalled();
     });

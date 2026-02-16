@@ -306,7 +306,24 @@ export class GitEngine {
       }
     }
 
-    const imagePatterns = ['*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.svg', '*.avif', '*.heic'];
+    const imagePatterns = [
+      '*.png',
+      '*.jpg',
+      '*.jpeg',
+      '*.jpe',
+      '*.jfif',
+      '*.gif',
+      '*.webp',
+      '*.svg',
+      '*.avif',
+      '*.heic',
+      '*.heif',
+      '*.bmp',
+      '*.tif',
+      '*.tiff',
+      '*.ico',
+      '*.jxl',
+    ];
     const trackedPatterns = await this.readLfsTrackedPatterns(projectPath);
     const patternsToTrack = imagePatterns.filter((pattern) => !trackedPatterns.has(pattern));
 
@@ -327,6 +344,7 @@ export class GitEngine {
     } else {
       emitProgress('staging-files', 75, 'Staging project files...', stageTargets.join(', '));
       await git.add(stageTargets);
+      await git.add(['--renormalize', ...stageTargets]);
     }
 
     const hasCommit = await this.hasHeadCommit(git);
