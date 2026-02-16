@@ -153,7 +153,7 @@ export const electronAPI: ElectronAPI = {
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
     getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
     setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
   // Tag Management (advanced tag operations)

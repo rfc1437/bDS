@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol, net } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol, net, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase } from './database';
@@ -6,8 +6,11 @@ import { registerIpcHandlers, registerChatHandlers, initializeChatHandlers, clea
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
+import { PreviewServer } from './engine/PreviewServer';
 
 let mainWindow: BrowserWindow | null = null;
+let previewServer: PreviewServer | null = null;
+const PREVIEW_SERVER_PORT = 4123;
 
 // Check if dev server is likely running (only in development)
 const isDev = process.env.NODE_ENV === 'development';
@@ -97,6 +100,15 @@ function createWindow(): void {
   });
 }
 
+async function openPreviewInBrowser(): Promise<void> {
+  if (!previewServer) {
+    previewServer = new PreviewServer();
+  }
+
+  await previewServer.start(PREVIEW_SERVER_PORT);
+  await shell.openExternal(`${previewServer.getBaseUrl()}/`);
+}
+
 function createApplicationMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -126,9 +138,19 @@ function createApplicationMenu(): Menu {
         },
         { type: 'separator' },
         {
+          label: 'Open in Browser',
+          click: async () => {
+            try {
+              await openPreviewInBrowser();
+            } catch (error) {
+              console.error('Failed to open preview in browser:', error);
+            }
+          },
+        },
+        { type: 'separator' },
+        {
           label: 'Open Data Folder',
           click: async () => {
-            const { shell } = require('electron');
             const paths = getDatabase().getDataPaths();
             shell.openPath(path.dirname(paths.database));
           },
@@ -275,14 +297,12 @@ function createApplicationMenu(): Menu {
         {
           label: 'View on GitHub',
           click: async () => {
-            const { shell } = require('electron');
             await shell.openExternal('https://github.com/rfc1437/bDS');
           },
         },
         {
           label: 'Report Issue',
           click: async () => {
-            const { shell } = require('electron');
             await shell.openExternal('https://github.com/rfc1437/bDS/issues');
           },
         },
@@ -443,6 +463,11 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async () => {
   // Cleanup chat resources
   await cleanupChatHandlers();
+
+  if (previewServer) {
+    await previewServer.stop();
+    previewServer = null;
+  }
 
   const db = getDatabase();
   await db.close();

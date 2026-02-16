@@ -39,6 +39,8 @@ export interface ProjectMetadata {
   description?: string;
   dataPath?: string;
   mainLanguage?: string;
+  defaultAuthor?: string;
+  maxPostsPerPage?: number;
 }
 
 export interface ProjectData {
@@ -517,7 +519,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;

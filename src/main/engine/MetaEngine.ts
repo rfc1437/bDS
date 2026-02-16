@@ -20,6 +20,40 @@ export interface ProjectMetadata {
   dataPath?: string; // Custom path for project data
   mainLanguage?: string; // Main language for AI-generated content (ISO code, e.g., 'en', 'de', 'es')
   defaultAuthor?: string; // Default author for new posts and media
+  maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
+}
+
+const DEFAULT_MAX_POSTS_PER_PAGE = 50;
+const MIN_MAX_POSTS_PER_PAGE = 1;
+const MAX_MAX_POSTS_PER_PAGE = 500;
+
+function sanitizeMaxPostsPerPage(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_MAX_POSTS_PER_PAGE;
+  }
+
+  const rounded = Math.floor(numeric);
+  if (rounded < MIN_MAX_POSTS_PER_PAGE) {
+    return DEFAULT_MAX_POSTS_PER_PAGE;
+  }
+  if (rounded > MAX_MAX_POSTS_PER_PAGE) {
+    return MAX_MAX_POSTS_PER_PAGE;
+  }
+
+  return rounded;
+}
+
+function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
+  const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
+  return {
+    ...metadata,
+    maxPostsPerPage,
+  };
 }
 
 /**
@@ -120,7 +154,7 @@ export class MetaEngine extends EventEmitter {
    * Set the project metadata (replaces existing).
    */
   async setProjectMetadata(metadata: ProjectMetadata): Promise<void> {
-    this.projectMetadata = { ...metadata };
+    this.projectMetadata = normalizeProjectMetadata({ ...metadata });
     await this.saveProjectMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
   }
@@ -129,16 +163,25 @@ export class MetaEngine extends EventEmitter {
    * Update specific fields of project metadata.
    */
   async updateProjectMetadata(updates: Partial<ProjectMetadata>): Promise<void> {
+    const normalizedUpdates: Partial<ProjectMetadata> = { ...updates };
+    if (updates.maxPostsPerPage !== undefined) {
+      normalizedUpdates.maxPostsPerPage = sanitizeMaxPostsPerPage(updates.maxPostsPerPage);
+    }
+
     if (!this.projectMetadata) {
-      this.projectMetadata = {
-        name: updates.name || '',
-        description: updates.description,
-      };
+      this.projectMetadata = normalizeProjectMetadata({
+        name: normalizedUpdates.name || '',
+        description: normalizedUpdates.description,
+        dataPath: normalizedUpdates.dataPath,
+        mainLanguage: normalizedUpdates.mainLanguage,
+        defaultAuthor: normalizedUpdates.defaultAuthor,
+        maxPostsPerPage: normalizedUpdates.maxPostsPerPage,
+      });
     } else {
-      this.projectMetadata = {
+      this.projectMetadata = normalizeProjectMetadata({
         ...this.projectMetadata,
-        ...updates,
-      };
+        ...normalizedUpdates,
+      });
     }
     await this.saveProjectMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
@@ -228,7 +271,7 @@ export class MetaEngine extends EventEmitter {
       const filePath = this.getProjectMetadataFilePath();
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = JSON.parse(content) as ProjectMetadata;
-      this.projectMetadata = parsed;
+      this.projectMetadata = normalizeProjectMetadata(parsed);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('[MetaEngine] Failed to load project metadata:', error);
@@ -423,6 +466,7 @@ export class MetaEngine extends EventEmitter {
         name: projectData.name,
         description: projectData.description || undefined,
         dataPath: projectData.dataPath || undefined,
+        maxPostsPerPage: DEFAULT_MAX_POSTS_PER_PAGE,
       };
       await this.saveProjectMetadata();
     }

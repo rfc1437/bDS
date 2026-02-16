@@ -565,6 +565,30 @@ describe('MetaEngine', () => {
       expect(metadata?.defaultAuthor).toBe('Loaded Author');
     });
 
+    it('should set and get maxPostsPerPage in project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        maxPostsPerPage: 42,
+      });
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.maxPostsPerPage).toBe(42);
+    });
+
+    it('should sanitize invalid maxPostsPerPage values from filesystem', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      mockFiles.set(projectPath, JSON.stringify({
+        name: 'Loaded Project',
+        maxPostsPerPage: -5,
+      }));
+
+      await metaEngine.loadProjectMetadata();
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.maxPostsPerPage).toBe(50);
+    });
+
     it('should handle ENOENT error when loading categories (no file)', async () => {
       // No file exists, should not throw
       await metaEngine.loadCategories();

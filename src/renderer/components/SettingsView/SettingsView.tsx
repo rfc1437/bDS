@@ -110,6 +110,7 @@ export const SettingsView: React.FC = () => {
   const [defaultProjectPath, setDefaultProjectPath] = useState('');
   const [projectMainLanguage, setProjectMainLanguage] = useState('en');
   const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
+  const [projectMaxPostsPerPage, setProjectMaxPostsPerPage] = useState(50);
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -154,6 +155,10 @@ export const SettingsView: React.FC = () => {
         } else {
           setProjectDefaultAuthor('');
         }
+        const maxPostsPerPage = typeof metadata?.maxPostsPerPage === 'number'
+          ? metadata.maxPostsPerPage
+          : 50;
+        setProjectMaxPostsPerPage(maxPostsPerPage);
       });
     }
   }, [activeProject]);
@@ -253,6 +258,7 @@ export const SettingsView: React.FC = () => {
           dataPath: projectDataPath.trim() || undefined,
           mainLanguage: projectMainLanguage,
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
+          maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
         });
       }
       showToast.success('Project settings saved');
@@ -274,7 +280,7 @@ export const SettingsView: React.FC = () => {
   };
 
   // Keywords for each section for search filtering
-  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data', 'language', 'author', 'default'];
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
@@ -384,6 +390,28 @@ export const SettingsView: React.FC = () => {
           placeholder="Author Name"
           value={projectDefaultAuthor}
           onChange={(e) => setProjectDefaultAuthor(e.target.value)}
+        />
+      </SettingRow>
+
+      <SettingRow
+        id="project-max-posts-per-page"
+        label="Max Posts Per Page"
+        description="Maximum number of posts shown per preview route page."
+      >
+        <input
+          id="project-max-posts-per-page"
+          type="number"
+          min={1}
+          max={500}
+          value={projectMaxPostsPerPage}
+          onChange={(e) => {
+            const parsed = Number(e.target.value);
+            if (!Number.isFinite(parsed)) {
+              setProjectMaxPostsPerPage(50);
+              return;
+            }
+            setProjectMaxPostsPerPage(Math.min(500, Math.max(1, Math.floor(parsed))));
+          }}
         />
       </SettingRow>
 

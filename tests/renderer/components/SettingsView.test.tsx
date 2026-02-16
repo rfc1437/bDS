@@ -5,8 +5,18 @@ import { SettingsView } from '../../../src/renderer/components/SettingsView/Sett
 import { useAppStore } from '../../../src/renderer/store';
 
 describe('SettingsView Diff Preferences', () => {
+  let updateProjectMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    updateProjectMock = vi.fn().mockResolvedValue({
+      id: 'project-1',
+      name: 'Test Project',
+      slug: 'test-project',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
 
     useAppStore.setState({
       activeProject: {
@@ -33,7 +43,8 @@ describe('SettingsView Diff Preferences', () => {
       meta: {
         ...(window as any).electronAPI?.meta,
         getCategories: vi.fn().mockResolvedValue(['article', 'picture', 'aside', 'page']),
-        getProjectMetadata: vi.fn().mockResolvedValue({}),
+        getProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 75 }),
+        updateProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 12 }),
       },
       chat: {
         ...(window as any).electronAPI?.chat,
@@ -43,7 +54,7 @@ describe('SettingsView Diff Preferences', () => {
       },
       projects: {
         ...(window as any).electronAPI?.projects,
-        update: vi.fn().mockResolvedValue(null),
+        update: updateProjectMock,
       },
     };
   });
@@ -65,5 +76,20 @@ describe('SettingsView Diff Preferences', () => {
       viewStyle: 'side-by-side',
       hideUnchangedRegions: true,
     });
+  });
+
+  it('includes project-level max posts per page in metadata save payload', async () => {
+    render(<SettingsView />);
+
+    await screen.findByDisplayValue('75');
+
+    const saveButton = screen.getByRole('button', { name: /save project settings/i });
+    fireEvent.click(saveButton);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPostsPerPage: 75 })
+    );
   });
 });
