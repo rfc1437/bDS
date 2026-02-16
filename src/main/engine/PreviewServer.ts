@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
+import { readFile } from 'node:fs/promises';
 import { marked } from 'marked';
 import { getMetaEngine, type ProjectMetadata } from './MetaEngine';
 import { getPostEngine, type PostData, type PostFilter } from './PostEngine';
@@ -29,6 +30,21 @@ interface PreviewServerDependencies {
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
 const MAX_MAX_POSTS_PER_PAGE = 500;
+
+const PREVIEW_ASSETS = {
+  'pico.min.css': {
+    modulePath: '@picocss/pico/css/pico.min.css',
+    contentType: 'text/css; charset=utf-8',
+  },
+  'lightbox.min.css': {
+    modulePath: 'lightbox2/dist/css/lightbox.min.css',
+    contentType: 'text/css; charset=utf-8',
+  },
+  'lightbox.min.js': {
+    modulePath: 'lightbox2/dist/js/lightbox-plus-jquery.min.js',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+} as const;
 
 function clampMaxPostsPerPage(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -111,7 +127,8 @@ function getPageHtml(content: string, title: string): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" href="/assets/pico.min.css" />
+    <link rel="stylesheet" href="/assets/lightbox.min.css" />
     <style>
       :root { color-scheme: light dark; }
       body { max-width: 960px; margin: 0 auto; padding: 2rem 1rem 4rem; }
@@ -120,6 +137,7 @@ function getPageHtml(content: string, title: string): string {
       .post iframe { width: 100%; min-height: 20rem; }
       .macro-gallery, .macro-photo-archive { border: 1px dashed var(--muted-border-color); padding: .75rem; }
     </style>
+    <script defer src="/assets/lightbox.min.js"></script>
   </head>
   <body>
     <main>
@@ -236,6 +254,12 @@ export class PreviewServer {
 
       const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
       const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
+
+      const asset = await this.resolveAsset(pathname);
+      if (asset) {
+        this.respondAsset(res, asset.contentType, asset.body);
+        return;
+      }
 
       const result = await this.resolveRoute(pathname, maxPostsPerPage);
       if (!result) {
@@ -360,9 +384,37 @@ export class PreviewServer {
     return rendered.join('\n');
   }
 
+  private async resolveAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {
+    const match = pathname.match(/^\/assets\/([^/]+)$/);
+    if (!match) return null;
+
+    const assetName = match[1] as keyof typeof PREVIEW_ASSETS;
+    const assetDefinition = PREVIEW_ASSETS[assetName];
+    if (!assetDefinition) return null;
+
+    try {
+      const absolutePath = require.resolve(assetDefinition.modulePath);
+      const body = await readFile(absolutePath);
+      return {
+        contentType: assetDefinition.contentType,
+        body,
+      };
+    } catch (error) {
+      console.error(`[PreviewServer] Failed to read local asset: ${assetDefinition.modulePath}`, error);
+      return null;
+    }
+  }
+
   private respond(res: ServerResponse, status: number, body: string): void {
     res.statusCode = status;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(body);
+  }
+
+  private respondAsset(res: ServerResponse, contentType: string, body: Buffer): void {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
     res.end(body);
   }

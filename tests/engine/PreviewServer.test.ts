@@ -121,6 +121,37 @@ describe('PreviewServer', () => {
     expect(html).toContain('<h1>Newest</h1>');
   });
 
+  it('uses local CSS/JS assets and serves them from the preview server', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const rootResponse = await fetch(`${server.getBaseUrl()}/`);
+    expect(rootResponse.status).toBe(200);
+    const rootHtml = await rootResponse.text();
+
+    expect(rootHtml).toContain('href="/assets/pico.min.css"');
+    expect(rootHtml).toContain('href="/assets/lightbox.min.css"');
+    expect(rootHtml).toContain('src="/assets/lightbox.min.js"');
+    expect(rootHtml).not.toContain('cdn.jsdelivr.net');
+
+    const picoResponse = await fetch(`${server.getBaseUrl()}/assets/pico.min.css`);
+    expect(picoResponse.status).toBe(200);
+    expect(picoResponse.headers.get('content-type')).toContain('text/css');
+
+    const lightboxCssResponse = await fetch(`${server.getBaseUrl()}/assets/lightbox.min.css`);
+    expect(lightboxCssResponse.status).toBe(200);
+    expect(lightboxCssResponse.headers.get('content-type')).toContain('text/css');
+
+    const lightboxJsResponse = await fetch(`${server.getBaseUrl()}/assets/lightbox.min.js`);
+    expect(lightboxJsResponse.status).toBe(200);
+    expect(lightboxJsResponse.headers.get('content-type')).toContain('application/javascript');
+  });
+
   it('limits list routes to 50 posts', async () => {
     const posts = Array.from({ length: 60 }).map((_, index) =>
       makePost({

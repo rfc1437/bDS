@@ -72,6 +72,19 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
+## ⚠️ MANDATORY: No External JS/CSS in Preview or Generated HTML
+
+**Do not reference external JavaScript or CSS libraries (CDNs/remote URLs) from the preview server output or generated HTML.**
+
+- Preview HTML must reference only local/package-bundled assets
+- Generated HTML must not include CDN-hosted JS/CSS libraries
+- If a library is needed (e.g., Pico CSS, Lightbox), include it as a local dependency and serve/reference it locally
+- Avoid introducing any new `<script src="https://...">` or `<link href="https://...">` for library assets in preview/generated output
+
+> **Preview and generated HTML must be self-contained with local assets. No exceptions.**
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns
