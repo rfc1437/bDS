@@ -64,6 +64,15 @@ describe('GitSidebar', () => {
     expect(await screen.findByRole('button', { name: /initialize git/i })).toBeInTheDocument();
   });
 
+  it('shows install guidance when git executable is missing', async () => {
+    (window as any).electronAPI.git.checkAvailability = vi.fn().mockResolvedValue({ gitFound: false });
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText(/git executable not found/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /initialize git/i })).toBeInTheDocument();
+  });
+
   it('renders open changes list when repository exists', async () => {
     (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
       isRepo: true,
@@ -606,6 +615,46 @@ describe('GitSidebar', () => {
     expect(await screen.findByText(/authentication required/i)).toBeInTheDocument();
     expect(screen.getAllByText(/create a github personal access token/i)).toHaveLength(1);
     expect(screen.getByText(/retry with username \+ token/i)).toBeInTheDocument();
+  });
+
+  it('shows merge conflict action error while keeping existing changes and history visible', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getStatus = vi.fn().mockResolvedValue({
+      files: [{ path: 'posts/first.md', status: 'modified' }],
+      counts: { untracked: 0, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 1 },
+    });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      {
+        hash: 'abc123',
+        shortHash: 'abc123',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: existing history',
+        author: 'Dev One',
+      },
+    ]);
+    (window as any).electronAPI.git.pull = vi.fn().mockResolvedValue({
+      success: false,
+      code: 'conflict',
+      error: 'CONFLICT (content): Merge conflict in posts/first.md',
+    });
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText('posts/first.md')).toBeInTheDocument();
+    expect(screen.getByText(/feat: existing history/i)).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /pull/i }));
+    });
+
+    expect(await screen.findByText(/merge conflict/i)).toBeInTheDocument();
+    expect(screen.getByText('posts/first.md')).toBeInTheDocument();
+    expect(screen.getByText(/feat: existing history/i)).toBeInTheDocument();
   });
 
   it('shows in-progress feedback while push is running', async () => {

@@ -835,5 +835,25 @@ describe('GitEngine', () => {
         expect.stringContaining('repository'),
       ]));
     });
+
+    it('should classify pull merge conflicts with conflict code', async () => {
+      mockPull.mockRejectedValue(new Error('CONFLICT (content): Merge conflict in posts/first.md'));
+
+      const result = await gitEngine.pull('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('conflict');
+      expect(result.error).toContain('Merge conflict');
+    });
+
+    it('should classify fetch connectivity issues with network code', async () => {
+      mockFetch.mockRejectedValue(new Error('fatal: unable to access https://example.com/repo.git: Could not resolve host'));
+
+      const result = await gitEngine.fetch('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('network');
+      expect(result.error).toContain('Could not resolve host');
+    });
   });
 });
