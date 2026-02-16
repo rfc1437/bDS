@@ -246,7 +246,8 @@ describe('GitEngine', () => {
   });
 
   describe('getHistory', () => {
-    it('should return latest commits from git log', async () => {
+    it('should return latest commits from git log as local-only when no tracking branch exists', async () => {
+      mockStatus.mockResolvedValue({ current: 'main', tracking: undefined });
       mockLog.mockResolvedValue({
         all: [
           {
@@ -274,7 +275,76 @@ describe('GitEngine', () => {
         date: '2026-02-16T10:00:00.000Z',
         subject: 'feat: add git sidebar',
         author: 'Dev One',
+        syncStatus: 'local-only',
       });
+    });
+
+    it('should classify commits as both, local-only, and remote-only when tracking branch exists', async () => {
+      mockStatus.mockResolvedValue({ current: 'main', tracking: 'origin/main' });
+      mockLog
+        .mockResolvedValueOnce({
+          all: [
+            {
+              hash: 'aaa111',
+              date: '2026-02-16T12:00:00.000Z',
+              message: 'feat: local commit',
+              author_name: 'Local Dev',
+            },
+            {
+              hash: 'bbb222',
+              date: '2026-02-16T11:00:00.000Z',
+              message: 'feat: shared commit',
+              author_name: 'Shared Dev',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          all: [
+            {
+              hash: 'bbb222',
+              date: '2026-02-16T11:00:00.000Z',
+              message: 'feat: shared commit',
+              author_name: 'Shared Dev',
+            },
+            {
+              hash: 'ccc333',
+              date: '2026-02-16T10:00:00.000Z',
+              message: 'fix: remote commit',
+              author_name: 'Remote Dev',
+            },
+          ],
+        });
+
+      const result = await gitEngine.getHistory('/tmp/project', 20);
+
+      expect(mockLog).toHaveBeenNthCalledWith(1, { maxCount: 20 });
+      expect(mockLog).toHaveBeenNthCalledWith(2, ['origin/main', '--max-count', '20']);
+      expect(result).toEqual([
+        {
+          hash: 'aaa111',
+          shortHash: 'aaa111',
+          date: '2026-02-16T12:00:00.000Z',
+          subject: 'feat: local commit',
+          author: 'Local Dev',
+          syncStatus: 'local-only',
+        },
+        {
+          hash: 'bbb222',
+          shortHash: 'bbb222',
+          date: '2026-02-16T11:00:00.000Z',
+          subject: 'feat: shared commit',
+          author: 'Shared Dev',
+          syncStatus: 'both',
+        },
+        {
+          hash: 'ccc333',
+          shortHash: 'ccc333',
+          date: '2026-02-16T10:00:00.000Z',
+          subject: 'fix: remote commit',
+          author: 'Remote Dev',
+          syncStatus: 'remote-only',
+        },
+      ]);
     });
   });
 

@@ -10,7 +10,7 @@ export const GitSidebar: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<'fetch' | 'pull' | 'push' | 'commit' | null>(null);
+  const [actionLoading, setActionLoading] = useState<'fetch' | 'pull' | 'push' | 'prune-lfs' | 'commit' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorGuidance, setErrorGuidance] = useState<string[]>([]);
   const [isRepo, setIsRepo] = useState(false);
@@ -28,7 +28,7 @@ export const GitSidebar: React.FC = () => {
   const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
   const getCommitDiffTabId = (commitHash: string): string => `git-diff:commit:${commitHash}`;
 
-  const getActionProgressMessage = (action: 'fetch' | 'pull' | 'push' | 'commit'): string => {
+  const getActionProgressMessage = (action: 'fetch' | 'pull' | 'push' | 'prune-lfs' | 'commit'): string => {
     if (action === 'push') {
       return 'Pushing commits to remote... this can take a while for large uploads.';
     }
@@ -38,7 +38,20 @@ export const GitSidebar: React.FC = () => {
     if (action === 'pull') {
       return 'Pulling latest changes...';
     }
+    if (action === 'prune-lfs') {
+      return 'Pruning local Git LFS cache...';
+    }
     return 'Creating commit...';
+  };
+
+  const getHistoryStatusLabel = (status: GitHistoryEntry['syncStatus']): string => {
+    if (status === 'local-only') {
+      return 'Local only';
+    }
+    if (status === 'remote-only') {
+      return 'Remote only';
+    }
+    return 'Synced';
   };
 
   const openDiffTab = useCallback(
@@ -179,7 +192,7 @@ export const GitSidebar: React.FC = () => {
     }
   };
 
-  const handleRepoAction = async (action: 'fetch' | 'pull' | 'push') => {
+  const handleRepoAction = async (action: 'fetch' | 'pull' | 'push' | 'prune-lfs') => {
     if (actionLoading) {
       return;
     }
@@ -202,10 +215,15 @@ export const GitSidebar: React.FC = () => {
           ? await window.electronAPI.git.fetch(effectiveProjectPath)
           : action === 'pull'
             ? await window.electronAPI.git.pull(effectiveProjectPath)
-            : await window.electronAPI.git.push(effectiveProjectPath);
+            : action === 'push'
+              ? await window.electronAPI.git.push(effectiveProjectPath)
+              : await window.electronAPI.git.pruneLfs(effectiveProjectPath, {
+                  dryRun: false,
+                  verifyRemote: true,
+                });
       if (!result.success) {
         setError(result.error || `Failed to ${action}.`);
-        setErrorGuidance(result.guidance || []);
+        setErrorGuidance('guidance' in result ? result.guidance || [] : []);
         return;
       }
       await loadRepoState();
@@ -317,6 +335,14 @@ export const GitSidebar: React.FC = () => {
             >
               {actionLoading === 'push' ? 'Pushing...' : 'Push'}
             </button>
+            <button
+              type="button"
+              className="git-sidebar-button"
+              onClick={() => handleRepoAction('prune-lfs')}
+              disabled={actionLoading !== null}
+            >
+              {actionLoading === 'prune-lfs' ? 'Pruning...' : 'Prune LFS'}
+            </button>
           </div>
           {actionLoading && (
             <div className="git-sidebar-empty-state git-sidebar-progress" role="status">
@@ -372,6 +398,29 @@ export const GitSidebar: React.FC = () => {
 
           <div className="git-sidebar-section git-sidebar-history">
             <div className="sidebar-section-title">Version History ({historyEntries.length})</div>
+            <div className="git-sidebar-history-legend" aria-label="Commit status legend">
+              <span className="git-sidebar-history-legend-item">
+                <span
+                  className="git-sidebar-history-legend-dot git-sidebar-history-legend-dot--both"
+                  data-testid="git-history-legend-both"
+                />
+                Synced
+              </span>
+              <span className="git-sidebar-history-legend-item">
+                <span
+                  className="git-sidebar-history-legend-dot git-sidebar-history-legend-dot--local-only"
+                  data-testid="git-history-legend-local-only"
+                />
+                Local only
+              </span>
+              <span className="git-sidebar-history-legend-item">
+                <span
+                  className="git-sidebar-history-legend-dot git-sidebar-history-legend-dot--remote-only"
+                  data-testid="git-history-legend-remote-only"
+                />
+                Remote only
+              </span>
+            </div>
             {historyLoading ? (
               <div className="git-sidebar-empty-state">Loading history...</div>
             ) : historyEntries.length === 0 ? (
@@ -382,7 +431,7 @@ export const GitSidebar: React.FC = () => {
                   <button
                     key={entry.hash}
                     type="button"
-                    className="git-sidebar-history-item"
+                    className={`git-sidebar-history-item git-sidebar-history-item--${entry.syncStatus ?? 'both'}`}
                     onClick={() => openCommitDiffTab(entry.hash, true)}
                     onDoubleClick={() => openCommitDiffTab(entry.hash, false)}
                     title={`${entry.shortHash}: ${entry.subject}`}
@@ -392,6 +441,9 @@ export const GitSidebar: React.FC = () => {
                       <span>{entry.shortHash}</span>
                       <span>{entry.author}</span>
                       <span>{new Date(entry.date).toLocaleDateString()}</span>
+                      <span className={`git-sidebar-history-status git-sidebar-history-status--${entry.syncStatus ?? 'both'}`}>
+                        {getHistoryStatusLabel(entry.syncStatus)}
+                      </span>
                     </div>
                   </button>
                 ))}

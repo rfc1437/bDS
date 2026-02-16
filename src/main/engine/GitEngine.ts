@@ -66,7 +66,10 @@ export interface GitHistoryEntry {
   date: string;
   subject: string;
   author: string;
+  syncStatus?: GitHistorySyncStatus;
 }
+
+export type GitHistorySyncStatus = 'both' | 'local-only' | 'remote-only';
 
 export type GitInitPhase =
   | 'checking-git'
@@ -643,15 +646,67 @@ export class GitEngine {
 
   async getHistory(projectPath: string, limit = 20): Promise<GitHistoryEntry[]> {
     const git = simpleGit(projectPath);
-    const history = await git.log({ maxCount: limit });
+    const status = await git.status();
+    const localHistory = await git.log({ maxCount: limit });
 
-    return history.all.map((entry) => ({
-      hash: entry.hash,
-      shortHash: entry.hash.slice(0, 7),
-      date: entry.date,
-      subject: entry.message,
-      author: entry.author_name,
-    }));
+    if (!status.tracking) {
+      return localHistory.all.map((entry) => ({
+        hash: entry.hash,
+        shortHash: entry.hash.slice(0, 7),
+        date: entry.date,
+        subject: entry.message,
+        author: entry.author_name,
+        syncStatus: 'local-only',
+      }));
+    }
+
+    const remoteHistory = await git.log([status.tracking, '--max-count', String(limit)]);
+
+    type CommitLike = {
+      hash: string;
+      date: string;
+      message: string;
+      author_name: string;
+    };
+
+    const localMap = new Map<string, CommitLike>();
+    const remoteMap = new Map<string, CommitLike>();
+
+    for (const entry of localHistory.all) {
+      localMap.set(entry.hash, entry);
+    }
+
+    for (const entry of remoteHistory.all) {
+      remoteMap.set(entry.hash, entry);
+    }
+
+    const combined = new Map<string, CommitLike>();
+    for (const entry of localMap.values()) {
+      combined.set(entry.hash, entry);
+    }
+    for (const entry of remoteMap.values()) {
+      if (!combined.has(entry.hash)) {
+        combined.set(entry.hash, entry);
+      }
+    }
+
+    return Array.from(combined.values())
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+      .slice(0, limit)
+      .map((entry) => {
+        const inLocal = localMap.has(entry.hash);
+        const inRemote = remoteMap.has(entry.hash);
+        const syncStatus: GitHistorySyncStatus = inLocal && inRemote ? 'both' : inLocal ? 'local-only' : 'remote-only';
+
+        return {
+          hash: entry.hash,
+          shortHash: entry.hash.slice(0, 7),
+          date: entry.date,
+          subject: entry.message,
+          author: entry.author_name,
+          syncStatus,
+        };
+      });
   }
 
   async fetch(projectPath: string): Promise<GitActionResult> {

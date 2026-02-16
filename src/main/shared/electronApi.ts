@@ -260,12 +260,15 @@ export interface GitCommitDiffFileDto {
   modified: string;
 }
 
+export type GitHistorySyncStatus = 'both' | 'local-only' | 'remote-only';
+
 export interface GitHistoryEntry {
   hash: string;
   shortHash: string;
   date: string;
   subject: string;
   author: string;
+  syncStatus?: GitHistorySyncStatus;
 }
 
 export type GitInitPhase =

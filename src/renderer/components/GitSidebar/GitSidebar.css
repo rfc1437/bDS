@@ -46,6 +46,9 @@
   margin-top: 12px;
   border-top: 1px solid var(--vscode-editorWidget-border);
   padding-top: 8px;
+  --git-history-synced-color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green, #89d185));
+  --git-history-local-color: var(--vscode-gitDecoration-untrackedResourceForeground, var(--vscode-charts-blue, #75beff));
+  --git-history-remote-color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-yellow, #cca700));
 }
 
 .git-sidebar-empty-state {
@@ -111,6 +114,40 @@
   padding: 0 12px 8px;
 }
 
+.git-sidebar-history-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 8px;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.git-sidebar-history-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.git-sidebar-history-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.git-sidebar-history-legend-dot--both {
+  background: var(--git-history-synced-color);
+}
+
+.git-sidebar-history-legend-dot--local-only {
+  background: var(--git-history-local-color);
+}
+
+.git-sidebar-history-legend-dot--remote-only {
+  background: var(--git-history-remote-color);
+}
+
 .git-sidebar-history-item {
   width: 100%;
   border: none;
@@ -126,6 +163,18 @@
   background: var(--vscode-list-hoverBackground);
 }
 
+.git-sidebar-history-item--both {
+  border-left: 3px solid var(--git-history-synced-color);
+}
+
+.git-sidebar-history-item--local-only {
+  border-left: 3px solid var(--git-history-local-color);
+}
+
+.git-sidebar-history-item--remote-only {
+  border-left: 3px solid var(--git-history-remote-color);
+}
+
 .git-sidebar-history-subject {
   font-size: 12px;
   color: var(--vscode-sideBar-foreground);
@@ -139,6 +188,23 @@
   flex-wrap: wrap;
   font-size: 10px;
   color: var(--vscode-descriptionForeground);
+}
+
+.git-sidebar-history-status {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.git-sidebar-history-status--both {
+  color: var(--git-history-synced-color);
+}
+
+.git-sidebar-history-status--local-only {
+  color: var(--git-history-local-color);
+}
+
+.git-sidebar-history-status--remote-only {
+  color: var(--git-history-remote-color);
 }
 
 .git-sidebar-main {

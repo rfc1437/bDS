@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { GitSidebar } from '../../../src/renderer/components/GitSidebar/GitSidebar';
 import { useAppStore } from '../../../src/renderer/store';
 
@@ -40,6 +40,7 @@ describe('GitSidebar', () => {
         fetch: vi.fn().mockResolvedValue({ success: true }),
         pull: vi.fn().mockResolvedValue({ success: true }),
         push: vi.fn().mockResolvedValue({ success: true }),
+        pruneLfs: vi.fn().mockResolvedValue({ success: true, dryRun: false, verifyRemote: true }),
         commitAll: vi.fn().mockResolvedValue({ success: true }),
         init: vi.fn().mockResolvedValue({ success: true }),
         ensureGitignore: vi.fn().mockResolvedValue({ updated: false, created: false, addedEntries: [] }),
@@ -94,6 +95,85 @@ describe('GitSidebar', () => {
     expect(screen.getByText(/version history/i)).toBeInTheDocument();
     expect(screen.getByText(/feat: add git sidebar/i)).toBeInTheDocument();
     expect(screen.getByText(/abc123/i)).toBeInTheDocument();
+  });
+
+  it('renders color-coded commit state labels for local, remote, and synced commits', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      {
+        hash: 'aaa111',
+        shortHash: 'aaa111',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: local',
+        author: 'Dev One',
+        syncStatus: 'local-only',
+      },
+      {
+        hash: 'bbb222',
+        shortHash: 'bbb222',
+        date: '2026-02-16T09:00:00.000Z',
+        subject: 'feat: remote',
+        author: 'Dev Two',
+        syncStatus: 'remote-only',
+      },
+      {
+        hash: 'ccc333',
+        shortHash: 'ccc333',
+        date: '2026-02-16T08:00:00.000Z',
+        subject: 'feat: both',
+        author: 'Dev Three',
+        syncStatus: 'both',
+      },
+    ]);
+
+    render(<GitSidebar />);
+
+    expect((await screen.findAllByText('Local only')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Remote only').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Synced').length).toBeGreaterThan(0);
+
+    const localCommit = screen.getByRole('button', { name: /feat: local/i });
+    const remoteCommit = screen.getByRole('button', { name: /feat: remote/i });
+    const syncedCommit = screen.getByRole('button', { name: /feat: both/i });
+
+    expect(localCommit).toHaveClass('git-sidebar-history-item--local-only');
+    expect(remoteCommit).toHaveClass('git-sidebar-history-item--remote-only');
+    expect(syncedCommit).toHaveClass('git-sidebar-history-item--both');
+  });
+
+  it('renders commit status legend in version history section', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      {
+        hash: 'aaa111',
+        shortHash: 'aaa111',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: local',
+        author: 'Dev One',
+        syncStatus: 'local-only',
+      },
+    ]);
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText(/version history/i)).toBeInTheDocument();
+    const legend = screen.getByLabelText('Commit status legend');
+    expect(within(legend).getByText('Synced')).toBeInTheDocument();
+    expect(within(legend).getByText('Local only')).toBeInTheDocument();
+    expect(within(legend).getByText('Remote only')).toBeInTheDocument();
+    expect(screen.getByTestId('git-history-legend-both')).toBeInTheDocument();
+    expect(screen.getByTestId('git-history-legend-local-only')).toBeInTheDocument();
+    expect(screen.getByTestId('git-history-legend-remote-only')).toBeInTheDocument();
   });
 
   it('uses the same section-title class as posts published heading', async () => {
@@ -401,7 +481,7 @@ describe('GitSidebar', () => {
     expect(screen.getByText(/100% — failed to configure remote repository/i)).toBeInTheDocument();
   });
 
-  it('wires fetch, pull, and push buttons', async () => {
+  it('wires fetch, pull, push, and prune lfs buttons', async () => {
     (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
       isRepo: true,
       rootPath: '/repo/path',
@@ -414,16 +494,52 @@ describe('GitSidebar', () => {
     const fetchButton = await screen.findByRole('button', { name: /fetch/i });
     const pullButton = screen.getByRole('button', { name: /pull/i });
     const pushButton = screen.getByRole('button', { name: /push/i });
+    const pruneButton = screen.getByRole('button', { name: /prune lfs/i });
 
     await act(async () => {
       fireEvent.click(fetchButton);
       fireEvent.click(pullButton);
       fireEvent.click(pushButton);
+      fireEvent.click(pruneButton);
     });
 
     expect((window as any).electronAPI.git.fetch).toHaveBeenCalledWith('/repo/path');
     expect((window as any).electronAPI.git.pull).toHaveBeenCalledWith('/repo/path');
     expect((window as any).electronAPI.git.push).toHaveBeenCalledWith('/repo/path');
+    expect((window as any).electronAPI.git.pruneLfs).toHaveBeenCalledWith('/repo/path', {
+      dryRun: false,
+      verifyRemote: true,
+    });
+  });
+
+  it('shows in-progress feedback while prune lfs is running', async () => {
+    let resolvePrune: ((value: { success: boolean; dryRun: boolean; verifyRemote: boolean }) => void) | null = null;
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.pruneLfs = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePrune = resolve;
+        }),
+    );
+
+    render(<GitSidebar />);
+
+    const pruneButton = await screen.findByRole('button', { name: /prune lfs/i });
+    await act(async () => {
+      fireEvent.click(pruneButton);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/pruning local git lfs cache/i);
+    expect(screen.getByRole('button', { name: /pruning/i })).toBeDisabled();
+
+    await act(async () => {
+      resolvePrune?.({ success: true, dryRun: false, verifyRemote: true });
+    });
   });
 
   it('commits all changes and closes open git-diff tabs', async () => {
