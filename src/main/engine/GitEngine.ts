@@ -100,8 +100,12 @@ export interface GitLfsPruneResult {
 
 export interface GitActionResult {
   success: boolean;
+  code?: 'auth-required' | 'conflict' | 'network' | 'action-failed';
   error?: string;
+  guidance?: string[];
 }
+
+type GitProvider = 'unknown' | 'github' | 'gitlab' | 'gitea-forgejo';
 
 let gitEngineInstance: GitEngine | null = null;
 
@@ -123,6 +127,241 @@ export class GitEngine {
     '._*',
     '.fseventsd',
   ];
+
+  private createNonInteractiveGit(projectPath: string): ReturnType<typeof simpleGit> {
+    return simpleGit(projectPath)
+      .env('GIT_TERMINAL_PROMPT', '0')
+      .env('GCM_INTERACTIVE', 'never')
+      .env('GIT_SSH_COMMAND', 'ssh -oBatchMode=yes');
+  }
+
+  private getPlatformAuthGuidance(): string {
+    if (process.platform === 'darwin') {
+      return 'On macOS, authenticate using Git Credential Manager (`brew install --cask git-credential-manager`), then run `git credential-manager configure`, or use SSH keys added to the keychain and loaded into ssh-agent.';
+    }
+    if (process.platform === 'win32') {
+      return 'On Windows, install Git Credential Manager (included with Git for Windows), run `git credential-manager configure`, then sign in when prompted, or configure SSH keys in the OpenSSH agent.';
+    }
+    return 'On Linux, install Git Credential Manager (`gcm`) and configure it, or use SSH keys with ssh-agent. Ensure your key is loaded before running fetch/pull/push.';
+  }
+
+  private getPlatformAuthGuidanceSteps(): string[] {
+    if (process.platform === 'darwin') {
+      return [
+        'Install Git Credential Manager: brew install --cask git-credential-manager',
+        'Configure it: git credential-manager configure',
+        'Alternatively use SSH keys in macOS keychain + ssh-agent.',
+      ];
+    }
+    if (process.platform === 'win32') {
+      return [
+        'Install Git for Windows (includes Git Credential Manager).',
+        'Configure it: git credential-manager configure',
+        'Alternatively configure SSH keys with the OpenSSH agent.',
+      ];
+    }
+    return [
+      'Install Git Credential Manager (`gcm`) and configure it.',
+      'Or use SSH keys with ssh-agent and ensure the key is loaded before fetch/pull/push.',
+    ];
+  }
+
+  private getGitHubGuidance(): string {
+    return [
+      'GitHub detected: use HTTPS with a Personal Access Token (classic/fine-grained) as password, or use SSH keys.',
+      'Token flow: create a token in GitHub Settings > Developer settings > Personal access tokens with at least `repo` scope (or equivalent fine-grained repository permissions).',
+      'Then run `git config --global credential.helper manager` (or `osxkeychain` on macOS if preferred), retry fetch/pull/push, and use your GitHub username + token when prompted.',
+      'SSH alternative: switch origin with `git remote set-url origin git@github.com:<owner>/<repo>.git` and ensure your SSH key is loaded.',
+    ].join(' ');
+  }
+
+  private getGitLabGuidanceSteps(): string[] {
+    return [
+      'Create a GitLab Personal Access Token in User Settings > Access Tokens.',
+      'Grant at least `read_repository` and `write_repository` scopes (or equivalent project token permissions).',
+      'Set credential helper: git config --global credential.helper manager (or osxkeychain on macOS).',
+      'Retry and log in with your GitLab username and the token as password.',
+      'SSH alternative: git remote set-url origin git@gitlab.com:<group>/<repo>.git',
+    ];
+  }
+
+  private getGiteaForgejoGuidanceSteps(): string[] {
+    return [
+      'Create an access token in your instance under Settings > Applications > Access Tokens (wording may vary by instance).',
+      'Grant repository read/write permissions for the target repository.',
+      'Set credential helper: git config --global credential.helper manager (or osxkeychain on macOS).',
+      'Retry and log in with your username and the token as password for HTTPS remotes.',
+      'SSH alternative: use git@<host>:<owner>/<repo>.git and ensure your SSH key is loaded.',
+    ];
+  }
+
+  private getGenericTokenGuidanceSteps(): string[] {
+    return [
+      'If your host uses HTTPS auth, create an access token in your Git hosting account settings.',
+      'Retry and log in with your normal username and the token as password.',
+      'If unsure, switch to SSH and use git@<host>:<owner>/<repo>.git with a loaded SSH key.',
+    ];
+  }
+
+  private getGitHubGuidanceSteps(): string[] {
+    return [
+      'Create a GitHub Personal Access Token in Settings > Developer settings > Personal access tokens.',
+      'Use at least `repo` scope (or equivalent fine-grained repository permissions).',
+      'Set credential helper: git config --global credential.helper manager (or osxkeychain on macOS).',
+      'Retry and log in with your GitHub username and the token as password.',
+      'SSH alternative: git remote set-url origin git@github.com:<owner>/<repo>.git',
+    ];
+  }
+
+  private isGitHubUrl(value: string): boolean {
+    const normalized = value.toLowerCase();
+    return normalized.includes('github.com') || normalized.includes('git@github.com:');
+  }
+
+  private isGitLabUrl(value: string): boolean {
+    const normalized = value.toLowerCase();
+    return normalized.includes('gitlab.com') || normalized.includes('git@gitlab.com:') || normalized.includes('gitlab');
+  }
+
+  private isGiteaForgejoUrl(value: string): boolean {
+    const normalized = value.toLowerCase();
+    return normalized.includes('gitea') || normalized.includes('forgejo');
+  }
+
+  private detectProviderFromValue(value: string): GitProvider {
+    if (this.isGitHubUrl(value)) {
+      return 'github';
+    }
+    if (this.isGitLabUrl(value)) {
+      return 'gitlab';
+    }
+    if (this.isGiteaForgejoUrl(value)) {
+      return 'gitea-forgejo';
+    }
+    return 'unknown';
+  }
+
+  private getProviderLabel(provider: GitProvider): string {
+    if (provider === 'github') return 'GitHub';
+    if (provider === 'gitlab') return 'GitLab';
+    if (provider === 'gitea-forgejo') return 'Gitea/Forgejo';
+    return 'Unknown';
+  }
+
+  private async detectProviderFromRemotes(git: ReturnType<typeof simpleGit>): Promise<GitProvider> {
+    try {
+      const remotes = await git.getRemotes(true);
+      const urls = remotes.flatMap((remote) => [remote.refs.fetch || '', remote.refs.push || '']);
+      for (const url of urls) {
+        const provider = this.detectProviderFromValue(url);
+        if (provider !== 'unknown') {
+          return provider;
+        }
+      }
+      return 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  private async detectProvider(git: ReturnType<typeof simpleGit>, message: string): Promise<GitProvider> {
+    const byMessage = this.detectProviderFromValue(message);
+    if (byMessage !== 'unknown') {
+      return byMessage;
+    }
+    return this.detectProviderFromRemotes(git);
+  }
+
+  private isAuthError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('authentication failed')
+      || normalized.includes('could not read username')
+      || normalized.includes('could not resolve host') === false && normalized.includes('permission denied (publickey)')
+      || normalized.includes('terminal prompts disabled')
+      || normalized.includes('credential') && normalized.includes('denied')
+    );
+  }
+
+  private isConflictError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('conflict') || normalized.includes('non-fast-forward') || normalized.includes('rejected');
+  }
+
+  private isNetworkError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('timed out')
+      || normalized.includes('could not resolve host')
+      || normalized.includes('connection reset')
+      || normalized.includes('network')
+      || normalized.includes('unable to access')
+    );
+  }
+
+  private isNoUpstreamError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('no upstream branch') || normalized.includes('has no upstream branch');
+  }
+
+  private async getCurrentBranchName(git: ReturnType<typeof simpleGit>): Promise<string | null> {
+    try {
+      const status = await git.status();
+      const branch = typeof status.current === 'string' ? status.current.trim() : '';
+      return branch || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async toActionFailure(git: ReturnType<typeof simpleGit>, error: unknown, fallback: string): Promise<GitActionResult> {
+    const message = error instanceof Error ? error.message : fallback;
+
+    if (this.isAuthError(message)) {
+      const provider = await this.detectProvider(git, message);
+      const providerText = provider === 'unknown' ? '' : ` Detected provider: ${this.getProviderLabel(provider)}.`;
+      const providerGuidance =
+        provider === 'github'
+          ? this.getGitHubGuidanceSteps()
+          : provider === 'gitlab'
+            ? this.getGitLabGuidanceSteps()
+            : provider === 'gitea-forgejo'
+              ? this.getGiteaForgejoGuidanceSteps()
+              : this.getGenericTokenGuidanceSteps();
+
+      return {
+        success: false,
+        code: 'auth-required',
+        error: `Authentication required for remote Git action.${providerText} Follow the steps below to sign in.`,
+        guidance: [
+          ...this.getPlatformAuthGuidanceSteps(),
+          ...providerGuidance,
+        ],
+      };
+    }
+
+    if (this.isConflictError(message)) {
+      return {
+        success: false,
+        code: 'conflict',
+        error: message,
+      };
+    }
+
+    if (this.isNetworkError(message)) {
+      return {
+        success: false,
+        code: 'network',
+        error: message,
+      };
+    }
+
+    return {
+      success: false,
+      code: 'action-failed',
+      error: message,
+    };
+  }
 
   private async readLfsTrackedPatterns(projectPath: string): Promise<Set<string>> {
     try {
@@ -280,41 +519,44 @@ export class GitEngine {
   }
 
   async fetch(projectPath: string): Promise<GitActionResult> {
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     try {
       await git.fetch(['--prune']);
       return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch remote updates.',
-      };
+      return this.toActionFailure(git, error, 'Failed to fetch remote updates.');
     }
   }
 
   async pull(projectPath: string): Promise<GitActionResult> {
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     try {
       await git.pull();
       return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to pull remote changes.',
-      };
+      return this.toActionFailure(git, error, 'Failed to pull remote changes.');
     }
   }
 
   async push(projectPath: string): Promise<GitActionResult> {
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     try {
       await git.push();
       return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to push local commits.',
-      };
+      const message = error instanceof Error ? error.message : 'Failed to push local commits.';
+      if (this.isNoUpstreamError(message)) {
+        const currentBranch = await this.getCurrentBranchName(git);
+        if (currentBranch) {
+          try {
+            await git.push(['-u', 'origin', currentBranch]);
+            return { success: true };
+          } catch (retryError) {
+            return this.toActionFailure(git, retryError, 'Failed to push local commits.');
+          }
+        }
+      }
+      return this.toActionFailure(git, error, 'Failed to push local commits.');
     }
   }
 
@@ -540,6 +782,12 @@ export class GitEngine {
     }
 
     const normalizedRemoteUrl = remoteUrl?.trim();
+    try {
+      await git.raw(['config', '--local', 'push.autoSetupRemote', 'true']);
+    } catch {
+      emitProgress('configuring-remote', 96, 'Configuring remote repository...', 'unable to set auto upstream');
+    }
+
     if (normalizedRemoteUrl) {
       emitProgress('configuring-remote', 96, 'Configuring remote repository...');
       try {

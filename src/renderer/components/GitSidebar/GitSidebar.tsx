@@ -12,6 +12,7 @@ export const GitSidebar: React.FC = () => {
   const [statusLoading, setStatusLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<'fetch' | 'pull' | 'push' | 'commit' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorGuidance, setErrorGuidance] = useState<string[]>([]);
   const [isRepo, setIsRepo] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
   const [statusFiles, setStatusFiles] = useState<Array<{ path: string; status: string }>>([]);
@@ -25,6 +26,19 @@ export const GitSidebar: React.FC = () => {
   const commitMessageInputRef = useRef<HTMLInputElement | null>(null);
 
   const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
+
+  const getActionProgressMessage = (action: 'fetch' | 'pull' | 'push' | 'commit'): string => {
+    if (action === 'push') {
+      return 'Pushing commits to remote... this can take a while for large uploads.';
+    }
+    if (action === 'fetch') {
+      return 'Fetching remote updates...';
+    }
+    if (action === 'pull') {
+      return 'Pulling latest changes...';
+    }
+    return 'Creating commit...';
+  };
 
   const openDiffTab = useCallback(
     (filePath: string, isTransient: boolean) => {
@@ -52,6 +66,7 @@ export const GitSidebar: React.FC = () => {
   const loadRepoState = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setErrorGuidance([]);
 
     try {
       const availability = await window.electronAPI.git.checkAvailability();
@@ -168,6 +183,7 @@ export const GitSidebar: React.FC = () => {
 
     setActionLoading(action);
     setError(null);
+    setErrorGuidance([]);
     try {
       const result =
         action === 'fetch'
@@ -177,6 +193,7 @@ export const GitSidebar: React.FC = () => {
             : await window.electronAPI.git.push(effectiveProjectPath);
       if (!result.success) {
         setError(result.error || `Failed to ${action}.`);
+        setErrorGuidance(result.guidance || []);
         return;
       }
       await loadRepoState();
@@ -203,11 +220,13 @@ export const GitSidebar: React.FC = () => {
 
     setActionLoading('commit');
     setError(null);
+    setErrorGuidance([]);
     try {
       const messageToCommit = commitMessageInputRef.current?.value ?? commitMessage;
       const result = await window.electronAPI.git.commitAll(effectiveProjectPath, messageToCommit);
       if (!result.success) {
         setError(result.error || 'Failed to commit changes.');
+        setErrorGuidance(result.guidance || []);
         return;
       }
 
@@ -268,7 +287,7 @@ export const GitSidebar: React.FC = () => {
               onClick={() => handleRepoAction('fetch')}
               disabled={actionLoading !== null}
             >
-              Fetch
+              {actionLoading === 'fetch' ? 'Fetching...' : 'Fetch'}
             </button>
             <button
               type="button"
@@ -276,7 +295,7 @@ export const GitSidebar: React.FC = () => {
               onClick={() => handleRepoAction('pull')}
               disabled={actionLoading !== null}
             >
-              Pull
+              {actionLoading === 'pull' ? 'Pulling...' : 'Pull'}
             </button>
             <button
               type="button"
@@ -284,9 +303,14 @@ export const GitSidebar: React.FC = () => {
               onClick={() => handleRepoAction('push')}
               disabled={actionLoading !== null}
             >
-              Push
+              {actionLoading === 'push' ? 'Pushing...' : 'Push'}
             </button>
           </div>
+          {actionLoading && (
+            <div className="git-sidebar-empty-state git-sidebar-progress" role="status">
+              {getActionProgressMessage(actionLoading)}
+            </div>
+          )}
 
           <div className="git-sidebar-section">
             <div className="sidebar-section-title">Open Changes ({statusFiles.length})</div>
@@ -307,7 +331,7 @@ export const GitSidebar: React.FC = () => {
                 onClick={handleCommit}
                 disabled={actionLoading !== null}
               >
-                Commit
+                {actionLoading === 'commit' ? 'Committing...' : 'Commit'}
               </button>
             </div>
 
@@ -356,7 +380,18 @@ export const GitSidebar: React.FC = () => {
             )}
             {currentBranch && <div className="git-sidebar-empty-state">Branch: {currentBranch}</div>}
           </div>
-          {error && <div className="git-sidebar-empty-state git-sidebar-error">{error}</div>}
+          {error && (
+            <div className="git-sidebar-empty-state git-sidebar-error">
+              <div>{error}</div>
+              {errorGuidance.length > 0 && (
+                <ul className="git-sidebar-guidance-list">
+                  {errorGuidance.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {transcriptSection}
         </div>
       </div>

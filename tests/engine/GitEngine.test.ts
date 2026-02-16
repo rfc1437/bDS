@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const mockVersion = vi.fn();
+const mockEnv = vi.fn();
 const mockCheckIsRepo = vi.fn();
 const mockRevparse = vi.fn();
 const mockStatus = vi.fn();
@@ -32,6 +33,7 @@ vi.mock('fs/promises', () => ({
 
 vi.mock('simple-git', () => ({
   simpleGit: vi.fn(() => ({
+    env: mockEnv,
     version: mockVersion,
     checkIsRepo: mockCheckIsRepo,
     revparse: mockRevparse,
@@ -63,6 +65,26 @@ describe('GitEngine', () => {
     mockStat.mockResolvedValue({});
     mockWriteFile.mockResolvedValue(undefined);
     mockCheckIsRepo.mockResolvedValue(false);
+    mockEnv.mockImplementation(() => ({
+      env: mockEnv,
+      version: mockVersion,
+      checkIsRepo: mockCheckIsRepo,
+      revparse: mockRevparse,
+      status: mockStatus,
+      diff: mockDiff,
+      show: mockShow,
+      log: mockLog,
+      init: mockInit,
+      raw: mockRaw,
+      add: mockAdd,
+      commit: mockCommit,
+      fetch: mockFetch,
+      pull: mockPull,
+      push: mockPush,
+      getRemotes: mockGetRemotes,
+      addRemote: mockAddRemote,
+      remote: mockRemote,
+    }));
     gitEngine = new GitEngine();
   });
 
@@ -389,6 +411,7 @@ describe('GitEngine', () => {
       expect(result).toEqual({ success: true });
       expect(mockGetRemotes).toHaveBeenCalledWith(true);
       expect(mockAddRemote).toHaveBeenCalledWith('origin', 'https://github.com/example/repo.git');
+      expect(mockRaw).toHaveBeenCalledWith(['config', '--local', 'push.autoSetupRemote', 'true']);
     });
 
     it('should succeed when there is nothing to commit after staging', async () => {
@@ -464,6 +487,8 @@ describe('GitEngine', () => {
 
       const result = await gitEngine.fetch('/tmp/project');
 
+      expect(mockEnv).toHaveBeenCalledWith('GIT_TERMINAL_PROMPT', '0');
+      expect(mockEnv).toHaveBeenCalledWith('GCM_INTERACTIVE', 'never');
       expect(mockFetch).toHaveBeenCalledWith(['--prune']);
       expect(result).toEqual({ success: true });
     });
@@ -486,6 +511,19 @@ describe('GitEngine', () => {
       expect(result).toEqual({ success: true });
     });
 
+    it('should auto-set upstream and retry push when no upstream branch exists', async () => {
+      mockPush
+        .mockRejectedValueOnce(new Error('fatal: The current branch main has no upstream branch.'))
+        .mockResolvedValueOnce(undefined);
+      mockStatus.mockResolvedValue({ current: 'main' });
+
+      const result = await gitEngine.push('/tmp/project');
+
+      expect(mockPush).toHaveBeenNthCalledWith(1);
+      expect(mockPush).toHaveBeenNthCalledWith(2, ['-u', 'origin', 'main']);
+      expect(result).toEqual({ success: true });
+    });
+
     it('should stage all files and commit with message', async () => {
       mockAdd.mockResolvedValue(undefined);
       mockCommit.mockResolvedValue(undefined);
@@ -503,6 +541,96 @@ describe('GitEngine', () => {
       expect(mockAdd).not.toHaveBeenCalled();
       expect(mockCommit).not.toHaveBeenCalled();
       expect(result).toEqual({ success: false, error: 'Commit message is required.' });
+    });
+
+    it('should return auth-required code with OS guidance when fetch authentication fails', async () => {
+      mockFetch.mockRejectedValue(new Error('fatal: Authentication failed for https://example.com/repo.git'));
+      mockGetRemotes.mockResolvedValue([]);
+
+      const result = await gitEngine.fetch('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('auth-required');
+      expect(result.error).toContain('Authentication required for remote Git action');
+      expect(result.error).not.toContain('Original error');
+      expect(Array.isArray(result.guidance)).toBe(true);
+      expect(result.guidance!.length).toBeGreaterThan(0);
+      expect(result.guidance!.join(' ')).not.toContain('GitHub detected');
+      expect(result.guidance!.join(' ')).toContain('token');
+      expect(result.guidance!.join(' ')).toContain('password');
+    });
+
+    it('should include GitHub-specific guidance when remote points to github.com', async () => {
+      mockFetch.mockRejectedValue(new Error('fatal: Authentication failed'));
+      mockGetRemotes.mockResolvedValue([
+        {
+          name: 'origin',
+          refs: {
+            fetch: 'https://github.com/example/repo.git',
+            push: 'https://github.com/example/repo.git',
+          },
+        },
+      ]);
+
+      const result = await gitEngine.fetch('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('auth-required');
+      expect(result.error).toContain('Detected provider: GitHub');
+      expect(result.guidance).toEqual(expect.arrayContaining([
+        expect.stringContaining('Personal Access Token'),
+        expect.stringContaining('repo'),
+        expect.stringContaining('git config --global credential.helper'),
+        expect.stringContaining('git remote set-url origin'),
+      ]));
+    });
+
+    it('should include GitLab-specific token guidance when remote points to gitlab', async () => {
+      mockFetch.mockRejectedValue(new Error('fatal: Authentication failed'));
+      mockGetRemotes.mockResolvedValue([
+        {
+          name: 'origin',
+          refs: {
+            fetch: 'https://gitlab.com/example/repo.git',
+            push: 'https://gitlab.com/example/repo.git',
+          },
+        },
+      ]);
+
+      const result = await gitEngine.fetch('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('auth-required');
+      expect(result.error).toContain('Detected provider: GitLab');
+      expect(result.guidance).toEqual(expect.arrayContaining([
+        expect.stringContaining('User Settings > Access Tokens'),
+        expect.stringContaining('read_repository'),
+        expect.stringContaining('write_repository'),
+      ]));
+    });
+
+    it('should include Gitea/Forgejo token guidance when remote appears self-hosted gitea/forgejo', async () => {
+      mockFetch.mockRejectedValue(new Error('fatal: Authentication failed'));
+      mockGetRemotes.mockResolvedValue([
+        {
+          name: 'origin',
+          refs: {
+            fetch: 'https://forgejo.example.com/my/repo.git',
+            push: 'https://forgejo.example.com/my/repo.git',
+          },
+        },
+      ]);
+
+      const result = await gitEngine.fetch('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('auth-required');
+      expect(result.error).toContain('Detected provider: Gitea/Forgejo');
+      expect(result.guidance).toEqual(expect.arrayContaining([
+        expect.stringContaining('Settings > Applications'),
+        expect.stringContaining('Access Tokens'),
+        expect.stringContaining('repository'),
+      ]));
     });
   });
 });

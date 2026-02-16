@@ -393,4 +393,63 @@ describe('GitSidebar', () => {
       { type: 'post', id: 'post-1', isTransient: false },
     ]);
   });
+
+  it('shows auth guidance when fetch fails due to authentication', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.fetch = vi.fn().mockResolvedValue({
+      success: false,
+      code: 'auth-required',
+      error: 'Authentication required for remote Git action. Detected provider: GitHub.',
+      guidance: [
+        'Create a GitHub Personal Access Token.',
+        'Retry with username + token.',
+      ],
+    });
+
+    render(<GitSidebar />);
+
+    const fetchButton = await screen.findByRole('button', { name: /fetch/i });
+    await act(async () => {
+      fireEvent.click(fetchButton);
+    });
+
+    expect(await screen.findByText(/authentication required/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/create a github personal access token/i)).toHaveLength(1);
+    expect(screen.getByText(/retry with username \+ token/i)).toBeInTheDocument();
+  });
+
+  it('shows in-progress feedback while push is running', async () => {
+    let resolvePush: ((value: { success: boolean }) => void) | null = null;
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.push = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePush = resolve;
+        }),
+    );
+
+    render(<GitSidebar />);
+
+    const pushButton = await screen.findByRole('button', { name: /push/i });
+    await act(async () => {
+      fireEvent.click(pushButton);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/pushing commits to remote/i);
+    expect(screen.getByRole('button', { name: /pushing/i })).toBeDisabled();
+
+    await act(async () => {
+      resolvePush?.({ success: true });
+    });
+  });
 });

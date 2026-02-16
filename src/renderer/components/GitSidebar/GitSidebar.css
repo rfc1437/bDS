@@ -148,6 +148,18 @@
   color: var(--vscode-descriptionForeground);
 }
 
+.git-sidebar-guidance-list {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.git-sidebar-guidance-list li {
+  color: var(--vscode-descriptionForeground);
+}
+
 .git-sidebar-transcript {
   margin-top: auto;
   padding-top: 8px;

@@ -295,7 +295,9 @@ export interface GitLfsPruneResult {
 
 export interface GitActionResult {
   success: boolean;
+  code?: 'auth-required' | 'conflict' | 'network' | 'action-failed';
   error?: string;
+  guidance?: string[];
 }
 
 // Post-Media Link types
