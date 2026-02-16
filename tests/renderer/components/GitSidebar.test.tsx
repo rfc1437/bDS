@@ -29,6 +29,7 @@ describe('GitSidebar', () => {
         checkAvailability: vi.fn().mockResolvedValue({ gitFound: true, version: '2.49.0' }),
         getRepoState: vi.fn().mockResolvedValue({ isRepo: false, hasRemote: false }),
         init: vi.fn().mockResolvedValue({ success: true }),
+        onInitProgress: vi.fn().mockImplementation(() => () => {}),
       },
     };
   });
@@ -87,6 +88,94 @@ describe('GitSidebar', () => {
 
     await vi.waitFor(() => {
       expect((window as any).electronAPI.git.init).toHaveBeenCalledWith('/repo/path', 'https://github.com/example/repo.git');
+    });
+  });
+
+  it('shows detailed progress feedback while initialization is running', async () => {
+    let resolveInit: ((value: { success: boolean }) => void) | null = null;
+    (window as any).electronAPI.git.init = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInit = resolve;
+        }),
+    );
+
+    render(<GitSidebar />);
+
+    const initButton = await screen.findByRole('button', { name: /initialize git/i });
+
+    await act(async () => {
+      fireEvent.click(initButton);
+    });
+
+    expect(screen.getByText(/preparing repository initialization/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /initializing/i })).toBeDisabled();
+
+    await act(async () => {
+      resolveInit?.({ success: true });
+    });
+  });
+
+  it('updates progress detail text from init progress events', async () => {
+    let resolveInit: ((value: { success: boolean }) => void) | null = null;
+    (window as any).electronAPI.git.init = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInit = resolve;
+        }),
+    );
+
+    render(<GitSidebar />);
+
+    const onInitProgressMock = (window as any).electronAPI.git.onInitProgress as ReturnType<typeof vi.fn>;
+    const subscription = onInitProgressMock.mock.calls[0][0] as (payload: { message: string }) => void;
+
+    const initButton = await screen.findByRole('button', { name: /initialize git/i });
+    await act(async () => {
+      fireEvent.click(initButton);
+    });
+
+    await act(async () => {
+      subscription({ message: 'Staging project files...', progress: 75 });
+    });
+
+    expect(screen.getByText(/75% — staging project files/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveInit?.({ success: true });
+    });
+  });
+
+  it('renders a compact transcript of initialization steps', async () => {
+    let resolveInit: ((value: { success: boolean }) => void) | null = null;
+    (window as any).electronAPI.git.init = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInit = resolve;
+        }),
+    );
+
+    render(<GitSidebar />);
+
+    const onInitProgressMock = (window as any).electronAPI.git.onInitProgress as ReturnType<typeof vi.fn>;
+    const subscription = onInitProgressMock.mock.calls[0][0] as (payload: { message: string; progress: number }) => void;
+
+    const initButton = await screen.findByRole('button', { name: /initialize git/i });
+    await act(async () => {
+      fireEvent.click(initButton);
+    });
+
+    await act(async () => {
+      subscription({ message: 'Checking Git availability...', progress: 5 });
+      subscription({ message: 'Initializing repository...', progress: 15 });
+    });
+
+    expect(screen.getByText(/initialization transcript/i)).toBeInTheDocument();
+    expect(screen.getByText(/5% — checking git availability/i)).toBeInTheDocument();
+    expect(screen.getByText(/15% — initializing repository/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveInit?.({ success: true });
     });
   });
 });

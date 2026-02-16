@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
+import type { GitInitProgress } from '../../../main/shared/electronApi';
 import './GitSidebar.css';
 
 export const GitSidebar: React.FC = () => {
@@ -10,6 +11,8 @@ export const GitSidebar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isRepo, setIsRepo] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
+  const [initProgress, setInitProgress] = useState<GitInitProgress | null>(null);
+  const [initTranscript, setInitTranscript] = useState<GitInitProgress[]>([]);
   const remoteUrlInputRef = useRef<HTMLInputElement | null>(null);
 
   const resolveProjectPath = useCallback(async (): Promise<string | null> => {
@@ -60,6 +63,17 @@ export const GitSidebar: React.FC = () => {
     void loadRepoState();
   }, [loadRepoState]);
 
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.git.onInitProgress((progress) => {
+      setInitProgress(progress);
+      setInitTranscript((previous) => [...previous, progress].slice(-12));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const handleInitialize = async () => {
     if (!projectPath) {
       return;
@@ -67,6 +81,12 @@ export const GitSidebar: React.FC = () => {
 
     setInitializing(true);
     setError(null);
+    setInitTranscript([]);
+    setInitProgress({
+      phase: 'initializing-repo',
+      progress: 0,
+      message: 'Preparing repository initialization...',
+    });
 
     try {
       const normalizedRemoteUrl = remoteUrlInputRef.current?.value.trim() || '';
@@ -95,6 +115,20 @@ export const GitSidebar: React.FC = () => {
     );
   }
 
+  const transcriptSection = initTranscript.length > 0 ? (
+    <div className="git-sidebar-transcript">
+      <p className="git-sidebar-transcript-title">Initialization transcript</p>
+      <ul className="git-sidebar-transcript-list">
+        {initTranscript.map((entry, index) => (
+          <li key={`${entry.phase}-${entry.progress}-${index}`}>
+            {entry.progress}% — {entry.message.toLowerCase().replace(/\.+$/, '')}
+            {entry.detail ? ` (${entry.detail})` : ''}
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
+
   if (isRepo) {
     return (
       <div className="git-sidebar">
@@ -102,6 +136,7 @@ export const GitSidebar: React.FC = () => {
         <div className="git-sidebar-empty">
           <p>Git repository ready</p>
           {currentBranch && <p>Branch: {currentBranch}</p>}
+          {transcriptSection}
         </div>
       </div>
     );
@@ -119,6 +154,13 @@ export const GitSidebar: React.FC = () => {
           placeholder="Optional remote repository URL"
           disabled={initializing}
         />
+        {initializing && (
+          <p className="git-sidebar-progress">
+            {initProgress?.message || 'Initializing repository...'}
+            {typeof initProgress?.progress === 'number' ? ` (${initProgress.progress}%)` : ''}
+            {initProgress?.detail ? ` — ${initProgress.detail}` : ''}
+          </p>
+        )}
         {error && <p className="git-sidebar-error">{error}</p>}
         <button
           className="git-sidebar-button"
@@ -127,6 +169,7 @@ export const GitSidebar: React.FC = () => {
         >
           {initializing ? 'Initializing...' : 'Initialize Git'}
         </button>
+        {transcriptSection}
       </div>
     </div>
   );

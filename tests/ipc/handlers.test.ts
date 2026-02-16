@@ -237,6 +237,14 @@ async function invokeHandler(channel: string, ...args: any[]): Promise<any> {
   return handler({}, ...args);
 }
 
+async function invokeHandlerWithEvent(event: any, channel: string, ...args: any[]): Promise<any> {
+  const handler = registeredHandlers.get(channel);
+  if (!handler) {
+    throw new Error(`No handler registered for channel: ${channel}`);
+  }
+  return handler(event, ...args);
+}
+
 describe('IPC Handlers', () => {
   beforeEach(async () => {
     // Clear all mocks
@@ -314,7 +322,7 @@ describe('IPC Handlers', () => {
 
         const result = await invokeHandler('git:init', '/repo');
 
-        expect(mockGitEngine.initializeRepo).toHaveBeenCalledWith('/repo');
+        expect(mockGitEngine.initializeRepo).toHaveBeenCalledWith('/repo', undefined, expect.any(Function));
         expect(result).toEqual({ success: true });
       });
 
@@ -323,7 +331,32 @@ describe('IPC Handlers', () => {
 
         await invokeHandler('git:init', '/repo', 'https://github.com/example/repo.git');
 
-        expect(mockGitEngine.initializeRepo).toHaveBeenCalledWith('/repo', 'https://github.com/example/repo.git');
+        expect(mockGitEngine.initializeRepo).toHaveBeenCalledWith('/repo', 'https://github.com/example/repo.git', expect.any(Function));
+      });
+
+      it('should forward init progress updates to renderer via event sender', async () => {
+        mockGitEngine.initializeRepo.mockImplementation(async (_projectPath: string, _remoteUrl: string | undefined, onProgress: (payload: unknown) => void) => {
+          onProgress({ phase: 'initializing-repo', progress: 20, message: 'Initializing repository...' });
+          onProgress({ phase: 'completed', progress: 100, message: 'Repository initialized.' });
+          return { success: true };
+        });
+
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        const result = await invokeHandlerWithEvent(event, 'git:init', '/repo');
+
+        expect(result).toEqual({ success: true });
+        expect(send).toHaveBeenCalledWith('git:initProgress', {
+          phase: 'initializing-repo',
+          progress: 20,
+          message: 'Initializing repository...',
+        });
+        expect(send).toHaveBeenCalledWith('git:initProgress', {
+          phase: 'completed',
+          progress: 100,
+          message: 'Repository initialized.',
+        });
       });
     });
   });

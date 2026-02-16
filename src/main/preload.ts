@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ElectronAPI } from './shared/electronApi';
+import type { GitInitProgress } from './shared/electronApi';
 
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
@@ -14,6 +15,11 @@ export const electronAPI: ElectronAPI = {
         return ipcRenderer.invoke('git:init', projectPath, remoteUrl);
       }
       return ipcRenderer.invoke('git:init', projectPath);
+    },
+    onInitProgress: (callback: (data: GitInitProgress) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: GitInitProgress) => callback(data);
+      ipcRenderer.on('git:initProgress', subscription);
+      return () => ipcRenderer.removeListener('git:initProgress', subscription);
     },
   },
 

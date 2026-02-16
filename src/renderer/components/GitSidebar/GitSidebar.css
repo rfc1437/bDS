@@ -27,6 +27,36 @@
   color: var(--vscode-errorForeground);
 }
 
+.git-sidebar-progress {
+  color: var(--vscode-descriptionForeground);
+}
+
+.git-sidebar-transcript {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vscode-editorWidget-border);
+}
+
+.git-sidebar-transcript-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.git-sidebar-transcript-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  max-height: 180px;
+  overflow: auto;
+}
+
+.git-sidebar-transcript-list li {
+  margin: 0 0 4px;
+}
+
 .git-sidebar-input {
   width: 100%;
   margin: 0 0 10px;

@@ -1,4 +1,6 @@
 import { simpleGit } from 'simple-git';
+import { readFile, stat } from 'fs/promises';
+import * as path from 'path';
 
 export interface GitAvailability {
   gitFound: boolean;
@@ -34,10 +36,28 @@ export interface GitStatusDto {
   counts: GitStatusCounts;
 }
 
+export type GitInitPhase =
+  | 'checking-git'
+  | 'initializing-repo'
+  | 'configuring-lfs'
+  | 'tracking-lfs-patterns'
+  | 'staging-files'
+  | 'creating-initial-commit'
+  | 'configuring-remote'
+  | 'completed'
+  | 'failed';
+
+export interface GitInitProgress {
+  phase: GitInitPhase;
+  progress: number;
+  message: string;
+  detail?: string;
+}
+
 export interface GitInitResult {
   success: boolean;
   error?: string;
-  code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed';
+  code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed' | 'commit-failed';
 }
 
 let gitEngineInstance: GitEngine | null = null;
@@ -50,6 +70,56 @@ export function getGitEngine(): GitEngine {
 }
 
 export class GitEngine {
+  private async readLfsTrackedPatterns(projectPath: string): Promise<Set<string>> {
+    try {
+      const attributesPath = path.join(projectPath, '.gitattributes');
+      const content = await readFile(attributesPath, 'utf8');
+      const patterns = content
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('#') && line.includes('filter=lfs'))
+        .map((line) => line.split(/\s+/)[0])
+        .filter(Boolean);
+      return new Set(patterns);
+    } catch {
+      return new Set<string>();
+    }
+  }
+
+  private async hasHeadCommit(git: ReturnType<typeof simpleGit>): Promise<boolean> {
+    try {
+      await git.raw(['rev-parse', '--verify', 'HEAD']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async isLfsConfigured(git: ReturnType<typeof simpleGit>): Promise<boolean> {
+    try {
+      const output = await git.raw(['config', '--local', '--get', 'filter.lfs.clean']);
+      return output.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private async existingStageTargets(projectPath: string): Promise<string[]> {
+    const targets = ['posts', 'media', 'meta', '.gitattributes'];
+    const existing: string[] = [];
+
+    for (const target of targets) {
+      try {
+        await stat(path.join(projectPath, target));
+        existing.push(target);
+      } catch {
+        continue;
+      }
+    }
+
+    return existing;
+  }
+
   async checkAvailability(): Promise<GitAvailability> {
     try {
       const versionResult = await simpleGit().version();
@@ -117,9 +187,19 @@ export class GitEngine {
     };
   }
 
-  async initializeRepo(projectPath: string, remoteUrl?: string): Promise<GitInitResult> {
+  async initializeRepo(
+    projectPath: string,
+    remoteUrl?: string,
+    onProgress?: (progress: GitInitProgress) => void,
+  ): Promise<GitInitResult> {
+    const emitProgress = (phase: GitInitPhase, progress: number, message: string, detail?: string): void => {
+      onProgress?.({ phase, progress, message, detail });
+    };
+
+    emitProgress('checking-git', 5, 'Checking Git availability...');
     const availability = await this.checkAvailability();
     if (!availability.gitFound) {
+      emitProgress('failed', 100, 'Git executable not found. Please install Git and restart the app.');
       return {
         success: false,
         code: 'git-missing',
@@ -128,55 +208,121 @@ export class GitEngine {
     }
 
     const git = simpleGit(projectPath);
+    const isRepo = await git.checkIsRepo();
 
-    try {
-      await git.init();
-    } catch {
-      return {
-        success: false,
-        code: 'init-failed',
-        error: 'Failed to initialize repository for this project.',
-      };
+    if (isRepo) {
+      emitProgress('initializing-repo', 15, 'Initializing repository...', 'already initialized');
+    } else {
+      emitProgress('initializing-repo', 15, 'Initializing repository...');
+      try {
+        await git.init();
+      } catch {
+        emitProgress('failed', 100, 'Failed to initialize repository for this project.');
+        return {
+          success: false,
+          code: 'init-failed',
+          error: 'Failed to initialize repository for this project.',
+        };
+      }
     }
 
-    try {
-      await git.raw(['lfs', 'install', '--local']);
-    } catch {
-      return {
-        success: false,
-        code: 'git-lfs-missing',
-        error: 'Git LFS executable not found. Please install Git LFS and try again.',
-      };
+    const lfsConfigured = await this.isLfsConfigured(git);
+    if (lfsConfigured) {
+      emitProgress('configuring-lfs', 30, 'Configuring Git LFS...', 'already configured');
+    } else {
+      emitProgress('configuring-lfs', 30, 'Configuring Git LFS...');
+      try {
+        await git.raw(['lfs', 'install', '--local']);
+      } catch {
+        emitProgress('failed', 100, 'Git LFS executable not found. Please install Git LFS and try again.');
+        return {
+          success: false,
+          code: 'git-lfs-missing',
+          error: 'Git LFS executable not found. Please install Git LFS and try again.',
+        };
+      }
     }
 
     const imagePatterns = ['*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.svg', '*.avif', '*.heic'];
+    const trackedPatterns = await this.readLfsTrackedPatterns(projectPath);
+    const patternsToTrack = imagePatterns.filter((pattern) => !trackedPatterns.has(pattern));
 
-    for (const pattern of imagePatterns) {
-      await git.raw(['lfs', 'track', pattern]);
+    if (patternsToTrack.length === 0) {
+      emitProgress('tracking-lfs-patterns', 55, 'Tracking image patterns with Git LFS...', 'already tracked');
+    } else {
+      for (let index = 0; index < patternsToTrack.length; index += 1) {
+        const pattern = patternsToTrack[index];
+        const progress = 35 + Math.round((index / patternsToTrack.length) * 20);
+        emitProgress('tracking-lfs-patterns', progress, 'Tracking image patterns with Git LFS...', pattern);
+        await git.raw(['lfs', 'track', pattern]);
+      }
     }
 
-    await git.add('.gitattributes');
+    const stageTargets = await this.existingStageTargets(projectPath);
+    if (stageTargets.length === 0) {
+      emitProgress('staging-files', 75, 'Staging project files...', 'no target files found');
+    } else {
+      emitProgress('staging-files', 75, 'Staging project files...', stageTargets.join(', '));
+      await git.add(stageTargets);
+    }
+
+    const hasCommit = await this.hasHeadCommit(git);
+    if (hasCommit) {
+      emitProgress('creating-initial-commit', 90, 'Creating initial commit...', 'already has commits');
+    } else {
+      emitProgress('creating-initial-commit', 90, 'Creating initial commit...');
+      try {
+        await git.commit('initial commit');
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        if (message.includes('nothing to commit')) {
+          emitProgress('creating-initial-commit', 90, 'Creating initial commit...', 'nothing to commit');
+        } else {
+          emitProgress('failed', 100, 'Failed to create initial commit.');
+          return {
+            success: false,
+            code: 'commit-failed',
+            error: 'Failed to create initial commit.',
+          };
+        }
+      }
+    }
 
     const normalizedRemoteUrl = remoteUrl?.trim();
     if (normalizedRemoteUrl) {
+      emitProgress('configuring-remote', 96, 'Configuring remote repository...');
       try {
         const remotes = await git.getRemotes(true);
-        const hasOrigin = remotes.some((remote) => remote.name === 'origin');
+        const origin = remotes.find((remote) => remote.name === 'origin');
 
-        if (hasOrigin) {
-          await git.remote(['set-url', 'origin', normalizedRemoteUrl]);
+        if (origin) {
+          const fetchUrl = origin.refs.fetch || '';
+          const pushUrl = origin.refs.push || '';
+          const alreadyMatching = fetchUrl === normalizedRemoteUrl && (pushUrl === normalizedRemoteUrl || pushUrl === '');
+
+          if (alreadyMatching) {
+            emitProgress('configuring-remote', 96, 'Configuring remote repository...', 'already up to date');
+          } else {
+            await git.remote(['set-url', 'origin', normalizedRemoteUrl]);
+            emitProgress('configuring-remote', 96, 'Configuring remote repository...', 'updated origin URL');
+          }
         } else {
           await git.addRemote('origin', normalizedRemoteUrl);
+          emitProgress('configuring-remote', 96, 'Configuring remote repository...', 'created origin remote');
         }
       } catch {
+        emitProgress('failed', 100, 'Failed to configure remote repository.');
         return {
           success: false,
           code: 'remote-failed',
           error: 'Failed to configure remote repository.',
         };
       }
+    } else {
+      emitProgress('configuring-remote', 96, 'Configuring remote repository...', 'not provided');
     }
 
+    emitProgress('completed', 100, 'Repository initialized successfully.');
     return { success: true };
   }
 }

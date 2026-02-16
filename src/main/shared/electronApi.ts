@@ -236,10 +236,28 @@ export interface GitStatusDto {
   counts: GitStatusCounts;
 }
 
+export type GitInitPhase =
+  | 'checking-git'
+  | 'initializing-repo'
+  | 'configuring-lfs'
+  | 'tracking-lfs-patterns'
+  | 'staging-files'
+  | 'creating-initial-commit'
+  | 'configuring-remote'
+  | 'completed'
+  | 'failed';
+
+export interface GitInitProgress {
+  phase: GitInitPhase;
+  progress: number;
+  message: string;
+  detail?: string;
+}
+
 export interface GitInitResult {
   success: boolean;
   error?: string;
-  code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed';
+  code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed' | 'commit-failed';
 }
 
 // Post-Media Link types
@@ -317,6 +335,7 @@ export interface ElectronAPI {
     getRepoState: (projectPath: string) => Promise<GitRepoState>;
     getStatus: (projectPath: string) => Promise<GitStatusDto>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;
+    onInitProgress: (callback: (progress: GitInitProgress) => void) => () => void;
   };
   projects: {
     create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => Promise<ProjectData>;

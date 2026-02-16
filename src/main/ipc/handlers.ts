@@ -48,12 +48,11 @@ export function registerIpcHandlers(): void {
     return engine.getStatus(projectPath);
   });
 
-  safeHandle('git:init', async (_, projectPath: string, remoteUrl?: string) => {
+  safeHandle('git:init', async (event, projectPath: string, remoteUrl?: string) => {
     const engine = getGitEngine();
-    if (remoteUrl) {
-      return engine.initializeRepo(projectPath, remoteUrl);
-    }
-    return engine.initializeRepo(projectPath);
+    return engine.initializeRepo(projectPath, remoteUrl, (progress) => {
+      event.sender.send('git:initProgress', progress);
+    });
   });
 
   // ============ Project Handlers ============
