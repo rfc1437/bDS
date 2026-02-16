@@ -562,34 +562,85 @@ describe('GitEngine', () => {
   });
 
   describe('pruneLfsCache', () => {
-    it('should run git lfs prune with verify-remote by default', async () => {
+    it('should run git lfs prune with verify-remote and aggressive recency defaults', async () => {
+      mockLog.mockResolvedValue({
+        all: [
+          { hash: 'aaa111', date: '2026-02-16T12:00:00.000Z', message: 'new', author_name: 'Dev' },
+          { hash: 'bbb222', date: '2026-02-16T11:00:00.000Z', message: 'old', author_name: 'Dev' },
+        ],
+      });
       mockRaw.mockResolvedValue('prune complete');
 
       const result = await gitEngine.pruneLfsCache('/tmp/project');
 
-      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'prune', '--verify-remote']);
+      expect(mockLog).toHaveBeenCalledWith({ maxCount: 2 });
+      expect(mockRaw).toHaveBeenCalledWith([
+        '-c',
+        'lfs.fetchrecentcommitsdays=1',
+        '-c',
+        'lfs.fetchrecentrefsdays=0',
+        '-c',
+        'lfs.pruneoffsetdays=0',
+        'lfs',
+        'prune',
+        '--verify-remote',
+      ]);
       expect(result.success).toBe(true);
       expect(result.dryRun).toBe(false);
       expect(result.verifyRemote).toBe(true);
+      expect(result.recentCommitsToKeep).toBe(2);
     });
 
     it('should run git lfs prune in dry-run mode when requested', async () => {
+      mockLog.mockResolvedValue({
+        all: [
+          { hash: 'aaa111', date: '2026-02-16T12:00:00.000Z', message: 'new', author_name: 'Dev' },
+          { hash: 'bbb222', date: '2026-02-16T11:00:00.000Z', message: 'old', author_name: 'Dev' },
+        ],
+      });
       mockRaw.mockResolvedValue('would prune');
 
       const result = await gitEngine.pruneLfsCache('/tmp/project', { dryRun: true });
 
-      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'prune', '--verify-remote', '--dry-run']);
+      expect(mockRaw).toHaveBeenCalledWith([
+        '-c',
+        'lfs.fetchrecentcommitsdays=1',
+        '-c',
+        'lfs.fetchrecentrefsdays=0',
+        '-c',
+        'lfs.pruneoffsetdays=0',
+        'lfs',
+        'prune',
+        '--verify-remote',
+        '--dry-run',
+      ]);
       expect(result.success).toBe(true);
       expect(result.dryRun).toBe(true);
+      expect(result.recentCommitsToKeep).toBe(2);
+    });
+
+    it('should allow overriding how many recent commits are protected', async () => {
+      mockLog.mockResolvedValue({
+        all: [{ hash: 'aaa111', date: '2026-02-16T12:00:00.000Z', message: 'new', author_name: 'Dev' }],
+      });
+      mockRaw.mockResolvedValue('prune complete');
+
+      const result = await gitEngine.pruneLfsCache('/tmp/project', { recentCommitsToKeep: 1 });
+
+      expect(mockLog).toHaveBeenCalledWith({ maxCount: 1 });
+      expect(result.success).toBe(true);
+      expect(result.recentCommitsToKeep).toBe(1);
     });
 
     it('should return error result when git lfs prune fails', async () => {
+      mockLog.mockResolvedValue({ all: [] });
       mockRaw.mockRejectedValue(new Error('prune failed'));
 
       const result = await gitEngine.pruneLfsCache('/tmp/project');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('prune failed');
+      expect(result.recentCommitsToKeep).toBe(2);
     });
   });
 

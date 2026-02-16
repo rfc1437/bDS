@@ -19,7 +19,7 @@ export const electronAPI: ElectronAPI = {
     push: (projectPath: string) => ipcRenderer.invoke('git:push', projectPath),
     commitAll: (projectPath: string, message: string) => ipcRenderer.invoke('git:commitAll', projectPath, message),
     ensureGitignore: (projectPath: string) => ipcRenderer.invoke('git:ensureGitignore', projectPath),
-    pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => ipcRenderer.invoke('git:pruneLfs', projectPath, options),
+    pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean; recentCommitsToKeep?: number }) => ipcRenderer.invoke('git:pruneLfs', projectPath, options),
     init: (projectPath: string, remoteUrl?: string) => {
       if (remoteUrl) {
         return ipcRenderer.invoke('git:init', projectPath, remoteUrl);

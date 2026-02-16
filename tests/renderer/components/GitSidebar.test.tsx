@@ -40,7 +40,7 @@ describe('GitSidebar', () => {
         fetch: vi.fn().mockResolvedValue({ success: true }),
         pull: vi.fn().mockResolvedValue({ success: true }),
         push: vi.fn().mockResolvedValue({ success: true }),
-        pruneLfs: vi.fn().mockResolvedValue({ success: true, dryRun: false, verifyRemote: true }),
+        pruneLfs: vi.fn().mockResolvedValue({ success: true, dryRun: false, verifyRemote: true, recentCommitsToKeep: 2 }),
         commitAll: vi.fn().mockResolvedValue({ success: true }),
         init: vi.fn().mockResolvedValue({ success: true }),
         ensureGitignore: vi.fn().mockResolvedValue({ updated: false, created: false, addedEntries: [] }),
@@ -509,11 +509,12 @@ describe('GitSidebar', () => {
     expect((window as any).electronAPI.git.pruneLfs).toHaveBeenCalledWith('/repo/path', {
       dryRun: false,
       verifyRemote: true,
+      recentCommitsToKeep: 2,
     });
   });
 
   it('shows in-progress feedback while prune lfs is running', async () => {
-    let resolvePrune: ((value: { success: boolean; dryRun: boolean; verifyRemote: boolean }) => void) | null = null;
+    let resolvePrune: ((value: { success: boolean; dryRun: boolean; verifyRemote: boolean; recentCommitsToKeep: number }) => void) | null = null;
     (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
       isRepo: true,
       rootPath: '/repo/path',
@@ -538,7 +539,7 @@ describe('GitSidebar', () => {
     expect(screen.getByRole('button', { name: /pruning/i })).toBeDisabled();
 
     await act(async () => {
-      resolvePrune?.({ success: true, dryRun: false, verifyRemote: true });
+      resolvePrune?.({ success: true, dryRun: false, verifyRemote: true, recentCommitsToKeep: 2 });
     });
   });
 

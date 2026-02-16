@@ -305,6 +305,7 @@ export interface GitLfsPruneResult {
   success: boolean;
   dryRun: boolean;
   verifyRemote: boolean;
+  recentCommitsToKeep: number;
   output?: string;
   error?: string;
 }
@@ -399,7 +400,7 @@ export interface ElectronAPI {
     push: (projectPath: string) => Promise<GitActionResult>;
     commitAll: (projectPath: string, message: string) => Promise<GitActionResult>;
     ensureGitignore: (projectPath: string) => Promise<GitIgnoreEnsureResult>;
-    pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => Promise<GitLfsPruneResult>;
+    pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean; recentCommitsToKeep?: number }) => Promise<GitLfsPruneResult>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;
     onInitProgress: (callback: (progress: GitInitProgress) => void) => () => void;
   };

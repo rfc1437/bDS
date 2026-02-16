@@ -104,12 +104,14 @@ export interface GitIgnoreEnsureResult {
 export interface GitLfsPruneOptions {
   dryRun?: boolean;
   verifyRemote?: boolean;
+  recentCommitsToKeep?: number;
 }
 
 export interface GitLfsPruneResult {
   success: boolean;
   dryRun: boolean;
   verifyRemote: boolean;
+  recentCommitsToKeep: number;
   output?: string;
   error?: string;
 }
@@ -823,8 +825,32 @@ export class GitEngine {
     const git = simpleGit(projectPath);
     const verifyRemote = options.verifyRemote ?? true;
     const dryRun = options.dryRun ?? false;
+    const recentCommitsToKeep = Math.max(0, options.recentCommitsToKeep ?? 2);
 
-    const args = ['lfs', 'prune'];
+    let recentCommitDays = 0;
+    if (recentCommitsToKeep > 0) {
+      const history = await git.log({ maxCount: recentCommitsToKeep });
+      if (history.all.length > 0) {
+        const oldestProtected = history.all[history.all.length - 1];
+        const oldestProtectedTimestamp = new Date(oldestProtected.date).getTime();
+        if (!Number.isNaN(oldestProtectedTimestamp)) {
+          const msPerDay = 24 * 60 * 60 * 1000;
+          const ageInDays = Math.ceil(Math.max(0, Date.now() - oldestProtectedTimestamp) / msPerDay);
+          recentCommitDays = ageInDays;
+        }
+      }
+    }
+
+    const args = [
+      '-c',
+      `lfs.fetchrecentcommitsdays=${recentCommitDays}`,
+      '-c',
+      'lfs.fetchrecentrefsdays=0',
+      '-c',
+      'lfs.pruneoffsetdays=0',
+      'lfs',
+      'prune',
+    ];
     if (verifyRemote) {
       args.push('--verify-remote');
     }
@@ -838,6 +864,7 @@ export class GitEngine {
         success: true,
         dryRun,
         verifyRemote,
+        recentCommitsToKeep,
         output,
       };
     } catch (error) {
@@ -846,6 +873,7 @@ export class GitEngine {
         success: false,
         dryRun,
         verifyRemote,
+        recentCommitsToKeep,
         error: message,
       };
     }

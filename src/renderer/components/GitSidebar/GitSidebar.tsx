@@ -220,6 +220,7 @@ export const GitSidebar: React.FC = () => {
               : await window.electronAPI.git.pruneLfs(effectiveProjectPath, {
                   dryRun: false,
                   verifyRemote: true,
+                  recentCommitsToKeep: 2,
                 });
       if (!result.success) {
         setError(result.error || `Failed to ${action}.`);
