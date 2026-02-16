@@ -146,6 +146,7 @@ const mockGitEngine = {
   getStatus: vi.fn(),
   initializeRepo: vi.fn(),
   ensureGitignore: vi.fn(),
+  pruneLfsCache: vi.fn(),
 };
 
 const mockTaskManager = {
@@ -377,6 +378,22 @@ describe('IPC Handlers', () => {
           created: false,
           addedEntries: ['Thumbs.db'],
         });
+      });
+    });
+
+    describe('git:pruneLfs', () => {
+      it('should pass project path and options to GitEngine.pruneLfsCache', async () => {
+        mockGitEngine.pruneLfsCache.mockResolvedValue({
+          success: true,
+          dryRun: true,
+          verifyRemote: true,
+          output: 'would prune',
+        });
+
+        const result = await invokeHandler('git:pruneLfs', '/repo', { dryRun: true, verifyRemote: true });
+
+        expect(mockGitEngine.pruneLfsCache).toHaveBeenCalledWith('/repo', { dryRun: true, verifyRemote: true });
+        expect(result.success).toBe(true);
       });
     });
   });

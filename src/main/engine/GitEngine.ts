@@ -66,6 +66,19 @@ export interface GitIgnoreEnsureResult {
   addedEntries: string[];
 }
 
+export interface GitLfsPruneOptions {
+  dryRun?: boolean;
+  verifyRemote?: boolean;
+}
+
+export interface GitLfsPruneResult {
+  success: boolean;
+  dryRun: boolean;
+  verifyRemote: boolean;
+  output?: string;
+  error?: string;
+}
+
 let gitEngineInstance: GitEngine | null = null;
 
 export function getGitEngine(): GitEngine {
@@ -248,6 +261,38 @@ export class GitEngine {
       created,
       addedEntries,
     };
+  }
+
+  async pruneLfsCache(projectPath: string, options: GitLfsPruneOptions = {}): Promise<GitLfsPruneResult> {
+    const git = simpleGit(projectPath);
+    const verifyRemote = options.verifyRemote ?? true;
+    const dryRun = options.dryRun ?? false;
+
+    const args = ['lfs', 'prune'];
+    if (verifyRemote) {
+      args.push('--verify-remote');
+    }
+    if (dryRun) {
+      args.push('--dry-run');
+    }
+
+    try {
+      const output = await git.raw(args);
+      return {
+        success: true,
+        dryRun,
+        verifyRemote,
+        output,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to prune Git LFS cache.';
+      return {
+        success: false,
+        dryRun,
+        verifyRemote,
+        error: message,
+      };
+    }
   }
 
   async initializeRepo(

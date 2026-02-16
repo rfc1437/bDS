@@ -60,6 +60,11 @@ export function registerIpcHandlers(): void {
     return engine.ensureGitignore(projectPath);
   });
 
+  safeHandle('git:pruneLfs', async (_, projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => {
+    const engine = getGitEngine();
+    return engine.pruneLfsCache(projectPath, options);
+  });
+
   // ============ Project Handlers ============
 
   safeHandle('projects:create', async (_, data: { name: string; description?: string; slug?: string; dataPath?: string }) => {

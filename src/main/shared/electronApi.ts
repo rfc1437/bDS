@@ -266,6 +266,14 @@ export interface GitIgnoreEnsureResult {
   addedEntries: string[];
 }
 
+export interface GitLfsPruneResult {
+  success: boolean;
+  dryRun: boolean;
+  verifyRemote: boolean;
+  output?: string;
+  error?: string;
+}
+
 // Post-Media Link types
 export interface MediaLinkData {
   id: string;
@@ -341,6 +349,7 @@ export interface ElectronAPI {
     getRepoState: (projectPath: string) => Promise<GitRepoState>;
     getStatus: (projectPath: string) => Promise<GitStatusDto>;
     ensureGitignore: (projectPath: string) => Promise<GitIgnoreEnsureResult>;
+    pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => Promise<GitLfsPruneResult>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;
     onInitProgress: (callback: (progress: GitInitProgress) => void) => () => void;
   };

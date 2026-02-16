@@ -350,4 +350,36 @@ describe('GitEngine', () => {
       expect(result.error).toContain('install Git LFS');
     });
   });
+
+  describe('pruneLfsCache', () => {
+    it('should run git lfs prune with verify-remote by default', async () => {
+      mockRaw.mockResolvedValue('prune complete');
+
+      const result = await gitEngine.pruneLfsCache('/tmp/project');
+
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'prune', '--verify-remote']);
+      expect(result.success).toBe(true);
+      expect(result.dryRun).toBe(false);
+      expect(result.verifyRemote).toBe(true);
+    });
+
+    it('should run git lfs prune in dry-run mode when requested', async () => {
+      mockRaw.mockResolvedValue('would prune');
+
+      const result = await gitEngine.pruneLfsCache('/tmp/project', { dryRun: true });
+
+      expect(mockRaw).toHaveBeenCalledWith(['lfs', 'prune', '--verify-remote', '--dry-run']);
+      expect(result.success).toBe(true);
+      expect(result.dryRun).toBe(true);
+    });
+
+    it('should return error result when git lfs prune fails', async () => {
+      mockRaw.mockRejectedValue(new Error('prune failed'));
+
+      const result = await gitEngine.pruneLfsCache('/tmp/project');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('prune failed');
+    });
+  });
 });
