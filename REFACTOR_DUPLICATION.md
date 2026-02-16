@@ -262,7 +262,7 @@ Move color contrast logic into a shared renderer utility.
 2. Phase 2 (finish TagEngine workflow dedup)
 3. Phase 3 (finish PostMedia single/batch dedup)
 4. ~~Phase 7 (WxrParser repeated parse blocks)~~ ✅ Completed
-5. Phase 8 (MetaEngine ↔ TagEngine overlap)
+5. ~~Phase 8 (MetaEngine ↔ TagEngine overlap)~~ ✅ Completed
 6. Phase 9 (renderer tag event subscription helper)
 7. Phase 10 (local UI repeated blocks in component files)
 
@@ -307,6 +307,8 @@ Extract shared `parsePubDate` and/or shared item base builder helper to avoid dr
 
 ## Phase 8 — Merge Shared Taxonomy/Metadata Logic (MetaEngine + TagEngine)
 
+Status: ✅ Completed
+
 ### Problem
 A medium-sized duplicate block appears across `MetaEngine` and `TagEngine` for taxonomy/tag-style handling.
 
@@ -322,6 +324,10 @@ Extract a shared helper module or internal utility used by both engines.
 ### Acceptance Criteria
 - Equivalent behavior in both engines.
 - Single implementation for overlapping logic.
+
+### Progress Check
+- Completed: extracted shared taxonomy normalization/collection helper and adopted it in both engines.
+- Completed: added cross-engine normalization tests (including empty/whitespace filtering parity).
 
 ### Coverage & Test Quality (fresh run: `npm run test:coverage`)
 - `src/main/engine/MetaEngine.ts`: 95.03% statements, 96.55% functions, 77.59% branches.

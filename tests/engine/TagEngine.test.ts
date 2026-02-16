@@ -634,6 +634,18 @@ describe('TagEngine', () => {
 
       expect(result.discovered).toBeGreaterThanOrEqual(0);
     });
+
+    it('should ignore empty and whitespace-only tags discovered from posts', async () => {
+      mockSelectDataQueue = [
+        [{ tags: '[" valid-tag ", "", "   "]' }],
+        [],
+      ];
+
+      const result = await tagEngine.syncTagsFromPosts();
+
+      expect(result.discovered).toBe(1);
+      expect(result.added).toEqual(['valid-tag']);
+    });
   });
 
   describe('loadTagsFromFile', () => {

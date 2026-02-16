@@ -372,6 +372,21 @@ describe('MetaEngine', () => {
       const categories = await metaEngine.collectCategoriesFromPosts();
       expect(categories).toEqual(['valid-cat']);
     });
+
+    it('should ignore empty and whitespace-only taxonomy entries from posts', async () => {
+      mockPosts = [
+        {
+          tags: JSON.stringify([' valid-tag ', '', '   ']),
+          categories: JSON.stringify([' valid-cat ', '', '   ']),
+        },
+      ];
+
+      const tags = await metaEngine.collectTagsFromPosts();
+      const categories = await metaEngine.collectCategoriesFromPosts();
+
+      expect(tags).toEqual(['valid-tag']);
+      expect(categories).toEqual(['valid-cat']);
+    });
   });
 
   describe('Event Emission', () => {

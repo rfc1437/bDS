@@ -8,6 +8,7 @@ import { getDatabase } from '../database';
 import { tags, posts } from '../database/schema';
 import { taskManager } from './TaskManager';
 import { getPostEngine } from './PostEngine';
+import { normalizeTaxonomyTerm, normalizeNonEmptyTaxonomyTerm } from './taxonomyUtils';
 
 /**
  * Tag data stored in the database
@@ -325,7 +326,7 @@ export class TagEngine extends EventEmitter {
   async createTag(input: CreateTagInput): Promise<TagData> {
     const db = this.getDb();
 
-    const name = input.name.trim().toLowerCase();
+    const name = normalizeTaxonomyTerm(input.name);
     if (!name) {
       throw new Error('Tag name is required');
     }
@@ -574,7 +575,7 @@ export class TagEngine extends EventEmitter {
   async renameTag(id: string, newName: string): Promise<RenameTagResult> {
     const db = this.getDb();
 
-    newName = newName.trim().toLowerCase();
+    newName = normalizeTaxonomyTerm(newName);
     if (!newName) {
       throw new Error('New name is required');
     }
@@ -678,7 +679,7 @@ export class TagEngine extends EventEmitter {
    */
   async getTagByName(name: string): Promise<TagData | null> {
     const db = this.getDb();
-    const normalizedName = name.trim().toLowerCase();
+    const normalizedName = normalizeTaxonomyTerm(name);
 
     const rows = await db
       .select()
@@ -763,8 +764,9 @@ export class TagEngine extends EventEmitter {
     for (const row of postRows) {
       const postTags: string[] = JSON.parse(row.tags || '[]');
       for (const tag of postTags) {
-        if (tag.trim()) {
-          discoveredTags.add(tag.trim().toLowerCase());
+        const normalizedTag = normalizeNonEmptyTaxonomyTerm(tag);
+        if (normalizedTag) {
+          discoveredTags.add(normalizedTag);
         }
       }
     }
@@ -861,7 +863,7 @@ export class TagEngine extends EventEmitter {
 
       for (const tag of rawTags) {
         // Support both portable format { name, color? } and legacy format with id
-        const name = (tag.name || '').trim().toLowerCase();
+        const name = normalizeTaxonomyTerm(tag.name || '');
         if (!name) continue;
 
         const color = tag.color || null;

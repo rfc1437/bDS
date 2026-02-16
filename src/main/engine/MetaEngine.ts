@@ -5,6 +5,11 @@ import { app } from 'electron';
 import { eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, projects } from '../database/schema';
+import {
+  normalizeTaxonomyTerm,
+  normalizeNonEmptyTaxonomyTerm,
+  collectNormalizedTermsFromJsonValues,
+} from './taxonomyUtils';
 
 /**
  * Project metadata stored in meta/project.json
@@ -144,7 +149,7 @@ export class MetaEngine extends EventEmitter {
    * Note: Tag persistence is handled by TagEngine.
    */
   async addTag(tag: string): Promise<void> {
-    const normalizedTag = tag.trim().toLowerCase();
+    const normalizedTag = normalizeTaxonomyTerm(tag);
     if (normalizedTag && !this.tags.has(normalizedTag)) {
       this.tags.add(normalizedTag);
       this.emit('tagsChanged', await this.getTags());
@@ -156,7 +161,7 @@ export class MetaEngine extends EventEmitter {
    * Note: Tag persistence is handled by TagEngine.
    */
   async removeTag(tag: string): Promise<void> {
-    const normalizedTag = tag.trim().toLowerCase();
+    const normalizedTag = normalizeTaxonomyTerm(tag);
     if (this.tags.delete(normalizedTag)) {
       this.emit('tagsChanged', await this.getTags());
     }
@@ -166,7 +171,7 @@ export class MetaEngine extends EventEmitter {
    * Add a new category to the available categories list.
    */
   async addCategory(category: string): Promise<void> {
-    const normalizedCategory = category.trim().toLowerCase();
+    const normalizedCategory = normalizeTaxonomyTerm(category);
     if (normalizedCategory && !this.categories.has(normalizedCategory)) {
       this.categories.add(normalizedCategory);
       this.emit('categoriesChanged', await this.getCategories());
@@ -178,7 +183,7 @@ export class MetaEngine extends EventEmitter {
    * Remove a category from the available categories list.
    */
   async removeCategory(category: string): Promise<void> {
-    const normalizedCategory = category.trim().toLowerCase();
+    const normalizedCategory = normalizeTaxonomyTerm(category);
     if (this.categories.delete(normalizedCategory)) {
       this.emit('categoriesChanged', await this.getCategories());
       await this.saveCategories();
@@ -244,7 +249,10 @@ export class MetaEngine extends EventEmitter {
       const parsed = JSON.parse(content) as string[];
       this.categories.clear();
       for (const cat of parsed) {
-        this.categories.add(cat.trim().toLowerCase());
+        const normalizedCategory = normalizeNonEmptyTaxonomyTerm(cat);
+        if (normalizedCategory) {
+          this.categories.add(normalizedCategory);
+        }
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -266,21 +274,7 @@ export class MetaEngine extends EventEmitter {
       .where(eq(posts.projectId, this.currentProjectId))
       .all();
 
-    const allTags = new Set<string>();
-    for (const row of dbPosts) {
-      if (row.tags) {
-        try {
-          const parsed: string[] = JSON.parse(row.tags);
-          for (const tag of parsed) {
-            allTags.add(tag.trim().toLowerCase());
-          }
-        } catch {
-          // Invalid JSON, skip
-        }
-      }
-    }
-
-    return Array.from(allTags).sort();
+    return collectNormalizedTermsFromJsonValues(dbPosts.map((row) => row.tags));
   }
 
   /**
@@ -294,21 +288,7 @@ export class MetaEngine extends EventEmitter {
       .where(eq(posts.projectId, this.currentProjectId))
       .all();
 
-    const allCategories = new Set<string>();
-    for (const row of dbPosts) {
-      if (row.categories) {
-        try {
-          const parsed: string[] = JSON.parse(row.categories);
-          for (const cat of parsed) {
-            allCategories.add(cat.trim().toLowerCase());
-          }
-        } catch {
-          // Invalid JSON, skip
-        }
-      }
-    }
-
-    return Array.from(allCategories).sort();
+    return collectNormalizedTermsFromJsonValues(dbPosts.map((row) => row.categories));
   }
 
   /**
