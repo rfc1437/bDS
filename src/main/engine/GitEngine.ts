@@ -69,6 +69,14 @@ export interface GitHistoryEntry {
   syncStatus?: GitHistorySyncStatus;
 }
 
+export interface GitRemoteStateDto {
+  localBranch: string | null;
+  upstreamBranch: string | null;
+  hasUpstream: boolean;
+  ahead: number;
+  behind: number;
+}
+
 export type GitHistorySyncStatus = 'both' | 'local-only' | 'remote-only';
 
 export type GitInitPhase =
@@ -709,6 +717,26 @@ export class GitEngine {
           syncStatus,
         };
       });
+  }
+
+  async getRemoteState(projectPath: string): Promise<GitRemoteStateDto> {
+    const git = simpleGit(projectPath);
+    const status = await git.status();
+
+    const localBranch = typeof status.current === 'string' && status.current.trim().length > 0
+      ? status.current
+      : null;
+    const upstreamBranch = typeof status.tracking === 'string' && status.tracking.trim().length > 0
+      ? status.tracking
+      : null;
+
+    return {
+      localBranch,
+      upstreamBranch,
+      hasUpstream: Boolean(upstreamBranch),
+      ahead: typeof status.ahead === 'number' ? status.ahead : Number(status.ahead ?? 0),
+      behind: typeof status.behind === 'number' ? status.behind : Number(status.behind ?? 0),
+    };
   }
 
   async fetch(projectPath: string): Promise<GitActionResult> {

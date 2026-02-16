@@ -33,6 +33,7 @@ describe('GitSidebar', () => {
         checkAvailability: vi.fn().mockResolvedValue({ gitFound: true, version: '2.49.0' }),
         getRepoState: vi.fn().mockResolvedValue({ isRepo: false, hasRemote: false }),
         getStatus: vi.fn().mockResolvedValue({ files: [], counts: { untracked: 0, modified: 0, deleted: 0, renamed: 0, staged: 0, total: 0 } }),
+        getRemoteState: vi.fn().mockResolvedValue({ localBranch: null, upstreamBranch: null, hasUpstream: false, ahead: 0, behind: 0 }),
         getDiff: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', patch: 'diff --git a/posts/a.md b/posts/a.md' }),
         getDiffContent: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', original: '', modified: '' }),
         getCommitDiffContent: vi.fn().mockResolvedValue({ commitHash: 'abc123', original: '', modified: '' }),
@@ -635,6 +636,69 @@ describe('GitSidebar', () => {
     await act(async () => {
       resolvePush?.({ success: true });
     });
+  });
+
+  it('renders upstream branch relation with ahead/behind indicators', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getRemoteState = vi.fn().mockResolvedValue({
+      localBranch: 'main',
+      upstreamBranch: 'origin/main',
+      hasUpstream: true,
+      ahead: 2,
+      behind: 1,
+    });
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText('main → origin/main')).toBeInTheDocument();
+    expect(screen.getByText('ahead 2 / behind 1')).toBeInTheDocument();
+  });
+
+  it('polls remote fetch/state periodically when repository has a remote', async () => {
+    vi.useFakeTimers();
+
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getRemoteState = vi.fn().mockResolvedValue({
+      localBranch: 'main',
+      upstreamBranch: 'origin/main',
+      hasUpstream: true,
+      ahead: 0,
+      behind: 0,
+    });
+    (window as any).electronAPI.git.fetch = vi.fn().mockResolvedValue({ success: true });
+
+    try {
+      render(<GitSidebar />);
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect((window as any).electronAPI.git.getRemoteState).toHaveBeenCalledTimes(1);
+      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(0);
+
+      await act(async () => {
+        vi.advanceTimersByTime(30000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(1);
+      expect((window as any).electronAPI.git.getRemoteState).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('polls repository status on an interval and prevents overlapping in-flight requests', async () => {

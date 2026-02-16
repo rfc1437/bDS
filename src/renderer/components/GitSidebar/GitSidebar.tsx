@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
-import type { GitInitProgress, GitHistoryEntry } from '../../../main/shared/electronApi';
+import type { GitInitProgress, GitHistoryEntry, GitRemoteStateDto } from '../../../main/shared/electronApi';
 import './GitSidebar.css';
 import '../Sidebar/Sidebar.css';
 
@@ -36,17 +36,21 @@ export const GitSidebar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [errorGuidance, setErrorGuidance] = useState<string[]>([]);
   const [isRepo, setIsRepo] = useState(false);
+  const [hasRemote, setHasRemote] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
   const [statusFiles, setStatusFiles] = useState<Array<{ path: string; status: string }>>([]);
   const [commitMessage, setCommitMessage] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<GitHistoryEntry[]>([]);
+  const [remoteState, setRemoteState] = useState<GitRemoteStateDto | null>(null);
+  const [remoteStateError, setRemoteStateError] = useState<string | null>(null);
   const [initProgress, setInitProgress] = useState<GitInitProgress | null>(null);
   const [initTranscript, setInitTranscript] = useState<GitInitProgress[]>([]);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const remoteUrlInputRef = useRef<HTMLInputElement | null>(null);
   const commitMessageInputRef = useRef<HTMLInputElement | null>(null);
   const statusRefreshInFlightRef = useRef(false);
+  const remoteRefreshInFlightRef = useRef(false);
 
   const refreshRepoDetails = useCallback(
     async (targetProjectPath: string, options?: { background?: boolean }) => {
@@ -75,6 +79,45 @@ export const GitSidebar: React.FC = () => {
           setStatusLoading(false);
           setHistoryLoading(false);
         }
+      }
+    },
+    [],
+  );
+
+  const refreshRemoteState = useCallback(
+    async (targetProjectPath: string, options?: { background?: boolean; fetchFirst?: boolean }) => {
+      if (remoteRefreshInFlightRef.current) {
+        return;
+      }
+
+      const background = options?.background ?? false;
+      const fetchFirst = options?.fetchFirst ?? false;
+
+      remoteRefreshInFlightRef.current = true;
+      try {
+        if (fetchFirst) {
+          const fetchResult = await window.electronAPI.git.fetch(targetProjectPath);
+          if (!fetchResult.success) {
+            const message = fetchResult.error || 'Failed to fetch remote updates.';
+            setRemoteStateError(message);
+            if (!background) {
+              setError(message);
+            }
+            return;
+          }
+        }
+
+        const nextRemoteState = await window.electronAPI.git.getRemoteState(targetProjectPath);
+        setRemoteState(nextRemoteState);
+        setRemoteStateError(null);
+      } catch {
+        const message = 'Unable to refresh remote tracking state.';
+        setRemoteStateError(message);
+        if (!background) {
+          setError(message);
+        }
+      } finally {
+        remoteRefreshInFlightRef.current = false;
       }
     },
     [],
@@ -167,23 +210,35 @@ export const GitSidebar: React.FC = () => {
 
       const repoState = await window.electronAPI.git.getRepoState(resolvedProjectPath);
       setIsRepo(repoState.isRepo);
+      setHasRemote(repoState.hasRemote);
       setCurrentBranch(repoState.currentBranch || null);
 
       if (repoState.isRepo) {
         await refreshRepoDetails(resolvedProjectPath);
+        if (repoState.hasRemote) {
+          await refreshRemoteState(resolvedProjectPath);
+        } else {
+          setRemoteState(null);
+          setRemoteStateError(null);
+        }
       } else {
         setStatusFiles([]);
         setHistoryEntries([]);
+        setRemoteState(null);
+        setRemoteStateError(null);
       }
     } catch {
       setError('Unable to load repository status.');
       setIsRepo(false);
+      setHasRemote(false);
       setStatusFiles([]);
       setHistoryEntries([]);
+      setRemoteState(null);
+      setRemoteStateError(null);
     } finally {
       setLoading(false);
     }
-  }, [refreshRepoDetails, resolveProjectPath]);
+  }, [refreshRemoteState, refreshRepoDetails, resolveProjectPath]);
 
   useEffect(() => {
     void loadRepoState();
@@ -216,6 +271,20 @@ export const GitSidebar: React.FC = () => {
       globalThis.clearInterval(intervalId);
     };
   }, [isRepo, projectPath, refreshRepoDetails]);
+
+  useEffect(() => {
+    if (!isRepo || !hasRemote || !projectPath) {
+      return;
+    }
+
+    const intervalId = globalThis.setInterval(() => {
+      void refreshRemoteState(projectPath, { background: true, fetchFirst: true });
+    }, 30000);
+
+    return () => {
+      globalThis.clearInterval(intervalId);
+    };
+  }, [hasRemote, isRepo, projectPath, refreshRemoteState]);
 
   const handleInitialize = async () => {
     if (!projectPath) {
@@ -508,6 +577,13 @@ export const GitSidebar: React.FC = () => {
               </div>
             )}
             {currentBranch && <div className="git-sidebar-empty-state">Branch: {currentBranch}</div>}
+            {remoteState?.hasUpstream && remoteState.localBranch && remoteState.upstreamBranch && (
+              <div className="git-sidebar-empty-state">{remoteState.localBranch} → {remoteState.upstreamBranch}</div>
+            )}
+            {remoteState?.hasUpstream && (
+              <div className="git-sidebar-empty-state">ahead {remoteState.ahead} / behind {remoteState.behind}</div>
+            )}
+            {remoteStateError && <div className="git-sidebar-empty-state git-sidebar-error">{remoteStateError}</div>}
           </div>
           {error && (
             <div className="git-sidebar-empty-state git-sidebar-error">

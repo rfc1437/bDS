@@ -348,6 +348,46 @@ describe('GitEngine', () => {
     });
   });
 
+  describe('getRemoteState', () => {
+    it('should return upstream tracking and ahead/behind counts when tracking branch exists', async () => {
+      mockStatus.mockResolvedValue({
+        current: 'main',
+        tracking: 'origin/main',
+        ahead: 2,
+        behind: 1,
+      });
+
+      const result = await gitEngine.getRemoteState('/tmp/project');
+
+      expect(result).toEqual({
+        localBranch: 'main',
+        upstreamBranch: 'origin/main',
+        hasUpstream: true,
+        ahead: 2,
+        behind: 1,
+      });
+    });
+
+    it('should return no-upstream state when tracking branch is missing', async () => {
+      mockStatus.mockResolvedValue({
+        current: 'main',
+        tracking: undefined,
+        ahead: 0,
+        behind: 0,
+      });
+
+      const result = await gitEngine.getRemoteState('/tmp/project');
+
+      expect(result).toEqual({
+        localBranch: 'main',
+        upstreamBranch: null,
+        hasUpstream: false,
+        ahead: 0,
+        behind: 0,
+      });
+    });
+  });
+
   describe('ensureGitignore', () => {
     it('should create .gitignore with default system metadata entries when missing', async () => {
       mockReadFile.mockRejectedValue(new Error('ENOENT'));

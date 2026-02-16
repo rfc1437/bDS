@@ -68,6 +68,11 @@ export function registerIpcHandlers(): void {
     return engine.getHistory(projectPath, limit);
   });
 
+  safeHandle('git:remoteState', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.getRemoteState(projectPath);
+  });
+
   safeHandle('git:fetch', async (_, projectPath: string) => {
     const engine = getGitEngine();
     return engine.fetch(projectPath);

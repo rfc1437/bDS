@@ -271,6 +271,14 @@ export interface GitHistoryEntry {
   syncStatus?: GitHistorySyncStatus;
 }
 
+export interface GitRemoteStateDto {
+  localBranch: string | null;
+  upstreamBranch: string | null;
+  hasUpstream: boolean;
+  ahead: number;
+  behind: number;
+}
+
 export type GitInitPhase =
   | 'checking-git'
   | 'initializing-repo'
@@ -395,6 +403,7 @@ export interface ElectronAPI {
     getDiffContent: (projectPath: string, filePath: string) => Promise<GitDiffContentDto>;
     getCommitDiffContent: (projectPath: string, commitHash: string) => Promise<GitCommitDiffContentDto>;
     getHistory: (projectPath: string, limit?: number) => Promise<GitHistoryEntry[]>;
+    getRemoteState: (projectPath: string) => Promise<GitRemoteStateDto>;
     fetch: (projectPath: string) => Promise<GitActionResult>;
     pull: (projectPath: string) => Promise<GitActionResult>;
     push: (projectPath: string) => Promise<GitActionResult>;

@@ -147,6 +147,7 @@ const mockGitEngine = {
   getDiff: vi.fn(),
   getDiffContent: vi.fn(),
   getHistory: vi.fn(),
+  getRemoteState: vi.fn(),
   fetch: vi.fn(),
   pull: vi.fn(),
   push: vi.fn(),
@@ -358,6 +359,29 @@ describe('IPC Handlers', () => {
 
         expect(mockGitEngine.getHistory).toHaveBeenCalledWith('/repo', 20);
         expect(result).toHaveLength(1);
+      });
+    });
+
+    describe('git:remoteState', () => {
+      it('should pass project path to GitEngine.getRemoteState', async () => {
+        mockGitEngine.getRemoteState.mockResolvedValue({
+          localBranch: 'main',
+          upstreamBranch: 'origin/main',
+          hasUpstream: true,
+          ahead: 2,
+          behind: 1,
+        });
+
+        const result = await invokeHandler('git:remoteState', '/repo');
+
+        expect(mockGitEngine.getRemoteState).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({
+          localBranch: 'main',
+          upstreamBranch: 'origin/main',
+          hasUpstream: true,
+          ahead: 2,
+          behind: 1,
+        });
       });
     });
 
