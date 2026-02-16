@@ -3,12 +3,19 @@
  * Validates state management behavior for posts, dirty tracking, and UI state
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useAppStore, PostData } from '../../../src/renderer/store/appStore';
+import { describe, it, expect, expectTypeOf, beforeEach } from 'vitest';
+import { useAppStore, ProjectData, PostData, MediaData, TaskProgress } from '../../../src/renderer/store/appStore';
+import type {
+  ProjectData as SharedProjectData,
+  PostData as SharedPostData,
+  MediaData as SharedMediaData,
+  TaskProgress as SharedTaskProgress,
+} from '../../../src/main/shared/electronApi';
 
 // Helper to create a mock post
 const createMockPost = (overrides: Partial<PostData> = {}): PostData => ({
   id: `post-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+  projectId: 'project-1',
   title: 'Test Post',
   slug: 'test-post',
   content: '# Test Content',
@@ -158,6 +165,15 @@ describe('AppStore', () => {
       getStore().setPreferredEditorMode('markdown');
 
       expect(getStore().preferredEditorMode).toBe('markdown');
+    });
+  });
+
+  describe('Type Contract', () => {
+    it('should keep store data types aligned with the shared Electron API contract', () => {
+      expectTypeOf<ProjectData>().toEqualTypeOf<SharedProjectData>();
+      expectTypeOf<PostData>().toEqualTypeOf<SharedPostData>();
+      expectTypeOf<MediaData>().toEqualTypeOf<SharedMediaData>();
+      expectTypeOf<TaskProgress>().toEqualTypeOf<SharedTaskProgress>();
     });
   });
 });

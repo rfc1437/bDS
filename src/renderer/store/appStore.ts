@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { DeleteReference, ConfirmDeleteDetails } from '../components/ConfirmDeleteModal';
+import type {
+  ProjectData,
+  PostData,
+  MediaData,
+  TaskProgress,
+} from '../../main/shared/electronApi';
 
 // Storage key for persisted state
 const STORAGE_KEY = 'bds-app-state';
@@ -20,58 +26,7 @@ export interface TabState {
 }
 
 // Types
-export interface ProjectData {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  dataPath?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PostData {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt?: string;
-  content: string;
-  status: 'draft' | 'published' | 'archived';
-  author?: string;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt?: string;
-  tags: string[];
-  categories: string[];
-}
-
-export interface MediaData {
-  id: string;
-  filename: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  width?: number;
-  height?: number;
-  title?: string;
-  alt?: string;
-  caption?: string;
-  author?: string;
-  createdAt: string;
-  updatedAt: string;
-  tags: string[];
-}
-
-export interface TaskProgress {
-  taskId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  progress: number;
-  message: string;
-  startTime: string;
-  endTime?: string;
-  error?: string;
-}
+export type { ProjectData, PostData, MediaData, TaskProgress };
 
 export interface ErrorDetails {
   message: string;

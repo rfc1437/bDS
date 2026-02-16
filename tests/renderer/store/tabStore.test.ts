@@ -9,6 +9,7 @@ import { useAppStore, PostData, MediaData, Tab } from '../../../src/renderer/sto
 // Helper to create a mock post
 const createMockPost = (overrides: Partial<PostData> = {}): PostData => ({
   id: `post-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+  projectId: 'project-1',
   title: 'Test Post',
   slug: 'test-post',
   content: '# Test Content',
@@ -23,6 +24,7 @@ const createMockPost = (overrides: Partial<PostData> = {}): PostData => ({
 // Helper to create a mock media
 const createMockMedia = (overrides: Partial<MediaData> = {}): MediaData => ({
   id: `media-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+  projectId: 'project-1',
   filename: 'test.jpg',
   originalName: 'test.jpg',
   mimeType: 'image/jpeg',

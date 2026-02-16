@@ -7,7 +7,7 @@ Scope: Reduce high-impact code duplication in production and test-adjacent areas
 
 | Phase | Area | Status | Notes |
 |---|---|---|---|
-| 1 | Electron API contract | ⚠️ Partial | Shared contract exists, but overlapping renderer store data interfaces remain. |
+| 1 | Electron API contract | ✅ Completed | Shared contract now covers renderer store data interfaces too. |
 | 2 | Tag mutation workflow | ⚠️ Partial | Helpers exist; duplicate blocks still present in task flows. |
 | 3 | Post-media single/batch ops | ⚠️ Partial | Core primitives extracted; some duplicate link/unlink logic remains. |
 | 4 | Project mapping + delete guards | ✅ Completed | Guard + mapper extracted and used in target methods. |
@@ -39,7 +39,7 @@ Scope: Reduce high-impact code duplication in production and test-adjacent areas
 
 ## Phase 1 — Consolidate Electron API Contract (Highest ROI)
 
-Status: ⚠️ Partially complete
+Status: ✅ Completed
 
 ### Problem
 `electronAPI` shape is duplicated across multiple files and can drift:
@@ -59,7 +59,7 @@ Create one canonical API contract and consume it from both preload and renderer 
 
 ### Progress Check
 - Completed: shared contract module exists and is imported by preload and renderer ambient types.
-- Remaining: reduce overlapping data-shape duplication between shared API data interfaces and `src/renderer/store/appStore.ts` interfaces.
+- Completed: overlapping data-shape duplication was removed by sourcing store data interfaces from shared contract types.
 
 ### Acceptance Criteria
 - Single source of truth for `electronAPI` contract shape.

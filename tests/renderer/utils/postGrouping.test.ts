@@ -13,6 +13,7 @@ import type { PostData } from '../../../src/renderer/store/appStore';
 function createTestPost(overrides: Partial<PostData>): PostData {
   return {
     id: 'test-id',
+    projectId: 'project-1',
     title: 'Test Post',
     slug: 'test-post',
     excerpt: 'Test excerpt',
