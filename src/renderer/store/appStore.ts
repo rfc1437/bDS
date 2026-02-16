@@ -38,6 +38,13 @@ export interface ErrorDetails {
 export type { DeleteReference, ConfirmDeleteDetails };
 
 export type EditorMode = 'wysiwyg' | 'markdown' | 'preview';
+export type GitDiffViewStyle = 'inline' | 'side-by-side';
+
+export interface GitDiffPreferences {
+  wordWrap: boolean;
+  viewStyle: GitDiffViewStyle;
+  hideUnchangedRegions: boolean;
+}
 
 // App State Store
 interface AppState {
@@ -56,6 +63,7 @@ interface AppState {
   selectedPostId: string | null;
   selectedMediaId: string | null;
   preferredEditorMode: EditorMode;
+  gitDiffPreferences: GitDiffPreferences;
   
   // Data
   posts: PostData[];
@@ -102,6 +110,7 @@ interface AppState {
   setSelectedPost: (id: string | null) => void;
   setSelectedMedia: (id: string | null) => void;
   setPreferredEditorMode: (mode: EditorMode) => void;
+  setGitDiffPreferences: (preferences: GitDiffPreferences) => void;
   
   setPosts: (posts: PostData[], hasMore?: boolean, total?: number) => void;
   appendPosts: (posts: PostData[], hasMore: boolean) => void;
@@ -153,6 +162,11 @@ export const useAppStore = create<AppState>()(
       selectedPostId: null,
       selectedMediaId: null,
       preferredEditorMode: 'wysiwyg',
+      gitDiffPreferences: {
+        wordWrap: true,
+        viewStyle: 'inline',
+        hideUnchangedRegions: false,
+      },
       
       // Initial Data
       posts: [],
@@ -270,6 +284,7 @@ export const useAppStore = create<AppState>()(
       setSelectedPost: (id) => set({ selectedPostId: id }),
       setSelectedMedia: (id) => set({ selectedMediaId: id }),
       setPreferredEditorMode: (mode) => set({ preferredEditorMode: mode }),
+      setGitDiffPreferences: (preferences) => set({ gitDiffPreferences: preferences }),
       
       // Post Actions
       setPosts: (posts, hasMore = false, total = 0) => set({ posts, hasMorePosts: hasMore, totalPosts: total }),
@@ -355,6 +370,7 @@ export const useAppStore = create<AppState>()(
         selectedPostId: state.selectedPostId,
         selectedMediaId: state.selectedMediaId,
         preferredEditorMode: state.preferredEditorMode,
+        gitDiffPreferences: state.gitDiffPreferences,
         // Tabs are persisted here for now (project-specific persistence handled separately)
         tabs: state.tabs,
         activeTabId: state.activeTabId,
@@ -370,6 +386,7 @@ export const useAppStore = create<AppState>()(
           tabs: persistedState.tabs || [],
           activeTabId: persistedState.activeTabId || null,
           dirtyPosts: new Set(persistedState.dirtyPosts || []),
+          gitDiffPreferences: persistedState.gitDiffPreferences || current.gitDiffPreferences,
         };
       },
     }

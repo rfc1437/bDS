@@ -90,7 +90,14 @@ const SettingSection: React.FC<{
 };
 
 export const SettingsView: React.FC = () => {
-  const { preferredEditorMode, setPreferredEditorMode, activeProject, setActiveProject } = useAppStore();
+  const {
+    preferredEditorMode,
+    setPreferredEditorMode,
+    gitDiffPreferences,
+    setGitDiffPreferences,
+    activeProject,
+    setActiveProject,
+  } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [credentials, setCredentials] = useState<Credentials>(defaultCredentials);
   const [showSecrets, setShowSecrets] = useState(false);
@@ -409,6 +416,65 @@ export const SettingsView: React.FC = () => {
           <option value="markdown">Markdown (Source)</option>
           <option value="preview">Preview (Read-only)</option>
         </select>
+      </SettingRow>
+
+      <SettingRow
+        id="diff-view-style"
+        label="Diff View Style"
+        description="Choose how Git diffs are shown by default."
+      >
+        <select
+          id="diff-view-style"
+          aria-label="Diff View Style"
+          value={gitDiffPreferences.viewStyle}
+          onChange={(e) =>
+            setGitDiffPreferences({
+              ...gitDiffPreferences,
+              viewStyle: e.target.value as 'inline' | 'side-by-side',
+            })
+          }
+        >
+          <option value="inline">Inline</option>
+          <option value="side-by-side">Side by Side</option>
+        </select>
+      </SettingRow>
+
+      <SettingRow
+        id="diff-wrap-long-lines"
+        label="Wrap Long Lines in Diff"
+        description="Enable word wrapping for long lines in Git diffs."
+      >
+        <input
+          id="diff-wrap-long-lines"
+          aria-label="Wrap long lines in diff"
+          type="checkbox"
+          checked={gitDiffPreferences.wordWrap}
+          onChange={(e) =>
+            setGitDiffPreferences({
+              ...gitDiffPreferences,
+              wordWrap: e.target.checked,
+            })
+          }
+        />
+      </SettingRow>
+
+      <SettingRow
+        id="diff-hide-unchanged-regions"
+        label="Hide Unchanged Regions"
+        description="Collapse unchanged regions in Git diffs."
+      >
+        <input
+          id="diff-hide-unchanged-regions"
+          aria-label="Hide unchanged regions"
+          type="checkbox"
+          checked={gitDiffPreferences.hideUnchangedRegions}
+          onChange={(e) =>
+            setGitDiffPreferences({
+              ...gitDiffPreferences,
+              hideUnchangedRegions: e.target.checked,
+            })
+          }
+        />
       </SettingRow>
     </SettingSection>
   );

@@ -166,6 +166,28 @@ describe('AppStore', () => {
 
       expect(getStore().preferredEditorMode).toBe('markdown');
     });
+
+    it('should default git diff preferences to wrapped inline and visible unchanged regions', () => {
+      expect(getStore().gitDiffPreferences).toEqual({
+        wordWrap: true,
+        viewStyle: 'inline',
+        hideUnchangedRegions: false,
+      });
+    });
+
+    it('should update git diff preferences', () => {
+      getStore().setGitDiffPreferences({
+        wordWrap: false,
+        viewStyle: 'side-by-side',
+        hideUnchangedRegions: true,
+      });
+
+      expect(getStore().gitDiffPreferences).toEqual({
+        wordWrap: false,
+        viewStyle: 'side-by-side',
+        hideUnchangedRegions: true,
+      });
+    });
   });
 
   describe('Type Contract', () => {

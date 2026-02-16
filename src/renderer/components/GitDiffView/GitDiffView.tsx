@@ -36,7 +36,7 @@ function detectLanguage(filePath: string): string {
 }
 
 export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
-  const { activeProject } = useAppStore();
+  const { activeProject, gitDiffPreferences } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [original, setOriginal] = useState('');
@@ -105,14 +105,17 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
           height="100%"
           options={{
             readOnly: true,
-            renderSideBySide: false,
+            renderSideBySide: gitDiffPreferences.viewStyle === 'side-by-side',
             minimap: { enabled: false },
             lineNumbers: 'on',
             scrollBeyondLastLine: false,
             renderOverviewRuler: true,
             originalEditable: false,
             diffCodeLens: false,
-            wordWrap: 'off',
+            wordWrap: gitDiffPreferences.wordWrap ? 'on' : 'off',
+            hideUnchangedRegions: {
+              enabled: gitDiffPreferences.hideUnchangedRegions,
+            },
             ignoreTrimWhitespace: false,
           }}
         />
