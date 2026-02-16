@@ -112,9 +112,18 @@
 }
 
 .git-sidebar-history-item {
+  width: 100%;
+  border: none;
   padding: 6px 8px;
   border-radius: 4px;
   background: var(--vscode-input-background);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-sidebar-history-item:hover {
+  background: var(--vscode-list-hoverBackground);
 }
 
 .git-sidebar-history-subject {

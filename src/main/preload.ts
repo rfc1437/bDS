@@ -12,6 +12,7 @@ export const electronAPI: ElectronAPI = {
     getStatus: (projectPath: string) => ipcRenderer.invoke('git:status', projectPath),
     getDiff: (projectPath: string, filePath: string) => ipcRenderer.invoke('git:diff', projectPath, filePath),
     getDiffContent: (projectPath: string, filePath: string) => ipcRenderer.invoke('git:diffContent', projectPath, filePath),
+    getCommitDiffContent: (projectPath: string, commitHash: string) => ipcRenderer.invoke('git:commitDiffContent', projectPath, commitHash),
     getHistory: (projectPath: string, limit?: number) => ipcRenderer.invoke('git:history', projectPath, limit),
     fetch: (projectPath: string) => ipcRenderer.invoke('git:fetch', projectPath),
     pull: (projectPath: string) => ipcRenderer.invoke('git:pull', projectPath),

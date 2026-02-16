@@ -26,6 +26,7 @@ export const GitSidebar: React.FC = () => {
   const commitMessageInputRef = useRef<HTMLInputElement | null>(null);
 
   const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
+  const getCommitDiffTabId = (commitHash: string): string => `git-diff:commit:${commitHash}`;
 
   const getActionProgressMessage = (action: 'fetch' | 'pull' | 'push' | 'commit'): string => {
     if (action === 'push') {
@@ -45,6 +46,17 @@ export const GitSidebar: React.FC = () => {
       openTab({
         type: 'git-diff',
         id: getDiffTabId(filePath),
+        isTransient,
+      });
+    },
+    [openTab],
+  );
+
+  const openCommitDiffTab = useCallback(
+    (commitHash: string, isTransient: boolean) => {
+      openTab({
+        type: 'git-diff',
+        id: getCommitDiffTabId(commitHash),
         isTransient,
       });
     },
@@ -367,14 +379,21 @@ export const GitSidebar: React.FC = () => {
             ) : (
               <div className="git-sidebar-history-list" role="list" aria-label="Version History">
                 {historyEntries.map((entry) => (
-                  <div key={entry.hash} className="git-sidebar-history-item">
+                  <button
+                    key={entry.hash}
+                    type="button"
+                    className="git-sidebar-history-item"
+                    onClick={() => openCommitDiffTab(entry.hash, true)}
+                    onDoubleClick={() => openCommitDiffTab(entry.hash, false)}
+                    title={`${entry.shortHash}: ${entry.subject}`}
+                  >
                     <div className="git-sidebar-history-subject">{entry.subject}</div>
                     <div className="git-sidebar-history-meta">
                       <span>{entry.shortHash}</span>
                       <span>{entry.author}</span>
                       <span>{new Date(entry.date).toLocaleDateString()}</span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

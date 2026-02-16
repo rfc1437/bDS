@@ -203,6 +203,48 @@ describe('GitEngine', () => {
     });
   });
 
+  describe('getCommitDiffContent', () => {
+    it('should return commit patch text in diff content shape', async () => {
+      mockShow.mockResolvedValue([
+        'diff --git a/posts/first.md b/posts/first.md',
+        'index 1234567..89abcde 100644',
+        '--- a/posts/first.md',
+        '+++ b/posts/first.md',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+        'diff --git a/src/main.ts b/src/main.ts',
+        'index 1234567..89abcde 100644',
+        '--- a/src/main.ts',
+        '+++ b/src/main.ts',
+        '@@ -1 +1 @@',
+        '-const oldValue = 1;',
+        '+const newValue = 2;',
+      ].join('\n'));
+
+      const result = await gitEngine.getCommitDiffContent('/tmp/project', 'abc123def456');
+
+      expect(mockShow).toHaveBeenCalledWith(['--format=', '--patch', 'abc123def456']);
+      expect(result).toEqual({
+        commitHash: 'abc123def456',
+        original: 'old',
+        modified: 'new',
+        files: [
+          {
+            filePath: 'posts/first.md',
+            original: 'old',
+            modified: 'new',
+          },
+          {
+            filePath: 'src/main.ts',
+            original: 'const oldValue = 1;',
+            modified: 'const newValue = 2;',
+          },
+        ],
+      });
+    });
+  });
+
   describe('getHistory', () => {
     it('should return latest commits from git log', async () => {
       mockLog.mockResolvedValue({

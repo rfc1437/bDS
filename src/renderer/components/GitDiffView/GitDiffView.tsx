@@ -3,6 +3,12 @@ import { DiffEditor } from '@monaco-editor/react';
 import { useAppStore } from '../../store';
 import './GitDiffView.css';
 
+interface CommitFileDiff {
+  filePath: string;
+  original: string;
+  modified: string;
+}
+
 interface GitDiffViewProps {
   filePath: string;
 }
@@ -35,9 +41,9 @@ function detectLanguage(filePath: string): string {
   }
 }
 
-function toModelPath(filePath: string, side: 'original' | 'modified'): string {
+function toModelPath(filePath: string, side: 'original' | 'modified', scope: string): string {
   const normalized = filePath.replace(/^\/+/, '');
-  return `inmemory://model/git-diff/${side}/${normalized}`;
+  return `inmemory://model/git-diff/${scope}/${side}/${normalized}`;
 }
 
 export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
@@ -46,6 +52,40 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
   const [error, setError] = useState<string | null>(null);
   const [original, setOriginal] = useState('');
   const [modified, setModified] = useState('');
+  const [commitFiles, setCommitFiles] = useState<CommitFileDiff[]>([]);
+  const [selectedCommitFilePath, setSelectedCommitFilePath] = useState<string>('');
+  const isCommitDiff = filePath.startsWith('commit:');
+  const commitHash = isCommitDiff ? filePath.slice('commit:'.length) : '';
+  const selectedCommitFile = commitFiles.find((entry) => entry.filePath === selectedCommitFilePath) ?? null;
+  const selectedCommitFileIndex = selectedCommitFilePath
+    ? commitFiles.findIndex((entry) => entry.filePath === selectedCommitFilePath)
+    : -1;
+  const canSelectPreviousFile = selectedCommitFileIndex > 0;
+  const canSelectNextFile = selectedCommitFileIndex >= 0 && selectedCommitFileIndex < commitFiles.length - 1;
+  const displayedOriginal = selectedCommitFile ? selectedCommitFile.original : original;
+  const displayedModified = selectedCommitFile ? selectedCommitFile.modified : modified;
+  const activeFilePath = selectedCommitFile ? selectedCommitFile.filePath : filePath;
+  const modelScope = isCommitDiff ? `commit-${commitHash}` : 'working-tree';
+
+  const selectPreviousCommitFile = () => {
+    if (!canSelectPreviousFile) {
+      return;
+    }
+    const previousFile = commitFiles[selectedCommitFileIndex - 1];
+    if (previousFile) {
+      setSelectedCommitFilePath(previousFile.filePath);
+    }
+  };
+
+  const selectNextCommitFile = () => {
+    if (!canSelectNextFile) {
+      return;
+    }
+    const nextFile = commitFiles[selectedCommitFileIndex + 1];
+    if (nextFile) {
+      setSelectedCommitFilePath(nextFile.filePath);
+    }
+  };
 
   useEffect(() => {
     const loadDiff = async () => {
@@ -67,9 +107,27 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
           return;
         }
 
-        const diff = await window.electronAPI.git.getDiffContent(projectPath, filePath);
-        setOriginal(diff.original || '');
-        setModified(diff.modified || '');
+        if (isCommitDiff) {
+          const diff = await window.electronAPI.git.getCommitDiffContent(projectPath, commitHash);
+          const files = diff.files || [];
+          setCommitFiles(files);
+
+          if (files.length > 0) {
+            setSelectedCommitFilePath(files[0].filePath);
+            setOriginal(files[0].original || '');
+            setModified(files[0].modified || '');
+          } else {
+            setSelectedCommitFilePath('');
+            setOriginal(diff.original || '');
+            setModified(diff.modified || '');
+          }
+        } else {
+          setCommitFiles([]);
+          setSelectedCommitFilePath('');
+          const diff = await window.electronAPI.git.getDiffContent(projectPath, filePath);
+          setOriginal(diff.original || '');
+          setModified(diff.modified || '');
+        }
       } catch {
         setError('Failed to load diff.');
       } finally {
@@ -78,12 +136,12 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
     };
 
     void loadDiff();
-  }, [activeProject, filePath]);
+  }, [activeProject, filePath, isCommitDiff, commitHash]);
 
   if (loading) {
     return (
       <div className="git-diff-view">
-        <div className="git-diff-header">Diff: {filePath}</div>
+        <div className="git-diff-header">Diff: {isCommitDiff ? `Commit ${commitHash}` : filePath}</div>
         <div className="git-diff-message">Loading diff...</div>
       </div>
     );
@@ -92,7 +150,7 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
   if (error) {
     return (
       <div className="git-diff-view">
-        <div className="git-diff-header">Diff: {filePath}</div>
+        <div className="git-diff-header">Diff: {isCommitDiff ? `Commit ${commitHash}` : filePath}</div>
         <div className="git-diff-error">{error}</div>
       </div>
     );
@@ -100,16 +158,54 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
 
   return (
     <div className="git-diff-view">
-      <div className="git-diff-header">Diff: {filePath}</div>
+      <div className="git-diff-header">Diff: {isCommitDiff ? `Commit ${commitHash}` : filePath}</div>
+      {isCommitDiff && commitFiles.length > 0 && (
+        <div className="git-diff-commit-nav">
+          <label htmlFor="git-diff-commit-files" className="git-diff-commit-label">
+            Changed files
+          </label>
+          <button
+            type="button"
+            className="git-diff-commit-button"
+            onClick={selectPreviousCommitFile}
+            disabled={!canSelectPreviousFile}
+            aria-label="Previous file"
+          >
+            Previous
+          </button>
+          <select
+            id="git-diff-commit-files"
+            className="git-diff-commit-select"
+            value={selectedCommitFilePath}
+            onChange={(event) => setSelectedCommitFilePath(event.target.value)}
+            aria-label="Changed files"
+          >
+            {commitFiles.map((entry) => (
+              <option key={entry.filePath} value={entry.filePath}>
+                {entry.filePath}
+              </option>
+            ))}
+          </select>
+            <button
+              type="button"
+              className="git-diff-commit-button"
+              onClick={selectNextCommitFile}
+              disabled={!canSelectNextFile}
+              aria-label="Next file"
+            >
+              Next
+            </button>
+        </div>
+      )}
       <div className="git-diff-editor-wrap">
         <DiffEditor
-          original={original}
-          modified={modified}
-          originalModelPath={toModelPath(filePath, 'original')}
-          modifiedModelPath={toModelPath(filePath, 'modified')}
+          original={displayedOriginal}
+          modified={displayedModified}
+          originalModelPath={toModelPath(activeFilePath, 'original', modelScope)}
+          modifiedModelPath={toModelPath(activeFilePath, 'modified', modelScope)}
           keepCurrentOriginalModel
           keepCurrentModifiedModel
-          language={detectLanguage(filePath)}
+          language={detectLanguage(activeFilePath)}
           theme="vs-dark"
           height="100%"
           options={{

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { GitDiffView } from '../../../src/renderer/components/GitDiffView/GitDiffView';
 import { useAppStore } from '../../../src/renderer/store';
 
@@ -58,6 +58,23 @@ describe('GitDiffView', () => {
           original: '# old line',
           modified: '# new line',
         }),
+        getCommitDiffContent: vi.fn().mockResolvedValue({
+          commitHash: 'abc123def456',
+          original: '--- posts/first.md\nold',
+          modified: '--- posts/first.md\nnew',
+          files: [
+            {
+              filePath: 'posts/first.md',
+              original: 'old',
+              modified: 'new',
+            },
+            {
+              filePath: 'src/main.ts',
+              original: 'const oldValue = 1;',
+              modified: 'const newValue = 2;',
+            },
+          ],
+        }),
       },
       app: {
         ...(window as any).electronAPI?.app,
@@ -78,5 +95,34 @@ describe('GitDiffView', () => {
     expect(screen.getByText('hideUnchanged:false')).toBeInTheDocument();
     expect(screen.getByText('keepOriginal:true')).toBeInTheDocument();
     expect(screen.getByText('keepModified:true')).toBeInTheDocument();
+  });
+
+  it('loads commit diff content when a commit tab identifier is used', async () => {
+    render(<GitDiffView filePath="commit:abc123def456" />);
+
+    const diffEditor = await screen.findByTestId('monaco-diff-editor');
+    expect(diffEditor).toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: /changed files/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /previous file/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /next file/i })).toBeEnabled();
+    expect((window as any).electronAPI.git.getCommitDiffContent).toHaveBeenCalledWith('/repo/path', 'abc123def456');
+    expect(diffEditor).toHaveTextContent(/original:\s*old/);
+    expect(diffEditor).toHaveTextContent(/modified:\s*new/);
+    expect(screen.getByText('language:markdown')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /next file/i }));
+
+    expect(diffEditor).toHaveTextContent(/original:\s*const oldValue = 1;/);
+    expect(diffEditor).toHaveTextContent(/modified:\s*const newValue = 2;/);
+    expect(screen.getByText('language:typescript')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /previous file/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /next file/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /previous file/i }));
+
+    expect(diffEditor).toHaveTextContent(/original:\s*old/);
+    expect(diffEditor).toHaveTextContent(/modified:\s*new/);
+    expect(screen.getByRole('button', { name: /previous file/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /next file/i })).toBeEnabled();
   });
 });

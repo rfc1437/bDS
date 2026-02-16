@@ -247,6 +247,19 @@ export interface GitDiffContentDto {
   modified: string;
 }
 
+export interface GitCommitDiffContentDto {
+  commitHash: string;
+  original: string;
+  modified: string;
+  files: GitCommitDiffFileDto[];
+}
+
+export interface GitCommitDiffFileDto {
+  filePath: string;
+  original: string;
+  modified: string;
+}
+
 export interface GitHistoryEntry {
   hash: string;
   shortHash: string;
@@ -376,6 +389,7 @@ export interface ElectronAPI {
     getStatus: (projectPath: string) => Promise<GitStatusDto>;
     getDiff: (projectPath: string, filePath: string) => Promise<GitDiffDto>;
     getDiffContent: (projectPath: string, filePath: string) => Promise<GitDiffContentDto>;
+    getCommitDiffContent: (projectPath: string, commitHash: string) => Promise<GitCommitDiffContentDto>;
     getHistory: (projectPath: string, limit?: number) => Promise<GitHistoryEntry[]>;
     fetch: (projectPath: string) => Promise<GitActionResult>;
     pull: (projectPath: string) => Promise<GitActionResult>;

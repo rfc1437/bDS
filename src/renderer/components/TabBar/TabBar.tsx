@@ -4,15 +4,36 @@ import './TabBar.css';
 
 const MAX_CHAT_TITLE_LENGTH = 18;
 
+function getGitDiffResource(tabId: string): string {
+  return tabId.startsWith('git-diff:') ? tabId.slice('git-diff:'.length) : tabId;
+}
+
+function getCommitHashFromGitDiffTabId(tabId: string): string | null {
+  const resource = getGitDiffResource(tabId);
+  if (!resource.startsWith('commit:')) {
+    return null;
+  }
+  return resource.slice('commit:'.length);
+}
+
 const getTabTitle = (
   tab: Tab,
   postTitles: Map<string, string>,
   media: { id: string; originalName: string }[],
   chatTitles: Map<string, string>,
-  importDefTitles: Map<string, string>
+  importDefTitles: Map<string, string>,
+  commitTitles: Map<string, string>
 ): string => {
   if (tab.type === 'git-diff') {
-    const filePath = tab.id.startsWith('git-diff:') ? tab.id.slice('git-diff:'.length) : tab.id;
+    const filePath = getGitDiffResource(tab.id);
+    const commitHash = getCommitHashFromGitDiffTabId(tab.id);
+    if (commitHash) {
+      const commitTitle = commitTitles.get(commitHash);
+      if (commitTitle) {
+        return commitTitle;
+      }
+      return `Commit ${commitHash.slice(0, 7)}`;
+    }
     const filename = filePath.split('/').pop();
     return filename || filePath;
   }
@@ -138,6 +159,7 @@ export const TabBar: React.FC = () => {
     tabs, 
     activeTabId, 
     media,
+    activeProject,
     dirtyPosts,
     sidebarVisible,
     toggleSidebar,
@@ -152,6 +174,7 @@ export const TabBar: React.FC = () => {
   const [postTitles, setPostTitles] = useState<Map<string, string>>(new Map());
   const [chatTitles, setChatTitles] = useState<Map<string, string>>(new Map());
   const [importDefTitles, setImportDefTitles] = useState<Map<string, string>>(new Map());
+  const [commitTitles, setCommitTitles] = useState<Map<string, string>>(new Map());
 
   // Fetch post titles from database for post tabs
   useEffect(() => {
@@ -289,6 +312,65 @@ export const TabBar: React.FC = () => {
     };
   }, []);
 
+  // Fetch commit subjects for commit-based git-diff tabs
+  useEffect(() => {
+    const commitHashes = tabs
+      .filter((tab) => tab.type === 'git-diff')
+      .map((tab) => getCommitHashFromGitDiffTabId(tab.id))
+      .filter((hash): hash is string => Boolean(hash));
+
+    if (commitHashes.length === 0 || !activeProject) {
+      return;
+    }
+
+    const missingHashes = commitHashes.filter((hash) => !commitTitles.has(hash));
+    if (missingHashes.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchCommitTitles = async () => {
+      try {
+        const projectPath = activeProject.dataPath
+          ? activeProject.dataPath
+          : await window.electronAPI?.app.getDefaultProjectPath(activeProject.id);
+
+        if (!projectPath) {
+          return;
+        }
+
+        const history = await window.electronAPI?.git.getHistory(projectPath, 200);
+        if (!history || cancelled) {
+          return;
+        }
+
+        setCommitTitles((previous) => {
+          const updated = new Map(previous);
+          let changed = false;
+
+          for (const hash of missingHashes) {
+            const match = history.find((entry) => entry.hash === hash);
+            if (match) {
+              updated.set(hash, `${match.shortHash} ${match.subject}`);
+              changed = true;
+            }
+          }
+
+          return changed ? updated : previous;
+        });
+      } catch (error) {
+        console.error('Failed to fetch commit titles:', error);
+      }
+    };
+
+    void fetchCommitTitles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tabs, activeProject]);
+
   // Check if arrows are needed based on scroll position
   const updateArrowVisibility = useCallback(() => {
     const container = tabsContainerRef.current;
@@ -419,7 +501,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, postTitles, media, chatTitles, importDefTitles);
+          const title = getTabTitle(tab, postTitles, media, chatTitles, importDefTitles, commitTitles);
           const icon = getTabIcon(tab);
           
           return (

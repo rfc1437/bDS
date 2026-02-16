@@ -47,6 +47,19 @@ export interface GitDiffContentDto {
   modified: string;
 }
 
+export interface GitCommitDiffContentDto {
+  commitHash: string;
+  original: string;
+  modified: string;
+  files: GitCommitDiffFileDto[];
+}
+
+export interface GitCommitDiffFileDto {
+  filePath: string;
+  original: string;
+  modified: string;
+}
+
 export interface GitHistoryEntry {
   hash: string;
   shortHash: string;
@@ -503,6 +516,129 @@ export class GitEngine {
       original,
       modified,
     };
+  }
+
+  async getCommitDiffContent(projectPath: string, commitHash: string): Promise<GitCommitDiffContentDto> {
+    const git = simpleGit(projectPath);
+    const patch = await git.show(['--format=', '--patch', commitHash]);
+    const files = this.parseUnifiedPatchFiles(patch);
+
+    if (files.length === 0) {
+      return {
+        commitHash,
+        original: '',
+        modified: patch,
+        files: [],
+      };
+    }
+
+    const firstFile = files[0];
+
+    return {
+      commitHash,
+      original: firstFile.original,
+      modified: firstFile.modified,
+      files,
+    };
+  }
+
+  private parseUnifiedPatchFiles(patch: string): GitCommitDiffFileDto[] {
+    interface FileDiffBuffers {
+      path: string;
+      original: string[];
+      modified: string[];
+      inHunk: boolean;
+      touched: boolean;
+    }
+
+    const lines = patch.split('\n');
+    const files: FileDiffBuffers[] = [];
+    let currentFile: FileDiffBuffers | null = null;
+
+    const flushCurrent = () => {
+      if (!currentFile) {
+        return;
+      }
+
+      if (currentFile.touched || currentFile.original.length > 0 || currentFile.modified.length > 0) {
+        files.push(currentFile);
+      }
+
+      currentFile = null;
+    };
+
+    for (const line of lines) {
+      if (line.startsWith('diff --git ')) {
+        flushCurrent();
+
+        const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+        const filePath = match ? match[2] : line;
+        currentFile = {
+          path: filePath,
+          original: [],
+          modified: [],
+          inHunk: false,
+          touched: false,
+        };
+        continue;
+      }
+
+      if (!currentFile) {
+        continue;
+      }
+
+      if (line.startsWith('@@')) {
+        currentFile.inHunk = true;
+        continue;
+      }
+
+      if (line.startsWith('Binary files ')) {
+        currentFile.original.push(line);
+        currentFile.modified.push(line);
+        currentFile.touched = true;
+        continue;
+      }
+
+      if (!currentFile.inHunk) {
+        continue;
+      }
+
+      if (line.startsWith('\\ No newline at end of file')) {
+        continue;
+      }
+
+      if (line.startsWith('+')) {
+        currentFile.modified.push(line.slice(1));
+        currentFile.touched = true;
+        continue;
+      }
+
+      if (line.startsWith('-')) {
+        currentFile.original.push(line.slice(1));
+        currentFile.touched = true;
+        continue;
+      }
+
+      if (line.startsWith(' ')) {
+        const contextLine = line.slice(1);
+        currentFile.original.push(contextLine);
+        currentFile.modified.push(contextLine);
+        currentFile.touched = true;
+        continue;
+      }
+
+      currentFile.original.push(line);
+      currentFile.modified.push(line);
+      currentFile.touched = true;
+    }
+
+    flushCurrent();
+
+    return files.map((file) => ({
+      filePath: file.path,
+      original: file.original.join('\n'),
+      modified: file.modified.join('\n'),
+    }));
   }
 
   async getHistory(projectPath: string, limit = 20): Promise<GitHistoryEntry[]> {

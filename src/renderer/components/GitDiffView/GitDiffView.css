@@ -19,6 +19,43 @@
   min-height: 0;
 }
 
+.git-diff-commit-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border);
+}
+
+.git-diff-commit-label {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.git-diff-commit-select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 12px;
+}
+
+.git-diff-commit-button {
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-button-border);
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.git-diff-commit-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .git-diff-message,
 .git-diff-error {
   padding: 12px;

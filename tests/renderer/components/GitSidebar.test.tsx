@@ -35,6 +35,7 @@ describe('GitSidebar', () => {
         getStatus: vi.fn().mockResolvedValue({ files: [], counts: { untracked: 0, modified: 0, deleted: 0, renamed: 0, staged: 0, total: 0 } }),
         getDiff: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', patch: 'diff --git a/posts/a.md b/posts/a.md' }),
         getDiffContent: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', original: '', modified: '' }),
+        getCommitDiffContent: vi.fn().mockResolvedValue({ commitHash: 'abc123', original: '', modified: '' }),
         getHistory: vi.fn().mockResolvedValue([]),
         fetch: vi.fn().mockResolvedValue({ success: true }),
         pull: vi.fn().mockResolvedValue({ success: true }),
@@ -169,6 +170,72 @@ describe('GitSidebar', () => {
 
     expect(getStore().tabs).toHaveLength(1);
     expect(getStore().tabs[0]).toMatchObject({ type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: false });
+  });
+
+  it('single click on a commit opens a transient git-diff commit tab', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      {
+        hash: 'abc123def456',
+        shortHash: 'abc123d',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: add sidebar history click',
+        author: 'Dev One',
+      },
+    ]);
+
+    render(<GitSidebar />);
+
+    const commitItem = await screen.findByRole('button', { name: /feat: add sidebar history click/i });
+
+    await act(async () => {
+      fireEvent.click(commitItem);
+    });
+
+    expect(getStore().tabs).toHaveLength(1);
+    expect(getStore().tabs[0]).toMatchObject({
+      type: 'git-diff',
+      id: 'git-diff:commit:abc123def456',
+      isTransient: true,
+    });
+  });
+
+  it('double click on a commit opens a persistent git-diff commit tab', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      {
+        hash: 'abc123def456',
+        shortHash: 'abc123d',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: add sidebar history click',
+        author: 'Dev One',
+      },
+    ]);
+
+    render(<GitSidebar />);
+
+    const commitItem = await screen.findByRole('button', { name: /feat: add sidebar history click/i });
+
+    await act(async () => {
+      fireEvent.doubleClick(commitItem);
+    });
+
+    expect(getStore().tabs).toHaveLength(1);
+    expect(getStore().tabs[0]).toMatchObject({
+      type: 'git-diff',
+      id: 'git-diff:commit:abc123def456',
+      isTransient: false,
+    });
   });
 
   it('initializes repository and refreshes repo state after clicking Initialize Git', async () => {
