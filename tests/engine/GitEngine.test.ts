@@ -11,6 +11,9 @@ const mockInit = vi.fn();
 const mockRaw = vi.fn();
 const mockAdd = vi.fn();
 const mockCommit = vi.fn();
+const mockFetch = vi.fn();
+const mockPull = vi.fn();
+const mockPush = vi.fn();
 const mockGetRemotes = vi.fn();
 const mockAddRemote = vi.fn();
 const mockRemote = vi.fn();
@@ -40,6 +43,9 @@ vi.mock('simple-git', () => ({
     raw: mockRaw,
     add: mockAdd,
     commit: mockCommit,
+    fetch: mockFetch,
+    pull: mockPull,
+    push: mockPush,
     getRemotes: mockGetRemotes,
     addRemote: mockAddRemote,
     remote: mockRemote,
@@ -449,6 +455,54 @@ describe('GitEngine', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('prune failed');
+    });
+  });
+
+  describe('repo actions', () => {
+    it('should run fetch with prune and return success', async () => {
+      mockFetch.mockResolvedValue(undefined);
+
+      const result = await gitEngine.fetch('/tmp/project');
+
+      expect(mockFetch).toHaveBeenCalledWith(['--prune']);
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should run pull and return success', async () => {
+      mockPull.mockResolvedValue(undefined);
+
+      const result = await gitEngine.pull('/tmp/project');
+
+      expect(mockPull).toHaveBeenCalled();
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should run push and return success', async () => {
+      mockPush.mockResolvedValue(undefined);
+
+      const result = await gitEngine.push('/tmp/project');
+
+      expect(mockPush).toHaveBeenCalled();
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should stage all files and commit with message', async () => {
+      mockAdd.mockResolvedValue(undefined);
+      mockCommit.mockResolvedValue(undefined);
+
+      const result = await gitEngine.commitAll('/tmp/project', 'feat: commit changes');
+
+      expect(mockAdd).toHaveBeenCalledWith(['-A']);
+      expect(mockCommit).toHaveBeenCalledWith('feat: commit changes');
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should reject empty commit messages', async () => {
+      const result = await gitEngine.commitAll('/tmp/project', '   ');
+
+      expect(mockAdd).not.toHaveBeenCalled();
+      expect(mockCommit).not.toHaveBeenCalled();
+      expect(result).toEqual({ success: false, error: 'Commit message is required.' });
     });
   });
 });

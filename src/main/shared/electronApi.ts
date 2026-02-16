@@ -293,6 +293,11 @@ export interface GitLfsPruneResult {
   error?: string;
 }
 
+export interface GitActionResult {
+  success: boolean;
+  error?: string;
+}
+
 // Post-Media Link types
 export interface MediaLinkData {
   id: string;
@@ -370,6 +375,10 @@ export interface ElectronAPI {
     getDiff: (projectPath: string, filePath: string) => Promise<GitDiffDto>;
     getDiffContent: (projectPath: string, filePath: string) => Promise<GitDiffContentDto>;
     getHistory: (projectPath: string, limit?: number) => Promise<GitHistoryEntry[]>;
+    fetch: (projectPath: string) => Promise<GitActionResult>;
+    pull: (projectPath: string) => Promise<GitActionResult>;
+    push: (projectPath: string) => Promise<GitActionResult>;
+    commitAll: (projectPath: string, message: string) => Promise<GitActionResult>;
     ensureGitignore: (projectPath: string) => Promise<GitIgnoreEnsureResult>;
     pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => Promise<GitLfsPruneResult>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;

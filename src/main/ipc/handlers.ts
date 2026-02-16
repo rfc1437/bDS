@@ -63,6 +63,26 @@ export function registerIpcHandlers(): void {
     return engine.getHistory(projectPath, limit);
   });
 
+  safeHandle('git:fetch', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.fetch(projectPath);
+  });
+
+  safeHandle('git:pull', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.pull(projectPath);
+  });
+
+  safeHandle('git:push', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.push(projectPath);
+  });
+
+  safeHandle('git:commitAll', async (_, projectPath: string, message: string) => {
+    const engine = getGitEngine();
+    return engine.commitAll(projectPath, message);
+  });
+
   safeHandle('git:init', async (event, projectPath: string, remoteUrl?: string) => {
     const engine = getGitEngine();
     return engine.initializeRepo(projectPath, remoteUrl, (progress) => {

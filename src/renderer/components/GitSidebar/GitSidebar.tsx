@@ -5,21 +5,24 @@ import './GitSidebar.css';
 import '../Sidebar/Sidebar.css';
 
 export const GitSidebar: React.FC = () => {
-  const { activeProject, openTab } = useAppStore();
+  const { activeProject, openTab, tabs, closeTab } = useAppStore();
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<'fetch' | 'pull' | 'push' | 'commit' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRepo, setIsRepo] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
   const [statusFiles, setStatusFiles] = useState<Array<{ path: string; status: string }>>([]);
+  const [commitMessage, setCommitMessage] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<GitHistoryEntry[]>([]);
   const [initProgress, setInitProgress] = useState<GitInitProgress | null>(null);
   const [initTranscript, setInitTranscript] = useState<GitInitProgress[]>([]);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const remoteUrlInputRef = useRef<HTMLInputElement | null>(null);
+  const commitMessageInputRef = useRef<HTMLInputElement | null>(null);
 
   const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
 
@@ -149,6 +152,78 @@ export const GitSidebar: React.FC = () => {
     }
   };
 
+  const handleRepoAction = async (action: 'fetch' | 'pull' | 'push') => {
+    if (actionLoading) {
+      return;
+    }
+
+    const effectiveProjectPath = projectPath ?? (await resolveProjectPath());
+    if (!effectiveProjectPath) {
+      setError('No active project selected.');
+      return;
+    }
+    if (!projectPath) {
+      setProjectPath(effectiveProjectPath);
+    }
+
+    setActionLoading(action);
+    setError(null);
+    try {
+      const result =
+        action === 'fetch'
+          ? await window.electronAPI.git.fetch(effectiveProjectPath)
+          : action === 'pull'
+            ? await window.electronAPI.git.pull(effectiveProjectPath)
+            : await window.electronAPI.git.push(effectiveProjectPath);
+      if (!result.success) {
+        setError(result.error || `Failed to ${action}.`);
+        return;
+      }
+      await loadRepoState();
+    } catch {
+      setError(`Failed to ${action}.`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (actionLoading) {
+      return;
+    }
+
+    const effectiveProjectPath = projectPath ?? (await resolveProjectPath());
+    if (!effectiveProjectPath) {
+      setError('No active project selected.');
+      return;
+    }
+    if (!projectPath) {
+      setProjectPath(effectiveProjectPath);
+    }
+
+    setActionLoading('commit');
+    setError(null);
+    try {
+      const messageToCommit = commitMessageInputRef.current?.value ?? commitMessage;
+      const result = await window.electronAPI.git.commitAll(effectiveProjectPath, messageToCommit);
+      if (!result.success) {
+        setError(result.error || 'Failed to commit changes.');
+        return;
+      }
+
+      tabs
+        .filter((tab) => tab.type === 'git-diff')
+        .forEach((tab) => closeTab(tab.id));
+
+      setCommitMessage('');
+      await loadRepoState();
+    } catch {
+      setError('Failed to commit changes.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="git-sidebar">
@@ -186,8 +261,56 @@ export const GitSidebar: React.FC = () => {
       <div className="git-sidebar">
         <div className="git-sidebar-header">SOURCE CONTROL</div>
         <div className="git-sidebar-content">
+          <div className="git-sidebar-actions" role="group" aria-label="Repository actions">
+            <button
+              type="button"
+              className="git-sidebar-button"
+              onClick={() => handleRepoAction('fetch')}
+              disabled={actionLoading !== null}
+            >
+              Fetch
+            </button>
+            <button
+              type="button"
+              className="git-sidebar-button"
+              onClick={() => handleRepoAction('pull')}
+              disabled={actionLoading !== null}
+            >
+              Pull
+            </button>
+            <button
+              type="button"
+              className="git-sidebar-button"
+              onClick={() => handleRepoAction('push')}
+              disabled={actionLoading !== null}
+            >
+              Push
+            </button>
+          </div>
+
           <div className="git-sidebar-section">
             <div className="sidebar-section-title">Open Changes ({statusFiles.length})</div>
+
+            <div className="git-sidebar-commit-row">
+              <input
+                ref={commitMessageInputRef}
+                className="git-sidebar-input"
+                type="text"
+                placeholder="Commit message"
+                value={commitMessage}
+                onChange={(event) => setCommitMessage(event.target.value)}
+                disabled={actionLoading !== null}
+              />
+              <button
+                type="button"
+                className="git-sidebar-button"
+                onClick={handleCommit}
+                disabled={actionLoading !== null}
+              >
+                Commit
+              </button>
+            </div>
+
             {statusLoading ? (
               <div className="git-sidebar-empty-state">Loading changes...</div>
             ) : statusFiles.length === 0 ? (
@@ -233,6 +356,7 @@ export const GitSidebar: React.FC = () => {
             )}
             {currentBranch && <div className="git-sidebar-empty-state">Branch: {currentBranch}</div>}
           </div>
+          {error && <div className="git-sidebar-empty-state git-sidebar-error">{error}</div>}
           {transcriptSection}
         </div>
       </div>

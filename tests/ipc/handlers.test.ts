@@ -147,6 +147,10 @@ const mockGitEngine = {
   getDiff: vi.fn(),
   getDiffContent: vi.fn(),
   getHistory: vi.fn(),
+  fetch: vi.fn(),
+  pull: vi.fn(),
+  push: vi.fn(),
+  commitAll: vi.fn(),
   initializeRepo: vi.fn(),
   ensureGitignore: vi.fn(),
   pruneLfsCache: vi.fn(),
@@ -452,6 +456,50 @@ describe('IPC Handlers', () => {
 
         expect(mockGitEngine.pruneLfsCache).toHaveBeenCalledWith('/repo', { dryRun: true, verifyRemote: true });
         expect(result.success).toBe(true);
+      });
+    });
+
+    describe('git:fetch', () => {
+      it('should pass project path to GitEngine.fetch', async () => {
+        mockGitEngine.fetch.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:fetch', '/repo');
+
+        expect(mockGitEngine.fetch).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({ success: true });
+      });
+    });
+
+    describe('git:pull', () => {
+      it('should pass project path to GitEngine.pull', async () => {
+        mockGitEngine.pull.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:pull', '/repo');
+
+        expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({ success: true });
+      });
+    });
+
+    describe('git:push', () => {
+      it('should pass project path to GitEngine.push', async () => {
+        mockGitEngine.push.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:push', '/repo');
+
+        expect(mockGitEngine.push).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({ success: true });
+      });
+    });
+
+    describe('git:commitAll', () => {
+      it('should pass project path and message to GitEngine.commitAll', async () => {
+        mockGitEngine.commitAll.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:commitAll', '/repo', 'feat: commit');
+
+        expect(mockGitEngine.commitAll).toHaveBeenCalledWith('/repo', 'feat: commit');
+        expect(result).toEqual({ success: true });
       });
     });
   });

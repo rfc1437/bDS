@@ -7,7 +7,14 @@ import { useAppStore } from '../../../src/renderer/store';
 vi.mock('@monaco-editor/react', () => ({
   __esModule: true,
   default: (_props: unknown) => null,
-  DiffEditor: (props: { original: string; modified: string; language?: string; options?: Record<string, unknown> }) => (
+  DiffEditor: (props: {
+    original: string;
+    modified: string;
+    language?: string;
+    options?: Record<string, unknown>;
+    keepCurrentOriginalModel?: boolean;
+    keepCurrentModifiedModel?: boolean;
+  }) => (
     <div data-testid="monaco-diff-editor">
       <div>original:{props.original}</div>
       <div>modified:{props.modified}</div>
@@ -15,6 +22,8 @@ vi.mock('@monaco-editor/react', () => ({
       <div>renderSideBySide:{String(props.options?.renderSideBySide)}</div>
       <div>wordWrap:{String(props.options?.wordWrap)}</div>
       <div>hideUnchanged:{String((props.options?.hideUnchangedRegions as { enabled?: boolean } | undefined)?.enabled)}</div>
+      <div>keepOriginal:{String(props.keepCurrentOriginalModel)}</div>
+      <div>keepModified:{String(props.keepCurrentModifiedModel)}</div>
     </div>
   ),
 }));
@@ -67,5 +76,7 @@ describe('GitDiffView', () => {
     expect(screen.getByText('renderSideBySide:false')).toBeInTheDocument();
     expect(screen.getByText('wordWrap:on')).toBeInTheDocument();
     expect(screen.getByText('hideUnchanged:false')).toBeInTheDocument();
+    expect(screen.getByText('keepOriginal:true')).toBeInTheDocument();
+    expect(screen.getByText('keepModified:true')).toBeInTheDocument();
   });
 });

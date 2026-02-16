@@ -34,7 +34,12 @@ describe('GitSidebar', () => {
         getRepoState: vi.fn().mockResolvedValue({ isRepo: false, hasRemote: false }),
         getStatus: vi.fn().mockResolvedValue({ files: [], counts: { untracked: 0, modified: 0, deleted: 0, renamed: 0, staged: 0, total: 0 } }),
         getDiff: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', patch: 'diff --git a/posts/a.md b/posts/a.md' }),
+        getDiffContent: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', original: '', modified: '' }),
         getHistory: vi.fn().mockResolvedValue([]),
+        fetch: vi.fn().mockResolvedValue({ success: true }),
+        pull: vi.fn().mockResolvedValue({ success: true }),
+        push: vi.fn().mockResolvedValue({ success: true }),
+        commitAll: vi.fn().mockResolvedValue({ success: true }),
         init: vi.fn().mockResolvedValue({ success: true }),
         ensureGitignore: vi.fn().mockResolvedValue({ updated: false, created: false, addedEntries: [] }),
         onInitProgress: vi.fn().mockImplementation(() => () => {}),
@@ -327,5 +332,65 @@ describe('GitSidebar', () => {
     const transcriptToggle = screen.getByRole('button', { name: /initialization transcript/i });
     expect(transcriptToggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText(/100% — failed to configure remote repository/i)).toBeInTheDocument();
+  });
+
+  it('wires fetch, pull, and push buttons', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    render(<GitSidebar />);
+
+    const fetchButton = await screen.findByRole('button', { name: /fetch/i });
+    const pullButton = screen.getByRole('button', { name: /pull/i });
+    const pushButton = screen.getByRole('button', { name: /push/i });
+
+    await act(async () => {
+      fireEvent.click(fetchButton);
+      fireEvent.click(pullButton);
+      fireEvent.click(pushButton);
+    });
+
+    expect((window as any).electronAPI.git.fetch).toHaveBeenCalledWith('/repo/path');
+    expect((window as any).electronAPI.git.pull).toHaveBeenCalledWith('/repo/path');
+    expect((window as any).electronAPI.git.push).toHaveBeenCalledWith('/repo/path');
+  });
+
+  it('commits all changes and closes open git-diff tabs', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    useAppStore.setState({
+      tabs: [
+        { type: 'git-diff', id: 'git-diff:posts/first.md', isTransient: false },
+        { type: 'post', id: 'post-1', isTransient: false },
+        { type: 'git-diff', id: 'git-diff:posts/second.md', isTransient: true },
+      ],
+      activeTabId: 'git-diff:posts/first.md',
+    });
+
+    render(<GitSidebar />);
+
+    const commitInput = await screen.findByPlaceholderText(/commit message/i);
+    await act(async () => {
+      fireEvent.change(commitInput, { target: { value: 'feat: commit from sidebar' } });
+    });
+
+    const commitButton = screen.getByRole('button', { name: /^commit$/i });
+    await act(async () => {
+      fireEvent.click(commitButton);
+    });
+
+    expect((window as any).electronAPI.git.commitAll).toHaveBeenCalledWith('/repo/path', 'feat: commit from sidebar');
+    expect(getStore().tabs).toEqual([
+      { type: 'post', id: 'post-1', isTransient: false },
+    ]);
   });
 });

@@ -98,6 +98,11 @@ export interface GitLfsPruneResult {
   error?: string;
 }
 
+export interface GitActionResult {
+  success: boolean;
+  error?: string;
+}
+
 let gitEngineInstance: GitEngine | null = null;
 
 export function getGitEngine(): GitEngine {
@@ -272,6 +277,67 @@ export class GitEngine {
       subject: entry.message,
       author: entry.author_name,
     }));
+  }
+
+  async fetch(projectPath: string): Promise<GitActionResult> {
+    const git = simpleGit(projectPath);
+    try {
+      await git.fetch(['--prune']);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch remote updates.',
+      };
+    }
+  }
+
+  async pull(projectPath: string): Promise<GitActionResult> {
+    const git = simpleGit(projectPath);
+    try {
+      await git.pull();
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to pull remote changes.',
+      };
+    }
+  }
+
+  async push(projectPath: string): Promise<GitActionResult> {
+    const git = simpleGit(projectPath);
+    try {
+      await git.push();
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to push local commits.',
+      };
+    }
+  }
+
+  async commitAll(projectPath: string, message: string): Promise<GitActionResult> {
+    const normalizedMessage = message.trim();
+    if (!normalizedMessage) {
+      return {
+        success: false,
+        error: 'Commit message is required.',
+      };
+    }
+
+    const git = simpleGit(projectPath);
+    try {
+      await git.add(['-A']);
+      await git.commit(normalizedMessage);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create commit.',
+      };
+    }
   }
 
   async ensureGitignore(projectPath: string): Promise<GitIgnoreEnsureResult> {

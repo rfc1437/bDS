@@ -35,6 +35,11 @@ function detectLanguage(filePath: string): string {
   }
 }
 
+function toModelPath(filePath: string, side: 'original' | 'modified'): string {
+  const normalized = filePath.replace(/^\/+/, '');
+  return `inmemory://model/git-diff/${side}/${normalized}`;
+}
+
 export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
   const { activeProject, gitDiffPreferences } = useAppStore();
   const [loading, setLoading] = useState(true);
@@ -100,6 +105,10 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
         <DiffEditor
           original={original}
           modified={modified}
+          originalModelPath={toModelPath(filePath, 'original')}
+          modifiedModelPath={toModelPath(filePath, 'modified')}
+          keepCurrentOriginalModel
+          keepCurrentModifiedModel
           language={detectLanguage(filePath)}
           theme="vs-dark"
           height="100%"
