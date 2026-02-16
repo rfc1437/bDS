@@ -87,6 +87,40 @@ const EXT_TO_MIME: Record<string, string> = {
 
 export class WxrParser {
 
+  private parsePubDate(item: Element): Date | null {
+    const pubDateStr = this.getDirectChildText(item, 'pubDate');
+    if (!pubDateStr) {
+      return null;
+    }
+
+    const parsed = new Date(pubDateStr);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private parseItemBase(item: Element): {
+    wpId: number;
+    title: string;
+    slug: string;
+    content: string;
+    excerpt: string;
+    pubDate: Date | null;
+    creator: string;
+    status: string;
+    postType: string;
+  } {
+    return {
+      wpId: parseInt(this.getElementText(item, 'post_id', NS.wp) || '0', 10),
+      title: this.getDirectChildText(item, 'title'),
+      slug: this.getElementText(item, 'post_name', NS.wp),
+      content: this.getElementText(item, 'encoded', NS.content),
+      excerpt: this.getElementText(item, 'encoded', NS.excerpt),
+      pubDate: this.parsePubDate(item),
+      creator: this.getElementText(item, 'creator', NS.dc),
+      status: this.getElementText(item, 'status', NS.wp),
+      postType: this.getElementText(item, 'post_type', NS.wp),
+    };
+  }
+
   async parseFile(filePath: string): Promise<WxrData> {
     const content = await fs.readFile(filePath, 'utf-8');
     return this.parseXml(content);
@@ -172,6 +206,7 @@ export class WxrParser {
   }
 
   private parsePostItem(item: Element): WxrPost {
+    const base = this.parseItemBase(item);
     const categories: string[] = [];
     const tags: string[] = [];
 
@@ -187,15 +222,6 @@ export class WxrParser {
         categories.push(text);
       } else if (domain === 'post_tag' && text) {
         tags.push(text);
-      }
-    }
-
-    const pubDateStr = this.getDirectChildText(item, 'pubDate');
-    let pubDate: Date | null = null;
-    if (pubDateStr) {
-      const parsed = new Date(pubDateStr);
-      if (!isNaN(parsed.getTime())) {
-        pubDate = parsed;
       }
     }
 
@@ -220,46 +246,38 @@ export class WxrParser {
     }
 
     return {
-      wpId: parseInt(this.getElementText(item, 'post_id', NS.wp) || '0', 10),
-      title: this.getDirectChildText(item, 'title'),
-      slug: this.getElementText(item, 'post_name', NS.wp),
-      content: this.getElementText(item, 'encoded', NS.content),
-      excerpt: this.getElementText(item, 'encoded', NS.excerpt),
-      pubDate,
+      wpId: base.wpId,
+      title: base.title,
+      slug: base.slug,
+      content: base.content,
+      excerpt: base.excerpt,
+      pubDate: base.pubDate,
       postDate,
       postModified,
-      creator: this.getElementText(item, 'creator', NS.dc),
-      status: this.getElementText(item, 'status', NS.wp),
-      postType: this.getElementText(item, 'post_type', NS.wp),
+      creator: base.creator,
+      status: base.status,
+      postType: base.postType,
       categories,
       tags,
     };
   }
 
   private parseMediaItem(item: Element): WxrMedia {
+    const base = this.parseItemBase(item);
     const url = this.getElementText(item, 'attachment_url', NS.wp);
     const filename = this.extractFilename(url);
     const relativePath = this.extractRelativePath(url);
 
-    const pubDateStr = this.getDirectChildText(item, 'pubDate');
-    let pubDate: Date | null = null;
-    if (pubDateStr) {
-      const parsed = new Date(pubDateStr);
-      if (!isNaN(parsed.getTime())) {
-        pubDate = parsed;
-      }
-    }
-
     return {
-      wpId: parseInt(this.getElementText(item, 'post_id', NS.wp) || '0', 10),
-      title: this.getDirectChildText(item, 'title'),
+      wpId: base.wpId,
+      title: base.title,
       url,
       filename,
       relativePath,
-      pubDate,
+      pubDate: base.pubDate,
       parentId: parseInt(this.getElementText(item, 'post_parent', NS.wp) || '0', 10),
       mimeType: this.inferMimeType(filename),
-      description: this.getElementText(item, 'encoded', NS.content),
+      description: base.content,
     };
   }
 

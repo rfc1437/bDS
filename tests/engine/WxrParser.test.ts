@@ -158,6 +158,72 @@ const WXR_WITH_MEDIA = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`;
 
+const WXR_WITH_MEDIA_PUBDATE = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+  <channel>
+    <title>My Blog</title>
+    <link>https://example.com</link>
+    <description>Test</description>
+    <language>en</language>
+    <item>
+      <title>header-image</title>
+      <pubDate>Fri, 05 Jan 2024 12:34:56 +0000</pubDate>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>101</wp:post_id>
+      <wp:post_name>header-image</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:attachment_url>https://example.com/wp-content/uploads/2024/01/header.jpg</wp:attachment_url>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+    </item>
+  </channel>
+</rss>`;
+
+const WXR_WITH_INVALID_PUBDATE = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+  <channel>
+    <title>Dates Blog</title>
+    <link>https://example.com</link>
+    <description>Test</description>
+    <language>en</language>
+    <item>
+      <title>Bad Date Post</title>
+      <pubDate>not-a-date</pubDate>
+      <content:encoded><![CDATA[<p>bad date</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>201</wp:post_id>
+      <wp:post_name>bad-date-post</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_type>post</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+    </item>
+    <item>
+      <title>Bad Date Media</title>
+      <pubDate>also-not-a-date</pubDate>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>202</wp:post_id>
+      <wp:post_name>bad-date-media</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:attachment_url>https://example.com/wp-content/uploads/2024/01/bad-date.jpg</wp:attachment_url>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+    </item>
+  </channel>
+</rss>`;
+
 // WXR with mixed content: posts, pages, and media
 const WXR_MIXED = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"
@@ -478,6 +544,42 @@ describe('WxrParser', () => {
       const result = parser.parseXml(WXR_WITH_PAGE);
       // Page has no pubDate element
       expect(result.pages[0].pubDate).toBeNull();
+    });
+
+    it('should parse valid RFC822 pubDate for media items', () => {
+      const result = parser.parseXml(WXR_WITH_MEDIA_PUBDATE);
+
+      expect(result.media).toHaveLength(1);
+      expect(result.media[0].pubDate).toBeInstanceOf(Date);
+      expect(result.media[0].pubDate?.toISOString()).toBe('2024-01-05T12:34:56.000Z');
+    });
+
+    it('should fallback to null for invalid pubDate nodes in post and media items', () => {
+      const result = parser.parseXml(WXR_WITH_INVALID_PUBDATE);
+
+      expect(result.posts).toHaveLength(1);
+      expect(result.media).toHaveLength(1);
+      expect(result.posts[0].pubDate).toBeNull();
+      expect(result.media[0].pubDate).toBeNull();
+    });
+
+    it('should keep base fields parity between post and page parse branches', () => {
+      const result = parser.parseXml(WXR_MIXED);
+      const post = result.posts[0];
+      const page = result.pages[0];
+
+      expect(post.postType).toBe('post');
+      expect(page.postType).toBe('page');
+      expect(post.wpId).toBeGreaterThan(0);
+      expect(page.wpId).toBeGreaterThan(0);
+      expect(post.title).toBeTruthy();
+      expect(page.title).toBeTruthy();
+      expect(post.slug).toBeTruthy();
+      expect(page.slug).toBeTruthy();
+      expect(typeof post.content).toBe('string');
+      expect(typeof page.content).toBe('string');
+      expect(typeof post.excerpt).toBe('string');
+      expect(typeof page.excerpt).toBe('string');
     });
   });
 

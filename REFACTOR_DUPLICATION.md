@@ -261,7 +261,7 @@ Move color contrast logic into a shared renderer utility.
 1. Phase 1 (finish API/store type convergence)
 2. Phase 2 (finish TagEngine workflow dedup)
 3. Phase 3 (finish PostMedia single/batch dedup)
-4. Phase 7 (WxrParser repeated parse blocks)
+4. ~~Phase 7 (WxrParser repeated parse blocks)~~ ✅ Completed
 5. Phase 8 (MetaEngine ↔ TagEngine overlap)
 6. Phase 9 (renderer tag event subscription helper)
 7. Phase 10 (local UI repeated blocks in component files)
@@ -273,6 +273,8 @@ Rationale: complete in-flight high-impact phases first, then address newly detec
 ## Newly Detected Phases (from latest scan)
 
 ## Phase 7 — Consolidate WXR Item Parse Blocks
+
+Status: ✅ Completed
 
 ### Problem
 `WxrParser` contains repeated `pubDate` parsing + return-shape scaffolding in nearby item parse paths.
@@ -288,6 +290,10 @@ Extract shared `parsePubDate` and/or shared item base builder helper to avoid dr
 ### Acceptance Criteria
 - No behavior change in parsed output.
 - Duplicated `pubDate`/return scaffolding materially reduced.
+
+### Progress Check
+- Completed: extracted shared `pubDate` parser helper and shared base item builder for post/media parse paths.
+- Completed: added branch-focused tests for valid/invalid/missing `pubDate` and post/page parse-branch parity.
 
 ### Coverage & Test Quality (fresh run: `npm run test:coverage`)
 - `src/main/engine/WxrParser.ts`: 93.55% statements, 100.00% functions, 67.14% branches.
