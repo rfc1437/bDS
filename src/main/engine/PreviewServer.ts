@@ -17,6 +17,8 @@ interface ActiveProjectContext {
 interface PostEngineContract {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPost: (id: string) => Promise<PostData | null>;
+  hasPublishedVersion: (id: string) => Promise<boolean>;
+  getPublishedVersion: (id: string) => Promise<PostData | null>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 }
 
@@ -472,21 +474,21 @@ export class PreviewServer {
         }
 
     if (pathname === '/') {
-      const posts = await this.loadPublishedPosts({ status: 'published' }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published' }, maxPostsPerPage);
       return this.renderPostList(posts, rewriteContext);
     }
 
     const tagMatch = pathname.match(/^\/tag\/([^/]+)$/);
     if (tagMatch) {
       const tag = tagMatch[1];
-      const posts = await this.loadPublishedPosts({ status: 'published', tags: [tag] }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', tags: [tag] }, maxPostsPerPage);
       return this.renderPostList(posts, rewriteContext);
     }
 
     const categoryMatch = pathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
-      const posts = await this.loadPublishedPosts({ status: 'published', categories: [category] }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', categories: [category] }, maxPostsPerPage);
       return this.renderPostList(posts, rewriteContext);
     }
 
@@ -516,21 +518,21 @@ export class PreviewServer {
       const year = Number(monthMatch[1]);
       const month = Number(monthMatch[2]);
       if (month < 1 || month > 12) return null;
-      const posts = await this.loadPublishedPosts({ status: 'published', year, month: month - 1 }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', year, month: month - 1 }, maxPostsPerPage);
       return this.renderPostList(posts, rewriteContext);
     }
 
     const yearMatch = pathname.match(/^\/(\d{4})$/);
     if (yearMatch) {
       const year = Number(yearMatch[1]);
-      const posts = await this.loadPublishedPosts({ status: 'published', year }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', year }, maxPostsPerPage);
       return this.renderPostList(posts, rewriteContext);
     }
 
     const pageSlugMatch = pathname.match(/^\/([^/]+)$/);
     if (pageSlugMatch) {
       const slug = pageSlugMatch[1];
-      const pages = await this.loadPublishedPosts({ status: 'published', categories: ['page'] }, maxPostsPerPage);
+      const pages = await this.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, maxPostsPerPage);
       const page = pages.find((candidate) => candidate.slug === slug) || null;
       if (!page) return null;
       return this.renderPostList([page], rewriteContext);
@@ -543,15 +545,14 @@ export class PreviewServer {
     if (!slug) return null;
 
     const filter: PostFilter = {
-      status: 'published',
       ...(dateFilter ? { year: dateFilter.year, month: dateFilter.month } : {}),
     };
 
-    const candidates = await this.postEngine.getPostsFiltered(filter);
+    const candidates = await this.loadPublishedSnapshots(filter);
     const match = candidates.find((candidate) => candidate.slug === slug);
     if (!match) return null;
 
-    return (await this.postEngine.getPost(match.id)) ?? match;
+    return match;
   }
 
   private async loadPostsForDay(year: number, month: number, day: number, maxPostsPerPage: number): Promise<PostData[]> {
@@ -562,7 +563,7 @@ export class PreviewServer {
     const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
     const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
 
-    const posts = await this.loadPublishedPosts({
+    const posts = await this.loadPublishedSnapshots({
       status: 'published',
       startDate,
       endDate,
@@ -576,27 +577,83 @@ export class PreviewServer {
     });
   }
 
-  private async loadPublishedPosts(filter: PostFilter, maxPostsPerPage: number): Promise<PostData[]> {
-    const posts = await this.postEngine.getPostsFiltered(filter);
-    const limited = posts.slice(0, maxPostsPerPage);
+  private buildSnapshotBaseFilter(filter: PostFilter): PostFilter {
+    const baseFilter: PostFilter = {};
 
-    const withContent = await Promise.all(
-      limited.map(async (post) => {
-        const fullPost = await this.postEngine.getPost(post.id);
-        return fullPost ?? post;
-      })
-    );
+    if (filter.startDate) baseFilter.startDate = filter.startDate;
+    if (filter.endDate) baseFilter.endDate = filter.endDate;
+    if (filter.year !== undefined) baseFilter.year = filter.year;
+    if (filter.month !== undefined) baseFilter.month = filter.month;
 
-    return withContent;
+    return baseFilter;
+  }
+
+  private async toPublishedSnapshot(post: PostData): Promise<PostData | null> {
+    if (post.status === 'published') {
+      return post;
+    }
+
+    if (post.status === 'draft') {
+      return await this.postEngine.getPublishedVersion(post.id);
+    }
+
+    return null;
+  }
+
+  private async loadPublishedSnapshots(filter: PostFilter, maxPostsPerPage?: number): Promise<PostData[]> {
+    if (filter.status && filter.status !== 'published') {
+      return [];
+    }
+
+    const baseFilter = this.buildSnapshotBaseFilter(filter);
+    const publishedCandidates = await this.postEngine.getPostsFiltered({
+      ...baseFilter,
+      status: 'published',
+    });
+    const draftCandidates = await this.postEngine.getPostsFiltered({
+      ...baseFilter,
+      status: 'draft',
+    });
+
+    const snapshotCandidates = await Promise.all([
+      ...publishedCandidates.map((post) => this.toPublishedSnapshot(post)),
+      ...draftCandidates.map((post) => this.toPublishedSnapshot(post)),
+    ]);
+
+    let snapshots = snapshotCandidates.filter((post): post is PostData => post !== null);
+
+    if (filter.tags && filter.tags.length > 0) {
+      snapshots = snapshots.filter((post) => filter.tags!.every((tag) => post.tags.includes(tag)));
+    }
+
+    if (filter.categories && filter.categories.length > 0) {
+      snapshots = snapshots.filter((post) => filter.categories!.some((category) => post.categories.includes(category)));
+    }
+
+    snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    if (typeof maxPostsPerPage === 'number') {
+      return snapshots.slice(0, maxPostsPerPage);
+    }
+
+    return snapshots;
   }
 
   private async renderPostList(posts: PostData[], rewriteContext: HtmlRewriteContext): Promise<string> {
-    const rendered = await Promise.all(posts.map((post) => renderPostHtml(post, rewriteContext)));
+    const renderablePosts = await Promise.all(posts.map(async (post) => {
+      if (post.status === 'published' && !post.content) {
+        const fullPost = await this.postEngine.getPost(post.id);
+        return fullPost ?? post;
+      }
+      return post;
+    }));
+
+    const rendered = await Promise.all(renderablePosts.map((post) => renderPostHtml(post, rewriteContext)));
     return rendered.join('\n');
   }
 
   private async buildHtmlRewriteContext(): Promise<HtmlRewriteContext> {
-    const publishedPosts = await this.postEngine.getPostsFiltered({ status: 'published' });
+    const publishedPosts = await this.loadPublishedSnapshots({ status: 'published' });
     const canonicalPostPathBySlug = new Map<string, string>();
 
     for (const post of publishedPosts) {

@@ -8,6 +8,8 @@ import { PreviewServer } from '../../src/main/engine/PreviewServer';
 type PostEngineLike = {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPost: (id: string) => Promise<PostData | null>;
+  hasPublishedVersion: (id: string) => Promise<boolean>;
+  getPublishedVersion: (id: string) => Promise<PostData | null>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 };
 
@@ -43,6 +45,12 @@ function makeEngine(posts: PostData[]): PostEngineLike {
 
   return {
     setProjectContext: vi.fn(),
+    async hasPublishedVersion(): Promise<boolean> {
+      return false;
+    },
+    async getPublishedVersion(): Promise<PostData | null> {
+      return null;
+    },
     async getPost(id: string): Promise<PostData | null> {
       return byId.get(id) ?? null;
     },
@@ -430,5 +438,145 @@ describe('PreviewServer', () => {
     expect(response.headers.get('content-type')).toContain('image/jpeg');
     const body = await response.text();
     expect(body).toBe('fake-image-bytes');
+  });
+
+  it('uses published snapshot content and metadata for draft posts that have a published version', async () => {
+    const draftWithPublished = makePost({
+      id: 'draft-1',
+      status: 'draft',
+      title: 'Draft Title',
+      slug: 'draft-slug',
+      content: '# Draft content must not leak',
+      tags: ['draft-tag'],
+      categories: ['draft-category'],
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+    });
+
+    const publishedSnapshot = makePost({
+      id: 'draft-1',
+      status: 'published',
+      title: 'Published Title',
+      slug: 'published-slug',
+      content: '# Published content only',
+      tags: ['published-tag'],
+      categories: ['page'],
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+    });
+
+    const engine = makeEngine([draftWithPublished]);
+    engine.hasPublishedVersion = vi.fn(async (id: string) => id === 'draft-1');
+    engine.getPublishedVersion = vi.fn(async (id: string) => (id === 'draft-1' ? publishedSnapshot : null));
+
+    server = new PreviewServer({
+      postEngine: engine,
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const rootHtml = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(rootHtml).toContain('Published content only');
+    expect(rootHtml).not.toContain('Draft content must not leak');
+
+    const publishedSlugResponse = await fetch(`${server.getBaseUrl()}/posts/published-slug/`);
+    expect(publishedSlugResponse.status).toBe(200);
+
+    const draftSlugResponse = await fetch(`${server.getBaseUrl()}/posts/draft-slug/`);
+    expect(draftSlugResponse.status).toBe(404);
+
+    const publishedTagHtml = await (await fetch(`${server.getBaseUrl()}/tag/published-tag/`)).text();
+    expect(publishedTagHtml).toContain('Published content only');
+
+    const draftTagResponse = await fetch(`${server.getBaseUrl()}/tag/draft-tag/`);
+    expect(draftTagResponse.status).toBe(404);
+    const draftTagHtml = await draftTagResponse.text();
+    expect(draftTagHtml).not.toContain('Published content only');
+  });
+
+  it('discovers candidates via status-scoped DB filters for published and draft only', async () => {
+    const published = makePost({ id: 'pub-1', status: 'published', slug: 'pub-1', content: '# Published one' });
+    const draft = makePost({ id: 'draft-1', status: 'draft', slug: 'draft-1', content: '# Draft one' });
+
+    const getPostsFiltered = vi.fn(async (filter: PostFilter) => {
+      if (filter.status === 'published') return [published];
+      if (filter.status === 'draft') return [draft];
+      return [];
+    });
+
+    const engine: PostEngineLike = {
+      setProjectContext: vi.fn(),
+      getPostsFiltered,
+      getPost: vi.fn(async (id: string) => (id === published.id ? published : draft)),
+      hasPublishedVersion: vi.fn(async (id: string) => id === draft.id),
+      getPublishedVersion: vi.fn(async (id: string) => (id === draft.id
+        ? makePost({ ...published, id: draft.id, slug: 'pub-draft', content: '# Published snapshot for draft' })
+        : null)),
+    };
+
+    server = new PreviewServer({
+      postEngine: engine,
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+
+    const statusValues = getPostsFiltered.mock.calls.map((args) => args[0]?.status);
+    expect(statusValues.every((value) => value === 'published' || value === 'draft')).toBe(true);
+    expect(statusValues).toContain('published');
+    expect(statusValues).toContain('draft');
+  });
+
+  it('loads published filesystem content only for rendered posts', async () => {
+    const fullPublishedPosts = Array.from({ length: 60 }).map((_, index) =>
+      makePost({
+        id: `pub-full-${index + 1}`,
+        slug: `pub-full-${index + 1}`,
+        title: `Published Full ${index + 1}`,
+        content: `# Published Full ${index + 1}`,
+        status: 'published',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 0, 0, index)),
+      })
+    );
+
+    const summaryPublishedPosts = fullPublishedPosts.map((post) => ({
+      ...post,
+      content: '',
+    }));
+
+    const byId = new Map(fullPublishedPosts.map((post) => [post.id, post]));
+    const getPost = vi.fn(async (id: string) => byId.get(id) ?? null);
+
+    const engine: PostEngineLike = {
+      setProjectContext: vi.fn(),
+      getPost,
+      hasPublishedVersion: vi.fn(async () => false),
+      getPublishedVersion: vi.fn(async () => null),
+      getPostsFiltered: vi.fn(async (filter: PostFilter) => {
+        if (filter.status === 'published') {
+          return summaryPublishedPosts;
+        }
+        if (filter.status === 'draft') {
+          return [];
+        }
+        return [];
+      }),
+    };
+
+    server = new PreviewServer({
+      postEngine: engine,
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+
+    expect(getPost).toHaveBeenCalledTimes(50);
   });
 });

@@ -2136,6 +2136,77 @@ Published content`);
     });
   });
 
+  describe('getPublishedVersion', () => {
+    it('should return null when post has no published file', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'draft-only-id',
+            projectId: 'default',
+            filePath: '',
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPublishedVersion('draft-only-id');
+      expect(result).toBeNull();
+    });
+
+    it('should return published content and metadata from filesystem snapshot', async () => {
+      const publishedFilePath = '/mock/published/snapshot.md';
+      mockFiles.set(publishedFilePath, `---
+id: snapshot-id
+projectId: default
+title: Published Snapshot Title
+slug: published-snapshot
+status: published
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-02T00:00:00.000Z
+publishedAt: 2024-01-03T00:00:00.000Z
+tags:
+  - published-tag
+categories:
+  - page
+---
+Published snapshot content`);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'snapshot-id',
+            projectId: 'default',
+            title: 'Draft title should not be used',
+            slug: 'draft-slug',
+            status: 'draft',
+            content: 'Draft content should not be used',
+            filePath: publishedFilePath,
+            tags: '[]',
+            categories: '[]',
+            createdAt: new Date('2024-01-01T00:00:00.000Z'),
+            updatedAt: new Date('2024-01-10T00:00:00.000Z'),
+            publishedAt: new Date('2024-01-03T00:00:00.000Z'),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPublishedVersion('snapshot-id');
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe('published');
+      expect(result?.title).toBe('Published Snapshot Title');
+      expect(result?.slug).toBe('published-snapshot');
+      expect(result?.content).toBe('Published snapshot content');
+      expect(result?.tags).toEqual(['published-tag']);
+      expect(result?.categories).toEqual(['page']);
+    });
+  });
+
   describe('getAllPosts', () => {
     it('should return empty result when no posts exist', async () => {
       vi.mocked(mockLocalDb.select).mockImplementation(() => {

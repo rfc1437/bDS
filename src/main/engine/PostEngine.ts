@@ -1049,6 +1049,36 @@ export class PostEngine extends EventEmitter {
     return !!(dbPost && dbPost.filePath && dbPost.filePath !== '');
   }
 
+  async getPublishedVersion(id: string): Promise<PostData | null> {
+    const db = getDatabase().getLocal();
+    const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
+
+    if (!dbPost || !dbPost.filePath) {
+      return null;
+    }
+
+    const fileData = await this.readPostFile(dbPost.filePath);
+    if (!fileData) {
+      return null;
+    }
+
+    return {
+      id: dbPost.id,
+      projectId: dbPost.projectId,
+      title: fileData.title,
+      slug: fileData.slug,
+      excerpt: fileData.excerpt,
+      content: fileData.content,
+      status: 'published',
+      author: fileData.author,
+      createdAt: fileData.createdAt,
+      updatedAt: fileData.updatedAt,
+      publishedAt: fileData.publishedAt ?? dbPost.publishedAt ?? undefined,
+      tags: fileData.tags,
+      categories: fileData.categories,
+    };
+  }
+
   /**
    * Rebuild the FTS index for all posts in the current project.
    * Call this after changing the search language or after migration.
