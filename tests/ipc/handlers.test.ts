@@ -139,6 +139,13 @@ const mockPostMediaEngine = {
   rebuildFromSidecars: vi.fn(),
 };
 
+const mockGitEngine = {
+  checkAvailability: vi.fn(),
+  getRepoState: vi.fn(),
+  getStatus: vi.fn(),
+  initializeRepo: vi.fn(),
+};
+
 const mockTaskManager = {
   getAllTasks: vi.fn(),
   cancelTask: vi.fn(),
@@ -193,6 +200,10 @@ vi.mock('../../src/main/engine/PostMediaEngine', () => ({
   getPostMediaEngine: vi.fn(() => mockPostMediaEngine),
 }));
 
+vi.mock('../../src/main/engine/GitEngine', () => ({
+  getGitEngine: vi.fn(() => mockGitEngine),
+}));
+
 vi.mock('../../src/main/engine/TaskManager', () => ({
   taskManager: mockTaskManager,
   TaskProgress: {},
@@ -239,6 +250,81 @@ describe('IPC Handlers', () => {
 
   afterEach(() => {
     vi.resetModules();
+  });
+
+  // ============ Git Handlers ============
+  describe('Git Handlers', () => {
+    describe('git:checkAvailability', () => {
+      it('should return availability from GitEngine', async () => {
+        mockGitEngine.checkAvailability.mockResolvedValue({ gitFound: true, version: '2.49.0' });
+
+        const result = await invokeHandler('git:checkAvailability');
+
+        expect(mockGitEngine.checkAvailability).toHaveBeenCalled();
+        expect(result).toEqual({ gitFound: true, version: '2.49.0' });
+      });
+    });
+
+    describe('git:getRepoState', () => {
+      it('should pass project path to GitEngine.getRepoState', async () => {
+        mockGitEngine.getRepoState.mockResolvedValue({
+          isRepo: true,
+          rootPath: '/repo',
+          currentBranch: 'main',
+          hasRemote: true,
+        });
+
+        const result = await invokeHandler('git:getRepoState', '/repo');
+
+        expect(mockGitEngine.getRepoState).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({
+          isRepo: true,
+          rootPath: '/repo',
+          currentBranch: 'main',
+          hasRemote: true,
+        });
+      });
+    });
+
+    describe('git:status', () => {
+      it('should pass project path to GitEngine.getStatus', async () => {
+        mockGitEngine.getStatus.mockResolvedValue({
+          files: [{ path: 'file.md', status: 'modified' }],
+          counts: {
+            untracked: 0,
+            modified: 1,
+            deleted: 0,
+            renamed: 0,
+            staged: 0,
+            total: 1,
+          },
+        });
+
+        const result = await invokeHandler('git:status', '/repo');
+
+        expect(mockGitEngine.getStatus).toHaveBeenCalledWith('/repo');
+        expect(result.counts.total).toBe(1);
+      });
+    });
+
+    describe('git:init', () => {
+      it('should pass project path to GitEngine.initializeRepo', async () => {
+        mockGitEngine.initializeRepo.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:init', '/repo');
+
+        expect(mockGitEngine.initializeRepo).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({ success: true });
+      });
+
+      it('should pass optional remote url to GitEngine.initializeRepo', async () => {
+        mockGitEngine.initializeRepo.mockResolvedValue({ success: true });
+
+        await invokeHandler('git:init', '/repo', 'https://github.com/example/repo.git');
+
+        expect(mockGitEngine.initializeRepo).toHaveBeenCalledWith('/repo', 'https://github.com/example/repo.git');
+      });
+    });
   });
 
   // ============ Project Handlers ============

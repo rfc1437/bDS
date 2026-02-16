@@ -49,6 +49,12 @@ const ImportIcon = () => (
   </svg>
 );
 
+const GitIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M22 11.73L12.27 2a1 1 0 0 0-1.41 0L8.84 4.02l2.56 2.56a1.2 1.2 0 0 1 1.52 1.53l2.47 2.47a1.2 1.2 0 1 1-.72.67l-2.3-2.3v6.06a1.2 1.2 0 1 1-.85 0V8.9a1.2 1.2 0 0 1-.66-1.59L8.35 4.8 2 11.16a1 1 0 0 0 0 1.41L11.73 22a1 1 0 0 0 1.41 0L22 13.14a1 1 0 0 0 0-1.41z"/>
+  </svg>
+);
+
 export const ActivityBar: React.FC = () => {
   const { activeView, setActiveView, sidebarVisible, toggleSidebar, openTab, tabs, activeTabId } = useAppStore();
   
@@ -66,9 +72,10 @@ export const ActivityBar: React.FC = () => {
 
   // Check if import sidebar is active
   const isImportActive = activeView === 'import' && sidebarVisible;
+  const isGitActive = activeView === 'git' && sidebarVisible;
 
   // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
-  const handleViewClick = (view: 'posts' | 'pages' | 'media' | 'chat') => {
+  const handleViewClick = (view: 'posts' | 'pages' | 'media' | 'chat' | 'git') => {
     if (activeView === view && sidebarVisible) {
       // Clicking on active view toggles sidebar off
       toggleSidebar();
@@ -162,6 +169,13 @@ export const ActivityBar: React.FC = () => {
       </div>
       
       <div className="activity-bar-bottom">
+        <button
+          className={`activity-bar-item ${isGitActive ? 'active' : ''}`}
+          onClick={() => handleViewClick('git')}
+          title="Source Control (click again to toggle sidebar)"
+        >
+          <GitIcon />
+        </button>
         <button
           className={`activity-bar-item ${isSettingsActive ? 'active' : ''}`}
           onClick={handleSettingsClick}

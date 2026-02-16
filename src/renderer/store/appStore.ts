@@ -50,7 +50,7 @@ interface AppState {
   activeTabId: string | null;
   
   // UI State
-  activeView: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import';
+  activeView: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git';
   sidebarVisible: boolean;
   panelVisible: boolean;
   selectedPostId: string | null;
@@ -96,7 +96,7 @@ interface AppState {
   restoreTabState: (state: TabState) => void;
   
   // Actions
-  setActiveView: (view: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import') => void;
+  setActiveView: (view: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git') => void;
   toggleSidebar: () => void;
   togglePanel: () => void;
   setSelectedPost: (id: string | null) => void;

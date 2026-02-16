@@ -73,3 +73,13 @@ export {
   type ScanResult,
   type TableStats,
 } from './MetadataDiffEngine';
+export {
+  GitEngine,
+  getGitEngine,
+  type GitAvailability,
+  type RepoState,
+  type GitStatusDto,
+  type GitStatusFile,
+  type GitStatusCounts,
+  type GitInitResult,
+} from './GitEngine';

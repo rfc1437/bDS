@@ -202,6 +202,46 @@ export interface SyncTagsResult {
   added: string[];
 }
 
+export interface GitAvailability {
+  gitFound: boolean;
+  version?: string;
+}
+
+export interface GitRepoState {
+  isRepo: boolean;
+  rootPath?: string;
+  currentBranch?: string;
+  hasRemote: boolean;
+}
+
+export type GitFileStatus = 'untracked' | 'modified' | 'deleted' | 'renamed' | 'staged';
+
+export interface GitStatusFile {
+  path: string;
+  status: GitFileStatus;
+  previousPath?: string;
+}
+
+export interface GitStatusCounts {
+  untracked: number;
+  modified: number;
+  deleted: number;
+  renamed: number;
+  staged: number;
+  total: number;
+}
+
+export interface GitStatusDto {
+  files: GitStatusFile[];
+  counts: GitStatusCounts;
+}
+
+export interface GitInitResult {
+  success: boolean;
+  error?: string;
+  code?: 'git-missing' | 'git-lfs-missing' | 'init-failed' | 'remote-failed';
+}
+
 // Post-Media Link types
 export interface MediaLinkData {
   id: string;
@@ -272,6 +312,12 @@ export interface ChatTitleUpdate {
 }
 
 export interface ElectronAPI {
+  git: {
+    checkAvailability: () => Promise<GitAvailability>;
+    getRepoState: (projectPath: string) => Promise<GitRepoState>;
+    getStatus: (projectPath: string) => Promise<GitStatusDto>;
+    init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;
+  };
   projects: {
     create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => Promise<ProjectData>;
     update: (id: string, data: Partial<ProjectData>) => Promise<ProjectData | null>;

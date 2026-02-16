@@ -8,6 +8,7 @@ import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
 import { getTagEngine } from '../engine/TagEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
+import { getGitEngine } from '../engine/GitEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
@@ -30,6 +31,31 @@ function safeHandle(channel: string, handler: (...args: any[]) => Promise<any>):
 }
 
 export function registerIpcHandlers(): void {
+  // ============ Git Handlers ============
+
+  safeHandle('git:checkAvailability', async () => {
+    const engine = getGitEngine();
+    return engine.checkAvailability();
+  });
+
+  safeHandle('git:getRepoState', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.getRepoState(projectPath);
+  });
+
+  safeHandle('git:status', async (_, projectPath: string) => {
+    const engine = getGitEngine();
+    return engine.getStatus(projectPath);
+  });
+
+  safeHandle('git:init', async (_, projectPath: string, remoteUrl?: string) => {
+    const engine = getGitEngine();
+    if (remoteUrl) {
+      return engine.initializeRepo(projectPath, remoteUrl);
+    }
+    return engine.initializeRepo(projectPath);
+  });
+
   // ============ Project Handlers ============
 
   safeHandle('projects:create', async (_, data: { name: string; description?: string; slug?: string; dataPath?: string }) => {

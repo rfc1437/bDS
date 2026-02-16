@@ -3,6 +3,7 @@ import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
 import { getContrastColor, groupPostsByStatus } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
+import { GitSidebar } from '../GitSidebar/GitSidebar';
 import './Sidebar.css';
 
 /** Get display name for media: title (truncated to 60 chars) or fallback to filename */
@@ -1640,6 +1641,7 @@ export const Sidebar: React.FC = () => {
       {activeView === 'tags' && <TagsNav />}
       {activeView === 'chat' && <ChatList />}
       {activeView === 'import' && <ImportList />}
+      {activeView === 'git' && <GitSidebar />}
     </div>
   );
 };

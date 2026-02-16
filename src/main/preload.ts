@@ -4,6 +4,19 @@ import type { ElectronAPI } from './shared/electronApi';
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
 export const electronAPI: ElectronAPI = {
+  // Git
+  git: {
+    checkAvailability: () => ipcRenderer.invoke('git:checkAvailability'),
+    getRepoState: (projectPath: string) => ipcRenderer.invoke('git:getRepoState', projectPath),
+    getStatus: (projectPath: string) => ipcRenderer.invoke('git:status', projectPath),
+    init: (projectPath: string, remoteUrl?: string) => {
+      if (remoteUrl) {
+        return ipcRenderer.invoke('git:init', projectPath, remoteUrl);
+      }
+      return ipcRenderer.invoke('git:init', projectPath);
+    },
+  },
+
   // Projects
   projects: {
     create: (data: { name: string; description?: string; slug?: string; dataPath?: string }) => ipcRenderer.invoke('projects:create', data),

@@ -44,6 +44,12 @@ Object.defineProperty(globalThis, 'window', {
   value: {
     localStorage: localStorageMock,
     electronAPI: {
+      git: {
+        checkAvailability: vi.fn(),
+        getRepoState: vi.fn(),
+        getStatus: vi.fn(),
+        init: vi.fn(),
+      },
       posts: {
         create: vi.fn(),
         update: vi.fn(),
