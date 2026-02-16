@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
-import type { GitInitProgress } from '../../../main/shared/electronApi';
+import type { GitInitProgress, GitHistoryEntry } from '../../../main/shared/electronApi';
 import './GitSidebar.css';
+import '../Sidebar/Sidebar.css';
 
 export const GitSidebar: React.FC = () => {
   const { activeProject, openTab } = useAppStore();
@@ -13,6 +14,8 @@ export const GitSidebar: React.FC = () => {
   const [isRepo, setIsRepo] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
   const [statusFiles, setStatusFiles] = useState<Array<{ path: string; status: string }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<GitHistoryEntry[]>([]);
   const [initProgress, setInitProgress] = useState<GitInitProgress | null>(null);
   const [initTranscript, setInitTranscript] = useState<GitInitProgress[]>([]);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
@@ -70,19 +73,27 @@ export const GitSidebar: React.FC = () => {
 
       if (repoState.isRepo) {
         setStatusLoading(true);
+        setHistoryLoading(true);
         try {
-          const status = await window.electronAPI.git.getStatus(resolvedProjectPath);
+          const [status, history] = await Promise.all([
+            window.electronAPI.git.getStatus(resolvedProjectPath),
+            window.electronAPI.git.getHistory(resolvedProjectPath, 20),
+          ]);
           setStatusFiles(status.files);
+          setHistoryEntries(history);
         } finally {
           setStatusLoading(false);
+          setHistoryLoading(false);
         }
       } else {
         setStatusFiles([]);
+        setHistoryEntries([]);
       }
     } catch {
       setError('Unable to load repository status.');
       setIsRepo(false);
       setStatusFiles([]);
+      setHistoryEntries([]);
     } finally {
       setLoading(false);
     }
@@ -176,7 +187,7 @@ export const GitSidebar: React.FC = () => {
         <div className="git-sidebar-header">SOURCE CONTROL</div>
         <div className="git-sidebar-content">
           <div className="git-sidebar-section">
-            <div className="git-sidebar-section-header">OPEN CHANGES</div>
+            <div className="sidebar-section-title">Open Changes ({statusFiles.length})</div>
             {statusLoading ? (
               <div className="git-sidebar-empty-state">Loading changes...</div>
             ) : statusFiles.length === 0 ? (
@@ -201,10 +212,26 @@ export const GitSidebar: React.FC = () => {
           </div>
 
           <div className="git-sidebar-section git-sidebar-history">
-            <div className="git-sidebar-section-header">VERSION HISTORY</div>
-            <div className="git-sidebar-empty-state">
-              {currentBranch ? `Branch: ${currentBranch}` : 'No branch information'}
-            </div>
+            <div className="sidebar-section-title">Version History ({historyEntries.length})</div>
+            {historyLoading ? (
+              <div className="git-sidebar-empty-state">Loading history...</div>
+            ) : historyEntries.length === 0 ? (
+              <div className="git-sidebar-empty-state">No commits yet</div>
+            ) : (
+              <div className="git-sidebar-history-list" role="list" aria-label="Version History">
+                {historyEntries.map((entry) => (
+                  <div key={entry.hash} className="git-sidebar-history-item">
+                    <div className="git-sidebar-history-subject">{entry.subject}</div>
+                    <div className="git-sidebar-history-meta">
+                      <span>{entry.shortHash}</span>
+                      <span>{entry.author}</span>
+                      <span>{new Date(entry.date).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {currentBranch && <div className="git-sidebar-empty-state">Branch: {currentBranch}</div>}
           </div>
           {transcriptSection}
         </div>

@@ -53,6 +53,16 @@ export function registerIpcHandlers(): void {
     return engine.getDiff(projectPath, filePath);
   });
 
+  safeHandle('git:diffContent', async (_, projectPath: string, filePath: string) => {
+    const engine = getGitEngine();
+    return engine.getDiffContent(projectPath, filePath);
+  });
+
+  safeHandle('git:history', async (_, projectPath: string, limit?: number) => {
+    const engine = getGitEngine();
+    return engine.getHistory(projectPath, limit);
+  });
+
   safeHandle('git:init', async (event, projectPath: string, remoteUrl?: string) => {
     const engine = getGitEngine();
     return engine.initializeRepo(projectPath, remoteUrl, (progress) => {

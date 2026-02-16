@@ -4,6 +4,18 @@ import { render, screen } from '@testing-library/react';
 import { GitDiffView } from '../../../src/renderer/components/GitDiffView/GitDiffView';
 import { useAppStore } from '../../../src/renderer/store';
 
+vi.mock('@monaco-editor/react', () => ({
+  __esModule: true,
+  default: (_props: unknown) => null,
+  DiffEditor: (props: { original: string; modified: string; language?: string }) => (
+    <div data-testid="monaco-diff-editor">
+      <div>original:{props.original}</div>
+      <div>modified:{props.modified}</div>
+      <div>language:{props.language}</div>
+    </div>
+  ),
+}));
+
 describe('GitDiffView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -24,9 +36,10 @@ describe('GitDiffView', () => {
       ...(window as any).electronAPI,
       git: {
         ...(window as any).electronAPI?.git,
-        getDiff: vi.fn().mockResolvedValue({
+        getDiffContent: vi.fn().mockResolvedValue({
           filePath: 'posts/first.md',
-          patch: 'diff --git a/posts/first.md b/posts/first.md\n+hello',
+          original: '# old line',
+          modified: '# new line',
         }),
       },
       app: {
@@ -36,10 +49,12 @@ describe('GitDiffView', () => {
     };
   });
 
-  it('loads and renders the git diff patch for the selected file', async () => {
+  it('loads and renders Monaco diff editor with original and modified content', async () => {
     render(<GitDiffView filePath="posts/first.md" />);
 
-    expect(await screen.findByText(/diff --git a\/posts\/first\.md b\/posts\/first\.md/i)).toBeInTheDocument();
-    expect((window as any).electronAPI.git.getDiff).toHaveBeenCalledWith('/repo/path', 'posts/first.md');
+    expect(await screen.findByTestId('monaco-diff-editor')).toBeInTheDocument();
+    expect((window as any).electronAPI.git.getDiffContent).toHaveBeenCalledWith('/repo/path', 'posts/first.md');
+    expect(screen.getByText('original:# old line')).toBeInTheDocument();
+    expect(screen.getByText('modified:# new line')).toBeInTheDocument();
   });
 });

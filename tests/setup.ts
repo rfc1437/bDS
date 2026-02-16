@@ -49,6 +49,8 @@ Object.defineProperty(globalThis, 'window', {
         getRepoState: vi.fn(),
         getStatus: vi.fn(),
         getDiff: vi.fn(),
+        getDiffContent: vi.fn(),
+        getHistory: vi.fn(),
         init: vi.fn(),
       },
       posts: {

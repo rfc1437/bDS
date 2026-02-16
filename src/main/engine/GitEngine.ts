@@ -41,6 +41,20 @@ export interface GitDiffDto {
   patch: string;
 }
 
+export interface GitDiffContentDto {
+  filePath: string;
+  original: string;
+  modified: string;
+}
+
+export interface GitHistoryEntry {
+  hash: string;
+  shortHash: string;
+  date: string;
+  subject: string;
+  author: string;
+}
+
 export type GitInitPhase =
   | 'checking-git'
   | 'initializing-repo'
@@ -230,6 +244,34 @@ export class GitEngine {
       filePath,
       patch,
     };
+  }
+
+  async getDiffContent(projectPath: string, filePath: string): Promise<GitDiffContentDto> {
+    const git = simpleGit(projectPath);
+
+    const [original, modified] = await Promise.all([
+      git.show([`HEAD:${filePath}`]).catch(() => ''),
+      fsPromises.readFile(path.join(projectPath, filePath), 'utf8').catch(() => ''),
+    ]);
+
+    return {
+      filePath,
+      original,
+      modified,
+    };
+  }
+
+  async getHistory(projectPath: string, limit = 20): Promise<GitHistoryEntry[]> {
+    const git = simpleGit(projectPath);
+    const history = await git.log({ maxCount: limit });
+
+    return history.all.map((entry) => ({
+      hash: entry.hash,
+      shortHash: entry.hash.slice(0, 7),
+      date: entry.date,
+      subject: entry.message,
+      author: entry.author_name,
+    }));
   }
 
   async ensureGitignore(projectPath: string): Promise<GitIgnoreEnsureResult> {

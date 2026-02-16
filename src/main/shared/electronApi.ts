@@ -241,6 +241,20 @@ export interface GitDiffDto {
   patch: string;
 }
 
+export interface GitDiffContentDto {
+  filePath: string;
+  original: string;
+  modified: string;
+}
+
+export interface GitHistoryEntry {
+  hash: string;
+  shortHash: string;
+  date: string;
+  subject: string;
+  author: string;
+}
+
 export type GitInitPhase =
   | 'checking-git'
   | 'initializing-repo'
@@ -354,6 +368,8 @@ export interface ElectronAPI {
     getRepoState: (projectPath: string) => Promise<GitRepoState>;
     getStatus: (projectPath: string) => Promise<GitStatusDto>;
     getDiff: (projectPath: string, filePath: string) => Promise<GitDiffDto>;
+    getDiffContent: (projectPath: string, filePath: string) => Promise<GitDiffContentDto>;
+    getHistory: (projectPath: string, limit?: number) => Promise<GitHistoryEntry[]>;
     ensureGitignore: (projectPath: string) => Promise<GitIgnoreEnsureResult>;
     pruneLfs: (projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => Promise<GitLfsPruneResult>;
     init: (projectPath: string, remoteUrl?: string) => Promise<GitInitResult>;

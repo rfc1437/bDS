@@ -5,6 +5,8 @@ const mockCheckIsRepo = vi.fn();
 const mockRevparse = vi.fn();
 const mockStatus = vi.fn();
 const mockDiff = vi.fn();
+const mockShow = vi.fn();
+const mockLog = vi.fn();
 const mockInit = vi.fn();
 const mockRaw = vi.fn();
 const mockAdd = vi.fn();
@@ -32,6 +34,8 @@ vi.mock('simple-git', () => ({
     revparse: mockRevparse,
     status: mockStatus,
     diff: mockDiff,
+    show: mockShow,
+    log: mockLog,
     init: mockInit,
     raw: mockRaw,
     add: mockAdd,
@@ -151,6 +155,55 @@ describe('GitEngine', () => {
       expect(result).toEqual({
         filePath: 'posts/first.md',
         patch: 'diff --git a/posts/first.md b/posts/first.md\n+hello',
+      });
+    });
+  });
+
+  describe('getDiffContent', () => {
+    it('should return original and modified text for a file', async () => {
+      mockShow.mockResolvedValue('# old content');
+      mockReadFile.mockResolvedValue('# new content');
+
+      const result = await gitEngine.getDiffContent('/tmp/project', 'posts/first.md');
+
+      expect(mockShow).toHaveBeenCalledWith(['HEAD:posts/first.md']);
+      expect(result).toEqual({
+        filePath: 'posts/first.md',
+        original: '# old content',
+        modified: '# new content',
+      });
+    });
+  });
+
+  describe('getHistory', () => {
+    it('should return latest commits from git log', async () => {
+      mockLog.mockResolvedValue({
+        all: [
+          {
+            hash: 'abc123',
+            date: '2026-02-16T10:00:00.000Z',
+            message: 'feat: add git sidebar',
+            author_name: 'Dev One',
+          },
+          {
+            hash: 'def456',
+            date: '2026-02-15T09:00:00.000Z',
+            message: 'fix: sidebar styles',
+            author_name: 'Dev Two',
+          },
+        ],
+      });
+
+      const result = await gitEngine.getHistory('/tmp/project', 20);
+
+      expect(mockLog).toHaveBeenCalledWith({ maxCount: 20 });
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        hash: 'abc123',
+        shortHash: 'abc123',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: add git sidebar',
+        author: 'Dev One',
       });
     });
   });

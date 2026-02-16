@@ -80,6 +80,8 @@ export {
   type RepoState,
   type GitStatusDto,
   type GitDiffDto,
+  type GitDiffContentDto,
+  type GitHistoryEntry,
   type GitStatusFile,
   type GitStatusCounts,
   type GitInitResult,

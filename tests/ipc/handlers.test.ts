@@ -145,6 +145,8 @@ const mockGitEngine = {
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
   getDiff: vi.fn(),
+  getDiffContent: vi.fn(),
+  getHistory: vi.fn(),
   initializeRepo: vi.fn(),
   ensureGitignore: vi.fn(),
   pruneLfsCache: vi.fn(),
@@ -332,6 +334,44 @@ describe('IPC Handlers', () => {
         expect(result).toEqual({
           filePath: 'posts/first.md',
           patch: 'diff --git a/posts/first.md b/posts/first.md',
+        });
+      });
+    });
+
+    describe('git:history', () => {
+      it('should pass project path and limit to GitEngine.getHistory', async () => {
+        mockGitEngine.getHistory.mockResolvedValue([
+          {
+            hash: 'abc123',
+            shortHash: 'abc123',
+            date: '2026-02-16T10:00:00.000Z',
+            subject: 'feat: add git sidebar',
+            author: 'Dev One',
+          },
+        ]);
+
+        const result = await invokeHandler('git:history', '/repo', 20);
+
+        expect(mockGitEngine.getHistory).toHaveBeenCalledWith('/repo', 20);
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe('git:diffContent', () => {
+      it('should pass project path and file path to GitEngine.getDiffContent', async () => {
+        mockGitEngine.getDiffContent.mockResolvedValue({
+          filePath: 'posts/first.md',
+          original: '# old content',
+          modified: '# new content',
+        });
+
+        const result = await invokeHandler('git:diffContent', '/repo', 'posts/first.md');
+
+        expect(mockGitEngine.getDiffContent).toHaveBeenCalledWith('/repo', 'posts/first.md');
+        expect(result).toEqual({
+          filePath: 'posts/first.md',
+          original: '# old content',
+          modified: '# new content',
         });
       });
     });

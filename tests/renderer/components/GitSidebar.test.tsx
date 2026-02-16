@@ -34,6 +34,7 @@ describe('GitSidebar', () => {
         getRepoState: vi.fn().mockResolvedValue({ isRepo: false, hasRemote: false }),
         getStatus: vi.fn().mockResolvedValue({ files: [], counts: { untracked: 0, modified: 0, deleted: 0, renamed: 0, staged: 0, total: 0 } }),
         getDiff: vi.fn().mockResolvedValue({ filePath: 'posts/a.md', patch: 'diff --git a/posts/a.md b/posts/a.md' }),
+        getHistory: vi.fn().mockResolvedValue([]),
         init: vi.fn().mockResolvedValue({ success: true }),
         ensureGitignore: vi.fn().mockResolvedValue({ updated: false, created: false, addedEntries: [] }),
         onInitProgress: vi.fn().mockImplementation(() => () => {}),
@@ -69,6 +70,15 @@ describe('GitSidebar', () => {
       ],
       counts: { untracked: 1, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 2 },
     });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      {
+        hash: 'abc123',
+        shortHash: 'abc123',
+        date: '2026-02-16T10:00:00.000Z',
+        subject: 'feat: add git sidebar',
+        author: 'Dev One',
+      },
+    ]);
 
     render(<GitSidebar />);
 
@@ -76,6 +86,25 @@ describe('GitSidebar', () => {
     expect(screen.getByText('posts/first.md')).toBeInTheDocument();
     expect(screen.getByText('posts/second.md')).toBeInTheDocument();
     expect(screen.getByText(/version history/i)).toBeInTheDocument();
+    expect(screen.getByText(/feat: add git sidebar/i)).toBeInTheDocument();
+    expect(screen.getByText(/abc123/i)).toBeInTheDocument();
+  });
+
+  it('uses the same section-title class as posts published heading', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    render(<GitSidebar />);
+
+    const openChangesHeader = await screen.findByText(/open changes/i);
+    const historyHeader = screen.getByText(/version history/i);
+
+    expect(openChangesHeader).toHaveClass('sidebar-section-title');
+    expect(historyHeader).toHaveClass('sidebar-section-title');
   });
 
   it('single click opens and reuses a transient git-diff tab', async () => {
