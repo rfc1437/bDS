@@ -475,10 +475,12 @@ export function registerIpcHandlers(): void {
 
   safeHandle('media:getUrl', async (_, id: string) => {
     // Returns the relative path for a media item (e.g. media/2025/01/uuid.jpg)
-    // This is the format used in markdown content for image references
+    // and exposes it as an absolute preview path (e.g. /media/2025/01/uuid.jpg)
+    // so inserted markdown uses root-absolute URLs.
     const engine = getMediaEngine();
     const relativePath = await engine.getRelativePath(id);
-    return relativePath ?? `media/${id}`;
+    const normalized = relativePath ?? `media/${id}`;
+    return normalized.startsWith('/') ? normalized : `/${normalized}`;
   });
 
   safeHandle('media:getFilePath', async (_, id: string) => {

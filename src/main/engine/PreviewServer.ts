@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { marked } from 'marked';
 import { getMetaEngine, type ProjectMetadata } from './MetaEngine';
+import { getMediaEngine, type MediaData } from './MediaEngine';
 import { getPostEngine, type PostData, type PostFilter } from './PostEngine';
 import { getProjectEngine } from './ProjectEngine';
 
@@ -25,8 +27,19 @@ interface MetaEngineContract {
 
 interface PreviewServerDependencies {
   postEngine: PostEngineContract;
+  mediaEngine: MediaEngineContract;
   settingsEngine: MetaEngineContract;
   getActiveProjectContext: () => Promise<ActiveProjectContext>;
+}
+
+interface HtmlRewriteContext {
+  canonicalPostPathBySlug: Map<string, string>;
+  canonicalMediaPathBySourcePath: Map<string, string>;
+}
+
+interface MediaEngineContract {
+  getAllMedia: () => Promise<MediaData[]>;
+  setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
 }
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
@@ -106,6 +119,102 @@ function parseMacroParams(paramString: string | undefined): Record<string, strin
   return params;
 }
 
+function isExternalOrSpecialUrl(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) return false;
+  if (normalized.startsWith('#') || normalized.startsWith('//')) return true;
+  return /^[a-z][a-z0-9+.-]*:/i.test(normalized);
+}
+
+function splitPathSuffix(value: string): { pathPart: string; suffix: string } {
+  const match = value.match(/^([^?#]*)([?#].*)?$/);
+  return {
+    pathPart: match?.[1] ?? value,
+    suffix: match?.[2] ?? '',
+  };
+}
+
+function normalizePreviewHref(rawHref: string, rewriteContext: HtmlRewriteContext): string {
+  if (!rawHref || isExternalOrSpecialUrl(rawHref)) {
+    return rawHref;
+  }
+
+  const { pathPart, suffix } = splitPathSuffix(rawHref.trim());
+
+  const canonicalDayRouteMatch = pathPart.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([a-z0-9-]+)(?:\.html?)?$/i);
+  if (canonicalDayRouteMatch) {
+    const [, year, month, day, slug] = canonicalDayRouteMatch;
+    const normalizedMonth = String(Number(month)).padStart(2, '0');
+    const normalizedDay = String(Number(day)).padStart(2, '0');
+    return `/${year}/${normalizedMonth}/${normalizedDay}/${slug}${suffix}`;
+  }
+
+  const postBySlugMatch = pathPart.match(/^\/?post\/([a-z0-9-]+(?:\.html?)?)$/i);
+  if (postBySlugMatch) {
+    const slug = postBySlugMatch[1].replace(/\.html?$/i, '');
+    const canonical = rewriteContext.canonicalPostPathBySlug.get(slug);
+    return `${canonical ?? `/posts/${slug}`}${suffix}`;
+  }
+
+  const postByYearMonthSlugMatch = pathPart.match(/^\/?post\/(\d{4})\/(\d{1,2})\/([a-z0-9-]+(?:\.html?)?)$/i);
+  if (postByYearMonthSlugMatch) {
+    const [, , , rawSlug] = postByYearMonthSlugMatch;
+    const slug = rawSlug.replace(/\.html?$/i, '');
+    const canonical = rewriteContext.canonicalPostPathBySlug.get(slug);
+    return `${canonical ?? `/posts/${slug}`}${suffix}`;
+  }
+
+  const postsBySlugMatch = pathPart.match(/^\/?posts\/([a-z0-9-]+(?:\.html?)?)$/i);
+  if (postsBySlugMatch) {
+    const slug = postsBySlugMatch[1].replace(/\.html?$/i, '');
+    const canonical = rewriteContext.canonicalPostPathBySlug.get(slug);
+    return `${canonical ?? `/posts/${slug}`}${suffix}`;
+  }
+
+  const postsByYearMonthSlugMatch = pathPart.match(/^\/?posts\/(\d{4})\/(\d{1,2})\/([a-z0-9-]+(?:\.html?)?)$/i);
+  if (postsByYearMonthSlugMatch) {
+    const [, , , rawSlug] = postsByYearMonthSlugMatch;
+    const slug = rawSlug.replace(/\.html?$/i, '');
+    const canonical = rewriteContext.canonicalPostPathBySlug.get(slug);
+    return `${canonical ?? `/posts/${slug}`}${suffix}`;
+  }
+
+  return rawHref;
+}
+
+function normalizePreviewSrc(rawSrc: string, rewriteContext: HtmlRewriteContext): string {
+  if (!rawSrc || isExternalOrSpecialUrl(rawSrc)) {
+    return rawSrc;
+  }
+
+  const { pathPart, suffix } = splitPathSuffix(rawSrc.trim());
+  const mediaMatch = pathPart.match(/^\/?media\/(\d{4})\/(\d{2})\/([^\s]+)$/i);
+  if (!mediaMatch) {
+    return rawSrc;
+  }
+
+  const [, year, month, filename] = mediaMatch;
+  const sourceKey = `media/${year}/${month}/${filename}`.toLowerCase();
+  const canonicalPath = rewriteContext.canonicalMediaPathBySourcePath.get(sourceKey);
+  if (canonicalPath) {
+    return `${canonicalPath}${suffix}`;
+  }
+
+  return `/media/${year}/${month}/${filename}${suffix}`;
+}
+
+function rewriteRenderedHtmlUrls(html: string, rewriteContext: HtmlRewriteContext): string {
+  return html
+    .replace(/\bhref=(['"])(.*?)\1/gi, (_fullMatch, quote: string, href: string) => {
+      const rewritten = normalizePreviewHref(href, rewriteContext);
+      return `href=${quote}${rewritten}${quote}`;
+    })
+    .replace(/\bsrc=(['"])(.*?)\1/gi, (_fullMatch, quote: string, src: string) => {
+      const rewritten = normalizePreviewSrc(src, rewriteContext);
+      return `src=${quote}${rewritten}${quote}`;
+    });
+}
+
 function renderMacro(name: string, params: Record<string, string>, postId: string): string {
   if (name === 'youtube') {
     const id = escapeHtml(params.id || '');
@@ -136,14 +245,22 @@ function renderMacro(name: string, params: Record<string, string>, postId: strin
   return '';
 }
 
-async function renderPostHtml(post: PostData): Promise<string> {
+async function renderPostHtml(post: PostData, rewriteContext: HtmlRewriteContext): Promise<string> {
   const withMacros = post.content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
     const params = parseMacroParams(rawParams);
     return renderMacro(macroName.toLowerCase(), params, post.id);
   });
 
   const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
-  return `<div class="post">${markdownHtml}</div>`;
+  const rewrittenHtml = rewriteRenderedHtmlUrls(markdownHtml, rewriteContext);
+  return `<div class="post">${rewrittenHtml}</div>`;
+}
+
+function buildCanonicalPostPath(post: PostData): string {
+  const year = post.createdAt.getFullYear();
+  const month = String(post.createdAt.getMonth() + 1).padStart(2, '0');
+  const day = String(post.createdAt.getDate()).padStart(2, '0');
+  return `/${year}/${month}/${day}/${post.slug}`;
 }
 
 function getPageHtml(content: string, title: string): string {
@@ -175,6 +292,7 @@ function getPageHtml(content: string, title: string): string {
 
 export class PreviewServer {
   private readonly postEngine: PostEngineContract;
+  private readonly mediaEngine: MediaEngineContract;
   private readonly settingsEngine: MetaEngineContract;
   private readonly getActiveProjectContext: () => Promise<ActiveProjectContext>;
   private server: Server | null = null;
@@ -182,6 +300,7 @@ export class PreviewServer {
 
   constructor(dependencies?: Partial<PreviewServerDependencies>) {
     this.postEngine = dependencies?.postEngine ?? getPostEngine();
+    this.mediaEngine = dependencies?.mediaEngine ?? getMediaEngine();
     this.settingsEngine = dependencies?.settingsEngine ?? getMetaEngine();
     this.getActiveProjectContext = dependencies?.getActiveProjectContext ?? (async () => {
       const projectEngine = getProjectEngine();
@@ -278,10 +397,12 @@ export class PreviewServer {
     try {
       const context = await this.getActiveProjectContext();
       this.postEngine.setProjectContext(context.projectId, context.dataDir);
+      this.mediaEngine.setProjectContext?.(context.projectId, context.dataDir, context.dataDir);
       this.settingsEngine.setProjectContext(context.projectId, context.dataDir);
 
       const metadata = await this.settingsEngine.getProjectMetadata();
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
+      const htmlRewriteContext = await this.buildHtmlRewriteContext();
 
       const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
       const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
@@ -292,7 +413,13 @@ export class PreviewServer {
         return;
       }
 
-      const result = await this.resolveRoute(pathname, maxPostsPerPage);
+      const mediaAsset = await this.resolveMediaAsset(pathname, context.dataDir);
+      if (mediaAsset) {
+        this.respondAsset(res, mediaAsset.contentType, mediaAsset.body);
+        return;
+      }
+
+      const result = await this.resolveRoute(pathname, maxPostsPerPage, htmlRewriteContext);
       if (!result) {
         this.respond(res, 404, 'Not Found');
         return;
@@ -305,24 +432,62 @@ export class PreviewServer {
     }
   }
 
-  private async resolveRoute(pathname: string, maxPostsPerPage: number): Promise<string | null> {
+  private async resolveRoute(pathname: string, maxPostsPerPage: number, rewriteContext: HtmlRewriteContext): Promise<string | null> {
+        const postsYearMonthSlugMatch = pathname.match(/^\/posts\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
+        if (postsYearMonthSlugMatch) {
+          const year = Number(postsYearMonthSlugMatch[1]);
+          const month = Number(postsYearMonthSlugMatch[2]);
+          const slug = postsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
+          if (month < 1 || month > 12) return null;
+          const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
+          if (!post) return null;
+          return this.renderPostList([post], rewriteContext);
+        }
+
+        const postsSlugMatch = pathname.match(/^\/posts\/([^/]+)$/);
+        if (postsSlugMatch) {
+          const slug = postsSlugMatch[1].replace(/\.html?$/i, '');
+          const post = await this.findPublishedPostBySlug(slug);
+          if (!post) return null;
+          return this.renderPostList([post], rewriteContext);
+        }
+
+        const legacyPostsYearMonthSlugMatch = pathname.match(/^\/post\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
+        if (legacyPostsYearMonthSlugMatch) {
+          const year = Number(legacyPostsYearMonthSlugMatch[1]);
+          const month = Number(legacyPostsYearMonthSlugMatch[2]);
+          const slug = legacyPostsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
+          if (month < 1 || month > 12) return null;
+          const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
+          if (!post) return null;
+          return this.renderPostList([post], rewriteContext);
+        }
+
+        const legacyPostsSlugMatch = pathname.match(/^\/post\/([^/]+)$/);
+        if (legacyPostsSlugMatch) {
+          const slug = legacyPostsSlugMatch[1].replace(/\.html?$/i, '');
+          const post = await this.findPublishedPostBySlug(slug);
+          if (!post) return null;
+          return this.renderPostList([post], rewriteContext);
+        }
+
     if (pathname === '/') {
       const posts = await this.loadPublishedPosts({ status: 'published' }, maxPostsPerPage);
-      return this.renderPostList(posts);
+      return this.renderPostList(posts, rewriteContext);
     }
 
     const tagMatch = pathname.match(/^\/tag\/([^/]+)$/);
     if (tagMatch) {
       const tag = tagMatch[1];
       const posts = await this.loadPublishedPosts({ status: 'published', tags: [tag] }, maxPostsPerPage);
-      return this.renderPostList(posts);
+      return this.renderPostList(posts, rewriteContext);
     }
 
     const categoryMatch = pathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
       const posts = await this.loadPublishedPosts({ status: 'published', categories: [category] }, maxPostsPerPage);
-      return this.renderPostList(posts);
+      return this.renderPostList(posts, rewriteContext);
     }
 
     const daySlugMatch = pathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
@@ -334,7 +499,7 @@ export class PreviewServer {
       const posts = await this.loadPostsForDay(year, month, day, maxPostsPerPage);
       const post = posts.find((candidate) => candidate.slug === slug) || null;
       if (!post) return null;
-      return this.renderPostList([post]);
+      return this.renderPostList([post], rewriteContext);
     }
 
     const dayMatch = pathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
@@ -343,7 +508,7 @@ export class PreviewServer {
       const month = Number(dayMatch[2]);
       const day = Number(dayMatch[3]);
       const posts = await this.loadPostsForDay(year, month, day, maxPostsPerPage);
-      return this.renderPostList(posts);
+      return this.renderPostList(posts, rewriteContext);
     }
 
     const monthMatch = pathname.match(/^\/(\d{4})\/(\d{1,2})$/);
@@ -352,14 +517,14 @@ export class PreviewServer {
       const month = Number(monthMatch[2]);
       if (month < 1 || month > 12) return null;
       const posts = await this.loadPublishedPosts({ status: 'published', year, month: month - 1 }, maxPostsPerPage);
-      return this.renderPostList(posts);
+      return this.renderPostList(posts, rewriteContext);
     }
 
     const yearMatch = pathname.match(/^\/(\d{4})$/);
     if (yearMatch) {
       const year = Number(yearMatch[1]);
       const posts = await this.loadPublishedPosts({ status: 'published', year }, maxPostsPerPage);
-      return this.renderPostList(posts);
+      return this.renderPostList(posts, rewriteContext);
     }
 
     const pageSlugMatch = pathname.match(/^\/([^/]+)$/);
@@ -368,10 +533,25 @@ export class PreviewServer {
       const pages = await this.loadPublishedPosts({ status: 'published', categories: ['page'] }, maxPostsPerPage);
       const page = pages.find((candidate) => candidate.slug === slug) || null;
       if (!page) return null;
-      return this.renderPostList([page]);
+      return this.renderPostList([page], rewriteContext);
     }
 
     return null;
+  }
+
+  private async findPublishedPostBySlug(slug: string, dateFilter?: { year: number; month: number }): Promise<PostData | null> {
+    if (!slug) return null;
+
+    const filter: PostFilter = {
+      status: 'published',
+      ...(dateFilter ? { year: dateFilter.year, month: dateFilter.month } : {}),
+    };
+
+    const candidates = await this.postEngine.getPostsFiltered(filter);
+    const match = candidates.find((candidate) => candidate.slug === slug);
+    if (!match) return null;
+
+    return (await this.postEngine.getPost(match.id)) ?? match;
   }
 
   private async loadPostsForDay(year: number, month: number, day: number, maxPostsPerPage: number): Promise<PostData[]> {
@@ -410,9 +590,41 @@ export class PreviewServer {
     return withContent;
   }
 
-  private async renderPostList(posts: PostData[]): Promise<string> {
-    const rendered = await Promise.all(posts.map((post) => renderPostHtml(post)));
+  private async renderPostList(posts: PostData[], rewriteContext: HtmlRewriteContext): Promise<string> {
+    const rendered = await Promise.all(posts.map((post) => renderPostHtml(post, rewriteContext)));
     return rendered.join('\n');
+  }
+
+  private async buildHtmlRewriteContext(): Promise<HtmlRewriteContext> {
+    const publishedPosts = await this.postEngine.getPostsFiltered({ status: 'published' });
+    const canonicalPostPathBySlug = new Map<string, string>();
+
+    for (const post of publishedPosts) {
+      canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
+    }
+
+    const canonicalMediaPathBySourcePath = new Map<string, string>();
+    try {
+      const mediaItems = await this.mediaEngine.getAllMedia();
+      for (const media of mediaItems) {
+        const year = media.createdAt.getFullYear();
+        const month = String(media.createdAt.getMonth() + 1).padStart(2, '0');
+        const canonicalPath = `/media/${year}/${month}/${media.filename}`;
+
+        const originalNameKey = `media/${year}/${month}/${media.originalName}`.toLowerCase();
+        const filenameKey = `media/${year}/${month}/${media.filename}`.toLowerCase();
+
+        canonicalMediaPathBySourcePath.set(originalNameKey, canonicalPath);
+        canonicalMediaPathBySourcePath.set(filenameKey, canonicalPath);
+      }
+    } catch {
+      // Keep media map empty if media metadata cannot be loaded.
+    }
+
+    return {
+      canonicalPostPathBySlug,
+      canonicalMediaPathBySourcePath,
+    };
   }
 
   private async resolveAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {
@@ -433,6 +645,65 @@ export class PreviewServer {
     } catch (error) {
       console.error(`[PreviewServer] Failed to read local asset: ${assetDefinition.modulePath}`, error);
       return null;
+    }
+  }
+
+  private async resolveMediaAsset(pathname: string, dataDir?: string): Promise<{ contentType: string; body: Buffer } | null> {
+    const match = pathname.match(/^\/media\/(.+)$/);
+    if (!match || !dataDir) return null;
+
+    const relativeMediaPath = path.posix.normalize(`media/${match[1]}`);
+    if (!relativeMediaPath.startsWith('media/')) {
+      return null;
+    }
+
+    const absoluteDataDir = path.resolve(dataDir);
+    const mediaRoot = path.resolve(absoluteDataDir, 'media');
+    const absoluteMediaPath = path.resolve(absoluteDataDir, relativeMediaPath);
+
+    if (absoluteMediaPath !== mediaRoot && !absoluteMediaPath.startsWith(`${mediaRoot}${path.sep}`)) {
+      return null;
+    }
+
+    try {
+      const body = await readFile(absoluteMediaPath);
+      return {
+        contentType: this.getMediaContentType(absoluteMediaPath),
+        body,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private getMediaContentType(filePath: string): string {
+    const extension = path.extname(filePath).toLowerCase();
+    switch (extension) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.gif':
+        return 'image/gif';
+      case '.webp':
+        return 'image/webp';
+      case '.svg':
+        return 'image/svg+xml';
+      case '.bmp':
+        return 'image/bmp';
+      case '.avif':
+        return 'image/avif';
+      case '.mp4':
+        return 'video/mp4';
+      case '.webm':
+        return 'video/webm';
+      case '.mov':
+        return 'video/quicktime';
+      case '.pdf':
+        return 'application/pdf';
+      default:
+        return 'application/octet-stream';
     }
   }
 

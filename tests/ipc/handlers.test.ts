@@ -918,21 +918,21 @@ describe('IPC Handlers', () => {
     });
 
     describe('media:getUrl', () => {
-      it('should return relative media path', async () => {
+      it('should return absolute media path', async () => {
         mockMediaEngine.getRelativePath.mockResolvedValue('media/2025/01/media-123.jpg');
 
         const result = await invokeHandler('media:getUrl', 'media-123');
 
         expect(mockMediaEngine.getRelativePath).toHaveBeenCalledWith('media-123');
-        expect(result).toBe('media/2025/01/media-123.jpg');
+        expect(result).toBe('/media/2025/01/media-123.jpg');
       });
 
-      it('should fall back to media/{id} when relative path is not found', async () => {
+      it('should fall back to /media/{id} when relative path is not found', async () => {
         mockMediaEngine.getRelativePath.mockResolvedValue(null);
 
         const result = await invokeHandler('media:getUrl', 'media-unknown');
 
-        expect(result).toBe('media/media-unknown');
+        expect(result).toBe('/media/media-unknown');
       });
     });
 

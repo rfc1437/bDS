@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import type { PostData, PostFilter } from '../../src/main/engine/PostEngine';
 import { PreviewServer } from '../../src/main/engine/PreviewServer';
 
@@ -84,12 +87,25 @@ function makeSettings(maxPostsPerPage = 50): SettingsEngineLike {
   };
 }
 
+function makeMediaEngine(mediaItems: Array<{ id: string; filename: string; originalName: string; createdAt: Date }>) {
+  return {
+    async getAllMedia() {
+      return mediaItems;
+    },
+  };
+}
+
 describe('PreviewServer', () => {
   let server: PreviewServer;
+  let tempDir: string | null = null;
 
   afterEach(async () => {
     if (server) {
       await server.stop();
+    }
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true });
+      tempDir = null;
     }
   });
 
@@ -327,5 +343,92 @@ describe('PreviewServer', () => {
 
     expect(html).toContain('<title>Configured Project Name</title>');
     expect(html).not.toContain('<title>Blog Preview</title>');
+  });
+
+  it('rewrites supported markdown links to preview-safe URLs while leaving external links unchanged', async () => {
+    const targetBySlug = makePost({
+      id: 'target-1',
+      slug: 'target-post',
+      title: 'Target Post',
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+      content: '# Target',
+    });
+    const targetByYearMonth = makePost({
+      id: 'target-2',
+      slug: 'archive-post',
+      title: 'Archive Post',
+      createdAt: new Date('2025-02-10T10:00:00.000Z'),
+      content: '# Archive',
+    });
+    const legacyTarget = makePost({
+      id: 'target-3',
+      slug: 'legacy-post',
+      title: 'Legacy Post',
+      createdAt: new Date('2025-03-01T10:00:00.000Z'),
+      content: '# Legacy',
+    });
+
+    const post = makePost({
+      id: 'rewrite-1',
+      slug: 'rewrite-test',
+      title: 'Rewrite Test',
+      content: [
+        '[Post by slug](/posts/target-post)',
+        '[Post by year/month](/posts/2025/02/archive-post)',
+        '[Legacy post link](post/legacy-post)',
+        '![Local image](media/2025/02/example.jpg)',
+        '[External](https://example.com/path)',
+      ].join('\n\n'),
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post, targetBySlug, targetByYearMonth, legacyTarget]),
+      mediaEngine: makeMediaEngine([
+        {
+          id: 'media-guid-1',
+          filename: '3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg',
+          originalName: 'example.jpg',
+          createdAt: new Date('2025-02-03T10:00:00.000Z'),
+        },
+      ]) as any,
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('href="/2025/02/14/target-post"');
+    expect(html).toContain('href="/2025/02/10/archive-post"');
+    expect(html).toContain('href="/2025/03/01/legacy-post"');
+    expect(html).toContain('src="/media/2025/02/3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg"');
+    expect(html).toContain('href="https://example.com/path"');
+  });
+
+  it('serves media files from the active project data directory at /media/...', async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), 'bds-preview-media-'));
+    const mediaDir = path.join(tempDir, 'media', '2025', '02');
+    await mkdir(mediaDir, { recursive: true });
+    await writeFile(path.join(mediaDir, 'sample.jpg'), Buffer.from('fake-image-bytes'));
+
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({
+        projectId: 'default',
+        dataDir: tempDir!,
+      }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/media/2025/02/sample.jpg`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('image/jpeg');
+    const body = await response.text();
+    expect(body).toBe('fake-image-bytes');
   });
 });

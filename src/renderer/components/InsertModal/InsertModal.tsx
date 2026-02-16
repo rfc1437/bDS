@@ -324,11 +324,20 @@ export const InsertModal: React.FC<InsertModalProps> = ({
         )}
 
         <div className="insert-modal-footer">
-          <span className="insert-modal-hint">
-            {activeTab === 'internal' 
-              ? 'Use ↑↓ to navigate, Enter to select, Esc to close'
-              : 'Enter URL and press Enter or click button, Esc to close'}
-          </span>
+          <div className="insert-modal-footer-content">
+            <span className="insert-modal-hint">
+              {activeTab === 'internal' 
+                ? 'Use ↑↓ to navigate, Enter to select, Esc to close'
+                : 'Enter URL and press Enter or click button, Esc to close'}
+            </span>
+            {activeTab === 'internal' && (
+              <span className="insert-modal-format-hint">
+                {mode === 'link'
+                  ? 'Canonical: /YYYY/MM/DD/slug'
+                  : 'Canonical: /media/YYYY/MM/file.ext'}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>

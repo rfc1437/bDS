@@ -203,11 +203,24 @@
   justify-content: center;
 }
 
+.insert-modal-footer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 .insert-modal-hint {
   font-size: 11px;
   color: var(--color-text-muted, #888);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.insert-modal-format-hint {
+  font-size: 11px;
+  color: var(--color-text-muted, #888);
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
 }
 
 /* Scrollbar styling */

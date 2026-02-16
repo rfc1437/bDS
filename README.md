@@ -75,6 +75,20 @@ tags: ["nature", "sunset"]
 ---
 ```
 
+### Internal Link Formats
+
+Canonical formats for new content:
+
+- Post links: `/YYYY/MM/DD/slug` (example: `/2025/02/16/my-post`)
+- Media links: `/media/YYYY/MM/file.ext` (example: `/media/2025/02/photo.jpg`)
+
+Also supported (legacy/alternative input formats):
+
+- Post links: `/posts/slug`, `/posts/YYYY/MM/slug`, `post/slug`, `post/YYYY/MM/slug`
+- Media links: `media/YYYY/MM/file.ext`
+
+Preview HTML generation rewrites supported post/media link formats to preview-routable URLs. Markdown source remains unchanged except when inserting new media links from the editor, which now use `/media/...`.
+
 ## Development
 
 ### Prerequisites
