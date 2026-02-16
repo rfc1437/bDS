@@ -85,6 +85,11 @@
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.27.3"
+    }
+  },
   "build": {
     "appId": "com.bds.blogging-desktop-server",
     "productName": "Blogging Desktop Server",
