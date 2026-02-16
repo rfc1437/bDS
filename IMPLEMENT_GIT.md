@@ -58,7 +58,7 @@ This plan is scoped to the existing Electron architecture:
 ## No Repository State
 - If current project is not a git repo:
   - show `Initialize Git` button.
-  - action runs `git init`, then enables Git LFS and tracks image file types (e.g. `*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.webp`, `*.svg`, `*.avif`, `*.heic`) so binary image assets are excluded from normal Git object/version storage.
+  - action runs `git init`, then enables Git LFS for this repository only (`git lfs install --local`, no global hook installation) and tracks image file types (e.g. `*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.webp`, `*.svg`, `*.avif`, `*.heic`) so binary image assets are excluded from normal Git object/version storage.
   - if git executable not found, show explicit install guidance message.
   - if Git LFS executable not found, show explicit install guidance message and block completion of initialization.
 
