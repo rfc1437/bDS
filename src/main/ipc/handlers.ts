@@ -236,10 +236,7 @@ export function registerIpcHandlers(): void {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
     }
-    // Fire and forget - don't await, let it run in background
-    engine.rebuildDatabaseFromFiles().catch(err => {
-      console.error('Post rebuild failed:', err);
-    });
+    return engine.rebuildDatabaseFromFiles();
   });
 
   safeHandle('posts:search', async (_, query: string) => {
@@ -305,10 +302,7 @@ export function registerIpcHandlers(): void {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
     }
-    // Fire and forget - let it run as a background task
-    engine.reindexText().catch(err => {
-      console.error('Text reindex failed:', err);
-    });
+    return engine.reindexText();
   });
 
   // ============ Media Handlers ============
@@ -481,18 +475,12 @@ export function registerIpcHandlers(): void {
       // This ensures all project data lives in the same location for backup
       engine.setProjectContext(project.id, dataDir, dataDir);
     }
-    // Fire and forget - don't await, let it run in background
-    engine.rebuildDatabaseFromFiles().catch(err => {
-      console.error('Media rebuild failed:', err);
-    });
+    return engine.rebuildDatabaseFromFiles();
   });
 
   safeHandle('media:reindexText', async () => {
     const engine = getMediaEngine();
-    // Fire and forget - don't await, let it run in background
-    engine.reindexText().catch(err => {
-      console.error('Media text reindex failed:', err);
-    });
+    return engine.reindexText();
   });
 
   safeHandle('media:getThumbnail', async (_, id: string, size?: 'small' | 'medium' | 'large') => {

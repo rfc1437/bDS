@@ -242,20 +242,31 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
-      window.electronAPI?.on('menu:rebuildDatabase', () => {
-        // Fire and forget - the handlers return immediately now
-        window.electronAPI?.posts.rebuildFromFiles();
-        window.electronAPI?.media.rebuildFromFiles();
-        // Also regenerate missing thumbnails after media rebuild
-        window.electronAPI?.media.regenerateMissingThumbnails();
+      window.electronAPI?.on('menu:rebuildDatabase', async () => {
+        try {
+          await Promise.all([
+            window.electronAPI?.posts.rebuildFromFiles(),
+            window.electronAPI?.media.rebuildFromFiles(),
+          ]);
+          await window.electronAPI?.media.regenerateMissingThumbnails();
+        } catch (error) {
+          console.error('Database rebuild failed:', error);
+          showToast.error('Database rebuild failed');
+        }
       }) || (() => {})
     );
 
     unsubscribers.push(
-      window.electronAPI?.on('menu:reindexText', () => {
-        // Fire and forget - runs as background tasks
-        window.electronAPI?.posts.reindexText();
-        window.electronAPI?.media.reindexText();
+      window.electronAPI?.on('menu:reindexText', async () => {
+        try {
+          await Promise.all([
+            window.electronAPI?.posts.reindexText(),
+            window.electronAPI?.media.reindexText(),
+          ]);
+        } catch (error) {
+          console.error('Text reindex failed:', error);
+          showToast.error('Text reindex failed');
+        }
       }) || (() => {})
     );
 

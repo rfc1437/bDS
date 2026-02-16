@@ -48,6 +48,7 @@ const mockPostEngine = {
   isSlugAvailable: vi.fn(),
   generateUniqueSlug: vi.fn(),
   rebuildDatabaseFromFiles: vi.fn(),
+  reindexText: vi.fn(),
   searchPosts: vi.fn(),
   getPostsFiltered: vi.fn(),
   getAvailableTags: vi.fn(),
@@ -629,6 +630,28 @@ describe('IPC Handlers', () => {
         expect(result).toEqual(linkedPosts);
       });
     });
+
+    describe('posts:rebuildFromFiles', () => {
+      it('should propagate rebuild errors to the caller', async () => {
+        const rebuildError = new Error('rebuild failed');
+        mockPostEngine.rebuildDatabaseFromFiles.mockRejectedValue(rebuildError);
+        mockProjectEngine.getActiveProject.mockResolvedValue(null);
+
+        await expect(invokeHandler('posts:rebuildFromFiles')).rejects.toThrow('rebuild failed');
+        expect(mockPostEngine.rebuildDatabaseFromFiles).toHaveBeenCalled();
+      });
+    });
+
+    describe('posts:reindexText', () => {
+      it('should propagate reindex errors to the caller', async () => {
+        const reindexError = new Error('post reindex failed');
+        mockPostEngine.reindexText.mockRejectedValue(reindexError);
+        mockProjectEngine.getActiveProject.mockResolvedValue(null);
+
+        await expect(invokeHandler('posts:reindexText')).rejects.toThrow('post reindex failed');
+        expect(mockPostEngine.reindexText).toHaveBeenCalled();
+      });
+    });
   });
 
   // ============ Media Handlers ============
@@ -788,6 +811,27 @@ describe('IPC Handlers', () => {
 
         expect(mockMediaEngine.getThumbnailDataUrl).toHaveBeenCalledWith('media-1', 'small');
         expect(result).toEqual(thumbnailDataUrl);
+      });
+    });
+
+    describe('media:rebuildFromFiles', () => {
+      it('should propagate rebuild errors to the caller', async () => {
+        const rebuildError = new Error('media rebuild failed');
+        mockMediaEngine.rebuildDatabaseFromFiles.mockRejectedValue(rebuildError);
+        mockProjectEngine.getActiveProject.mockResolvedValue(null);
+
+        await expect(invokeHandler('media:rebuildFromFiles')).rejects.toThrow('media rebuild failed');
+        expect(mockMediaEngine.rebuildDatabaseFromFiles).toHaveBeenCalled();
+      });
+    });
+
+    describe('media:reindexText', () => {
+      it('should propagate reindex errors to the caller', async () => {
+        const reindexError = new Error('media reindex failed');
+        mockMediaEngine.reindexText.mockRejectedValue(reindexError);
+
+        await expect(invokeHandler('media:reindexText')).rejects.toThrow('media reindex failed');
+        expect(mockMediaEngine.reindexText).toHaveBeenCalled();
       });
     });
   });

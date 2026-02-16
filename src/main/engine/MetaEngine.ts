@@ -397,16 +397,21 @@ export class MetaEngine extends EventEmitter {
     if (projectMetadataFileExists) {
       await this.loadProjectMetadata();
 
-      // If project.json has a dataPath, sync it back to the database
-      if (this.projectMetadata?.dataPath !== undefined) {
-        const projectData = await this.fetchProjectFromDatabase();
-        if (projectData && projectData.dataPath !== this.projectMetadata.dataPath) {
-          const db = getDatabase().getLocal();
-          await db.update(projects)
-            .set({ dataPath: this.projectMetadata.dataPath || null })
-            .where(eq(projects.id, this.currentProjectId));
-          console.log(`[MetaEngine] Synced dataPath from project.json to database: ${this.projectMetadata.dataPath || '(default)'}`);
-        }
+      // Keep dataPath authoritative in database (selected folder path on create/open).
+      // If project.json has a stale dataPath, update project.json from database.
+      const projectData = await this.fetchProjectFromDatabase();
+      if (!projectData) {
+        throw new Error(`Project not found in database: ${this.currentProjectId}`);
+      }
+
+      const databaseDataPath = projectData.dataPath || undefined;
+      if (this.projectMetadata && this.projectMetadata.dataPath !== databaseDataPath) {
+        this.projectMetadata = {
+          ...this.projectMetadata,
+          dataPath: databaseDataPath,
+        };
+        await this.saveProjectMetadata();
+        console.log(`[MetaEngine] Synced dataPath from database to project.json: ${databaseDataPath || '(default)'}`);
       }
     } else {
       // No file exists, fetch project data from database and create file

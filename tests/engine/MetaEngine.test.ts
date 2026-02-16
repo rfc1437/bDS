@@ -731,19 +731,19 @@ describe('MetaEngine', () => {
       expect(metaDir).toContain('/custom/data/path');
     });
 
-    it('should sync dataPath from project.json to database if different', async () => {
+    it('should sync dataPath from database to project.json if different', async () => {
       const metaDir = metaEngine.getMetaDir();
       mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
         name: 'Project',
-        dataPath: '/custom/path/from/file',
+        dataPath: '/old/path/from/file',
       }));
       
-      // Database has different or missing dataPath
+      // Database has the currently selected (authoritative) path
       mockProject = {
         id: 'test-project',
         name: 'Project',
         description: null,
-        dataPath: null,
+        dataPath: '/new/path/from/database',
         slug: 'project',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -752,8 +752,11 @@ describe('MetaEngine', () => {
       
       await metaEngine.syncOnStartup();
       
-      // Should have synced (database update called)
-      expect(mockLocalDb.select).toHaveBeenCalled();
+      const savedProjectJson = mockFiles.get(normalizePath(`${metaDir}/project.json`));
+      expect(savedProjectJson).toBeDefined();
+      const parsed = JSON.parse(savedProjectJson!);
+      expect(parsed.dataPath).toBe('/new/path/from/database');
+      expect(mockLocalDb.update).not.toHaveBeenCalled();
     });
   });
 });
