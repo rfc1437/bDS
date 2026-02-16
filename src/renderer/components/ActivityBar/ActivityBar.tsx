@@ -10,6 +10,12 @@ const PostsIcon = () => (
   </svg>
 );
 
+const PagesIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M4 4h10v4h6v12H4V4zm10 1.5V9h4.5L14 5.5zM7 12h10v1.5H7V12zm0 3h10v1.5H7V15z"/>
+  </svg>
+);
+
 const MediaIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
@@ -62,7 +68,7 @@ export const ActivityBar: React.FC = () => {
   const isImportActive = activeView === 'import' && sidebarVisible;
 
   // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
-  const handleViewClick = (view: 'posts' | 'media' | 'chat') => {
+  const handleViewClick = (view: 'posts' | 'pages' | 'media' | 'chat') => {
     if (activeView === view && sidebarVisible) {
       // Clicking on active view toggles sidebar off
       toggleSidebar();
@@ -117,6 +123,13 @@ export const ActivityBar: React.FC = () => {
           title="Posts (click again to toggle sidebar)"
         >
           <PostsIcon />
+        </button>
+        <button
+          className={`activity-bar-item ${activeView === 'pages' && sidebarVisible ? 'active' : ''}`}
+          onClick={() => handleViewClick('pages')}
+          title="Pages (click again to toggle sidebar)"
+        >
+          <PagesIcon />
         </button>
         <button
           className={`activity-bar-item ${activeView === 'media' && sidebarVisible ? 'active' : ''}`}

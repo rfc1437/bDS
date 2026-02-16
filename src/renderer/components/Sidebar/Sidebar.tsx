@@ -57,6 +57,27 @@ const getPostTypeIcon = (categories: string[]): { icon: string; type: string } =
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const PAGE_CATEGORY = 'page';
+
+const hasPageCategory = (post: PostData): boolean =>
+  post.categories.some((category) => category.toLowerCase() === PAGE_CATEGORY);
+
+const applyPageFilter = (posts: PostData[], isPagesMode: boolean): PostData[] =>
+  isPagesMode ? posts.filter(hasPageCategory) : posts;
+
+const mergeWithPageCategory = (categories: string[], isPagesMode: boolean): string[] => {
+  if (!isPagesMode) {
+    return categories;
+  }
+
+  const normalized = new Set(categories.map((category) => category.toLowerCase()));
+  if (normalized.has(PAGE_CATEGORY)) {
+    return categories;
+  }
+
+  return [...categories, PAGE_CATEGORY];
+};
+
 interface CalendarViewProps {
   onDateSelect: (year: number, month?: number) => void;
   selectedYear?: number;
@@ -458,8 +479,16 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
   );
 };
 
-const PostsList: React.FC = () => {
+type PostsListMode = 'posts' | 'pages';
+
+interface PostsListProps {
+  mode: PostsListMode;
+}
+
+const PostsList: React.FC<PostsListProps> = ({ mode }) => {
   const { posts, hasMorePosts, totalPosts, appendPosts, openTab, activeTabId } = useAppStore();
+  const isPagesMode = mode === 'pages';
+  const postSubset = useMemo(() => applyPageFilter(posts, isPagesMode), [posts, isPagesMode]);
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -484,7 +513,14 @@ const PostsList: React.FC = () => {
         window.electronAPI?.tags.getAll(),
       ]);
       if (tags) setAvailableTags(tags as string[]);
-      if (categories) setAvailableCategories(categories as string[]);
+      if (categories) {
+        const allCategories = categories as string[];
+        setAvailableCategories(
+          isPagesMode
+            ? allCategories.filter((category) => category.toLowerCase() !== PAGE_CATEGORY)
+            : allCategories
+        );
+      }
       if (allTagsData) {
         const colorMap = new Map<string, string>();
         for (const tag of allTagsData as TagData[]) {
@@ -516,7 +552,7 @@ const PostsList: React.FC = () => {
             fullPosts.push(post as PostData);
           }
         }
-        setSearchResults(fullPosts);
+        setSearchResults(applyPageFilter(fullPosts, isPagesMode));
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -535,16 +571,18 @@ const PostsList: React.FC = () => {
     }
     setSelectedYear(year);
     setSelectedMonth(month);
+
+    const mergedCategories = mergeWithPageCategory(selectedCategories, isPagesMode);
     
     try {
       const results = await window.electronAPI?.posts.filter({
         year,
         month,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        categories: mergedCategories.length > 0 ? mergedCategories : undefined,
       });
       if (results) {
-        setFilteredPosts(results as PostData[]);
+        setFilteredPosts(applyPageFilter(results as PostData[], isPagesMode));
       }
     } catch (error) {
       console.error('Filter failed:', error);
@@ -558,23 +596,25 @@ const PostsList: React.FC = () => {
         setFilteredPosts(null);
         return;
       }
+
+      const mergedCategories = mergeWithPageCategory(selectedCategories, isPagesMode);
       
       try {
         const results = await window.electronAPI?.posts.filter({
           year: selectedYear,
           month: selectedMonth,
           tags: selectedTags.length > 0 ? selectedTags : undefined,
-          categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+          categories: mergedCategories.length > 0 ? mergedCategories : undefined,
         });
         if (results) {
-          setFilteredPosts(results as PostData[]);
+          setFilteredPosts(applyPageFilter(results as PostData[], isPagesMode));
         }
       } catch (error) {
         console.error('Filter failed:', error);
       }
     };
     applyFilters();
-  }, [selectedTags, selectedCategories]);
+  }, [selectedTags, selectedCategories, selectedYear, selectedMonth, isPagesMode]);
 
   // Track previous post statuses to detect changes
   const prevPostStatusMapRef = useRef<Map<string, string>>(new Map());
@@ -613,7 +653,7 @@ const PostsList: React.FC = () => {
                   fullPosts.push(post as PostData);
                 }
               }
-              setSearchResults(fullPosts);
+              setSearchResults(applyPageFilter(fullPosts, isPagesMode));
             }
           } catch (error) {
             console.error('Search refresh failed:', error);
@@ -623,15 +663,16 @@ const PostsList: React.FC = () => {
       } else if (selectedYear || selectedTags.length > 0 || selectedCategories.length > 0) {
         // Re-run filter
         const refetchFilters = async () => {
+          const mergedCategories = mergeWithPageCategory(selectedCategories, isPagesMode);
           try {
             const results = await window.electronAPI?.posts.filter({
               year: selectedYear,
               month: selectedMonth,
               tags: selectedTags.length > 0 ? selectedTags : undefined,
-              categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+              categories: mergedCategories.length > 0 ? mergedCategories : undefined,
             });
             if (results) {
-              setFilteredPosts(results as PostData[]);
+              setFilteredPosts(applyPageFilter(results as PostData[], isPagesMode));
             }
           } catch (error) {
             console.error('Filter refresh failed:', error);
@@ -644,7 +685,7 @@ const PostsList: React.FC = () => {
         setFilteredPosts(null);
       }
     }
-  }, [posts, searchQuery, selectedYear, selectedMonth, selectedTags, selectedCategories]);
+  }, [posts, searchQuery, selectedYear, selectedMonth, selectedTags, selectedCategories, isPagesMode]);
 
   const handleCreatePost = async () => {
     // Create a real post immediately in the database with default empty content
@@ -691,8 +732,8 @@ const PostsList: React.FC = () => {
   // Memoized grouping that freshens cached filter results with current store data
   // This ensures status changes are reflected even when filters are active
   const groupedPosts = useMemo(
-    () => groupPostsByStatus(posts, filteredDisplayPosts),
-    [posts, filteredDisplayPosts]
+    () => groupPostsByStatus(postSubset, filteredDisplayPosts),
+    [postSubset, filteredDisplayPosts]
   );
 
   const clearAllFilters = () => {
@@ -718,7 +759,7 @@ const PostsList: React.FC = () => {
     <div className="sidebar-content">
       <div className="sidebar-section">
         <div className="sidebar-section-header">
-          <span>POSTS</span>
+          <span>{isPagesMode ? 'PAGES' : 'POSTS'}</span>
           <div className="sidebar-actions">
             <button 
               className={`sidebar-action ${showFilters ? 'active' : ''}`} 
@@ -855,9 +896,9 @@ const PostsList: React.FC = () => {
         </div>
       )}
 
-      {posts.length === 0 && !isFiltered && (
+      {postSubset.length === 0 && !isFiltered && (
         <div className="sidebar-empty">
-          <p>No posts yet</p>
+          <p>{isPagesMode ? 'No pages yet' : 'No posts yet'}</p>
           <button onClick={handleCreatePost}>Create your first post</button>
         </div>
       )}
@@ -1541,7 +1582,12 @@ export const Sidebar: React.FC = () => {
 
   return (
     <div className="sidebar">
-      {activeView === 'posts' && <PostsList />}
+      <div style={{ display: activeView === 'posts' ? 'block' : 'none' }}>
+        <PostsList mode="posts" />
+      </div>
+      <div style={{ display: activeView === 'pages' ? 'block' : 'none' }}>
+        <PostsList mode="pages" />
+      </div>
       {activeView === 'media' && <MediaList />}
       {activeView === 'settings' && <SettingsNav />}
       {activeView === 'tags' && <TagsNav />}
