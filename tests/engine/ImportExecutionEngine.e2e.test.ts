@@ -1630,7 +1630,7 @@ describe('ImportExecutionEngine E2E Tests', () => {
     /**
      * Creates a custom post with specific content for URL conversion testing
      */
-    function createPostWithContent(content: string, siteUrl: string = 'https://testblog.example.com'): ImportAnalysisReport {
+    function createPostWithContent(content: string, siteUrl: string = 'https://testblog'): ImportAnalysisReport {
       const customPost: WxrPost = {
         wpId: 9001,
         title: 'URL Conversion Test Post',
@@ -1673,7 +1673,7 @@ describe('ImportExecutionEngine E2E Tests', () => {
     it('should convert absolute media URLs from site domain to relative paths', async () => {
       // Post with image URL pointing to the site's own media
       const content = `<p>Check out this image:</p>
-<img src="https://testblog.example.com/wp-content/uploads/2022/11/P1010853_01.jpg" alt="My Photo" />
+    <img src="https://testblog/wp-content/uploads/2022/11/P1010853_01.jpg" alt="My Photo" />
 <p>Nice, right?</p>`;
 
       const report = createPostWithContent(content);
@@ -1687,13 +1687,13 @@ describe('ImportExecutionEngine E2E Tests', () => {
       // Should convert to relative media URL
       expect(fileContent).toContain('![My Photo](media/2022/11/P1010853_01.jpg)');
       // Should NOT contain the absolute URL
-      expect(fileContent).not.toContain('https://testblog.example.com/wp-content/uploads');
+      expect(fileContent).not.toContain('https://testblog/wp-content/uploads');
     });
 
     it('should convert linked images with absolute media URLs to relative paths', async () => {
       // Linked image pattern common in WordPress - thumbnail links to full-size
-      const content = `<a href="https://testblog.example.com/wp-content/uploads/2022/11/full-size.jpg">
-<img src="https://testblog.example.com/wp-content/uploads/2022/11/thumb.jpg" alt="Gallery Image" />
+      const content = `<a href="https://testblog/wp-content/uploads/2022/11/full-size.jpg">
+    <img src="https://testblog/wp-content/uploads/2022/11/thumb.jpg" alt="Gallery Image" />
 </a>`;
 
       const report = createPostWithContent(content);
@@ -1707,13 +1707,13 @@ describe('ImportExecutionEngine E2E Tests', () => {
       // The linked image rule uses the href (full-size) as the image URL
       expect(fileContent).toContain('media/2022/11/full-size.jpg');
       // Should NOT contain absolute URLs
-      expect(fileContent).not.toContain('https://testblog.example.com/wp-content/uploads');
+      expect(fileContent).not.toContain('https://testblog/wp-content/uploads');
     });
 
     it('should preserve external image URLs that are not from the site', async () => {
       // Mix of site-owned and external images
       const content = `<p>Own image:</p>
-<img src="https://testblog.example.com/wp-content/uploads/2024/01/local.jpg" alt="Local" />
+    <img src="https://testblog/wp-content/uploads/2024/01/local.jpg" alt="Local" />
 <p>External image:</p>
 <img src="https://external-site.com/images/photo.jpg" alt="External" />`;
 
@@ -1760,7 +1760,7 @@ describe('ImportExecutionEngine E2E Tests', () => {
     it('should convert media URLs in markdown image syntax after HTML conversion', async () => {
       // Sometimes WordPress content already has markdown-like syntax in HTML
       const content = `<p>Image with title:</p>
-<img src="https://testblog.example.com/wp-content/uploads/2024/02/sunset.png" alt="Sunset" title="Beautiful Sunset" />`;
+    <img src="https://testblog/wp-content/uploads/2024/02/sunset.png" alt="Sunset" title="Beautiful Sunset" />`;
 
       const report = createPostWithContent(content);
       await engine.executeImport(report, {});
@@ -1776,9 +1776,9 @@ describe('ImportExecutionEngine E2E Tests', () => {
 
     it('should handle multiple images in same post', async () => {
       const content = `<p>Gallery:</p>
-<img src="https://testblog.example.com/wp-content/uploads/2024/01/img1.jpg" alt="Image 1" />
-<img src="https://testblog.example.com/wp-content/uploads/2024/01/img2.jpg" alt="Image 2" />
-<img src="https://testblog.example.com/wp-content/uploads/2024/02/img3.jpg" alt="Image 3" />`;
+    <img src="https://testblog/wp-content/uploads/2024/01/img1.jpg" alt="Image 1" />
+    <img src="https://testblog/wp-content/uploads/2024/01/img2.jpg" alt="Image 2" />
+    <img src="https://testblog/wp-content/uploads/2024/02/img3.jpg" alt="Image 3" />`;
 
       const report = createPostWithContent(content);
       await engine.executeImport(report, {});
@@ -1793,7 +1793,7 @@ describe('ImportExecutionEngine E2E Tests', () => {
     });
 
     it('should handle deep nested upload paths', async () => {
-      const content = `<img src="https://testblog.example.com/wp-content/uploads/sites/2/2024/03/nested/deep/image.jpg" alt="Deep" />`;
+      const content = `<img src="https://testblog/wp-content/uploads/sites/2/2024/03/nested/deep/image.jpg" alt="Deep" />`;
 
       const report = createPostWithContent(content);
       await engine.executeImport(report, {});
@@ -1808,8 +1808,8 @@ describe('ImportExecutionEngine E2E Tests', () => {
 
     it('should NOT convert wp-content/themes or wp-content/plugins URLs', async () => {
       // Assets from themes/plugins should stay absolute (they're not imported media)
-      const content = `<img src="https://testblog.example.com/wp-content/themes/mytheme/images/logo.png" alt="Theme Logo" />
-<img src="https://testblog.example.com/wp-content/plugins/myplugin/assets/icon.png" alt="Plugin Icon" />`;
+      const content = `<img src="https://testblog/wp-content/themes/mytheme/images/logo.png" alt="Theme Logo" />
+    <img src="https://testblog/wp-content/plugins/myplugin/assets/icon.png" alt="Plugin Icon" />`;
 
       const report = createPostWithContent(content);
       await engine.executeImport(report, {});
@@ -1819,9 +1819,9 @@ describe('ImportExecutionEngine E2E Tests', () => {
 
       const fileContent = writtenFile!.content;
       // Theme assets should remain absolute
-      expect(fileContent).toContain('https://testblog.example.com/wp-content/themes/');
+      expect(fileContent).toContain('https://testblog/wp-content/themes/');
       // Plugin assets should remain absolute  
-      expect(fileContent).toContain('https://testblog.example.com/wp-content/plugins/');
+      expect(fileContent).toContain('https://testblog/wp-content/plugins/');
     });
   });
 });

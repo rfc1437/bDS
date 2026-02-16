@@ -79,7 +79,7 @@ vi.mock('@milkdown/kit/utils', () => ({
   $remark: () => ({}),
   $prose: () => ({}),
   replaceAll: (content: string) => () => {
-    const normalized = content.replace('\n', '\n\n');
+    const normalized = content.replace(/\n/g, '\n\n');
     markdownUpdatedHandler?.({}, normalized, '');
   },
   callCommand: () => () => {},
