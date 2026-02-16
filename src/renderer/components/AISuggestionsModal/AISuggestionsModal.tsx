@@ -13,6 +13,19 @@ export interface CurrentValues {
   caption: string;
 }
 
+type SuggestionFieldKey = 'title' | 'alt' | 'caption';
+
+interface SuggestionFieldConfig {
+  key: SuggestionFieldKey;
+  label: string;
+}
+
+const SUGGESTION_FIELDS: SuggestionFieldConfig[] = [
+  { key: 'title', label: 'Title' },
+  { key: 'alt', label: 'Alt Text' },
+  { key: 'caption', label: 'Caption' },
+];
+
 interface AISuggestionsModalProps {
   isOpen: boolean;
   isLoading: boolean;
@@ -65,6 +78,51 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
   const hasAnySuggestion = suggestions && (suggestions.title || suggestions.alt || suggestions.caption);
   const hasAnySelected = useTitle || useAlt || useCaption;
 
+  const fieldSelection: Record<SuggestionFieldKey, [boolean, (checked: boolean) => void]> = {
+    title: [useTitle, setUseTitle],
+    alt: [useAlt, setUseAlt],
+    caption: [useCaption, setUseCaption],
+  };
+
+  const renderSuggestionField = (field: SuggestionFieldConfig) => {
+    if (!suggestions?.[field.key]) {
+      return null;
+    }
+
+    const [isChecked, setChecked] = fieldSelection[field.key];
+    const currentValue = currentValues[field.key];
+    const suggestedValue = suggestions[field.key];
+
+    return (
+      <div key={field.key} className="ai-suggestion-item">
+        <label className="ai-suggestion-checkbox">
+          <input
+            type="checkbox"
+            checked={isChecked}
+            onChange={(e) => setChecked(e.target.checked)}
+          />
+          <span className="checkmark"></span>
+        </label>
+        <div className="ai-suggestion-content">
+          <div className="ai-suggestion-label">
+            {field.label}
+            {currentValue && (
+              <span className="ai-suggestion-has-value" title="This field already has a value">
+                (has existing value)
+              </span>
+            )}
+          </div>
+          <div className="ai-suggestion-value">{suggestedValue}</div>
+          {currentValue && (
+            <div className="ai-suggestion-current">
+              Current: <em>{currentValue}</em>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="ai-suggestions-modal-backdrop" onClick={handleBackdropClick}>
       <div className="ai-suggestions-modal">
@@ -97,93 +155,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
               <p className="ai-suggestions-intro">
                 Select which AI-generated values to apply. Existing values are preserved by default.
               </p>
-
-              {suggestions?.title && (
-                <div className="ai-suggestion-item">
-                  <label className="ai-suggestion-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={useTitle}
-                      onChange={(e) => setUseTitle(e.target.checked)}
-                    />
-                    <span className="checkmark"></span>
-                  </label>
-                  <div className="ai-suggestion-content">
-                    <div className="ai-suggestion-label">
-                      Title
-                      {currentValues.title && (
-                        <span className="ai-suggestion-has-value" title="This field already has a value">
-                          (has existing value)
-                        </span>
-                      )}
-                    </div>
-                    <div className="ai-suggestion-value">{suggestions.title}</div>
-                    {currentValues.title && (
-                      <div className="ai-suggestion-current">
-                        Current: <em>{currentValues.title}</em>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {suggestions?.alt && (
-                <div className="ai-suggestion-item">
-                  <label className="ai-suggestion-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={useAlt}
-                      onChange={(e) => setUseAlt(e.target.checked)}
-                    />
-                    <span className="checkmark"></span>
-                  </label>
-                  <div className="ai-suggestion-content">
-                    <div className="ai-suggestion-label">
-                      Alt Text
-                      {currentValues.alt && (
-                        <span className="ai-suggestion-has-value" title="This field already has a value">
-                          (has existing value)
-                        </span>
-                      )}
-                    </div>
-                    <div className="ai-suggestion-value">{suggestions.alt}</div>
-                    {currentValues.alt && (
-                      <div className="ai-suggestion-current">
-                        Current: <em>{currentValues.alt}</em>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {suggestions?.caption && (
-                <div className="ai-suggestion-item">
-                  <label className="ai-suggestion-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={useCaption}
-                      onChange={(e) => setUseCaption(e.target.checked)}
-                    />
-                    <span className="checkmark"></span>
-                  </label>
-                  <div className="ai-suggestion-content">
-                    <div className="ai-suggestion-label">
-                      Caption
-                      {currentValues.caption && (
-                        <span className="ai-suggestion-has-value" title="This field already has a value">
-                          (has existing value)
-                        </span>
-                      )}
-                    </div>
-                    <div className="ai-suggestion-value">{suggestions.caption}</div>
-                    {currentValues.caption && (
-                      <div className="ai-suggestion-current">
-                        Current: <em>{currentValues.caption}</em>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              {SUGGESTION_FIELDS.map(renderSuggestionField)}
             </div>
           )}
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { getContrastColor } from '../../utils/color';
+import { subscribeToTagEvents } from '../../utils/tagEventSubscriptions';
 import './TagsView.css';
 
 // Types
@@ -179,27 +180,9 @@ export const TagsView: React.FC = () => {
 
   // Listen for tag events
   useEffect(() => {
-    const unsubscribers: Array<() => void> = [];
-
-    unsubscribers.push(
-      window.electronAPI?.on('tag:created', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tag:updated', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tag:deleted', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tag:renamed', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tags:merged', () => loadTags()) || (() => {})
-    );
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
+    return subscribeToTagEvents(window.electronAPI?.on, loadTags, {
+      includeUpdated: true,
+    });
   }, [loadTags]);
 
   // Handle tag selection

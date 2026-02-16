@@ -13,6 +13,10 @@ Scope: Reduce high-impact code duplication in production and test-adjacent areas
 | 4 | Project mapping + delete guards | ✅ Completed | Guard + mapper extracted and used in target methods. |
 | 5 | Metadata sync loop scaffolding | ✅ Completed | `runSyncLoop` extracted and reused by both sync directions. |
 | 6 | Shared color utility | ✅ Completed | Shared `getContrastColor` utility is in use. |
+| 7 | WXR parse block dedup | ✅ Completed | Shared `parsePubDate` + item base builder in use. |
+| 8 | Meta/Tag taxonomy overlap | ✅ Completed | Shared taxonomy normalization helper adopted in both engines. |
+| 9 | Renderer tag subscriptions | ✅ Completed | Shared `subscribeToTagEvents` helper with component coverage tests. |
+| 10 | Local UI block dedup | ✅ Completed | `AISuggestionsModal` repeated suggestion blocks consolidated with tests. |
 
 ### Retired Phases (do not revisit unless regressions appear)
 
@@ -263,8 +267,8 @@ Move color contrast logic into a shared renderer utility.
 3. Phase 3 (finish PostMedia single/batch dedup)
 4. ~~Phase 7 (WxrParser repeated parse blocks)~~ ✅ Completed
 5. ~~Phase 8 (MetaEngine ↔ TagEngine overlap)~~ ✅ Completed
-6. Phase 9 (renderer tag event subscription helper)
-7. Phase 10 (local UI repeated blocks in component files)
+6. ~~Phase 9 (renderer tag event subscription helper)~~ ✅ Completed
+7. ~~Phase 10 (local UI repeated blocks in component files)~~ ✅ Completed
 
 Rationale: complete in-flight high-impact phases first, then address newly detected production hotspots.
 
@@ -341,6 +345,8 @@ Extract a shared helper module or internal utility used by both engines.
 
 ## Phase 9 — Renderer Tag Event Subscription Dedup
 
+Status: ✅ Completed
+
 ### Problem
 `TagInput` and `TagsView` duplicate tag-event subscription setup/teardown scaffolding.
 
@@ -356,6 +362,10 @@ Introduce a small shared renderer utility/hook for tag event subscriptions.
 - Same runtime behavior and refresh triggers.
 - One canonical subscription implementation.
 
+### Progress Check
+- Completed: extracted shared `subscribeToTagEvents` helper and adopted it in both `TagInput` and `TagsView`.
+- Completed: added renderer component tests that assert subscription/unsubscription behavior for both components.
+
 ### Coverage & Test Quality (fresh run: `npm run test:coverage`)
 - `src/renderer/components/TagInput/TagInput.tsx`: 0% statements/functions/branches.
 - `src/renderer/components/TagsView/TagsView.tsx`: 0% statements/functions/branches.
@@ -367,6 +377,8 @@ Introduce a small shared renderer utility/hook for tag event subscriptions.
 ---
 
 ## Phase 10 — Local UI Component Block Dedup (Low Risk)
+
+Status: ✅ Completed
 
 ### Problem
 Small duplicated blocks exist within individual components (`ProjectSelector`, `CredentialsPanel`, `AISuggestionsModal`, and parts of `App.tsx`).
@@ -382,6 +394,10 @@ Reduce repeated local code with tiny helpers while preserving readability.
 ### Acceptance Criteria
 - Lower clone count in affected files.
 - No UX or behavior changes.
+
+### Progress Check
+- Completed: consolidated repeated suggestion item rendering in `AISuggestionsModal` into one shared rendering path.
+- Completed: added focused component tests to guard selection/apply and empty-suggestions behavior.
 
 ### Coverage & Test Quality (fresh run: `npm run test:coverage`)
 - `src/renderer/components/ProjectSelector/ProjectSelector.tsx`: 0% statements/functions/branches.

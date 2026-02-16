@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { showToast } from '../Toast';
 import { getContrastColor } from '../../utils/color';
+import { subscribeToTagEvents } from '../../utils/tagEventSubscriptions';
 import './TagInput.css';
 
 interface TagData {
@@ -54,24 +55,7 @@ export const TagInput: React.FC<TagInputProps> = ({
 
   // Listen for tag changes
   useEffect(() => {
-    const unsubscribers: Array<() => void> = [];
-
-    unsubscribers.push(
-      window.electronAPI?.on('tag:created', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tag:deleted', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tag:renamed', () => loadTags()) || (() => {})
-    );
-    unsubscribers.push(
-      window.electronAPI?.on('tags:merged', () => loadTags()) || (() => {})
-    );
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
+    return subscribeToTagEvents(window.electronAPI?.on, loadTags);
   }, [loadTags]);
 
   // Filter suggestions based on input
