@@ -9,8 +9,28 @@ export default defineConfig({
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 8000,
     rollupOptions: {
       input: resolve(__dirname, 'src/renderer/index.html'),
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/monaco-editor') || id.includes('node_modules/@monaco-editor')) {
+            return 'monaco-vendor';
+          }
+
+          if (id.includes('node_modules/@milkdown') || id.includes('node_modules/prosemirror')) {
+            return 'editor-vendor';
+          }
+
+          if (id.includes('node_modules/react') || id.includes('node_modules/scheduler')) {
+            return 'react-vendor';
+          }
+
+          if (id.includes('node_modules/zustand') || id.includes('node_modules/date-fns')) {
+            return 'app-vendor';
+          }
+        },
+      },
     },
   },
   resolve: {
