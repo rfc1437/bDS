@@ -316,6 +316,143 @@ describe('PreviewServer', () => {
     expect(html).toContain('<h1>Explicit Single Post Title</h1>');
   });
 
+  it('uses blog description as h1 on first date archive page and date range h1 on later pages', async () => {
+    const posts = [
+      makePost({
+        id: 'd-1',
+        slug: 'd-1',
+        title: 'D1',
+        content: 'Body 1',
+        createdAt: new Date('2020-02-05T10:00:00.000Z'),
+      }),
+      makePost({
+        id: 'd-2',
+        slug: 'd-2',
+        title: 'D2',
+        content: 'Body 2',
+        createdAt: new Date('2020-02-04T10:00:00.000Z'),
+      }),
+      makePost({
+        id: 'd-3',
+        slug: 'd-3',
+        title: 'D3',
+        content: 'Body 3',
+        createdAt: new Date('2020-01-02T10:00:00.000Z'),
+      }),
+      makePost({
+        id: 'd-4',
+        slug: 'd-4',
+        title: 'D4',
+        content: 'Body 4',
+        createdAt: new Date('2020-01-01T10:00:00.000Z'),
+      }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            description: 'Meine Blog Beschreibung',
+            maxPostsPerPage: 2,
+          };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const firstPageHtml = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(firstPageHtml).toContain('<h1 class="archive-heading">Meine Blog Beschreibung</h1>');
+
+    const secondPageHtml = await (await fetch(`${server.getBaseUrl()}/page/2/`)).text();
+    expect(secondPageHtml).toContain('<h1 class="archive-heading">Archiv 1.1.2020 - 2.1.2020</h1>');
+  });
+
+  it('renders month archive heading with German month name on first page', async () => {
+    const posts = [
+      makePost({ id: 'm-1', slug: 'm-1', title: 'M1', content: 'Body 1', createdAt: new Date('2020-02-05T10:00:00.000Z') }),
+      makePost({ id: 'm-2', slug: 'm-2', title: 'M2', content: 'Body 2', createdAt: new Date('2020-02-04T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            description: 'Meine Blog Beschreibung',
+            maxPostsPerPage: 50,
+          };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const monthPageHtml = await (await fetch(`${server.getBaseUrl()}/2020/2/`)).text();
+    expect(monthPageHtml).toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
+  });
+
+  it('renders tag heading on first page and adds date range on later pages', async () => {
+    const posts = [
+      makePost({ id: 't-1', slug: 't-1', title: 'T1', content: 'Body 1', tags: ['dev'], createdAt: new Date('2020-02-05T10:00:00.000Z') }),
+      makePost({ id: 't-2', slug: 't-2', title: 'T2', content: 'Body 2', tags: ['dev'], createdAt: new Date('2020-02-04T10:00:00.000Z') }),
+      makePost({ id: 't-3', slug: 't-3', title: 'T3', content: 'Body 3', tags: ['dev'], createdAt: new Date('2020-01-02T10:00:00.000Z') }),
+      makePost({ id: 't-4', slug: 't-4', title: 'T4', content: 'Body 4', tags: ['dev'], createdAt: new Date('2020-01-01T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return { description: 'Beschreibung', maxPostsPerPage: 2 };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const firstPageHtml = await (await fetch(`${server.getBaseUrl()}/tag/dev/`)).text();
+    expect(firstPageHtml).toContain('<h1 class="archive-heading">dev</h1>');
+
+    const secondPageHtml = await (await fetch(`${server.getBaseUrl()}/tag/dev/page/2/`)).text();
+    expect(secondPageHtml).toContain('<h1 class="archive-heading">dev - 1.1.2020 - 2.1.2020</h1>');
+  });
+
+  it('renders category heading on first page and adds date range on later pages', async () => {
+    const posts = [
+      makePost({ id: 'c-1', slug: 'c-1', title: 'C1', content: 'Body 1', categories: ['news'], createdAt: new Date('2020-02-05T10:00:00.000Z') }),
+      makePost({ id: 'c-2', slug: 'c-2', title: 'C2', content: 'Body 2', categories: ['news'], createdAt: new Date('2020-02-04T10:00:00.000Z') }),
+      makePost({ id: 'c-3', slug: 'c-3', title: 'C3', content: 'Body 3', categories: ['news'], createdAt: new Date('2020-01-02T10:00:00.000Z') }),
+      makePost({ id: 'c-4', slug: 'c-4', title: 'C4', content: 'Body 4', categories: ['news'], createdAt: new Date('2020-01-01T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return { description: 'Beschreibung', maxPostsPerPage: 2 };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const firstPageHtml = await (await fetch(`${server.getBaseUrl()}/category/news/`)).text();
+    expect(firstPageHtml).toContain('<h1 class="archive-heading">news</h1>');
+
+    const secondPageHtml = await (await fetch(`${server.getBaseUrl()}/category/news/page/2/`)).text();
+    expect(secondPageHtml).toContain('<h1 class="archive-heading">news - 1.1.2020 - 2.1.2020</h1>');
+  });
+
   it('supports tag, category, and page-slug routes', async () => {
     const tagged = makePost({ id: 'tag1', title: 'Tagged', slug: 'tagged', tags: ['dev'] });
     const categorized = makePost({ id: 'cat1', title: 'Categorized', slug: 'categorized', categories: ['news'] });

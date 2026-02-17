@@ -3,6 +3,33 @@
   {% render 'partials/head', page_title: page_title %}
   <body>
     <main>
+      {% if archive_context %}
+        {% assign month_names_de = "Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember" | split: "|" %}
+        {% if show_archive_range_heading and min_date and max_date %}
+          {% if archive_context.kind == 'tag' or archive_context.kind == 'category' %}
+            <h1 class="archive-heading">{{ archive_context.name }} - {{ min_date.day }}.{{ min_date.month }}.{{ min_date.year }} - {{ max_date.day }}.{{ max_date.month }}.{{ max_date.year }}</h1>
+          {% else %}
+            <h1 class="archive-heading">Archiv {{ min_date.day }}.{{ min_date.month }}.{{ min_date.year }} - {{ max_date.day }}.{{ max_date.month }}.{{ max_date.year }}</h1>
+          {% endif %}
+        {% else %}
+          {% if archive_context.kind == 'tag' or archive_context.kind == 'category' %}
+            <h1 class="archive-heading">{{ archive_context.name }}</h1>
+          {% elsif archive_context.kind == 'month' and archive_context.month and archive_context.year %}
+            {% assign month_index = archive_context.month | minus: 1 %}
+            {% assign month_name = month_names_de[month_index] %}
+            <h1 class="archive-heading">Archiv {{ month_name }} {{ archive_context.year }}</h1>
+          {% elsif archive_context.kind == 'year' and archive_context.year %}
+            <h1 class="archive-heading">Archiv {{ archive_context.year }}</h1>
+          {% elsif archive_context.kind == 'day' and archive_context.day and archive_context.month and archive_context.year %}
+            {% assign day_month_index = archive_context.month | minus: 1 %}
+            {% assign day_month_name = month_names_de[day_month_index] %}
+            <h1 class="archive-heading">Archiv {{ archive_context.day }}. {{ day_month_name }} {{ archive_context.year }}</h1>
+          {% else %}
+            <h1 class="archive-heading">{{ page_title }}</h1>
+          {% endif %}
+        {% endif %}
+      {% endif %}
+
       <section class="post-list" data-template="post-list" data-list-page="{{ is_list_page }}" data-first-page="{{ is_first_page }}" data-last-page="{{ is_last_page }}">
         {% for day_block in day_blocks %}
           {% if day_block.show_date_marker %}

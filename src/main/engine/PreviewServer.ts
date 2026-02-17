@@ -69,6 +69,17 @@ interface DayBlockContext {
 interface PostListTemplateContext {
   page_title: string;
   language: string;
+  is_date_archive: boolean;
+  show_archive_range_heading: boolean;
+  archive_context: {
+    kind: 'root' | 'year' | 'month' | 'day' | 'tag' | 'category';
+    name: string | null;
+    year: number | null;
+    month: number | null;
+    day: number | null;
+  } | null;
+  min_date: { day: number; month: number; year: number } | null;
+  max_date: { day: number; month: number; year: number } | null;
   is_list_page: boolean;
   is_first_page: boolean;
   is_last_page: boolean;
@@ -80,6 +91,16 @@ interface PostListTemplateContext {
   canonical_media_path_by_source_path: Record<string, string>;
   day_blocks: DayBlockContext[];
 }
+
+type ArchiveRouteKind = 'date' | 'non-date';
+
+type DateArchiveContext = {
+  kind: 'root' | 'year' | 'month' | 'day' | 'tag' | 'category';
+  name?: string;
+  year?: number;
+  month?: number;
+  day?: number;
+};
 
 interface SinglePostTemplateContext {
   page_title: string;
@@ -358,6 +379,14 @@ function getArchiveDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function toDateParts(date: Date): { day: number; month: number; year: number } {
+  return {
+    day: date.getDate(),
+    month: date.getMonth() + 1,
+    year: date.getFullYear(),
+  };
 }
 
 function buildPaginationHref(basePathname: string, page: number): string {
@@ -646,6 +675,8 @@ export class PreviewServer {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published' }, pageOptions);
       return this.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: false,
+        routeKind: 'date',
+        archiveContext: { kind: 'root' },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
@@ -659,6 +690,8 @@ export class PreviewServer {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published', tags: [tag] }, pageOptions);
       return this.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
+        routeKind: 'non-date',
+        archiveContext: { kind: 'tag', name: tag },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
@@ -672,6 +705,8 @@ export class PreviewServer {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published', categories: [category] }, pageOptions);
       return this.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
+        routeKind: 'non-date',
+        archiveContext: { kind: 'category', name: category },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
@@ -702,6 +737,8 @@ export class PreviewServer {
       const result = await this.loadPostsForDayPage(year, month, day, pageOptions);
       return this.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
+        routeKind: 'date',
+        archiveContext: { kind: 'day', year, month, day },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
@@ -717,6 +754,8 @@ export class PreviewServer {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1 }, pageOptions);
       return this.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
+        routeKind: 'date',
+        archiveContext: { kind: 'month', year, month },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
@@ -730,6 +769,8 @@ export class PreviewServer {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published', year }, pageOptions);
       return this.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
+        routeKind: 'date',
+        archiveContext: { kind: 'year', year },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
@@ -913,6 +954,8 @@ export class PreviewServer {
     rewriteContext: HtmlRewriteContext,
     options: {
       archiveGrouping: boolean;
+      routeKind: ArchiveRouteKind;
+      archiveContext?: DateArchiveContext;
       basePathname: string;
       page_title: string;
       language: string;
@@ -977,9 +1020,60 @@ export class PreviewServer {
       ? buildPaginationHref(options.basePathname, (pagination as PaginationContext).page + 1)
       : '';
 
+    let minDateParts: { day: number; month: number; year: number } | null = null;
+    let maxDateParts: { day: number; month: number; year: number } | null = null;
+
+    const hasRangeHeading = Boolean(
+      !isFirstPage
+      && posts.length > 0
+      && (
+        options.routeKind === 'date'
+        || options.archiveContext?.kind === 'tag'
+        || options.archiveContext?.kind === 'category'
+      ),
+    );
+
+    if (hasRangeHeading) {
+      let minDate = posts[0].createdAt;
+      let maxDate = posts[0].createdAt;
+
+      for (const post of posts) {
+        if (post.createdAt.getTime() < minDate.getTime()) {
+          minDate = post.createdAt;
+        }
+        if (post.createdAt.getTime() > maxDate.getTime()) {
+          maxDate = post.createdAt;
+        }
+      }
+
+      minDateParts = toDateParts(minDate);
+      maxDateParts = toDateParts(maxDate);
+    }
+
     return {
       page_title: options.page_title,
       language: options.language,
+      is_date_archive: options.routeKind === 'date',
+      show_archive_range_heading: hasRangeHeading,
+      archive_context: options.routeKind === 'date'
+        ? {
+            kind: options.archiveContext?.kind ?? 'root',
+            name: options.archiveContext?.name ?? null,
+            year: options.archiveContext?.year ?? null,
+            month: options.archiveContext?.month ?? null,
+            day: options.archiveContext?.day ?? null,
+          }
+        : options.archiveContext
+          ? {
+              kind: options.archiveContext.kind,
+              name: options.archiveContext.name ?? null,
+              year: options.archiveContext.year ?? null,
+              month: options.archiveContext.month ?? null,
+              day: options.archiveContext.day ?? null,
+            }
+          : null,
+      min_date: minDateParts,
+      max_date: maxDateParts,
       is_list_page: isListPage,
       is_first_page: isFirstPage,
       is_last_page: isLastPage,
@@ -998,6 +1092,8 @@ export class PreviewServer {
     rewriteContext: HtmlRewriteContext,
     options: {
       archiveGrouping: boolean;
+      routeKind: ArchiveRouteKind;
+      archiveContext?: DateArchiveContext;
       basePathname: string;
       page_title: string;
       language: string;
