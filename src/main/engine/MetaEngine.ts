@@ -255,7 +255,8 @@ export class MetaEngine extends EventEmitter {
     try {
       await this.ensureMetaDirExists();
       const filePath = this.getProjectMetadataFilePath();
-      const content = JSON.stringify(this.projectMetadata, null, 2);
+      const { dataPath: _dataPath, ...persistedMetadata } = this.projectMetadata || {};
+      const content = JSON.stringify(persistedMetadata, null, 2);
       await fs.writeFile(filePath, content, 'utf-8');
     } catch (error) {
       console.error('[MetaEngine] Failed to save project metadata:', error);
@@ -439,22 +440,11 @@ export class MetaEngine extends EventEmitter {
     // Handle project metadata
     if (projectMetadataFileExists) {
       await this.loadProjectMetadata();
-
-      // Keep dataPath authoritative in database (selected folder path on create/open).
-      // If project.json has a stale dataPath, update project.json from database.
-      const projectData = await this.fetchProjectFromDatabase();
-      if (!projectData) {
-        throw new Error(`Project not found in database: ${this.currentProjectId}`);
-      }
-
-      const databaseDataPath = projectData.dataPath || undefined;
-      if (this.projectMetadata && this.projectMetadata.dataPath !== databaseDataPath) {
-        this.projectMetadata = {
-          ...this.projectMetadata,
-          dataPath: databaseDataPath,
-        };
+      if (this.projectMetadata?.dataPath !== undefined) {
+        const { dataPath: _dataPath, ...metadataWithoutDataPath } = this.projectMetadata;
+        this.projectMetadata = metadataWithoutDataPath;
         await this.saveProjectMetadata();
-        console.log(`[MetaEngine] Synced dataPath from database to project.json: ${databaseDataPath || '(default)'}`);
+        console.log('[MetaEngine] Removed deprecated dataPath from project.json');
       }
     } else {
       // No file exists, fetch project data from database and create file
@@ -465,7 +455,6 @@ export class MetaEngine extends EventEmitter {
       this.projectMetadata = {
         name: projectData.name,
         description: projectData.description || undefined,
-        dataPath: projectData.dataPath || undefined,
         maxPostsPerPage: DEFAULT_MAX_POSTS_PER_PAGE,
       };
       await this.saveProjectMetadata();

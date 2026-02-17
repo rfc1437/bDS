@@ -284,9 +284,9 @@ function buildCanonicalPostPath(post: PostData): string {
   return `/${year}/${month}/${day}/${post.slug}`;
 }
 
-function getPageHtml(content: string, title: string): string {
+function getPageHtml(content: string, title: string, language: string): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(language)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -452,7 +452,8 @@ export class PreviewServer {
         return;
       }
 
-      this.respond(res, 200, getPageHtml(result, resolvePageTitle(metadata, context.projectName, context.projectDescription)));
+      const language = metadata?.mainLanguage?.trim() || 'en';
+      this.respond(res, 200, getPageHtml(result, resolvePageTitle(metadata, context.projectName, context.projectDescription), language));
     } catch (error) {
       console.error('[PreviewServer] Request failed:', error);
       this.respond(res, 500, 'Internal Server Error');

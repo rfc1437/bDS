@@ -472,6 +472,20 @@ describe('MetaEngine', () => {
       expect(parsed.description).toBe('Test description');
     });
 
+    it('should not persist dataPath to filesystem project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Test Project',
+        dataPath: '/custom/project/path',
+      });
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+
+      expect(parsed.dataPath).toBeUndefined();
+    });
+
     it('should load project metadata from filesystem', async () => {
       const metaDir = metaEngine.getMetaDir();
       const projectPath = normalizePath(`${metaDir}/project.json`);
@@ -757,7 +771,7 @@ describe('MetaEngine', () => {
       expect(normalizePath(metaDir)).toContain(normalizePath(customDataDir));
     });
 
-    it('should sync dataPath from database to project.json if different', async () => {
+    it('should ignore and remove dataPath from project.json during syncOnStartup', async () => {
       const metaDir = metaEngine.getMetaDir();
       const oldPath = path.join('old', 'path', 'from', 'file');
       const newPath = path.join('new', 'path', 'from', 'database');
@@ -783,7 +797,7 @@ describe('MetaEngine', () => {
       const savedProjectJson = mockFiles.get(normalizePath(`${metaDir}/project.json`));
       expect(savedProjectJson).toBeDefined();
       const parsed = JSON.parse(savedProjectJson!);
-      expect(normalizePath(parsed.dataPath)).toBe(normalizePath(newPath));
+      expect(parsed.dataPath).toBeUndefined();
       expect(mockLocalDb.update).not.toHaveBeenCalled();
     });
   });

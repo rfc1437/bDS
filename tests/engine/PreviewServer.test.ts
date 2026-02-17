@@ -14,7 +14,7 @@ type PostEngineLike = {
 };
 
 type SettingsEngineLike = {
-  getProjectMetadata: () => Promise<{ maxPostsPerPage?: number } | null>;
+  getProjectMetadata: () => Promise<{ maxPostsPerPage?: number; mainLanguage?: string } | null>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 };
 
@@ -333,6 +333,30 @@ describe('PreviewServer', () => {
     expect(html).toContain('<title>A wonderful publication</title>');
     expect(html).not.toContain('<title>My Great Blog</title>');
     expect(html).not.toContain('<title>Blog Preview</title>');
+  });
+
+  it('uses mainLanguage from metadata for html lang attribute', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            name: 'My Great Blog',
+            mainLanguage: 'de',
+            maxPostsPerPage: 50,
+          };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('<html lang="de">');
   });
 
   it('falls back to active project name in page title when metadata is unavailable', async () => {
