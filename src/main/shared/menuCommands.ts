@@ -2,6 +2,7 @@ export type AppMenuAction =
   | 'newPost'
   | 'importMedia'
   | 'save'
+  | 'quit'
   | 'undo'
   | 'redo'
   | 'cut'
@@ -20,7 +21,9 @@ export type AppMenuAction =
   | 'rebuildDatabase'
   | 'reindexText'
   | 'metadataDiff'
-  | 'about';
+  | 'about'
+  | 'viewOnGitHub'
+  | 'reportIssue';
 
 export type AppMenuRole = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'delete' | 'selectAll';
 
@@ -44,6 +47,8 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'New Post', action: 'newPost', accelerator: 'CmdOrCtrl+N' },
       { label: 'Import Media...', action: 'importMedia', accelerator: 'CmdOrCtrl+I' },
       { label: 'Save', action: 'save', accelerator: 'CmdOrCtrl+S' },
+      { label: '', action: 'file-separator-1', separator: true },
+      { label: 'Quit', action: 'quit', accelerator: 'CmdOrCtrl+Q' },
     ],
   },
   {
@@ -86,6 +91,9 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
     label: 'Help',
     items: [
       { label: 'About Blogging Desktop Server', action: 'about' },
+      { label: '', action: 'help-separator-1', separator: true },
+      { label: 'View on GitHub', action: 'viewOnGitHub' },
+      { label: 'Report Issue', action: 'reportIssue' },
     ],
   },
 ];

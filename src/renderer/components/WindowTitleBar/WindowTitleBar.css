@@ -46,6 +46,11 @@
   background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
 }
 
+.window-titlebar-menu-mnemonic {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .window-titlebar-menu-dropdown {
   position: absolute;
   top: 30px;
@@ -86,6 +91,10 @@
 }
 
 .window-titlebar-menu-item:hover {
+  background-color: var(--vscode-menu-selectionBackground, rgba(9, 71, 113, 0.45));
+}
+
+.window-titlebar-menu-item.is-keyboard-active {
   background-color: var(--vscode-menu-selectionBackground, rgba(9, 71, 113, 0.45));
 }
 

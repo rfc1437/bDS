@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import { APP_MENU_GROUPS } from '../../../main/shared/menuCommands';
 import './WindowTitleBar.css';
@@ -14,7 +14,10 @@ export const WindowTitleBar: React.FC = () => {
   const { sidebarVisible, toggleSidebar } = useAppStore();
   const [windowTitle, setWindowTitle] = useState<string>(document.title || 'Blogging Desktop Server');
   const [openMenu, setOpenMenu] = useState<{ label: string; left: number } | null>(null);
+  const [showMnemonics, setShowMnemonics] = useState<boolean>(false);
+  const [keyboardMenuItemIndex, setKeyboardMenuItemIndex] = useState<number | null>(null);
   const menuRootRef = useRef<HTMLDivElement | null>(null);
+  const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const isMac = navigator.platform.toLowerCase().includes('mac');
   const isDevMode = (window as Window & { __BDS_IS_DEV__?: boolean }).__BDS_IS_DEV__
     ?? (typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV));
@@ -29,6 +32,57 @@ export const WindowTitleBar: React.FC = () => {
       items: group.items.filter(item => isDevMode || item.action !== 'toggleDevTools'),
     };
   });
+
+  const mnemonicByKey = useMemo(() => {
+    return visibleMenuGroups.reduce<Record<string, string>>((acc, group) => {
+      const mnemonicKey = group.label.charAt(0).toLowerCase();
+      acc[mnemonicKey] = group.label;
+      return acc;
+    }, {});
+  }, [visibleMenuGroups]);
+
+  const getMenuLeft = (label: string): number | null => {
+    const button = menuButtonRefs.current[label];
+    if (!button) {
+      return null;
+    }
+
+    const buttonRect = button.getBoundingClientRect();
+    const rootRect = menuRootRef.current?.getBoundingClientRect();
+    return rootRect ? buttonRect.left - rootRect.left : buttonRect.left;
+  };
+
+  const openMenuByLabel = (label: string) => {
+    const left = getMenuLeft(label);
+    if (left === null) {
+      return;
+    }
+    setKeyboardMenuItemIndex(null);
+    setOpenMenu({ label, left });
+  };
+
+  const getMenuActionableItems = (label: string) => {
+    const group = visibleMenuGroups.find(item => item.label === label);
+    if (!group) {
+      return [];
+    }
+
+    return group.items.filter(item => !item.separator);
+  };
+
+  const switchOpenMenuByOffset = (offset: number) => {
+    if (!openMenu) {
+      return;
+    }
+
+    const currentIndex = visibleMenuGroups.findIndex(group => group.label === openMenu.label);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextIndex = (currentIndex + offset + visibleMenuGroups.length) % visibleMenuGroups.length;
+    openMenuByLabel(visibleMenuGroups[nextIndex].label);
+  };
 
   useEffect(() => {
     const rootStyle = document.documentElement.style;
@@ -110,12 +164,111 @@ export const WindowTitleBar: React.FC = () => {
       const target = event.target as Node;
       if (menuRootRef.current && !menuRootRef.current.contains(target)) {
         setOpenMenu(null);
+        setShowMnemonics(false);
       }
     };
 
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpenMenu(null);
+        setKeyboardMenuItemIndex(null);
+        setShowMnemonics(false);
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        switchOpenMenuByOffset(1);
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        switchOpenMenuByOffset(-1);
+        return;
+      }
+
+      if (!openMenu) {
+        return;
+      }
+
+      const actionableItems = getMenuActionableItems(openMenu.label);
+      if (actionableItems.length === 0) {
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setKeyboardMenuItemIndex((previous) => {
+          if (previous === null) {
+            return 0;
+          }
+          return (previous + 1) % actionableItems.length;
+        });
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setKeyboardMenuItemIndex((previous) => {
+          if (previous === null) {
+            return actionableItems.length - 1;
+          }
+          return (previous - 1 + actionableItems.length) % actionableItems.length;
+        });
+        return;
+      }
+
+      if ((event.key === 'Enter' || event.key === ' ') && keyboardMenuItemIndex !== null) {
+        event.preventDefault();
+        const targetItem = actionableItems[keyboardMenuItemIndex];
+        if (targetItem) {
+          void window.electronAPI?.app?.triggerMenuAction?.(targetItem.action);
+          setOpenMenu(null);
+          setKeyboardMenuItemIndex(null);
+          setShowMnemonics(false);
+        }
+        return;
+      }
+
+      if (event.key === 'Home') {
+        event.preventDefault();
+        setKeyboardMenuItemIndex(0);
+        return;
+      }
+
+      if (event.key === 'End') {
+        event.preventDefault();
+        setKeyboardMenuItemIndex(actionableItems.length - 1);
+        return;
+      }
+
+      if (event.key.length === 1 && !event.altKey && !event.shiftKey) {
+        const typed = event.key.toLowerCase();
+        const matchingIndices = actionableItems
+          .map((item, index) => ({ item, index }))
+          .filter(entry => entry.item.label.toLowerCase().startsWith(typed))
+          .map(entry => entry.index);
+
+        if (matchingIndices.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+        if (keyboardMenuItemIndex === null) {
+          setKeyboardMenuItemIndex(matchingIndices[0]);
+          return;
+        }
+
+        const currentMatchPosition = matchingIndices.findIndex(index => index === keyboardMenuItemIndex);
+        if (currentMatchPosition >= 0) {
+          const nextPosition = (currentMatchPosition + 1) % matchingIndices.length;
+          setKeyboardMenuItemIndex(matchingIndices[nextPosition]);
+          return;
+        }
+
+        const firstAfterCurrent = matchingIndices.find(index => index > keyboardMenuItemIndex);
+        setKeyboardMenuItemIndex(firstAfterCurrent ?? matchingIndices[0]);
       }
     };
 
@@ -126,24 +279,97 @@ export const WindowTitleBar: React.FC = () => {
       document.removeEventListener('mousedown', onDocumentMouseDown);
       document.removeEventListener('keydown', onEscape);
     };
-  }, [openMenu]);
+  }, [keyboardMenuItemIndex, openMenu, visibleMenuGroups]);
+
+  useEffect(() => {
+    setKeyboardMenuItemIndex(null);
+  }, [openMenu?.label]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey) {
+        return;
+      }
+
+      if (event.key === 'Alt' && !event.shiftKey) {
+        setShowMnemonics(true);
+        return;
+      }
+
+      if (event.altKey && event.key.length === 1) {
+        const targetMenuLabel = mnemonicByKey[event.key.toLowerCase()];
+        if (targetMenuLabel) {
+          event.preventDefault();
+          setShowMnemonics(true);
+          openMenuByLabel(targetMenuLabel);
+        }
+        return;
+      }
+
+      if (showMnemonics && event.key !== 'Shift') {
+        setShowMnemonics(false);
+      }
+    };
+
+    const onDocumentMouseDown = () => {
+      if (showMnemonics) {
+        setShowMnemonics(false);
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onDocumentMouseDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onDocumentMouseDown);
+    };
+  }, [mnemonicByKey, showMnemonics]);
 
   const handleMenuButtonClick = (event: React.MouseEvent<HTMLButtonElement>, label: string) => {
-    const buttonRect = event.currentTarget.getBoundingClientRect();
-    const rootRect = menuRootRef.current?.getBoundingClientRect();
-    const left = rootRect ? buttonRect.left - rootRect.left : buttonRect.left;
+    const left = getMenuLeft(label);
+    if (left === null) {
+      return;
+    }
 
     if (openMenu?.label === label) {
       setOpenMenu(null);
+      setKeyboardMenuItemIndex(null);
       return;
     }
 
     setOpenMenu({ label, left });
   };
 
+  const handleMenuButtonMouseEnter = (event: React.MouseEvent<HTMLButtonElement>, label: string) => {
+    if (!openMenu || openMenu.label === label) {
+      return;
+    }
+
+    const buttonRect = event.currentTarget.getBoundingClientRect();
+    const rootRect = menuRootRef.current?.getBoundingClientRect();
+    const left = rootRect ? buttonRect.left - rootRect.left : buttonRect.left;
+    setOpenMenu({ label, left });
+  };
+
   const handleMenuItemClick = (action: string) => {
     setOpenMenu(null);
+    setKeyboardMenuItemIndex(null);
+    setShowMnemonics(false);
     void window.electronAPI?.app?.triggerMenuAction?.(action);
+  };
+
+  const renderMenuLabel = (label: string) => {
+    if (!showMnemonics || label.length === 0) {
+      return label;
+    }
+
+    return (
+      <>
+        <span className="window-titlebar-menu-mnemonic">{label.charAt(0)}</span>
+        {label.slice(1)}
+      </>
+    );
   };
 
   const formatAccelerator = (accelerator: string): string => {
@@ -162,12 +388,16 @@ export const WindowTitleBar: React.FC = () => {
         {visibleMenuGroups.map(group => (
           <button
             key={group.label}
+            ref={(element) => {
+              menuButtonRefs.current[group.label] = element;
+            }}
             className={`window-titlebar-menu-button${openMenu?.label === group.label ? ' is-active' : ''}`}
             type="button"
             onClick={(event) => handleMenuButtonClick(event, group.label)}
+            onMouseEnter={(event) => handleMenuButtonMouseEnter(event, group.label)}
             aria-label={group.label}
           >
-            {group.label}
+            {renderMenuLabel(group.label)}
           </button>
         ))}
       </div>
@@ -193,18 +423,21 @@ export const WindowTitleBar: React.FC = () => {
           data-testid="window-titlebar-menu-dropdown"
           style={{ left: `${openMenu.left}px` }}
         >
-          {activeMenu.items.map(item => {
+          {activeMenu.items.map((item) => {
             if (item.separator) {
               return <div key={item.action} className="window-titlebar-menu-separator" />;
             }
 
             const acceleratorText = item.accelerator ? formatAccelerator(item.accelerator) : null;
+            const actionableItems = activeMenu.items.filter(menuItem => !menuItem.separator);
+            const currentActionableIndex = actionableItems.findIndex(menuItem => menuItem.action === item.action);
+            const isKeyboardActive = keyboardMenuItemIndex !== null && keyboardMenuItemIndex === currentActionableIndex;
 
             return (
               <button
                 key={item.action}
                 type="button"
-                className="window-titlebar-menu-item"
+                className={`window-titlebar-menu-item${isKeyboardActive ? ' is-keyboard-active' : ''}`}
                 onClick={() => handleMenuItemClick(item.action)}
                 aria-label={acceleratorText ? `${item.label} ${acceleratorText}` : item.label}
               >

@@ -179,6 +179,21 @@ function createApplicationMenu(): Menu {
     }, {});
 
   const triggerMenuAction = (action: AppMenuAction): void => {
+    if (action === 'quit') {
+      app.quit();
+      return;
+    }
+
+    if (action === 'viewOnGitHub') {
+      void shell.openExternal('https://github.com/rfc1437/bDS');
+      return;
+    }
+
+    if (action === 'reportIssue') {
+      void shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
     const channel = APP_MENU_ACTION_EVENT_MAP[action];
     if (channel) {
       mainWindow?.webContents.send(channel);
@@ -251,13 +266,7 @@ function createApplicationMenu(): Menu {
           },
         },
         { type: 'separator' },
-        {
-          label: 'Exit',
-          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Alt+F4',
-          click: () => {
-            app.quit();
-          },
-        },
+        buildSharedMenuItem('quit'),
       ],
     },
     {
@@ -313,22 +322,7 @@ function createApplicationMenu(): Menu {
     },
     {
       label: 'Help',
-      submenu: [
-        buildSharedMenuItem('about'),
-        { type: 'separator' },
-        {
-          label: 'View on GitHub',
-          click: async () => {
-            await shell.openExternal('https://github.com/rfc1437/bDS');
-          },
-        },
-        {
-          label: 'Report Issue',
-          click: async () => {
-            await shell.openExternal('https://github.com/rfc1437/bDS/issues');
-          },
-        },
-      ],
+      submenu: buildSharedGroupMenuItems('Help'),
     },
   ];
 

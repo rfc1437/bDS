@@ -146,6 +146,129 @@ describe('WindowTitleBar', () => {
     expect(screen.getByRole('button', { name: 'Publish Selected Ctrl+Shift+P' })).toBeInTheDocument();
   });
 
+  it('shows Quit in File menu and View on GitHub in Help menu', () => {
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    expect(screen.getByRole('button', { name: 'Quit Ctrl+Q' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Help' }));
+    expect(screen.getByRole('button', { name: 'View on GitHub' })).toBeInTheDocument();
+  });
+
+  it('switches to another menu on hover when a menu is already open', () => {
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    expect(screen.getByRole('button', { name: 'New Post Ctrl+N' })).toBeInTheDocument();
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('button', { name: 'Undo Ctrl+Z' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New Post Ctrl+N' })).toBeNull();
+  });
+
+  it('shows menu mnemonics when Alt is pressed', () => {
+    const { container } = render(<WindowTitleBar />);
+
+    expect(container.querySelector('.window-titlebar-menu-mnemonic')).toBeNull();
+
+    fireEvent.keyDown(document, { key: 'Alt' });
+
+    expect(container.querySelector('.window-titlebar-menu-mnemonic')).not.toBeNull();
+  });
+
+  it('opens File menu when Alt+F is pressed', () => {
+    render(<WindowTitleBar />);
+
+    fireEvent.keyDown(document, { key: 'f', altKey: true });
+
+    expect(screen.getByRole('button', { name: 'New Post Ctrl+N' })).toBeInTheDocument();
+  });
+
+  it('navigates menu items with arrow keys and activates selection with Enter', () => {
+    const triggerMenuAction = vi.fn().mockResolvedValue(undefined);
+    window.electronAPI.app = {
+      ...(window.electronAPI.app || {}),
+      triggerMenuAction,
+    };
+
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    expect(triggerMenuAction).toHaveBeenCalledWith('newPost');
+  });
+
+  it('switches open menu with ArrowRight and ArrowLeft', () => {
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    expect(screen.getByRole('button', { name: 'New Post Ctrl+N' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(screen.getByRole('button', { name: 'Undo Ctrl+Z' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    expect(screen.getByRole('button', { name: 'New Post Ctrl+N' })).toBeInTheDocument();
+  });
+
+  it('jumps to first and last menu item with Home and End', () => {
+    const triggerMenuAction = vi.fn().mockResolvedValue(undefined);
+    window.electronAPI.app = {
+      ...(window.electronAPI.app || {}),
+      triggerMenuAction,
+    };
+
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+
+    fireEvent.keyDown(document, { key: 'End' });
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(triggerMenuAction).toHaveBeenCalledWith('quit');
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    fireEvent.keyDown(document, { key: 'Home' });
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(triggerMenuAction).toHaveBeenCalledWith('newPost');
+  });
+
+  it('jumps to matching item by first letter key and activates with Enter', () => {
+    const triggerMenuAction = vi.fn().mockResolvedValue(undefined);
+    window.electronAPI.app = {
+      ...(window.electronAPI.app || {}),
+      triggerMenuAction,
+    };
+
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    fireEvent.keyDown(document, { key: 'i' });
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    expect(triggerMenuAction).toHaveBeenCalledWith('importMedia');
+  });
+
+  it('cycles through same-letter matches on repeated key presses', () => {
+    const triggerMenuAction = vi.fn().mockResolvedValue(undefined);
+    window.electronAPI.app = {
+      ...(window.electronAPI.app || {}),
+      triggerMenuAction,
+    };
+
+    render(<WindowTitleBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.keyDown(document, { key: 'r' });
+    fireEvent.keyDown(document, { key: 'r' });
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    expect(triggerMenuAction).toHaveBeenCalledWith('replace');
+  });
+
   it('shows Toggle Developer Tools in View menu in development mode', () => {
     (window as Window & { __BDS_IS_DEV__?: boolean }).__BDS_IS_DEV__ = true;
     const triggerMenuAction = vi.fn().mockResolvedValue(undefined);

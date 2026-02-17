@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell } from 'electron';
+import { app, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
@@ -715,6 +715,22 @@ export function registerIpcHandlers(): void {
 
   safeHandle('app:triggerMenuAction', async (event, action: string) => {
     const typedAction = action as AppMenuAction;
+
+    if (typedAction === 'quit') {
+      app.quit();
+      return;
+    }
+
+    if (typedAction === 'viewOnGitHub') {
+      await shell.openExternal('https://github.com/rfc1437/bDS');
+      return;
+    }
+
+    if (typedAction === 'reportIssue') {
+      await shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
     const handledByWebContents = runWebContentsMenuAction((event as any)?.sender, typedAction);
     if (handledByWebContents) {
       return;
