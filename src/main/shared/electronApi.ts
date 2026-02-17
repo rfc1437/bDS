@@ -510,6 +510,7 @@ export interface ElectronAPI {
     getDefaultProjectPath: (projectId: string) => Promise<string>;
     readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; mainLanguage?: string } | null>;
     setPreviewPostTarget: (postId: string | null) => Promise<void>;
+    triggerMenuAction: (action: string) => Promise<void>;
   };
   meta: {
     getTags: () => Promise<string[]>;

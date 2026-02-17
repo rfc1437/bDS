@@ -78,4 +78,12 @@ describe('TabBar', () => {
     expect(await screen.findByText('abc123d feat: improve commit diff tabs')).toBeInTheDocument();
     expect((window as any).electronAPI.git.getHistory).toHaveBeenCalledWith('/repo/path', 200);
   });
+
+  it('does not render the tab bar when there are no open tabs', () => {
+    useAppStore.setState({ tabs: [], activeTabId: null });
+
+    const { container } = render(<TabBar />);
+
+    expect(container.querySelector('.tab-bar')).toBeNull();
+  });
 });

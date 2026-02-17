@@ -124,6 +124,9 @@ Object.defineProperty(globalThis, 'window', {
         cancel: vi.fn(),
         clearCompleted: vi.fn(),
       },
+      app: {
+        triggerMenuAction: vi.fn(),
+      },
       import: {
         selectAndAnalyze: vi.fn(),
         analyzeFile: vi.fn(),

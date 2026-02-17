@@ -120,7 +120,7 @@ describe('main bootstrap preview behavior', () => {
         symbolColor: '#cccccc',
         height: 34,
       },
-      autoHideMenuBar: true,
+      autoHideMenuBar: false,
     }));
 
     Object.defineProperty(process, 'platform', { value: originalPlatform });

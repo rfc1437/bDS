@@ -1,4 +1,5 @@
 .window-titlebar {
+  position: relative;
   height: 34px;
   display: flex;
   align-items: center;
@@ -6,13 +7,120 @@
   background-color: var(--vscode-editorGroupHeader-tabsBackground, #252526);
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, #1e1e1e);
   flex-shrink: 0;
+  app-region: drag;
   -webkit-app-region: drag;
-  padding-right: 10px;
+  padding-right: calc(10px + var(--bds-titlebar-overlay-right, 0px));
+}
+
+.window-titlebar-menu-bar {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-left: 6px;
+  gap: 2px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  z-index: 2;
+}
+
+.window-titlebar-menu-button {
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-titleBar-activeForeground, var(--vscode-foreground, #cccccc));
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.window-titlebar-menu-button:focus,
+.window-titlebar-menu-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.window-titlebar-menu-button:hover,
+.window-titlebar-menu-button.is-active {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.window-titlebar-menu-dropdown {
+  position: absolute;
+  top: 30px;
+  min-width: 210px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background-color: var(--vscode-menu-background, #252526);
+  border: 1px solid var(--vscode-menu-border, #454545);
+  border-radius: 6px;
+  box-shadow: var(--vscode-widget-shadow, 0 8px 24px rgba(0, 0, 0, 0.4));
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  z-index: 10;
+}
+
+.window-titlebar-menu-item {
+  border: none;
+  background: transparent;
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #cccccc));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.window-titlebar-menu-item:focus,
+.window-titlebar-menu-item:focus-visible {
+  outline: none;
+  box-shadow: none;
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.window-titlebar-menu-item:hover {
+  background-color: var(--vscode-menu-selectionBackground, rgba(9, 71, 113, 0.45));
+}
+
+.window-titlebar-menu-item-accelerator {
+  opacity: 0.8;
+}
+
+.window-titlebar-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background-color: var(--vscode-menu-separatorBackground, rgba(255, 255, 255, 0.08));
 }
 
 .window-titlebar-drag-region {
   flex: 1;
   height: 100%;
+}
+
+.window-titlebar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 45%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vscode-titleBar-activeForeground, var(--vscode-foreground, #cccccc));
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  pointer-events: none;
 }
 
 .window-titlebar-actions {
@@ -35,6 +143,7 @@
   color: var(--vscode-foreground, #cccccc);
   cursor: pointer;
   border-radius: 4px;
+  app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 

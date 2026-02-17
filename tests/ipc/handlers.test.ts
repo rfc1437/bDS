@@ -1339,6 +1339,39 @@ describe('IPC Handlers', () => {
         expect(result).toBe('/Users/test/bds/project-1');
       });
     });
+
+    describe('app:triggerMenuAction', () => {
+      it('should forward custom titlebar action to renderer menu channel', async () => {
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'newPost');
+
+        expect(send).toHaveBeenCalledWith('menu:newPost');
+      });
+
+      it('should execute default edit actions on webContents sender', async () => {
+        const undo = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { undo, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'undo');
+
+        expect(undo).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should execute toggleDevTools on sender when action is toggleDevTools', async () => {
+        const toggleDevTools = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { toggleDevTools, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'toggleDevTools');
+
+        expect(toggleDevTools).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+    });
   });
 
   // ============ Error Handling ============
