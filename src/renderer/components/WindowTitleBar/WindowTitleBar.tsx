@@ -11,7 +11,7 @@ type WindowControlsOverlayLike = {
 };
 
 export const WindowTitleBar: React.FC = () => {
-  const { sidebarVisible, toggleSidebar } = useAppStore();
+  const { sidebarVisible, panelVisible, toggleSidebar, togglePanel } = useAppStore();
   const [windowTitle, setWindowTitle] = useState<string>(document.title || 'Blogging Desktop Server');
   const [openMenu, setOpenMenu] = useState<{ label: string; left: number } | null>(null);
   const [showMnemonics, setShowMnemonics] = useState<boolean>(false);
@@ -414,6 +414,16 @@ export const WindowTitleBar: React.FC = () => {
         >
           <span className="window-titlebar-sidebar-icon" data-shape="frame-square" aria-hidden="true">
             <span className="window-titlebar-sidebar-pane" data-shape="left-half" />
+          </span>
+        </button>
+        <button
+          className="window-titlebar-action-button"
+          aria-label="Toggle Panel"
+          onClick={togglePanel}
+          title={`${panelVisible ? 'Hide' : 'Show'} Panel (Ctrl+J)`}
+        >
+          <span className="window-titlebar-panel-icon" data-shape="frame-square" aria-hidden="true">
+            <span className="window-titlebar-panel-pane" data-shape="bottom-half" />
           </span>
         </button>
       </div>

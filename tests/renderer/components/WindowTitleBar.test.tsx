@@ -8,6 +8,7 @@ describe('WindowTitleBar', () => {
   beforeEach(() => {
     useAppStore.setState({
       sidebarVisible: true,
+      panelVisible: false,
     });
   });
 
@@ -35,6 +36,42 @@ describe('WindowTitleBar', () => {
     expect(iconPane).not.toBeNull();
     expect(iconFrame).toHaveAttribute('data-shape', 'frame-square');
     expect(iconPane).toHaveAttribute('data-shape', 'left-half');
+  });
+
+  it('renders a right-side panel toggle button and toggles panel visibility', () => {
+    render(<WindowTitleBar />);
+
+    const toggleButton = screen.getByLabelText('Toggle Panel');
+    expect(toggleButton).toBeInTheDocument();
+    expect(toggleButton).toHaveAttribute('title', 'Show Panel (Ctrl+J)');
+
+    fireEvent.click(toggleButton);
+
+    expect(useAppStore.getState().panelVisible).toBe(true);
+    expect(toggleButton).toHaveAttribute('title', 'Hide Panel (Ctrl+J)');
+  });
+
+  it('uses a VS Code-like panel toggle icon shape', () => {
+    render(<WindowTitleBar />);
+
+    const toggleButton = screen.getByLabelText('Toggle Panel');
+    const iconFrame = toggleButton.querySelector('.window-titlebar-panel-icon');
+    const iconPane = toggleButton.querySelector('.window-titlebar-panel-pane');
+
+    expect(iconFrame).not.toBeNull();
+    expect(iconPane).not.toBeNull();
+    expect(iconFrame).toHaveAttribute('data-shape', 'frame-square');
+    expect(iconPane).toHaveAttribute('data-shape', 'bottom-half');
+  });
+
+  it('places panel toggle to the right of sidebar toggle', () => {
+    render(<WindowTitleBar />);
+
+    const actionButtons = Array.from(document.querySelectorAll('.window-titlebar-actions .window-titlebar-action-button'));
+
+    expect(actionButtons).toHaveLength(2);
+    expect(actionButtons[0]).toHaveAttribute('aria-label', 'Toggle Sidebar');
+    expect(actionButtons[1]).toHaveAttribute('aria-label', 'Toggle Panel');
   });
 
   it('updates overlay inset CSS variables when window controls geometry changes', () => {

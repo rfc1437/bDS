@@ -181,6 +181,25 @@
   background-color: currentColor;
 }
 
+.window-titlebar-panel-icon {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+
+.window-titlebar-panel-pane {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 33.3333%;
+  background-color: currentColor;
+}
+
 .window-titlebar-action-button:hover {
   background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
 }
