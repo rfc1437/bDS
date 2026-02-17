@@ -106,6 +106,7 @@ const mockProjectEngine = {
 const mockMetaEngine = {
   on: vi.fn(),
   setProjectContext: vi.fn(),
+  isInitialized: vi.fn(),
   syncOnStartup: vi.fn(),
   getTags: vi.fn(),
   getCategories: vi.fn(),
@@ -1166,10 +1167,24 @@ describe('IPC Handlers', () => {
     describe('meta:getProjectMetadata', () => {
       it('should return project metadata', async () => {
         const metadata = { name: 'Test Blog', description: 'A test blog', mainLanguage: 'de' };
+        mockMetaEngine.isInitialized.mockReturnValue(true);
         mockMetaEngine.getProjectMetadata.mockResolvedValue(metadata);
 
         const result = await invokeHandler('meta:getProjectMetadata');
 
+        expect(mockMetaEngine.getProjectMetadata).toHaveBeenCalled();
+        expect(result).toEqual(metadata);
+      });
+
+      it('should sync metadata before reading when engine is not initialized', async () => {
+        const metadata = { name: 'Test Blog', mainLanguage: 'de', defaultAuthor: 'Max' };
+        mockMetaEngine.isInitialized.mockReturnValue(false);
+        mockMetaEngine.syncOnStartup.mockResolvedValue(undefined);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue(metadata);
+
+        const result = await invokeHandler('meta:getProjectMetadata');
+
+        expect(mockMetaEngine.syncOnStartup).toHaveBeenCalled();
         expect(mockMetaEngine.getProjectMetadata).toHaveBeenCalled();
         expect(result).toEqual(metadata);
       });

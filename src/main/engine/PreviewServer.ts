@@ -25,6 +25,8 @@ interface PostEngineContract {
 interface MetaEngineContract {
   getProjectMetadata: () => Promise<ProjectMetadata | null>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
+  isInitialized?: () => boolean;
+  syncOnStartup?: () => Promise<void>;
 }
 
 interface PreviewServerDependencies {
@@ -420,6 +422,10 @@ export class PreviewServer {
       this.postEngine.setProjectContext(context.projectId, context.dataDir);
       this.mediaEngine.setProjectContext?.(context.projectId, context.dataDir, context.dataDir);
       this.settingsEngine.setProjectContext(context.projectId, context.dataDir);
+
+      if (this.settingsEngine.isInitialized && this.settingsEngine.syncOnStartup && !this.settingsEngine.isInitialized()) {
+        await this.settingsEngine.syncOnStartup();
+      }
 
       const metadata = await this.settingsEngine.getProjectMetadata();
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);

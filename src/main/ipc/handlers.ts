@@ -810,6 +810,9 @@ export function registerIpcHandlers(): void {
 
   safeHandle('meta:getProjectMetadata', async () => {
     const engine = getMetaEngine();
+    if (!engine.isInitialized()) {
+      await engine.syncOnStartup();
+    }
     return engine.getProjectMetadata();
   });
 

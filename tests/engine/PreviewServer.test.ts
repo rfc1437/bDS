@@ -359,6 +359,34 @@ describe('PreviewServer', () => {
     expect(html).toContain('<html lang="de">');
   });
 
+  it('initializes metadata before reading language when supported by settings engine', async () => {
+    let initialized = false;
+
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        isInitialized: vi.fn(() => initialized),
+        syncOnStartup: vi.fn(async () => {
+          initialized = true;
+        }),
+        async getProjectMetadata() {
+          return initialized
+            ? { name: 'My Great Blog', mainLanguage: 'fr', maxPostsPerPage: 50 }
+            : null;
+        },
+      } as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('<html lang="fr">');
+  });
+
   it('falls back to active project name in page title when metadata is unavailable', async () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),
