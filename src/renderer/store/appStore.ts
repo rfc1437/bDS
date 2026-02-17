@@ -39,7 +39,7 @@ export type { DeleteReference, ConfirmDeleteDetails };
 
 export type EditorMode = 'wysiwyg' | 'markdown' | 'preview';
 export type GitDiffViewStyle = 'inline' | 'side-by-side';
-export type PanelTab = 'tasks' | 'output' | 'git-log';
+export type PanelTab = 'tasks' | 'output' | 'post-links' | 'git-log';
 
 export interface GitDiffPreferences {
   wordWrap: boolean;

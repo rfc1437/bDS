@@ -34,9 +34,30 @@ function toRelativePath(absolutePath: string, projectPath: string): string {
 }
 
 export const Panel: React.FC = () => {
-  const { panelVisible, panelActiveTab, setPanelActiveTab, tasks, tabs, activeTabId, posts, media, activeProject } = useAppStore();
+  const {
+    panelVisible,
+    panelActiveTab,
+    setPanelActiveTab,
+    tasks,
+    tabs,
+    activeTabId,
+    posts,
+    media,
+    activeProject,
+    openTab,
+    setSelectedPost,
+    setActiveView,
+  } = useAppStore();
   const [gitLogLoading, setGitLogLoading] = useState(false);
   const [gitLogError, setGitLogError] = useState<string | null>(null);
+  const [postLinksLoading, setPostLinksLoading] = useState(false);
+  const [postLinksError, setPostLinksError] = useState<string | null>(null);
+  const [postLinksEntries, setPostLinksEntries] = useState<Array<{
+    id: string;
+    title: string;
+    slug: string;
+    direction: 'from' | 'to';
+  }>>([]);
   const [gitLogTargetLabel, setGitLogTargetLabel] = useState<string | null>(null);
   const [gitLogEntries, setGitLogEntries] = useState<Array<{
     hash: string;
@@ -49,10 +70,67 @@ export const Panel: React.FC = () => {
 
   const recentTasks = tasks.slice(-10).reverse();
   const activeEditorTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) ?? null, [tabs, activeTabId]);
+  const canActivatePostLinks = activeEditorTab?.type === 'post';
   const canActivateGitLog = activeEditorTab?.type === 'post' || activeEditorTab?.type === 'media';
-  const effectiveActivePanelTab = panelActiveTab === 'git-log' && !canActivateGitLog
-    ? 'tasks'
-    : panelActiveTab;
+  const effectiveActivePanelTab = useMemo(() => {
+    if (panelActiveTab === 'post-links' && !canActivatePostLinks) {
+      return 'tasks';
+    }
+    if (panelActiveTab === 'git-log' && !canActivateGitLog) {
+      return 'tasks';
+    }
+    return panelActiveTab;
+  }, [panelActiveTab, canActivatePostLinks, canActivateGitLog]);
+
+  useEffect(() => {
+    if (!panelVisible || effectiveActivePanelTab !== 'post-links') {
+      setPostLinksLoading(false);
+      setPostLinksError(null);
+      return;
+    }
+
+    if (!activeEditorTab || activeEditorTab.type !== 'post') {
+      setPostLinksEntries([]);
+      setPostLinksError(null);
+      setPostLinksLoading(false);
+      return;
+    }
+
+    const loadPostLinks = async () => {
+      setPostLinksLoading(true);
+      setPostLinksError(null);
+
+      try {
+        const [linkedBy, linksTo] = await Promise.all([
+          window.electronAPI?.posts.getLinkedBy(activeEditorTab.id),
+          window.electronAPI?.posts.getLinksTo(activeEditorTab.id),
+        ]);
+
+        const fromEntries = (linkedBy || []).map((post) => ({
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          direction: 'from' as const,
+        }));
+
+        const toEntries = (linksTo || []).map((post) => ({
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          direction: 'to' as const,
+        }));
+
+        setPostLinksEntries([...fromEntries, ...toEntries]);
+      } catch (error) {
+        setPostLinksError(error instanceof Error ? error.message : 'Failed to load post links.');
+        setPostLinksEntries([]);
+      } finally {
+        setPostLinksLoading(false);
+      }
+    };
+
+    void loadPostLinks();
+  }, [panelVisible, effectiveActivePanelTab, activeEditorTab]);
 
   useEffect(() => {
     if (!panelVisible || effectiveActivePanelTab !== 'git-log') {
@@ -146,6 +224,12 @@ export const Panel: React.FC = () => {
     return null;
   }
 
+  const handlePostLinkClick = (postId: string) => {
+    openTab({ type: 'post', id: postId, isTransient: false });
+    setSelectedPost(postId);
+    setActiveView('posts');
+  };
+
   return (
     <div className="panel">
       <div className="panel-header">
@@ -168,6 +252,17 @@ export const Panel: React.FC = () => {
           >
             Output
           </button>
+          {canActivatePostLinks && (
+            <button
+              type="button"
+              role="tab"
+              className={`panel-tab ${effectiveActivePanelTab === 'post-links' ? 'active' : ''}`}
+              aria-selected={effectiveActivePanelTab === 'post-links'}
+              onClick={() => setPanelActiveTab('post-links')}
+            >
+              Post Links
+            </button>
+          )}
           <button
             type="button"
             role="tab"
@@ -232,6 +327,32 @@ export const Panel: React.FC = () => {
 
         {effectiveActivePanelTab === 'output' && (
           <div className="panel-empty">No output</div>
+        )}
+
+        {effectiveActivePanelTab === 'post-links' && (
+          !canActivatePostLinks ? (
+            <div className="panel-empty">Open a post editor to view post links</div>
+          ) : postLinksLoading ? (
+            <div className="panel-empty">Loading post links...</div>
+          ) : postLinksError ? (
+            <div className="panel-empty">{postLinksError}</div>
+          ) : postLinksEntries.length === 0 ? (
+            <div className="panel-empty">No post links for this post</div>
+          ) : (
+            <div className="post-links-list">
+              {postLinksEntries.map((entry) => (
+                <button
+                  key={`${entry.direction}-${entry.id}`}
+                  type="button"
+                  className="post-links-item"
+                  onClick={() => handlePostLinkClick(entry.id)}
+                  title={`Open ${entry.title || entry.slug}`}
+                >
+                  <span className="post-links-direction">{entry.direction} {entry.slug}</span>
+                </button>
+              ))}
+            </div>
+          )
         )}
 
         {effectiveActivePanelTab === 'git-log' && (

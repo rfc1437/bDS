@@ -49,6 +49,8 @@ describe('Panel', () => {
       posts: {
         ...(window as any).electronAPI?.posts,
         get: vi.fn().mockResolvedValue(null),
+        getLinksTo: vi.fn().mockResolvedValue([]),
+        getLinkedBy: vi.fn().mockResolvedValue([]),
       },
     };
 
@@ -81,6 +83,65 @@ describe('Panel', () => {
 
     expect(screen.getByRole('tab', { name: 'Git Log' })).toBeInTheDocument();
     expect(screen.queryByText('Sync Log')).not.toBeInTheDocument();
+  });
+
+  it('shows Post Links tab when active editor is a post', () => {
+    render(<Panel />);
+
+    expect(screen.getByRole('tab', { name: 'Post Links' })).toBeInTheDocument();
+  });
+
+  it('hides Post Links tab when active editor is not a post', () => {
+    useAppStore.setState({
+      tabs: [{ type: 'media', id: 'media-1', isTransient: false }],
+      activeTabId: 'media-1',
+    });
+
+    render(<Panel />);
+
+    expect(screen.queryByRole('tab', { name: 'Post Links' })).not.toBeInTheDocument();
+  });
+
+  it('lists from/to post slugs for links related to active post', async () => {
+    (window as any).electronAPI.posts.getLinkedBy = vi.fn().mockResolvedValue([
+      createPost({ id: 'post-2', slug: 'source-post', title: 'Source Post' }),
+    ]);
+    (window as any).electronAPI.posts.getLinksTo = vi.fn().mockResolvedValue([
+      createPost({ id: 'post-3', slug: 'target-post', title: 'Target Post' }),
+    ]);
+
+    render(<Panel />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Post Links' }));
+
+    await vi.waitFor(() => {
+      expect((window as any).electronAPI.posts.getLinkedBy).toHaveBeenCalledWith('post-1');
+      expect((window as any).electronAPI.posts.getLinksTo).toHaveBeenCalledWith('post-1');
+    });
+
+    expect(await screen.findByText('from source-post')).toBeInTheDocument();
+    expect(screen.getByText('to target-post')).toBeInTheDocument();
+  });
+
+  it('opens related post tab when clicking a post link row', async () => {
+    (window as any).electronAPI.posts.getLinkedBy = vi.fn().mockResolvedValue([
+      createPost({ id: 'post-2', slug: 'source-post', title: 'Source Post' }),
+    ]);
+    (window as any).electronAPI.posts.getLinksTo = vi.fn().mockResolvedValue([]);
+
+    render(<Panel />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Post Links' }));
+
+    const fromButton = await screen.findByRole('button', { name: 'from source-post' });
+    fireEvent.click(fromButton);
+
+    expect(useAppStore.getState().tabs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'post', id: 'post-2', isTransient: false }),
+      ])
+    );
+    expect(useAppStore.getState().activeTabId).toBe('post-2');
   });
 
   it('loads git history for the focused item and updates when active editor changes', async () => {

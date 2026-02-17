@@ -157,6 +157,36 @@
   background-color: var(--vscode-button-secondaryBackground);
 }
 
+.post-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.post-links-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background-color: var(--vscode-sideBar-background);
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.post-links-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.post-links-item:focus-visible {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.post-links-direction {
+  font-size: 12px;
+  color: var(--vscode-editor-foreground);
+}
+
 .git-log-list {
   display: flex;
   flex-direction: column;
