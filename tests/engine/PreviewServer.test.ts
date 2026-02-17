@@ -103,6 +103,15 @@ function makeMediaEngine(mediaItems: Array<{ id: string; filename: string; origi
   };
 }
 
+function makePostMediaEngine(linksByPostId: Record<string, Array<{ media: { id: string } }>>) {
+  return {
+    setProjectContext: vi.fn(),
+    async getLinkedMediaDataForPost(postId: string) {
+      return linksByPostId[postId] ?? [];
+    },
+  };
+}
+
 describe('PreviewServer', () => {
   let server: PreviewServer;
   let tempDir: string | null = null;
@@ -775,6 +784,102 @@ describe('PreviewServer', () => {
     expect(html).toContain('href="/2025/03/01/legacy-post"');
     expect(html).toContain('src="/media/2025/02/3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg"');
     expect(html).toContain('href="https://example.com/path"');
+  });
+
+  it('renders gallery and photo_album macros as interactive lightbox markup in preview', async () => {
+    const post = makePost({
+      id: 'macro-1',
+      slug: 'macro-preview',
+      title: 'Macro Preview',
+      content: [
+        '[[gallery columns="2" caption="Trip Photos"]]',
+        '[[photo_album year="2025" month="2"]]',
+      ].join('\n\n'),
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      mediaEngine: makeMediaEngine([
+        {
+          id: 'media-1',
+          filename: 'linked-1.jpg',
+          originalName: 'linked-1.jpg',
+          createdAt: new Date('2025-02-10T10:00:00.000Z'),
+          linkedPostIds: ['macro-1'],
+        } as any,
+        {
+          id: 'media-2',
+          filename: 'linked-2.jpg',
+          originalName: 'linked-2.jpg',
+          createdAt: new Date('2025-02-12T10:00:00.000Z'),
+          linkedPostIds: ['macro-1'],
+        } as any,
+        {
+          id: 'media-3',
+          filename: 'archive.jpg',
+          originalName: 'archive.jpg',
+          createdAt: new Date('2025-02-09T10:00:00.000Z'),
+          linkedPostIds: [],
+        } as any,
+      ]) as any,
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).not.toContain('Gallery preview is not interactive yet.');
+    expect(html).not.toContain('Photo archive preview is not interactive yet.');
+
+    expect(html).toContain('class="macro-gallery gallery-cols-2"');
+    expect(html).toContain('data-lightbox="gallery-macro-1"');
+    expect(html).toContain('/media/2025/02/linked-1.jpg');
+    expect(html).toContain('/media/2025/02/linked-2.jpg');
+    expect(html).toContain('Trip Photos');
+
+    expect(html).toContain('class="macro-photo-archive photo-archive-single-month"');
+    expect(html).toContain('data-lightbox="photo-archive-2025-02"');
+    expect(html).toContain('/media/2025/02/archive.jpg');
+  });
+
+  it('resolves gallery linked images via post-media links even when media.linkedPostIds is empty', async () => {
+    const post = makePost({
+      id: 'macro-junction-1',
+      slug: 'macro-junction-preview',
+      title: 'Macro Junction Preview',
+      content: '[[gallery columns="2"]]',
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      mediaEngine: makeMediaEngine([
+        {
+          id: 'junction-media-1',
+          filename: 'junction-1.jpg',
+          originalName: 'junction-1.jpg',
+          createdAt: new Date('2025-02-10T10:00:00.000Z'),
+          linkedPostIds: [],
+        } as any,
+      ]) as any,
+      postMediaEngine: makePostMediaEngine({
+        'macro-junction-1': [{ media: { id: 'junction-media-1' } }],
+      }) as any,
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    } as any);
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).not.toContain('No linked images found.');
+    expect(html).toContain('/media/2025/02/junction-1.jpg');
   });
 
   it('serves media files from the active project data directory at /media/...', async () => {

@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import { Liquid } from 'liquidjs';
 import { getMetaEngine, type ProjectMetadata } from './MetaEngine';
 import { getMediaEngine, type MediaData } from './MediaEngine';
+import { getPostMediaEngine } from './PostMediaEngine';
 import { getPostEngine, type PostData, type PostFilter } from './PostEngine';
 import { getProjectEngine } from './ProjectEngine';
 
@@ -33,6 +34,7 @@ interface MetaEngineContract {
 interface PreviewServerDependencies {
   postEngine: PostEngineContract;
   mediaEngine: MediaEngineContract;
+  postMediaEngine: PostMediaEngineContract;
   settingsEngine: MetaEngineContract;
   getActiveProjectContext: () => Promise<ActiveProjectContext>;
 }
@@ -118,6 +120,11 @@ interface NotFoundTemplateContext {
 interface MediaEngineContract {
   getAllMedia: () => Promise<MediaData[]>;
   setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
+}
+
+interface PostMediaEngineContract {
+  getLinkedMediaDataForPost: (postId: string) => Promise<Array<{ media: MediaData }>>;
+  setProjectContext: (projectId: string) => void;
 }
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
@@ -214,6 +221,169 @@ function parseMacroParams(paramString: string | undefined): Record<string, strin
   }
 
   return params;
+}
+
+function parseIntegerParam(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function normalizeMacroName(name: string): string {
+  if (name === 'photo_album') {
+    return 'photo_archive';
+  }
+
+  return name;
+}
+
+function buildCanonicalMediaPath(media: MediaData): string {
+  const year = media.createdAt.getFullYear();
+  const month = String(media.createdAt.getMonth() + 1).padStart(2, '0');
+  return `/media/${year}/${month}/${media.filename}`;
+}
+
+function isRenderableImage(media: MediaData): boolean {
+  if (media.mimeType?.toLowerCase().startsWith('image/')) {
+    return true;
+  }
+
+  const extension = path.extname(media.filename).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'].includes(extension);
+}
+
+function buildPhotoArchiveBuckets(
+  mediaItems: MediaData[],
+  params: Record<string, string>,
+): Array<{ year: number; month: number; media: MediaData[] }> {
+  const yearParam = parseIntegerParam(params.year);
+  const monthParam = parseIntegerParam(params.month);
+
+  const filteredByDate = mediaItems.filter((media) => {
+    const year = media.createdAt.getFullYear();
+    const month = media.createdAt.getMonth() + 1;
+
+    if (yearParam !== null && year !== yearParam) {
+      return false;
+    }
+
+    if (monthParam !== null && month !== monthParam) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const buckets = new Map<string, { year: number; month: number; media: MediaData[] }>();
+  for (const media of filteredByDate) {
+    const year = media.createdAt.getFullYear();
+    const month = media.createdAt.getMonth() + 1;
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    const existing = buckets.get(key);
+
+    if (existing) {
+      existing.media.push(media);
+      continue;
+    }
+
+    buckets.set(key, { year, month, media: [media] });
+  }
+
+  let orderedBuckets = Array.from(buckets.values())
+    .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+
+  if (yearParam === null) {
+    orderedBuckets = orderedBuckets.slice(0, 10);
+  }
+
+  for (const bucket of orderedBuckets) {
+    bucket.media.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  return orderedBuckets;
+}
+
+function renderGalleryMacro(
+  params: Record<string, string>,
+  postId: string,
+  mediaItems: MediaData[],
+  linkedMediaIds: Set<string> | null,
+): string {
+  const requestedColumns = parseIntegerParam(params.columns);
+  const columns = requestedColumns && requestedColumns >= 1 && requestedColumns <= 6 ? requestedColumns : 3;
+  const caption = params.caption ? `<figcaption class="gallery-caption">${escapeHtml(params.caption)}</figcaption>` : '';
+
+  const linkedImages = mediaItems
+    .filter((media) => {
+      if (!isRenderableImage(media)) {
+        return false;
+      }
+
+      const linkedByPostMedia = linkedMediaIds?.has(media.id) ?? false;
+      const linkedBySidecar = Array.isArray(media.linkedPostIds) && media.linkedPostIds.includes(postId);
+      return linkedByPostMedia || linkedBySidecar;
+    })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  const groupName = `gallery-${escapeHtml(postId || 'post')}`;
+  const galleryItems = linkedImages.map((media) => {
+    const mediaPath = escapeHtml(buildCanonicalMediaPath(media));
+    const title = escapeHtml(media.caption || media.title || media.originalName || media.filename);
+    const alt = escapeHtml(media.alt || media.title || media.originalName || media.filename);
+    return `<a class="gallery-item" href="${mediaPath}" data-lightbox="${groupName}" data-title="${title}"><img src="${mediaPath}" alt="${alt}" loading="lazy" /></a>`;
+  }).join('');
+
+  const content = galleryItems || '<div class="gallery-empty">No linked images found.</div>';
+  return `<div class="macro-gallery gallery-cols-${columns}" data-post-id="${escapeHtml(postId)}" data-columns="${columns}" data-lightbox="true"><div class="gallery-container gallery-lightbox">${content}</div>${caption}</div>`;
+}
+
+function renderPhotoArchiveMacro(params: Record<string, string>, mediaItems: MediaData[]): string {
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const yearParam = parseIntegerParam(params.year);
+  const monthParam = parseIntegerParam(params.month);
+
+  const rootClasses = ['macro-photo-archive'];
+  if (yearParam === null) {
+    rootClasses.push('photo-archive-recent-months');
+  } else if (monthParam !== null) {
+    rootClasses.push('photo-archive-single-month');
+  } else {
+    rootClasses.push('photo-archive-full-year');
+  }
+
+  const dataAttrs: string[] = [];
+  if (yearParam === null) {
+    dataAttrs.push('data-recent="10"');
+  } else {
+    dataAttrs.push(`data-year="${escapeHtml(String(yearParam))}"`);
+    if (monthParam !== null) {
+      dataAttrs.push(`data-month="${escapeHtml(String(monthParam))}"`);
+    }
+  }
+
+  const renderableMedia = mediaItems.filter((media) => isRenderableImage(media));
+  const buckets = buildPhotoArchiveBuckets(renderableMedia, params);
+
+  if (buckets.length === 0) {
+    return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container"><div class="photo-archive-empty">No photos found for this archive.</div></div></div>`;
+  }
+
+  const monthsHtml = buckets.map((bucket) => {
+    const monthName = monthNames[bucket.month - 1] || String(bucket.month);
+    const label = `${monthName} ${bucket.year}`;
+    const groupName = `photo-archive-${bucket.year}-${String(bucket.month).padStart(2, '0')}`;
+
+    const itemsHtml = bucket.media.map((media) => {
+      const mediaPath = escapeHtml(buildCanonicalMediaPath(media));
+      const title = escapeHtml(media.caption || media.title || media.originalName || media.filename);
+      const alt = escapeHtml(media.alt || media.title || media.originalName || media.filename);
+      return `<a class="photo-archive-item" href="${mediaPath}" data-lightbox="${groupName}" data-title="${title}"><img src="${mediaPath}" alt="${alt}" loading="lazy" /></a>`;
+    }).join('');
+
+    return `<div class="photo-archive-month-wrapper"><div class="photo-archive-month"><div class="photo-archive-month-label"><span>${escapeHtml(label)}</span></div><div class="photo-archive-gallery">${itemsHtml}</div></div></div>`;
+  }).join('');
+
+  return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container">${monthsHtml}</div></div>`;
 }
 
 function isExternalOrSpecialUrl(value: string): boolean {
@@ -330,31 +500,35 @@ function rewriteRenderedHtmlUrls(html: string, rewriteContext: HtmlRewriteContex
     });
 }
 
-function renderMacro(name: string, params: Record<string, string>, postId: string): string {
-  if (name === 'youtube') {
+function renderMacro(
+  name: string,
+  params: Record<string, string>,
+  postId: string,
+  mediaItems: MediaData[],
+  linkedMediaIds: Set<string> | null,
+): string {
+  const normalizedName = normalizeMacroName(name);
+
+  if (normalizedName === 'youtube') {
     const id = escapeHtml(params.id || '');
     const title = escapeHtml(params.title || 'YouTube video');
     if (!id) return '';
     return `<div class="macro-youtube"><iframe src="https://www.youtube.com/embed/${id}?rel=0" title="${title}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
   }
 
-  if (name === 'vimeo') {
+  if (normalizedName === 'vimeo') {
     const id = escapeHtml(params.id || '');
     const title = escapeHtml(params.title || 'Vimeo video');
     if (!id) return '';
     return `<div class="macro-vimeo"><iframe src="https://player.vimeo.com/video/${id}" title="${title}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
   }
 
-  if (name === 'gallery') {
-    const columns = escapeHtml(params.columns || '3');
-    const caption = params.caption ? `<figcaption>${escapeHtml(params.caption)}</figcaption>` : '';
-    return `<div class="macro-gallery" data-post-id="${escapeHtml(postId)}" data-columns="${columns}"><div>Gallery preview is not interactive yet.</div>${caption}</div>`;
+  if (normalizedName === 'gallery') {
+    return renderGalleryMacro(params, postId, mediaItems, linkedMediaIds);
   }
 
-  if (name === 'photo_archive') {
-    const year = params.year ? ` data-year="${escapeHtml(params.year)}"` : '';
-    const month = params.month ? ` data-month="${escapeHtml(params.month)}"` : '';
-    return `<div class="macro-photo-archive"${year}${month}><div>Photo archive preview is not interactive yet.</div></div>`;
+  if (normalizedName === 'photo_archive') {
+    return renderPhotoArchiveMacro(params, mediaItems);
   }
 
   return '';
@@ -416,6 +590,7 @@ function recordToMap(record: unknown): Map<string, string> {
 export class PreviewServer {
   private readonly postEngine: PostEngineContract;
   private readonly mediaEngine: MediaEngineContract;
+  private readonly postMediaEngine: PostMediaEngineContract;
   private readonly settingsEngine: MetaEngineContract;
   private readonly getActiveProjectContext: () => Promise<ActiveProjectContext>;
   private readonly liquid: Liquid;
@@ -425,6 +600,7 @@ export class PreviewServer {
   constructor(dependencies?: Partial<PreviewServerDependencies>) {
     this.postEngine = dependencies?.postEngine ?? getPostEngine();
     this.mediaEngine = dependencies?.mediaEngine ?? getMediaEngine();
+    this.postMediaEngine = dependencies?.postMediaEngine ?? getPostMediaEngine();
     this.settingsEngine = dependencies?.settingsEngine ?? getMetaEngine();
     this.getActiveProjectContext = dependencies?.getActiveProjectContext ?? (async () => {
       const projectEngine = getProjectEngine();
@@ -458,9 +634,20 @@ export class PreviewServer {
         canonicalMediaPathBySourcePath: recordToMap(canonicalMediaArg),
       };
 
+      const needsMediaLookup = /\[\[(gallery|photo_archive|photo_album)\b/i.test(content);
+      const mediaItems = needsMediaLookup
+        ? await this.mediaEngine.getAllMedia().catch(() => [] as MediaData[])
+        : [];
+
+      const linkedMediaIds = needsMediaLookup && postId
+        ? await this.postMediaEngine.getLinkedMediaDataForPost(postId)
+          .then((links) => new Set<string>(links.map((link) => link.media?.id).filter((id): id is string => typeof id === 'string' && id.length > 0)))
+          .catch(() => null)
+        : null;
+
       const withMacros = content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
         const params = parseMacroParams(rawParams);
-        return renderMacro(macroName.toLowerCase(), params, postId);
+        return renderMacro(macroName.toLowerCase(), params, postId, mediaItems, linkedMediaIds);
       });
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
@@ -550,6 +737,7 @@ export class PreviewServer {
       const context = await this.getActiveProjectContext();
       this.postEngine.setProjectContext(context.projectId, context.dataDir);
       this.mediaEngine.setProjectContext?.(context.projectId, context.dataDir, context.dataDir);
+      this.postMediaEngine.setProjectContext(context.projectId);
       this.settingsEngine.setProjectContext(context.projectId, context.dataDir);
 
       if (this.settingsEngine.isInitialized && this.settingsEngine.syncOnStartup && !this.settingsEngine.isInitialized()) {
