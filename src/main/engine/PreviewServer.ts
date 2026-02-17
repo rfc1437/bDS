@@ -41,6 +41,11 @@ interface HtmlRewriteContext {
   canonicalMediaPathBySourcePath: Map<string, string>;
 }
 
+interface RoutePagination {
+  pathname: string;
+  page: number;
+}
+
 interface MediaEngineContract {
   getAllMedia: () => Promise<MediaData[]>;
   setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
@@ -154,6 +159,24 @@ function splitPathSuffix(value: string): { pathPart: string; suffix: string } {
   return {
     pathPart: match?.[1] ?? value,
     suffix: match?.[2] ?? '',
+  };
+}
+
+function parseRoutePagination(pathname: string): RoutePagination | null {
+  const pageMatch = pathname.match(/^(.*)\/page\/(\d+)$/);
+  if (!pageMatch) {
+    return { pathname, page: 1 };
+  }
+
+  const page = Number(pageMatch[2]);
+  if (!Number.isInteger(page) || page < 1) {
+    return null;
+  }
+
+  const basePathname = pageMatch[1] || '/';
+  return {
+    pathname: basePathname,
+    page,
   };
 }
 
@@ -467,7 +490,19 @@ export class PreviewServer {
   }
 
   private async resolveRoute(pathname: string, maxPostsPerPage: number, rewriteContext: HtmlRewriteContext): Promise<string | null> {
-        const postsYearMonthSlugMatch = pathname.match(/^\/posts\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
+    const routePagination = parseRoutePagination(pathname);
+    if (!routePagination) {
+      return null;
+    }
+
+    const pagedPathname = routePagination.pathname;
+    const page = routePagination.page;
+    const pageOptions = {
+      maxPostsPerPage,
+      page,
+    };
+
+        const postsYearMonthSlugMatch = pagedPathname.match(/^\/posts\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
         if (postsYearMonthSlugMatch) {
           const year = Number(postsYearMonthSlugMatch[1]);
           const month = Number(postsYearMonthSlugMatch[2]);
@@ -478,7 +513,7 @@ export class PreviewServer {
           return this.renderPostList([post], rewriteContext);
         }
 
-        const postsSlugMatch = pathname.match(/^\/posts\/([^/]+)$/);
+        const postsSlugMatch = pagedPathname.match(/^\/posts\/([^/]+)$/);
         if (postsSlugMatch) {
           const slug = postsSlugMatch[1].replace(/\.html?$/i, '');
           const post = await this.findPublishedPostBySlug(slug);
@@ -486,7 +521,7 @@ export class PreviewServer {
           return this.renderPostList([post], rewriteContext);
         }
 
-        const legacyPostsYearMonthSlugMatch = pathname.match(/^\/post\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
+        const legacyPostsYearMonthSlugMatch = pagedPathname.match(/^\/post\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
         if (legacyPostsYearMonthSlugMatch) {
           const year = Number(legacyPostsYearMonthSlugMatch[1]);
           const month = Number(legacyPostsYearMonthSlugMatch[2]);
@@ -497,7 +532,7 @@ export class PreviewServer {
           return this.renderPostList([post], rewriteContext);
         }
 
-        const legacyPostsSlugMatch = pathname.match(/^\/post\/([^/]+)$/);
+        const legacyPostsSlugMatch = pagedPathname.match(/^\/post\/([^/]+)$/);
         if (legacyPostsSlugMatch) {
           const slug = legacyPostsSlugMatch[1].replace(/\.html?$/i, '');
           const post = await this.findPublishedPostBySlug(slug);
@@ -505,66 +540,66 @@ export class PreviewServer {
           return this.renderPostList([post], rewriteContext);
         }
 
-    if (pathname === '/') {
-      const posts = await this.loadPublishedSnapshots({ status: 'published' }, maxPostsPerPage);
+    if (pagedPathname === '/') {
+      const posts = await this.loadPublishedSnapshots({ status: 'published' }, pageOptions);
       return this.renderPostList(posts, rewriteContext);
     }
 
-    const tagMatch = pathname.match(/^\/tag\/([^/]+)$/);
+    const tagMatch = pagedPathname.match(/^\/tag\/([^/]+)$/);
     if (tagMatch) {
       const tag = tagMatch[1];
-      const posts = await this.loadPublishedSnapshots({ status: 'published', tags: [tag] }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', tags: [tag] }, pageOptions);
       return this.renderPostList(posts, rewriteContext);
     }
 
-    const categoryMatch = pathname.match(/^\/category\/([^/]+)$/);
+    const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
-      const posts = await this.loadPublishedSnapshots({ status: 'published', categories: [category] }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', categories: [category] }, pageOptions);
       return this.renderPostList(posts, rewriteContext);
     }
 
-    const daySlugMatch = pathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
+    const daySlugMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
     if (daySlugMatch) {
       const year = Number(daySlugMatch[1]);
       const month = Number(daySlugMatch[2]);
       const day = Number(daySlugMatch[3]);
       const slug = daySlugMatch[4];
-      const posts = await this.loadPostsForDay(year, month, day, maxPostsPerPage);
+      const posts = await this.loadPostsForDay(year, month, day);
       const post = posts.find((candidate) => candidate.slug === slug) || null;
       if (!post) return null;
       return this.renderPostList([post], rewriteContext);
     }
 
-    const dayMatch = pathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    const dayMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
     if (dayMatch) {
       const year = Number(dayMatch[1]);
       const month = Number(dayMatch[2]);
       const day = Number(dayMatch[3]);
-      const posts = await this.loadPostsForDay(year, month, day, maxPostsPerPage);
+      const posts = await this.loadPostsForDay(year, month, day, pageOptions);
       return this.renderPostList(posts, rewriteContext);
     }
 
-    const monthMatch = pathname.match(/^\/(\d{4})\/(\d{1,2})$/);
+    const monthMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})$/);
     if (monthMatch) {
       const year = Number(monthMatch[1]);
       const month = Number(monthMatch[2]);
       if (month < 1 || month > 12) return null;
-      const posts = await this.loadPublishedSnapshots({ status: 'published', year, month: month - 1 }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', year, month: month - 1 }, pageOptions);
       return this.renderPostList(posts, rewriteContext);
     }
 
-    const yearMatch = pathname.match(/^\/(\d{4})$/);
+    const yearMatch = pagedPathname.match(/^\/(\d{4})$/);
     if (yearMatch) {
       const year = Number(yearMatch[1]);
-      const posts = await this.loadPublishedSnapshots({ status: 'published', year }, maxPostsPerPage);
+      const posts = await this.loadPublishedSnapshots({ status: 'published', year }, pageOptions);
       return this.renderPostList(posts, rewriteContext);
     }
 
-    const pageSlugMatch = pathname.match(/^\/([^/]+)$/);
+    const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
     if (pageSlugMatch) {
       const slug = pageSlugMatch[1];
-      const pages = await this.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, maxPostsPerPage);
+      const pages = await this.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
       const page = pages.find((candidate) => candidate.slug === slug) || null;
       if (!page) return null;
       return this.renderPostList([page], rewriteContext);
@@ -587,7 +622,12 @@ export class PreviewServer {
     return match;
   }
 
-  private async loadPostsForDay(year: number, month: number, day: number, maxPostsPerPage: number): Promise<PostData[]> {
+  private async loadPostsForDay(
+    year: number,
+    month: number,
+    day: number,
+    pagination?: { maxPostsPerPage: number; page?: number },
+  ): Promise<PostData[]> {
     if (month < 1 || month > 12 || day < 1 || day > 31) {
       return [];
     }
@@ -599,7 +639,7 @@ export class PreviewServer {
       status: 'published',
       startDate,
       endDate,
-    }, maxPostsPerPage);
+    }, pagination);
 
     return posts.filter((post) => {
       const createdAt = post.createdAt;
@@ -632,7 +672,10 @@ export class PreviewServer {
     return null;
   }
 
-  private async loadPublishedSnapshots(filter: PostFilter, maxPostsPerPage?: number): Promise<PostData[]> {
+  private async loadPublishedSnapshots(
+    filter: PostFilter,
+    pagination?: { maxPostsPerPage: number; page?: number },
+  ): Promise<PostData[]> {
     if (filter.status && filter.status !== 'published') {
       return [];
     }
@@ -664,8 +707,13 @@ export class PreviewServer {
 
     snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    if (typeof maxPostsPerPage === 'number') {
-      return snapshots.slice(0, maxPostsPerPage);
+    if (typeof pagination?.maxPostsPerPage === 'number') {
+      const maxPostsPerPage = pagination.maxPostsPerPage;
+      const page = Number.isInteger(pagination.page) && (pagination.page ?? 0) > 0
+        ? (pagination.page as number)
+        : 1;
+      const offset = (page - 1) * maxPostsPerPage;
+      return snapshots.slice(offset, offset + maxPostsPerPage);
     }
 
     return snapshots;

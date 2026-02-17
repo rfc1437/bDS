@@ -284,6 +284,55 @@ describe('PreviewServer', () => {
     expect(pageHtml).not.toContain('About Blog Post');
   });
 
+  it('supports /page/<num> suffix on list routes', async () => {
+    const baseTimestamp = Date.UTC(2020, 9, 31, 23, 59, 59);
+    const posts = Array.from({ length: 120 }).map((_, index) => {
+      const number = index + 1;
+      return makePost({
+        id: `hist-${number}`,
+        slug: `history-${number}`,
+        title: `History ${number}`,
+        createdAt: new Date(baseTimestamp - index * 1000),
+        tags: ['dev'],
+        categories: ['news'],
+      });
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const rootPageTwoHtml = await (await fetch(`${server.getBaseUrl()}/page/2/`)).text();
+    expect(rootPageTwoHtml).toContain('History 51');
+    expect(rootPageTwoHtml).toContain('History 100');
+    expect(rootPageTwoHtml).not.toContain('History 50');
+    expect(rootPageTwoHtml).not.toContain('History 101');
+
+    const yearPageThreeHtml = await (await fetch(`${server.getBaseUrl()}/2020/page/3/`)).text();
+    expect(yearPageThreeHtml).toContain('History 101');
+    expect(yearPageThreeHtml).toContain('History 120');
+    expect(yearPageThreeHtml).not.toContain('History 100');
+
+    const monthPageTwoHtml = await (await fetch(`${server.getBaseUrl()}/2020/10/page/2/`)).text();
+    expect(monthPageTwoHtml).toContain('History 51');
+    expect(monthPageTwoHtml).toContain('History 100');
+    expect(monthPageTwoHtml).not.toContain('History 50');
+
+    const categoryPageTwoHtml = await (await fetch(`${server.getBaseUrl()}/category/news/page/2/`)).text();
+    expect(categoryPageTwoHtml).toContain('History 51');
+    expect(categoryPageTwoHtml).toContain('History 100');
+    expect(categoryPageTwoHtml).not.toContain('History 50');
+
+    const tagPageThreeHtml = await (await fetch(`${server.getBaseUrl()}/tag/dev/page/3/`)).text();
+    expect(tagPageThreeHtml).toContain('History 101');
+    expect(tagPageThreeHtml).toContain('History 120');
+    expect(tagPageThreeHtml).not.toContain('History 100');
+  });
+
   it('uses max posts per page from preferences', async () => {
     const posts = Array.from({ length: 20 }).map((_, index) =>
       makePost({
