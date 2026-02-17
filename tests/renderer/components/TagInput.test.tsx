@@ -49,3 +49,40 @@ describe('TagInput subscriptions', () => {
     });
   });
 });
+
+describe('TagInput category mode', () => {
+  beforeEach(() => {
+    const onMock = vi.fn((_channel: string, _callback: (...args: unknown[]) => void) => vi.fn());
+
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      tags: {
+        getAll: vi.fn().mockResolvedValue([]),
+        create: vi.fn(),
+      },
+      meta: {
+        ...(window as any).electronAPI?.meta,
+        getCategories: vi.fn().mockResolvedValue(['article']),
+      },
+      on: onMock,
+    };
+  });
+
+  it('loads categories from meta API in category mode', async () => {
+    render(
+      <TagInput
+        value={[]}
+        onChange={vi.fn()}
+        placeholder="Add categories..."
+        mode="category"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(window.electronAPI.meta.getCategories).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.on).not.toHaveBeenCalled();
+  });
+});

@@ -19,6 +19,8 @@ interface TagInputProps {
   placeholder?: string;
   /** Whether the input is disabled */
   disabled?: boolean;
+  /** Input mode (tags or categories) */
+  mode?: 'tag' | 'category';
 }
 
 export const TagInput: React.FC<TagInputProps> = ({
@@ -26,6 +28,7 @@ export const TagInput: React.FC<TagInputProps> = ({
   onChange,
   placeholder = 'Add tags...',
   disabled = false,
+  mode = 'tag',
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<TagData[]>([]);
@@ -40,14 +43,21 @@ export const TagInput: React.FC<TagInputProps> = ({
   // Load all available tags
   const loadTags = useCallback(async () => {
     try {
-      const tags = await window.electronAPI?.tags.getAll();
-      if (tags) {
-        setAllTags(tags as TagData[]);
+      if (mode === 'category') {
+        const categories = await window.electronAPI?.meta.getCategories();
+        if (categories) {
+          setAllTags(categories.map((name) => ({ id: name, name })));
+        }
+      } else {
+        const tags = await window.electronAPI?.tags.getAll();
+        if (tags) {
+          setAllTags(tags as TagData[]);
+        }
       }
     } catch (error) {
-      console.error('Failed to load tags:', error);
+      console.error(`Failed to load ${mode}s:`, error);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     loadTags();
@@ -55,8 +65,11 @@ export const TagInput: React.FC<TagInputProps> = ({
 
   // Listen for tag changes
   useEffect(() => {
+    if (mode !== 'tag') {
+      return;
+    }
     return subscribeToTagEvents(window.electronAPI?.on, loadTags);
-  }, [loadTags]);
+  }, [loadTags, mode]);
 
   // Filter suggestions based on input
   useEffect(() => {
@@ -124,16 +137,20 @@ export const TagInput: React.FC<TagInputProps> = ({
 
     setIsCreating(true);
     try {
-      await window.electronAPI?.tags.create({ name: normalized });
+      if (mode === 'category') {
+        await window.electronAPI?.meta.addCategory(normalized);
+      } else {
+        await window.electronAPI?.tags.create({ name: normalized });
+      }
       addTag(normalized);
-      showToast.success(`Tag "${normalized}" created`);
+      showToast.success(`${mode === 'category' ? 'Category' : 'Tag'} "${normalized}" created`);
     } catch (error) {
       const err = error as Error;
       showToast.error(err.message);
     } finally {
       setIsCreating(false);
     }
-  }, [allTags, addTag]);
+  }, [allTags, addTag, mode]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -285,7 +302,7 @@ export const TagInput: React.FC<TagInputProps> = ({
               onClick={() => createAndAddTag(inputValue.trim())}
             >
               <span className="tag-suggestion-icon">+</span>
-              <span>Create "{inputValue.trim()}"</span>
+              <span>Create {mode === 'category' ? 'category' : 'tag'} "{inputValue.trim()}"</span>
             </button>
           )}
         </div>
