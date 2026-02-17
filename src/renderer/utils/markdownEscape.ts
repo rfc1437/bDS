@@ -37,3 +37,37 @@ export function unescapeMacroSyntax(markdown: string): string {
   
   return result;
 }
+
+const unorderedListItemPattern = /^[-+*]\s/;
+const orderedListItemPattern = /^\d+\.\s/;
+
+function getListLineType(line: string): 'ordered' | 'unordered' | null {
+  if (unorderedListItemPattern.test(line)) return 'unordered';
+  if (orderedListItemPattern.test(line)) return 'ordered';
+  return null;
+}
+
+export function normalizeMilkdownMarkdown(markdown: string): string {
+  const unescaped = unescapeMacroSyntax(markdown);
+  const lines = unescaped.split('\n');
+  const normalized: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const previousListType = i > 0 ? getListLineType(lines[i - 1]) : null;
+    const nextListType = i < lines.length - 1 ? getListLineType(lines[i + 1]) : null;
+    if (line === '' && previousListType !== null && previousListType === nextListType) {
+      continue;
+    }
+
+    if (line === '>') {
+      normalized.push('> ');
+      continue;
+    }
+
+    normalized.push(line);
+  }
+
+  return normalized.join('\n');
+}

@@ -22,7 +22,7 @@ import { imageResolverPlugin } from '../../plugins/imageResolverPlugin';
 import '../../macros';
 import './MilkdownEditor.css';
 import { InsertModal } from '../InsertModal';
-import { unescapeMacroSyntax } from '../../utils/markdownEscape';
+import { normalizeMilkdownMarkdown } from '../../utils/markdownEscape';
 
 // Remark plugin to force tight lists (no blank lines between list items)
 const remarkTightListsPlugin: Plugin<[Record<string, unknown>], Root> = () => {
@@ -68,11 +68,11 @@ export const shouldPropagateMilkdownChange = ({
   externalContent,
   hasUserInteracted,
 }: MilkdownChangePropagationInput): boolean => {
-  const unescaped = unescapeMacroSyntax(markdown);
-  const prevUnescaped = unescapeMacroSyntax(prevMarkdown);
-  const externalUnescaped = unescapeMacroSyntax(externalContent);
+  const normalized = normalizeMilkdownMarkdown(markdown);
+  const prevNormalized = normalizeMilkdownMarkdown(prevMarkdown);
+  const externalNormalized = normalizeMilkdownMarkdown(externalContent);
 
-  if (unescaped === prevUnescaped) {
+  if (normalized === prevNormalized) {
     return false;
   }
 
@@ -80,7 +80,7 @@ export const shouldPropagateMilkdownChange = ({
     return false;
   }
 
-  return unescaped !== externalUnescaped;
+  return normalized !== externalNormalized;
 };
 
 interface EditorToolbarProps {
@@ -329,7 +329,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
 
           if (shouldEmit) {
             isInternalChange.current = true;
-            onChangeRef.current(unescapeMacroSyntax(markdown));
+            onChangeRef.current(normalizeMilkdownMarkdown(markdown));
           }
         });
       })

@@ -45,4 +45,15 @@ describe('shouldPropagateMilkdownChange', () => {
 
     expect(result).toBe(false);
   });
+
+  it('does not propagate list-spacing-only normalization differences', () => {
+    const result = shouldPropagateMilkdownChange({
+      markdown: '- one\n\n- two',
+      prevMarkdown: '',
+      externalContent: '- one\n- two',
+      hasUserInteracted: true,
+    });
+
+    expect(result).toBe(false);
+  });
 });
