@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell } from 'electron';
+import { app, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
@@ -12,6 +12,7 @@ import { getGitEngine } from '../engine/GitEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
+import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_WEB_CONTENTS_ACTIONS, type AppMenuAction } from '../shared/menuCommands';
 
 /**
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
@@ -44,6 +45,45 @@ function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
 
   const parsed = new Date(post.createdAt);
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
+  if (!sender) {
+    return false;
+  }
+
+  if (!APP_MENU_WEB_CONTENTS_ACTIONS.has(action)) {
+    return false;
+  }
+
+  switch (action) {
+    case 'undo':
+      sender.undo?.();
+      return true;
+    case 'redo':
+      sender.redo?.();
+      return true;
+    case 'cut':
+      sender.cut?.();
+      return true;
+    case 'copy':
+      sender.copy?.();
+      return true;
+    case 'paste':
+      sender.paste?.();
+      return true;
+    case 'delete':
+      sender.delete?.();
+      return true;
+    case 'selectAll':
+      sender.selectAll?.();
+      return true;
+    case 'toggleDevTools':
+      sender.toggleDevTools?.();
+      return true;
+    default:
+      return false;
+  }
 }
 
 export function registerIpcHandlers(): void {
@@ -671,6 +711,36 @@ export function registerIpcHandlers(): void {
       // File doesn't exist or is invalid - return null
       return null;
     }
+  });
+
+  safeHandle('app:triggerMenuAction', async (event, action: string) => {
+    const typedAction = action as AppMenuAction;
+
+    if (typedAction === 'quit') {
+      app.quit();
+      return;
+    }
+
+    if (typedAction === 'viewOnGitHub') {
+      await shell.openExternal('https://github.com/rfc1437/bDS');
+      return;
+    }
+
+    if (typedAction === 'reportIssue') {
+      await shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
+    const handledByWebContents = runWebContentsMenuAction((event as any)?.sender, typedAction);
+    if (handledByWebContents) {
+      return;
+    }
+
+    const channel = APP_MENU_ACTION_EVENT_MAP[typedAction];
+    if (!channel) {
+      return;
+    }
+    event.sender.send(channel);
   });
 
   // ============ Meta Handlers ============

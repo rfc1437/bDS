@@ -472,6 +472,10 @@ export const TabBar: React.FC = () => {
     }
   };
 
+  if (tabs.length === 0) {
+    return null;
+  }
+
   return (
     <div className="tab-bar">
       {showLeftArrow && (

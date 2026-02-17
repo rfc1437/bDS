@@ -142,6 +142,7 @@ export const electronAPI: ElectronAPI = {
     getDefaultProjectPath: (projectId: string) => ipcRenderer.invoke('app:getDefaultProjectPath', projectId),
     readProjectMetadata: (folderPath: string) => ipcRenderer.invoke('app:readProjectMetadata', folderPath),
     setPreviewPostTarget: (postId: string | null) => ipcRenderer.invoke('app:setPreviewPostTarget', postId),
+    triggerMenuAction: (action: string) => ipcRenderer.invoke('app:triggerMenuAction', action),
   },
 
   // Meta (tags, categories, and project metadata)

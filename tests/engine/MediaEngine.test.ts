@@ -29,6 +29,7 @@ import { MediaEngine, MediaData } from '../../src/main/engine/MediaEngine';
 const mockMedia = new Map<string, any>();
 const mockPostMedia = new Map<string, any>();
 const mockFiles = new Map<string, Buffer | string>();
+const normalizePath = (value: string): string => value.replace(/\\/g, '/');
 
 // Track database operations for testing
 let mediaDeleteCalled = false;
@@ -126,7 +127,8 @@ vi.mock('../../src/main/database', () => ({
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(async (path: string) => {
-    const content = mockFiles.get(path);
+    const normalizedPath = normalizePath(path);
+    const content = mockFiles.get(normalizedPath);
     if (!content) {
       const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
       (error as any).code = 'ENOENT';
@@ -135,29 +137,29 @@ vi.mock('fs/promises', () => ({
     return content;
   }),
   writeFile: vi.fn(async (path: string, content: Buffer | string) => {
-    mockFiles.set(path, content);
+    mockFiles.set(normalizePath(path), content);
   }),
   unlink: vi.fn(async (path: string) => {
-    mockFiles.delete(path);
+    mockFiles.delete(normalizePath(path));
   }),
   mkdir: vi.fn(async () => {}),
   readdir: vi.fn(async () => []),
   stat: vi.fn(async (path: string) => ({
-    isFile: () => mockFiles.has(path),
-    isDirectory: () => !mockFiles.has(path),
-    size: mockFiles.get(path)?.length || 0,
+    isFile: () => mockFiles.has(normalizePath(path)),
+    isDirectory: () => !mockFiles.has(normalizePath(path)),
+    size: mockFiles.get(normalizePath(path))?.length || 0,
   })),
   access: vi.fn(async (path: string) => {
-    if (!mockFiles.has(path)) {
+    if (!mockFiles.has(normalizePath(path))) {
       const error = new Error(`ENOENT`);
       (error as any).code = 'ENOENT';
       throw error;
     }
   }),
   copyFile: vi.fn(async (src: string, dest: string) => {
-    const content = mockFiles.get(src);
+    const content = mockFiles.get(normalizePath(src));
     if (content) {
-      mockFiles.set(dest, content);
+      mockFiles.set(normalizePath(dest), content);
     }
   }),
 }));

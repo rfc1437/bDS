@@ -11,6 +11,7 @@ import { visit } from 'unist-util-visit';
 import { normalizeMilkdownMarkdown } from '../../../src/renderer/utils/markdownEscape';
 
 const wxrRefDir = path.join(__dirname, '../../assets/wxr-ref');
+const normalizeLineEndingsToLf = (value: string): string => value.replace(/\r\n/g, '\n');
 
 const remarkTightListsPlugin: Plugin<[Record<string, unknown>], Root> = () => {
   return (tree: Root) => {
@@ -42,13 +43,14 @@ describe('Milkdown markdown round trip', () => {
     const files = fs.readdirSync(wxrRefDir).filter((file) => file.endsWith('.md'));
 
     for (const file of files) {
-      const raw = fs.readFileSync(path.join(wxrRefDir, file), 'utf-8');
+      const raw = normalizeLineEndingsToLf(fs.readFileSync(path.join(wxrRefDir, file), 'utf-8'));
       const { content } = matter(raw);
+      const normalizedContent = normalizeLineEndingsToLf(content);
 
       const editor = await Editor.make()
         .config((ctx) => {
           ctx.set(rootCtx, root);
-          ctx.set(defaultValueCtx, content);
+          ctx.set(defaultValueCtx, normalizedContent);
           ctx.set(remarkStringifyOptionsCtx, {
             bullet: '-',
             listItemIndent: 'one',
@@ -59,16 +61,16 @@ describe('Milkdown markdown round trip', () => {
         .use(gfm)
         .create();
 
-      const serialized = editor.action((ctx) => {
+      const serialized = normalizeLineEndingsToLf(editor.action((ctx) => {
         const parser = ctx.get(parserCtx);
         const serializer = ctx.get(serializerCtx);
-        const doc = parser(content);
+        const doc = parser(normalizedContent);
         return normalizeMilkdownMarkdown(serializer(doc));
-      });
+      }));
 
       await editor.destroy();
 
-      expect(serialized, `round trip mismatch for ${file}`).toBe(content);
+      expect(serialized, `round trip mismatch for ${file}`).toBe(normalizedContent);
     }
   }, 30000);
 });

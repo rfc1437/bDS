@@ -960,7 +960,8 @@ export class MediaEngine extends EventEmitter {
     const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
     if (!dbMedia?.filePath) return null;
     const dataDir = this.getDataDir();
-    return path.relative(dataDir, dbMedia.filePath);
+    const relativePath = path.relative(dataDir, dbMedia.filePath);
+    return relativePath.replace(/\\/g, '/');
   }
 
   async rebuildDatabaseFromFiles(): Promise<void> {

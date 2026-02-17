@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { PreviewServer } from './engine/PreviewServer';
+import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 
 let mainWindow: BrowserWindow | null = null;
 let previewServer: PreviewServer | null = null;
@@ -41,6 +42,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function createWindow(): void {
+  const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -48,7 +50,17 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Blogging Desktop Server',
     backgroundColor: '#1e1e1e', // VS Code dark background
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    ...(isMac
+      ? {}
+      : {
+          titleBarOverlay: {
+            color: '#252526',
+            symbolColor: '#cccccc',
+            height: 34,
+          },
+          autoHideMenuBar: false,
+        }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -158,32 +170,82 @@ async function startPreviewServerOnAppStart(): Promise<void> {
 }
 
 function createApplicationMenu(): Menu {
+  const commandDefinitions = APP_MENU_GROUPS
+    .flatMap(group => group.items)
+    .filter(item => !item.separator)
+    .reduce<Record<string, AppMenuItemDefinition>>((acc, item) => {
+      acc[item.action] = item;
+      return acc;
+    }, {});
+
+  const triggerMenuAction = (action: AppMenuAction): void => {
+    if (action === 'quit') {
+      app.quit();
+      return;
+    }
+
+    if (action === 'viewOnGitHub') {
+      void shell.openExternal('https://github.com/rfc1437/bDS');
+      return;
+    }
+
+    if (action === 'reportIssue') {
+      void shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
+    const channel = APP_MENU_ACTION_EVENT_MAP[action];
+    if (channel) {
+      mainWindow?.webContents.send(channel);
+    }
+  };
+
+  const buildSharedMenuItem = (action: AppMenuAction): MenuItemConstructorOptions => {
+    const definition = commandDefinitions[action];
+    if (!definition) {
+      throw new Error(`Unknown shared menu action: ${action}`);
+    }
+
+    if (definition.role) {
+      return {
+        label: definition.label,
+        role: definition.role,
+        accelerator: definition.accelerator,
+      };
+    }
+
+    return {
+      label: definition.label,
+      accelerator: definition.accelerator,
+      click: () => {
+        triggerMenuAction(action);
+      },
+    };
+  };
+
+  const buildSharedGroupMenuItems = (groupLabel: string): MenuItemConstructorOptions[] => {
+    const group = APP_MENU_GROUPS.find(item => item.label === groupLabel);
+    if (!group) {
+      return [];
+    }
+
+    return group.items.map((item) => {
+      if (item.separator) {
+        return { type: 'separator' };
+      }
+
+      return buildSharedMenuItem(item.action as AppMenuAction);
+    });
+  };
+
   const template: MenuItemConstructorOptions[] = [
     {
       label: 'File',
       submenu: [
-        {
-          label: 'New Post',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            mainWindow?.webContents.send('menu:newPost');
-          },
-        },
-        {
-          label: 'Import Media...',
-          accelerator: 'CmdOrCtrl+I',
-          click: () => {
-            mainWindow?.webContents.send('menu:importMedia');
-          },
-        },
+        buildSharedMenuItem('newPost'),
+        buildSharedMenuItem('importMedia'),
         { type: 'separator' },
-        {
-          label: 'Save',
-          accelerator: 'CmdOrCtrl+S',
-          click: () => {
-            mainWindow?.webContents.send('menu:save');
-          },
-        },
+        buildSharedMenuItem('save'),
         { type: 'separator' },
         {
           label: 'Open in Browser',
@@ -204,76 +266,17 @@ function createApplicationMenu(): Menu {
           },
         },
         { type: 'separator' },
-        {
-          label: 'Exit',
-          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Alt+F4',
-          click: () => {
-            app.quit();
-          },
-        },
+        buildSharedMenuItem('quit'),
       ],
     },
     {
       label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'delete' },
-        { type: 'separator' },
-        { role: 'selectAll' },
-        { type: 'separator' },
-        {
-          label: 'Find',
-          accelerator: 'CmdOrCtrl+F',
-          click: () => {
-            mainWindow?.webContents.send('menu:find');
-          },
-        },
-        {
-          label: 'Replace',
-          accelerator: 'CmdOrCtrl+H',
-          click: () => {
-            mainWindow?.webContents.send('menu:replace');
-          },
-        },
-      ],
+      submenu: buildSharedGroupMenuItems('Edit'),
     },
     {
       label: 'View',
       submenu: [
-        {
-          label: 'Posts',
-          accelerator: 'CmdOrCtrl+1',
-          click: () => {
-            mainWindow?.webContents.send('menu:viewPosts');
-          },
-        },
-        {
-          label: 'Media',
-          accelerator: 'CmdOrCtrl+2',
-          click: () => {
-            mainWindow?.webContents.send('menu:viewMedia');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Toggle Sidebar',
-          accelerator: 'CmdOrCtrl+B',
-          click: () => {
-            mainWindow?.webContents.send('menu:toggleSidebar');
-          },
-        },
-        {
-          label: 'Toggle Panel',
-          accelerator: 'CmdOrCtrl+J',
-          click: () => {
-            mainWindow?.webContents.send('menu:togglePanel');
-          },
-        },
+        ...buildSharedGroupMenuItems('View'),
         { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
@@ -295,13 +298,7 @@ function createApplicationMenu(): Menu {
     {
       label: 'Blog',
       submenu: [
-        {
-          label: 'Publish Selected',
-          accelerator: 'CmdOrCtrl+Shift+P',
-          click: () => {
-            mainWindow?.webContents.send('menu:publishSelected');
-          },
-        },
+        buildSharedMenuItem('publishSelected'),
         { type: 'separator' },
         {
           label: 'Preview Post',
@@ -317,50 +314,15 @@ function createApplicationMenu(): Menu {
           },
         },
         { type: 'separator' },
-        {
-          label: 'Rebuild Database from Files',
-          click: () => {
-            mainWindow?.webContents.send('menu:rebuildDatabase');
-          },
-        },
-        {
-          label: 'Reindex Search Text',
-          click: () => {
-            mainWindow?.webContents.send('menu:reindexText');
-          },
-        },
+        buildSharedMenuItem('rebuildDatabase'),
+        buildSharedMenuItem('reindexText'),
         { type: 'separator' },
-        {
-          label: 'Metadata Diff Tool',
-          click: () => {
-            mainWindow?.webContents.send('menu:metadataDiff');
-          },
-        },
+        buildSharedMenuItem('metadataDiff'),
       ],
     },
     {
       label: 'Help',
-      submenu: [
-        {
-          label: 'About Blogging Desktop Server',
-          click: () => {
-            mainWindow?.webContents.send('menu:about');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'View on GitHub',
-          click: async () => {
-            await shell.openExternal('https://github.com/rfc1437/bDS');
-          },
-        },
-        {
-          label: 'Report Issue',
-          click: async () => {
-            await shell.openExternal('https://github.com/rfc1437/bDS/issues');
-          },
-        },
-      ],
+      submenu: buildSharedGroupMenuItems('Help'),
     },
   ];
 

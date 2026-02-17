@@ -16,6 +16,9 @@ const registeredHandlers = new Map<string, (...args: any[]) => Promise<any>>();
 
 // Mock ipcMain to capture handler registrations
 vi.mock('electron', () => ({
+  app: {
+    quit: vi.fn(),
+  },
   ipcMain: {
     handle: vi.fn((channel: string, handler: (...args: any[]) => Promise<any>) => {
       registeredHandlers.set(channel, handler);
@@ -27,6 +30,7 @@ vi.mock('electron', () => ({
   },
   shell: {
     openPath: vi.fn(),
+    openExternal: vi.fn(),
     showItemInFolder: vi.fn(),
   },
 }));
@@ -1337,6 +1341,61 @@ describe('IPC Handlers', () => {
 
         expect(mockProjectEngine.getDefaultProjectBaseDir).toHaveBeenCalledWith('project-1');
         expect(result).toBe('/Users/test/bds/project-1');
+      });
+    });
+
+    describe('app:triggerMenuAction', () => {
+      it('should forward custom titlebar action to renderer menu channel', async () => {
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'newPost');
+
+        expect(send).toHaveBeenCalledWith('menu:newPost');
+      });
+
+      it('should execute default edit actions on webContents sender', async () => {
+        const undo = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { undo, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'undo');
+
+        expect(undo).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should execute toggleDevTools on sender when action is toggleDevTools', async () => {
+        const toggleDevTools = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { toggleDevTools, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'toggleDevTools');
+
+        expect(toggleDevTools).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should quit the application when action is quit', async () => {
+        const { app } = await import('electron');
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'quit');
+
+        expect(app.quit).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should open repository URL when action is viewOnGitHub', async () => {
+        const { shell } = await import('electron');
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'viewOnGitHub');
+
+        expect(shell.openExternal).toHaveBeenCalledWith('https://github.com/rfc1437/bDS');
+        expect(send).not.toHaveBeenCalled();
       });
     });
   });
