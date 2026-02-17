@@ -162,9 +162,6 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [author, setAuthor] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
-  const [availableCategories, setAvailableCategories] = useState<string[]>(['article', 'picture', 'aside', 'page']);
-  const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
-  const categoriesDropdownRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
@@ -193,34 +190,6 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   useEffect(() => {
     window.electronAPI?.posts.hasPublishedVersion(postId).then(setHasPublishedVersion);
   }, [postId]);
-
-  // Load available categories from backend (project-scoped)
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const categories = await window.electronAPI?.meta.getCategories();
-        if (categories && categories.length > 0) {
-          setAvailableCategories(categories);
-        }
-      } catch {
-        // Keep defaults
-      }
-    };
-    loadCategories();
-  }, []);
-
-  // Close categories dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (categoriesDropdownRef.current && !categoriesDropdownRef.current.contains(event.target as Node)) {
-        setCategoriesDropdownOpen(false);
-      }
-    };
-    if (categoriesDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [categoriesDropdownOpen]);
 
   // Resolve media URLs in content for display
   const resolvedContent = useMemo(() => resolveMediaUrls(content, media), [content, media]);
@@ -770,66 +739,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               </div>
               <div className="editor-field">
                 <label>Categories</label>
-                <div className="multi-select-dropdown" ref={categoriesDropdownRef}>
-                  <button
-                    type="button"
-                    className="multi-select-trigger"
-                    onClick={() => setCategoriesDropdownOpen(!categoriesDropdownOpen)}
-                  >
-                    <span className="multi-select-value">
-                      {selectedCategories.length === 0
-                        ? 'Select categories...'
-                        : selectedCategories.length === 1
-                          ? selectedCategories[0]
-                          : `${selectedCategories.length} categories`}
-                    </span>
-                    <span className="multi-select-arrow">{categoriesDropdownOpen ? '▲' : '▼'}</span>
-                  </button>
-                  {categoriesDropdownOpen && (
-                    <div className="multi-select-menu">
-                      {availableCategories.map((cat) => (
-                        <label key={cat} className="multi-select-option">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.includes(cat)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedCategories([...selectedCategories, cat]);
-                              } else {
-                                // Don't allow unchecking if it's the last category
-                                if (selectedCategories.length > 1) {
-                                  setSelectedCategories(selectedCategories.filter(c => c !== cat));
-                                }
-                              }
-                            }}
-                          />
-                          <span>{cat}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {selectedCategories.length > 1 && (
-                  <div className="multi-select-pills">
-                    {selectedCategories.map((cat) => (
-                      <span key={cat} className="multi-select-pill">
-                        {cat}
-                        <button
-                          type="button"
-                          className="multi-select-pill-remove"
-                          onClick={() => {
-                            if (selectedCategories.length > 1) {
-                              setSelectedCategories(selectedCategories.filter(c => c !== cat));
-                            }
-                          }}
-                          title="Remove category"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <TagInput
+                  value={selectedCategories}
+                  onChange={(categories) => {
+                    setSelectedCategories(categories.length > 0 ? categories : ['article']);
+                  }}
+                  placeholder="Add categories..."
+                  mode="category"
+                />
               </div>
             </div>
             
