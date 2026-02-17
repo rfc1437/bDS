@@ -309,6 +309,20 @@ function buildCanonicalPostPath(post: PostData): string {
   return `/${year}/${month}/${day}/${post.slug}`;
 }
 
+function formatArchiveDate(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = String(date.getFullYear());
+  return `${day}.${month}.${year}`;
+}
+
+function getArchiveDateKey(date: Date): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getPageHtml(content: string, title: string, language: string): string {
   return `<!doctype html>
 <html lang="${escapeHtml(language)}">
@@ -325,6 +339,12 @@ function getPageHtml(content: string, title: string, language: string): string {
       .post { border: 1px solid var(--muted-border-color); padding: 1rem; background: var(--card-background-color); }
       .post iframe { width: 100%; min-height: 20rem; }
       .macro-gallery, .macro-photo-archive { border: 1px dashed var(--muted-border-color); padding: .75rem; }
+      .archive-day-group { display: grid; grid-template-columns: 5.25rem 1fr; gap: 1.25rem; align-items: stretch; }
+      .archive-day-marker { display: flex; justify-content: center; align-items: center; color: var(--muted-color); }
+      .archive-day-marker span { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .16em; font-size: 1.05rem; font-weight: 600; text-transform: uppercase; }
+      .archive-day-posts { display: grid; gap: 1rem; }
+      .archive-day-separator { position: relative; height: 2px; width: 100%; color: var(--color); border-top: 1px solid currentColor; opacity: .18; margin: .45rem 0 .65rem; }
+      .archive-day-separator::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to right, transparent 0%, transparent 18%, currentColor 58%, transparent 92%, transparent 100%); opacity: .85; }
     </style>
     <script defer src="/assets/lightbox.min.js"></script>
   </head>
@@ -549,14 +569,14 @@ export class PreviewServer {
     if (tagMatch) {
       const tag = tagMatch[1];
       const posts = await this.loadPublishedSnapshots({ status: 'published', tags: [tag] }, pageOptions);
-      return this.renderPostList(posts, rewriteContext);
+      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
     }
 
     const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
       const posts = await this.loadPublishedSnapshots({ status: 'published', categories: [category] }, pageOptions);
-      return this.renderPostList(posts, rewriteContext);
+      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
     }
 
     const daySlugMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
@@ -577,7 +597,7 @@ export class PreviewServer {
       const month = Number(dayMatch[2]);
       const day = Number(dayMatch[3]);
       const posts = await this.loadPostsForDay(year, month, day, pageOptions);
-      return this.renderPostList(posts, rewriteContext);
+      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
     }
 
     const monthMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})$/);
@@ -586,14 +606,14 @@ export class PreviewServer {
       const month = Number(monthMatch[2]);
       if (month < 1 || month > 12) return null;
       const posts = await this.loadPublishedSnapshots({ status: 'published', year, month: month - 1 }, pageOptions);
-      return this.renderPostList(posts, rewriteContext);
+      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
     }
 
     const yearMatch = pagedPathname.match(/^\/(\d{4})$/);
     if (yearMatch) {
       const year = Number(yearMatch[1]);
       const posts = await this.loadPublishedSnapshots({ status: 'published', year }, pageOptions);
-      return this.renderPostList(posts, rewriteContext);
+      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
     }
 
     const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
@@ -719,7 +739,11 @@ export class PreviewServer {
     return snapshots;
   }
 
-  private async renderPostList(posts: PostData[], rewriteContext: HtmlRewriteContext): Promise<string> {
+  private async renderPostList(
+    posts: PostData[],
+    rewriteContext: HtmlRewriteContext,
+    options?: { archiveGrouping?: boolean },
+  ): Promise<string> {
     const renderablePosts = await Promise.all(posts.map(async (post) => {
       if (post.status === 'published' && !post.content) {
         const fullPost = await this.postEngine.getPost(post.id);
@@ -728,8 +752,41 @@ export class PreviewServer {
       return post;
     }));
 
-    const rendered = await Promise.all(renderablePosts.map((post) => renderPostHtml(post, rewriteContext)));
-    return rendered.join('\n');
+    if (!options?.archiveGrouping) {
+      const rendered = await Promise.all(renderablePosts.map((post) => renderPostHtml(post, rewriteContext)));
+      return rendered.join('\n');
+    }
+
+    const groups: Array<{ dateLabel: string; posts: PostData[] }> = [];
+    let currentGroup: { key: string; dateLabel: string; posts: PostData[] } | null = null;
+
+    for (const post of renderablePosts) {
+      const key = getArchiveDateKey(post.createdAt);
+      if (!currentGroup || currentGroup.key !== key) {
+        currentGroup = {
+          key,
+          dateLabel: formatArchiveDate(post.createdAt),
+          posts: [],
+        };
+        groups.push(currentGroup);
+      }
+
+      currentGroup.posts.push(post);
+    }
+
+    const renderedGroups = await Promise.all(groups.map(async (group) => {
+      const renderedPosts = await Promise.all(group.posts.map((post) => renderPostHtml(post, rewriteContext)));
+      return `<section class="archive-day-group"><aside class="archive-day-marker"><span>${escapeHtml(group.dateLabel)}</span></aside><div class="archive-day-posts">${renderedPosts.join('\n')}</div></section>`;
+    }));
+
+    return renderedGroups
+      .map((groupHtml, index) => {
+        if (index === renderedGroups.length - 1) {
+          return groupHtml;
+        }
+        return `${groupHtml}\n<div class="archive-day-separator" aria-hidden="true"></div>`;
+      })
+      .join('\n');
   }
 
   private async buildHtmlRewriteContext(): Promise<HtmlRewriteContext> {

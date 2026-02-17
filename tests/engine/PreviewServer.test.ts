@@ -238,6 +238,42 @@ describe('PreviewServer', () => {
     expect(dayHtml).not.toContain('Month Post');
   });
 
+  it('renders archive pages grouped by day with rotated date markers and separators', async () => {
+    const posts = [
+      makePost({ id: 'a1', slug: 'a1', title: 'A1', createdAt: new Date('2025-02-14T12:00:00.000Z') }),
+      makePost({ id: 'a2', slug: 'a2', title: 'A2', createdAt: new Date('2025-02-14T08:00:00.000Z') }),
+      makePost({ id: 'b1', slug: 'b1', title: 'B1', createdAt: new Date('2025-02-13T09:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/2025/2/`)).text();
+
+    expect(html).toContain('archive-day-group');
+    expect(html).toContain('archive-day-marker');
+    expect(html).toContain('14.02.2025');
+    expect(html).toContain('13.02.2025');
+
+    const markerCount = (html.match(/class="archive-day-marker"/g) || []).length;
+    expect(markerCount).toBe(2);
+
+    const separatorCount = (html.match(/class="archive-day-separator"/g) || []).length;
+    expect(separatorCount).toBe(1);
+
+    expect(html).toContain('.archive-day-separator { position: relative; height: 2px;');
+    expect(html).toContain('color: var(--color);');
+    expect(html).toContain('border-top: 1px solid currentColor;');
+    expect(html).toContain('opacity: .18;');
+    expect(html).toContain('.archive-day-separator::before');
+    expect(html).toContain('linear-gradient(to right, transparent 0%, transparent 18%, currentColor 58%, transparent 92%, transparent 100%)');
+  });
+
   it('supports day-and-slug post route', async () => {
     const post = makePost({ id: 'one', title: 'Single Post', slug: 'single-post', createdAt: new Date('2025-02-14T10:00:00.000Z') });
 
@@ -282,6 +318,50 @@ describe('PreviewServer', () => {
     const pageHtml = await pageResponse.text();
     expect(pageHtml).toContain('About');
     expect(pageHtml).not.toContain('About Blog Post');
+  });
+
+  it('renders tag and category pages with archive-style day grouping', async () => {
+    const tagDayOneA = makePost({
+      id: 'tag-day-one-a',
+      title: 'Tag Day One A',
+      slug: 'tag-day-one-a',
+      tags: ['dev'],
+      categories: ['news'],
+      createdAt: new Date('2025-03-10T14:00:00.000Z'),
+    });
+    const tagDayOneB = makePost({
+      id: 'tag-day-one-b',
+      title: 'Tag Day One B',
+      slug: 'tag-day-one-b',
+      tags: ['dev'],
+      categories: ['news'],
+      createdAt: new Date('2025-03-10T08:00:00.000Z'),
+    });
+    const tagDayTwo = makePost({
+      id: 'tag-day-two',
+      title: 'Tag Day Two',
+      slug: 'tag-day-two',
+      tags: ['dev'],
+      categories: ['news'],
+      createdAt: new Date('2025-03-09T09:00:00.000Z'),
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([tagDayOneA, tagDayOneB, tagDayTwo]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const tagHtml = await (await fetch(`${server.getBaseUrl()}/tag/dev/`)).text();
+    expect(tagHtml).toContain('class="archive-day-group"');
+    expect(tagHtml).toContain('10.03.2025');
+    expect(tagHtml).toContain('09.03.2025');
+
+    const categoryHtml = await (await fetch(`${server.getBaseUrl()}/category/news/`)).text();
+    expect(categoryHtml).toContain('class="archive-day-group"');
+    expect(categoryHtml).toContain('class="archive-day-separator"');
   });
 
   it('supports /page/<num> suffix on list routes', async () => {
