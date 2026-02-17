@@ -41,6 +41,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function createWindow(): void {
+  const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -48,7 +49,17 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Blogging Desktop Server',
     backgroundColor: '#1e1e1e', // VS Code dark background
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    ...(isMac
+      ? {}
+      : {
+          titleBarOverlay: {
+            color: '#252526',
+            symbolColor: '#cccccc',
+            height: 34,
+          },
+          autoHideMenuBar: true,
+        }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
