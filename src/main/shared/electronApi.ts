@@ -430,6 +430,7 @@ export interface ElectronAPI {
     update: (id: string, data: Partial<PostData>) => Promise<PostData | null>;
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<PostData | null>;
+    getPreviewUrl: (id: string) => Promise<string | null>;
     getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;
     publish: (id: string) => Promise<PostData | null>;
@@ -508,6 +509,7 @@ export interface ElectronAPI {
     selectFolder: (title?: string) => Promise<string | null>;
     getDefaultProjectPath: (projectId: string) => Promise<string>;
     readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; mainLanguage?: string } | null>;
+    setPreviewPostTarget: (postId: string | null) => Promise<void>;
   };
   meta: {
     getTags: () => Promise<string[]>;

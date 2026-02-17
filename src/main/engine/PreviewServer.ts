@@ -63,6 +63,25 @@ const PREVIEW_ASSETS = {
   },
 } as const;
 
+const PREVIEW_IMAGE_ASSETS = {
+  'prev.png': {
+    modulePath: 'lightbox2/dist/images/prev.png',
+    contentType: 'image/png',
+  },
+  'next.png': {
+    modulePath: 'lightbox2/dist/images/next.png',
+    contentType: 'image/png',
+  },
+  'close.png': {
+    modulePath: 'lightbox2/dist/images/close.png',
+    contentType: 'image/png',
+  },
+  'loading.gif': {
+    modulePath: 'lightbox2/dist/images/loading.gif',
+    contentType: 'image/gif',
+  },
+} as const;
+
 function clampMaxPostsPerPage(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return DEFAULT_MAX_POSTS_PER_PAGE;
@@ -415,6 +434,12 @@ export class PreviewServer {
         return;
       }
 
+      const imageAsset = await this.resolveImageAsset(pathname);
+      if (imageAsset) {
+        this.respondAsset(res, imageAsset.contentType, imageAsset.body);
+        return;
+      }
+
       const mediaAsset = await this.resolveMediaAsset(pathname, context.dataDir);
       if (mediaAsset) {
         this.respondAsset(res, mediaAsset.contentType, mediaAsset.body);
@@ -701,6 +726,27 @@ export class PreviewServer {
       };
     } catch (error) {
       console.error(`[PreviewServer] Failed to read local asset: ${assetDefinition.modulePath}`, error);
+      return null;
+    }
+  }
+
+  private async resolveImageAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {
+    const match = pathname.match(/^\/images\/([^/]+)$/);
+    if (!match) return null;
+
+    const assetName = match[1] as keyof typeof PREVIEW_IMAGE_ASSETS;
+    const assetDefinition = PREVIEW_IMAGE_ASSETS[assetName];
+    if (!assetDefinition) return null;
+
+    try {
+      const absolutePath = require.resolve(assetDefinition.modulePath);
+      const body = await readFile(absolutePath);
+      return {
+        contentType: assetDefinition.contentType,
+        body,
+      };
+    } catch (error) {
+      console.error(`[PreviewServer] Failed to read image asset: ${assetDefinition.modulePath}`, error);
       return null;
     }
   }

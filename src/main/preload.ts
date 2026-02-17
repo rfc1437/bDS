@@ -52,6 +52,7 @@ export const electronAPI: ElectronAPI = {
     update: (id: string, data: unknown) => ipcRenderer.invoke('posts:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('posts:delete', id),
     get: (id: string) => ipcRenderer.invoke('posts:get', id),
+    getPreviewUrl: (id: string) => ipcRenderer.invoke('posts:getPreviewUrl', id),
     getAll: (options?: { limit?: number; offset?: number }) => ipcRenderer.invoke('posts:getAll', options),
     getByStatus: (status: string) => ipcRenderer.invoke('posts:getByStatus', status),
     publish: (id: string) => ipcRenderer.invoke('posts:publish', id),
@@ -140,6 +141,7 @@ export const electronAPI: ElectronAPI = {
     selectFolder: (title?: string) => ipcRenderer.invoke('app:selectFolder', title),
     getDefaultProjectPath: (projectId: string) => ipcRenderer.invoke('app:getDefaultProjectPath', projectId),
     readProjectMetadata: (folderPath: string) => ipcRenderer.invoke('app:readProjectMetadata', folderPath),
+    setPreviewPostTarget: (postId: string | null) => ipcRenderer.invoke('app:setPreviewPostTarget', postId),
   },
 
   // Meta (tags, categories, and project metadata)

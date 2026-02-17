@@ -6,11 +6,14 @@ import { registerIpcHandlers, registerChatHandlers, initializeChatHandlers, clea
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
+import { getPostEngine } from './engine/PostEngine';
 import { PreviewServer } from './engine/PreviewServer';
 
 let mainWindow: BrowserWindow | null = null;
 let previewServer: PreviewServer | null = null;
+let activePreviewPostId: string | null = null;
 const PREVIEW_SERVER_PORT = 4123;
+const BLOG_PREVIEW_POST_MENU_ID = 'blog.previewPost';
 
 // Check if dev server is likely running (only in development)
 const isDev = process.env.NODE_ENV === 'development';
@@ -107,6 +110,42 @@ async function openPreviewInBrowser(): Promise<void> {
 
   await previewServer.start(PREVIEW_SERVER_PORT);
   await shell.openExternal(`${previewServer.getBaseUrl()}/`);
+}
+
+function buildCanonicalPostPath(createdAt: Date, slug: string): string {
+  const year = createdAt.getFullYear();
+  const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+  const day = String(createdAt.getDate()).padStart(2, '0');
+  return `/${year}/${month}/${day}/${slug}`;
+}
+
+function setPreviewPostMenuEnabled(enabled: boolean): void {
+  const appMenu = Menu.getApplicationMenu();
+  const previewPostMenuItem = appMenu?.getMenuItemById(BLOG_PREVIEW_POST_MENU_ID);
+  if (previewPostMenuItem) {
+    previewPostMenuItem.enabled = enabled;
+  }
+}
+
+async function openActivePostPreviewInBrowser(): Promise<void> {
+  if (!activePreviewPostId) {
+    return;
+  }
+
+  const postEngine = getPostEngine();
+  const post = await postEngine.getPost(activePreviewPostId);
+  if (!post) {
+    setPreviewPostMenuEnabled(false);
+    return;
+  }
+
+  if (!previewServer) {
+    previewServer = new PreviewServer();
+  }
+
+  await previewServer.start(PREVIEW_SERVER_PORT);
+  const canonicalPath = buildCanonicalPostPath(post.createdAt, post.slug);
+  await shell.openExternal(`${previewServer.getBaseUrl()}${canonicalPath}`);
 }
 
 async function startPreviewServerOnAppStart(): Promise<void> {
@@ -265,9 +304,15 @@ function createApplicationMenu(): Menu {
         { type: 'separator' },
         {
           label: 'Preview Post',
+          id: BLOG_PREVIEW_POST_MENU_ID,
+          enabled: false,
           accelerator: 'CmdOrCtrl+Shift+V',
-          click: () => {
-            mainWindow?.webContents.send('menu:previewPost');
+          click: async () => {
+            try {
+              await openActivePostPreviewInBrowser();
+            } catch (error) {
+              console.error('Failed to preview active post in browser:', error);
+            }
           },
         },
         { type: 'separator' },
@@ -444,6 +489,11 @@ async function initialize(): Promise<void> {
 
   // Register IPC handlers
   registerIpcHandlers();
+
+  ipcMain.handle('app:setPreviewPostTarget', async (_, postId: string | null) => {
+    activePreviewPostId = typeof postId === 'string' && postId.length > 0 ? postId : null;
+    setPreviewPostMenuEnabled(Boolean(activePreviewPostId));
+  });
   
   // Initialize and register chat handlers
   initializeChatHandlers(() => mainWindow);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, fireEvent } from '@testing-library/react';
 
 let markdownUpdatedHandler: ((ctx: unknown, markdown: string, prevMarkdown: string) => void) | null = null;
 
@@ -161,6 +161,7 @@ describe('Editor visual mode persistence', () => {
     (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost());
     (window as any).electronAPI.posts.hasPublishedVersion = vi.fn().mockReturnValue(neverSettles);
     (window as any).electronAPI.posts.update = vi.fn().mockResolvedValue(null);
+    (window as any).electronAPI.posts.getPreviewUrl = vi.fn().mockResolvedValue('http://127.0.0.1:4123/2026/02/16/test-post');
     (window as any).electronAPI.meta.getCategories = vi.fn().mockReturnValue(neverSettles);
 
     useAppStore.setState({
@@ -199,5 +200,47 @@ describe('Editor visual mode persistence', () => {
     await act(async () => {
       unmount?.();
     });
+  });
+
+  it('uses canonical preview server URL in preview mode iframe', async () => {
+    const { getByTitle, container } = render(<PostEditor postId="post-1" />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      fireEvent.click(getByTitle('Read-only preview'));
+      await Promise.resolve();
+    });
+
+    expect((window as any).electronAPI.posts.getPreviewUrl).toHaveBeenCalledWith('post-1');
+
+    const frame = container.querySelector('.editor-preview-frame') as HTMLIFrameElement | null;
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute('src')).toBe('http://127.0.0.1:4123/2026/02/16/test-post');
+
+    expect(container.querySelector('.preview-content')).toBeNull();
+  });
+
+  it('renders mode toggle in centered toolbar section', async () => {
+    const { container } = render(<PostEditor postId="post-1" />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const centerSection = container.querySelector('.editor-toolbar-center');
+    expect(centerSection).not.toBeNull();
+
+    const modeToggle = centerSection?.querySelector('.editor-mode-toggle');
+    expect(modeToggle).not.toBeNull();
+
+    const modeButtons = modeToggle?.querySelectorAll('button');
+    expect(modeButtons?.length).toBe(3);
   });
 });

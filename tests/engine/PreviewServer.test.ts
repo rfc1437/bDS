@@ -174,6 +174,14 @@ describe('PreviewServer', () => {
     const lightboxJsResponse = await fetch(`${server.getBaseUrl()}/assets/lightbox.min.js`);
     expect(lightboxJsResponse.status).toBe(200);
     expect(lightboxJsResponse.headers.get('content-type')).toContain('application/javascript');
+
+    const lightboxPrevImageResponse = await fetch(`${server.getBaseUrl()}/images/prev.png`);
+    expect(lightboxPrevImageResponse.status).toBe(200);
+    expect(lightboxPrevImageResponse.headers.get('content-type')).toContain('image/png');
+
+    const lightboxLoadingImageResponse = await fetch(`${server.getBaseUrl()}/images/loading.gif`);
+    expect(lightboxLoadingImageResponse.status).toBe(200);
+    expect(lightboxLoadingImageResponse.headers.get('content-type')).toContain('image/gif');
   });
 
   it('limits list routes to 50 posts', async () => {

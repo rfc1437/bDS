@@ -701,6 +701,29 @@ describe('IPC Handlers', () => {
       });
     });
 
+    describe('posts:getPreviewUrl', () => {
+      it('should return canonical preview URL for an existing post', async () => {
+        mockPostEngine.getPost.mockResolvedValue(createMockPost({
+          id: 'post-1',
+          slug: 'my-post',
+          createdAt: new Date('2026-02-16T12:00:00.000Z'),
+        }));
+
+        const result = await invokeHandler('posts:getPreviewUrl', 'post-1');
+
+        expect(mockPostEngine.getPost).toHaveBeenCalledWith('post-1');
+        expect(result).toBe('http://127.0.0.1:4123/2026/02/16/my-post');
+      });
+
+      it('should return null when post does not exist', async () => {
+        mockPostEngine.getPost.mockResolvedValue(null);
+
+        const result = await invokeHandler('posts:getPreviewUrl', 'missing-post');
+
+        expect(result).toBeNull();
+      });
+    });
+
     describe('posts:getAll', () => {
       it('should return paginated posts from PostEngine', async () => {
         const mockPosts = [

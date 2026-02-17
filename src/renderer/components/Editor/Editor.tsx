@@ -16,10 +16,8 @@ import { ImportAnalysisView } from '../ImportAnalysisView';
 import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
-import { parseMacros, getMacro } from '../../macros/registry';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
-import { marked } from 'marked';
 import './Editor.css';
 
 /** Get display name for media: prefer title over originalName */
@@ -116,380 +114,6 @@ const resolveMediaUrls = (content: string, mediaList: MediaData[]): string => {
   });
 };
 
-// Render a macro synchronously for preview
-const renderMacroSync = (name: string, params: Record<string, string>, postId?: string): string => {
-  const macro = getMacro(name);
-  if (!macro) {
-    return `<span class="macro-error">Unknown macro: ${name}</span>`;
-  }
-  try {
-    const result = macro.render(params, { postId, isPreview: true });
-    // If it returns a promise, show loading state (shouldn't happen for gallery)
-    if (result instanceof Promise) {
-      return `<div class="macro-loading">Loading ${name}...</div>`;
-    }
-    return result;
-  } catch (e) {
-    return `<span class="macro-error">Error rendering ${name}</span>`;
-  }
-};
-
-// Simple markdown to HTML converter for preview
-export const markdownToHtml = (markdown: string, postId?: string): string => {
-  // First, render macros
-  const macros = parseMacros(markdown);
-  let result = markdown;
-  
-  // Replace macros from end to start to preserve positions
-  for (let i = macros.length - 1; i >= 0; i--) {
-    const macro = macros[i];
-    const rendered = renderMacroSync(macro.name, macro.params, postId);
-    result = result.slice(0, macro.start) + rendered + result.slice(macro.end);
-  }
-
-  return marked.parse(result, {
-    gfm: true,
-    breaks: false,
-    async: false,
-  }) as string;
-};
-
-/**
- * Hydrate gallery elements in the preview with actual linked media
- */
-const hydrateGalleries = async (
-  container: HTMLElement,
-  postId: string,
-  onImageClick: (index: number, images: { src: string; alt: string }[]) => void
-) => {
-  const galleries = container.querySelectorAll('.macro-gallery[data-post-id]');
-  
-  for (const gallery of galleries) {
-    const galleryPostId = gallery.getAttribute('data-post-id');
-    if (!galleryPostId || galleryPostId !== postId) continue;
-    
-    const galleryContainer = gallery.querySelector('.gallery-container');
-    if (!galleryContainer) continue;
-    
-    try {
-      // Load linked media for this post
-      const linkedData = await window.electronAPI?.postMedia.getMediaDataForPost(postId);
-      
-      if (!linkedData || linkedData.length === 0) {
-        galleryContainer.innerHTML = '<div class="gallery-empty">No media linked to this post</div>';
-        continue;
-      }
-      
-      // Filter to images only (media is nested in the link object)
-      const images = linkedData.filter(link => link.media?.mimeType?.startsWith('image/'));
-      
-      if (images.length === 0) {
-        galleryContainer.innerHTML = '<div class="gallery-empty">No images linked to this post</div>';
-        continue;
-      }
-      
-      // Build gallery grid (column count is handled via CSS class on parent)
-      galleryContainer.innerHTML = images.map((link, index) => `
-        <div class="gallery-item" data-index="${index}">
-          <img 
-            src="bds-media://${link.media.id}" 
-            alt="${link.media.alt || link.media.originalName}" 
-            title="${link.media.title || link.media.originalName}"
-          />
-        </div>
-      `).join('');
-      
-      // Set up lightbox click handlers
-      const items = galleryContainer.querySelectorAll('.gallery-item');
-      const imageData = images.map(link => ({
-        src: `bds-media://${link.media.id}`,
-        alt: link.media.alt || link.media.originalName,
-      }));
-      
-      items.forEach((item, index) => {
-        item.addEventListener('click', () => onImageClick(index, imageData));
-      });
-      
-    } catch (error) {
-      console.error('Failed to hydrate gallery:', error);
-      galleryContainer.innerHTML = '<div class="gallery-error">Failed to load gallery</div>';
-    }
-  }
-};
-
-const FULL_MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-// Track photo_archive hydration state to prevent duplicate runs
-const photoArchiveHydratingCache = new WeakSet<HTMLElement>();
-
-/**
- * Hydrate photo_archive elements in the preview with actual media from the given year/month.
- */
-const hydratePhotoArchive = async (
-  container: HTMLElement,
-  onImageClick: (index: number, images: { src: string; alt: string }[]) => void
-) => {
-  // Match both year-based and recent-based archives
-  const archives = container.querySelectorAll('.macro-photo-archive[data-year], .macro-photo-archive[data-recent]');
-  
-  if (archives.length === 0) {
-    return;
-  }
-  
-  // Check if we're already hydrating (prevent duplicate runs)
-  if (photoArchiveHydratingCache.has(container)) {
-    console.log('[photo_archive] Skipping duplicate hydration for container');
-    return;
-  }
-  photoArchiveHydratingCache.add(container);
-  
-  try {
-    await doHydratePhotoArchive(container, onImageClick, archives);
-  } finally {
-    // Clear the hydrating flag after a delay to allow for content changes
-    setTimeout(() => photoArchiveHydratingCache.delete(container), 500);
-  }
-};
-
-/**
- * Internal implementation of photo_archive hydration
- */
-const doHydratePhotoArchive = async (
-  _container: HTMLElement,
-  onImageClick: (index: number, images: { src: string; alt: string }[]) => void,
-  archives: NodeListOf<Element>
-) => {
-  // Collect media for archive rendering based on current macros.
-  type ImageData = { id: string; originalName: string; alt?: string; mimeType: string; createdAt?: Date };
-  const archiveData: Array<{
-    element: Element;
-    mode: 'single-month' | 'full-year' | 'recent';
-    year?: number;
-    month?: number;
-    images?: ImageData[];
-    // Map key is "YYYY-MM" for recent mode, or month number (1-12) for year mode
-    monthlyImages?: Map<string | number, ImageData[]>;
-    showYearInLabel?: boolean;
-  }> = [];
-  
-  console.log(`[photo_archive] Processing ${archives.length} archive macro(s)`);
-  
-  for (const archive of archives) {
-    const recentStr = archive.getAttribute('data-recent');
-    const yearStr = archive.getAttribute('data-year');
-    const monthStr = archive.getAttribute('data-month');
-    
-    if (recentStr) {
-      // Recent mode: get last N months with images
-      const recentCount = parseInt(recentStr, 10) || 10;
-      console.log(`[photo_archive] Recent mode: fetching last ${recentCount} months with images`);
-      
-      // Fetch all images (no filter)
-      const allMedia = await window.electronAPI?.media.filter({});
-      const allImages = (allMedia || []).filter(m => m.mimeType?.startsWith('image/'));
-      
-      // Group by year-month and sort by most recent
-      const monthlyMap = new Map<string, ImageData[]>();
-      for (const img of allImages) {
-        if (!img.createdAt) continue;
-        const date = new Date(img.createdAt);
-        const year = date.getFullYear();
-        const month = date.getMonth() + 1; // 1-based
-        const key = `${year}-${String(month).padStart(2, '0')}`; // e.g. "2024-06"
-        
-        if (!monthlyMap.has(key)) {
-          monthlyMap.set(key, []);
-        }
-        monthlyMap.get(key)!.push(img);
-      }
-      
-      // Sort by key descending (newest first) and take top N
-      const sortedKeys = Array.from(monthlyMap.keys()).sort().reverse().slice(0, recentCount);
-      const recentMonthlyImages = new Map<string, ImageData[]>();
-      
-      for (const key of sortedKeys) {
-        const images = monthlyMap.get(key)!;
-        recentMonthlyImages.set(key, images);
-      }
-      
-      const totalImages = Array.from(recentMonthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
-      archiveData.push({ 
-        element: archive, 
-        mode: 'recent',
-        monthlyImages: recentMonthlyImages, 
-        showYearInLabel: true 
-      });
-      console.log(`[photo_archive] Recent: ${totalImages} images across ${recentMonthlyImages.size} months`);
-      
-    } else if (yearStr) {
-      const year = parseInt(yearStr, 10);
-      const month = monthStr ? parseInt(monthStr, 10) : undefined;
-      
-      if (!year) continue;
-      
-      if (month !== undefined) {
-        // Single month view
-        const mediaItems = await window.electronAPI?.media.filter({
-          year,
-          month: month - 1, // API uses 0-based month
-        });
-        const images = (mediaItems || []).filter(m => m.mimeType?.startsWith('image/'));
-        
-        archiveData.push({ element: archive, mode: 'single-month', year, month, images });
-        console.log(`[photo_archive] Year ${year} month ${month}: ${images.length} images`);
-      } else {
-        // Full year view - collect all months, tracking which month each image belongs to
-        const monthlyImages = new Map<number, ImageData[]>();
-        
-        for (let m = 0; m < 12; m++) {
-          const mediaItems = await window.electronAPI?.media.filter({
-            year,
-            month: m,
-          });
-          const images = (mediaItems || []).filter(item => item.mimeType?.startsWith('image/'));
-          
-          if (images.length > 0) {
-            monthlyImages.set(m + 1, images); // Store with 1-based month key
-          }
-        }
-        
-        const totalImages = Array.from(monthlyImages.values()).reduce((sum, imgs) => sum + imgs.length, 0);
-        archiveData.push({ element: archive, mode: 'full-year', year, month: undefined, monthlyImages });
-        console.log(`[photo_archive] Year ${year}: ${totalImages} images across ${monthlyImages.size} months`);
-      }
-    }
-  }
-
-  // Render galleries
-  for (const { element, mode, year, month, images, monthlyImages, showYearInLabel } of archiveData) {
-    const archiveContainer = element.querySelector('.photo-archive-container');
-    if (!archiveContainer) continue;
-    
-    try {
-      // Render the gallery
-      let html = '';
-      
-      if (mode === 'single-month' && month !== undefined && images && year) {
-        // Single month view
-        if (images.length === 0) {
-          archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${FULL_MONTH_NAMES[month - 1]} ${year}</div>`;
-          continue;
-        }
-        html = buildMonthGallery(month, year, images, onImageClick, false);
-      } else if (mode === 'recent' && monthlyImages) {
-        // Recent mode - keys are "YYYY-MM" strings
-        if (monthlyImages.size === 0) {
-          archiveContainer.innerHTML = `<div class="photo-archive-empty">No recent photos found</div>`;
-          continue;
-        }
-        
-        // Sort by key descending (newest first) - keys are "YYYY-MM" strings
-        const sortedEntries = Array.from(monthlyImages.entries())
-          .sort((a, b) => (b[0] as string).localeCompare(a[0] as string));
-        
-        html = sortedEntries.map(([key, imgs]) => {
-          // Parse "YYYY-MM" to get year and month
-          const [yearStr, monthStr] = (key as string).split('-');
-          const entryYear = parseInt(yearStr, 10);
-          const entryMonth = parseInt(monthStr, 10);
-          return `<div class="photo-archive-month-wrapper">${buildMonthGallery(entryMonth, entryYear, imgs, onImageClick, true)}</div>`;
-        }).join('');
-      } else if (mode === 'full-year' && monthlyImages && year) {
-        // Full year view - keys are month numbers
-        if (monthlyImages.size === 0) {
-          archiveContainer.innerHTML = `<div class="photo-archive-empty">No photos found for ${year}</div>`;
-          continue;
-        }
-        
-        // Sort months ascending (January first)
-        const sortedMonths = Array.from(monthlyImages.entries())
-          .sort((a, b) => (a[0] as number) - (b[0] as number));
-        html = sortedMonths.map(([m, imgs]) => 
-          `<div class="photo-archive-month-wrapper">${buildMonthGallery(m as number, year, imgs, onImageClick, showYearInLabel || false)}</div>`
-        ).join('');
-      }
-      
-      archiveContainer.innerHTML = html;
-      
-      // Set up click handlers for all images
-      setupPhotoArchiveClickHandlers(archiveContainer, onImageClick);
-      
-    } catch (error) {
-      console.error('Failed to hydrate photo archive:', error);
-      archiveContainer.innerHTML = '<div class="photo-archive-error">Failed to load photo archive</div>';
-    }
-  }
-  
-  console.log('[photo_archive] Hydration complete.');
-};
-
-/**
- * Build HTML for a single month's gallery with rotated month label
- * @param month - 1-based month number (1 = January)
- * @param year - The year
- * @param images - Array of image data
- * @param _onImageClick - Click handler (unused in template, set up separately)
- * @param showYear - Whether to include the year in the label (e.g., "January 2024")
- */
-function buildMonthGallery(
-  month: number,
-  year: number,
-  images: { id: string; originalName: string; alt?: string }[],
-  _onImageClick: (index: number, images: { src: string; alt: string }[]) => void,
-  showYear: boolean = false
-): string {
-  const monthName = FULL_MONTH_NAMES[month - 1];
-  const labelText = showYear ? `${monthName} ${year}` : monthName;
-  
-  return `
-    <div class="photo-archive-month" data-month="${month}" data-year="${year}">
-      <div class="photo-archive-month-label">
-        <span>${labelText}</span>
-      </div>
-      <div class="photo-archive-gallery gallery-lightbox">
-        ${images.map((img, index) => `
-          <div class="photo-archive-item" data-index="${index}" data-media-id="${img.id}">
-            <img 
-              src="bds-media://${img.id}" 
-              alt="${img.alt || img.originalName}" 
-              title="${img.title || img.originalName}"
-            />
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
-/**
- * Set up click handlers for photo archive gallery items
- */
-function setupPhotoArchiveClickHandlers(
-  container: Element,
-  onImageClick: (index: number, images: { src: string; alt: string }[]) => void
-) {
-  // Find all month galleries
-  const monthGalleries = container.querySelectorAll('.photo-archive-month');
-  
-  monthGalleries.forEach(monthGallery => {
-    const items = monthGallery.querySelectorAll('.photo-archive-item');
-    const imageData = Array.from(items).map(item => {
-      const img = item.querySelector('img');
-      return {
-        src: img?.getAttribute('src') || '',
-        alt: img?.getAttribute('alt') || '',
-      };
-    });
-    
-    items.forEach((item, index) => {
-      item.addEventListener('click', () => onImageClick(index, imageData));
-    });
-  });
-}
-
 interface PostEditorProps {
   postId: string;
 }
@@ -543,17 +167,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const categoriesDropdownRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
-  const hydrationOverlayRef = useRef<HTMLDivElement>(null);
-  const isHydratingRef = useRef(false);
-  const previewContentRef = useRef<HTMLDivElement>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [galleryImages, setGalleryImages] = useState<{ src: string; alt: string }[]>([]);
   const [showPostSearch, setShowPostSearch] = useState(false);
   const [showMediaSearch, setShowMediaSearch] = useState(false);
   const editorRef = useRef<unknown>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
 
   const isDirty = checkIsDirty(postId);
 
@@ -607,67 +227,30 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   // Extract images from resolved content for lightbox
   const images = useMarkdownImages(resolvedContent);
-  
-  // Combine regular images with gallery images for lightbox
-  const allImages = useMemo(() => {
-    // If gallery images are set, use those; otherwise use extracted images
-    return galleryImages.length > 0 ? galleryImages : images;
-  }, [images, galleryImages]);
 
-  // Hydrate galleries and photo archives when in preview mode
   useEffect(() => {
-    if (editorMode !== 'preview' || !previewRef.current || !previewContentRef.current) return;
-    
+    if (editorMode !== 'preview') return;
+
     let cancelled = false;
-    
-    // Helper to show/hide the overlay without triggering React re-render
-    const showOverlay = (show: boolean) => {
-      if (hydrationOverlayRef.current) {
-        hydrationOverlayRef.current.style.display = show ? 'flex' : 'none';
-      }
-    };
-    
-    // Set content immediately if not hydrating
-    // During hydration, we skip updating to preserve the hydrated DOM
-    if (!isHydratingRef.current) {
-      previewContentRef.current.innerHTML = markdownToHtml(resolvedContent, postId);
-    }
-    
-    // Small delay to ensure DOM is updated
-    const timer = setTimeout(async () => {
-      if (cancelled || !previewRef.current) return;
-      
-      const lightboxHandler = (index: number, imgs: { src: string; alt: string }[]) => {
-        setGalleryImages(imgs);
-        setLightboxIndex(index);
-        setLightboxOpen(true);
-      };
-      
-      // Check if there are photo_archive macros that need hydration
-      const hasPhotoArchives = previewRef.current.querySelectorAll('.macro-photo-archive[data-year], .macro-photo-archive[data-recent]').length > 0;
-      
-      if (hasPhotoArchives) {
-        isHydratingRef.current = true;
-        showOverlay(true);
-      }
-      
-      try {
-        await hydrateGalleries(previewRef.current, postId, lightboxHandler);
+    setPreviewUrl(null);
+
+    window.electronAPI?.posts.getPreviewUrl(postId)
+      .then((url) => {
         if (!cancelled) {
-          await hydratePhotoArchive(previewRef.current, lightboxHandler);
+          setPreviewUrl(url);
         }
-      } finally {
-        // Always reset hydration state when complete - the ref is global to the component
-        isHydratingRef.current = false;
-        showOverlay(false);
-      }
-    }, 100);
-    
+      })
+      .catch((error) => {
+        console.error('Failed to load post preview URL:', error);
+        if (!cancelled) {
+          setPreviewUrl(null);
+        }
+      });
+
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
-  }, [editorMode, postId, resolvedContent]);
+  }, [editorMode, postId]);
 
   // Track latest values for auto-save on unmount/switch
   const pendingChangesRef = useRef<{
@@ -1264,57 +847,63 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         
         <div className="editor-body">
           <div className="editor-toolbar">
-            <label>Content</label>
-            <div className="editor-mode-toggle">
-              <button 
-                className={editorMode === 'wysiwyg' ? 'active' : ''} 
-                onClick={() => handleEditorModeChange('wysiwyg')}
-                title="Visual editor"
-              >
-                Visual
-              </button>
-              <button 
-                className={editorMode === 'markdown' ? 'active' : ''} 
-                onClick={() => handleEditorModeChange('markdown')}
-                title="Markdown source"
-              >
-                Markdown
-              </button>
-              <button 
-                className={editorMode === 'preview' ? 'active' : ''} 
-                onClick={() => handleEditorModeChange('preview')}
-                title="Read-only preview"
-              >
-                Preview
-              </button>
+            <div className="editor-toolbar-left">
+              <label>Content</label>
             </div>
-            {images.length > 0 && (
-              <button
-                className="gallery-button"
-                onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
-                title={`View ${images.length} image(s)`}
-              >
-                📷 {images.length}
-              </button>
-            )}
-            {editorMode === 'markdown' && (
-              <>
-                <button
-                  className="insert-post-link-button"
-                  onClick={() => setShowPostSearch(true)}
-                  title="Link to post (Ctrl+K)"
+            <div className="editor-toolbar-center">
+              <div className="editor-mode-toggle">
+                <button 
+                  className={editorMode === 'wysiwyg' ? 'active' : ''} 
+                  onClick={() => handleEditorModeChange('wysiwyg')}
+                  title="Visual editor"
                 >
-                  📝
+                  Visual
                 </button>
-                <button
-                  className="insert-media-button"
-                  onClick={() => setShowMediaSearch(true)}
-                  title="Insert image from media library"
+                <button 
+                  className={editorMode === 'markdown' ? 'active' : ''} 
+                  onClick={() => handleEditorModeChange('markdown')}
+                  title="Markdown source"
                 >
-                  🖼️
+                  Markdown
                 </button>
-              </>
-            )}
+                <button 
+                  className={editorMode === 'preview' ? 'active' : ''} 
+                  onClick={() => handleEditorModeChange('preview')}
+                  title="Read-only preview"
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+            <div className="editor-toolbar-right">
+              {images.length > 0 && (
+                <button
+                  className="gallery-button"
+                  onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
+                  title={`View ${images.length} image(s)`}
+                >
+                  📷 {images.length}
+                </button>
+              )}
+              {editorMode === 'markdown' && (
+                <>
+                  <button
+                    className="insert-post-link-button"
+                    onClick={() => setShowPostSearch(true)}
+                    title="Link to post (Ctrl+K)"
+                  >
+                    📝
+                  </button>
+                  <button
+                    className="insert-media-button"
+                    onClick={() => setShowMediaSearch(true)}
+                    title="Insert image from media library"
+                  >
+                    🖼️
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           
           {editorMode === 'wysiwyg' && (
@@ -1353,27 +942,26 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           )}
           
           {editorMode === 'preview' && (
-            <div className="editor-preview markdown-body" ref={previewRef}>
-              <div className="preview-hydrating-overlay" ref={hydrationOverlayRef} style={{ display: 'none' }}>
-                <div className="preview-hydrating-content">
-                  <div className="preview-hydrating-spinner" />
-                  <span>Loading photo archive...</span>
-                </div>
-              </div>
-              <div
-                className="preview-content"
-                ref={previewContentRef}
-              />
+            <div className="editor-preview">
+              {previewUrl ? (
+                <iframe
+                  className="editor-preview-frame"
+                  src={previewUrl}
+                  title="Post preview"
+                />
+              ) : (
+                <div className="editor-preview-loading">Loading preview...</div>
+              )}
             </div>
           )}
         </div>
         
         {/* Lightbox for viewing images in content */}
         <Lightbox
-          images={allImages}
+          images={images}
           initialIndex={lightboxIndex}
           isOpen={lightboxOpen}
-          onClose={() => { setLightboxOpen(false); setGalleryImages([]); }}
+          onClose={() => { setLightboxOpen(false); }}
         />
       </div>
 
@@ -2196,6 +1784,13 @@ export const Editor: React.FC = () => {
   const showImport = activeTab?.type === 'import';
   const showMetadataDiff = activeTab?.type === 'metadata-diff';
   const showGitDiff = activeTab?.type === 'git-diff';
+
+  useEffect(() => {
+    const activePostId = activeTab?.type === 'post' ? activeTab.id : null;
+    window.electronAPI?.app.setPreviewPostTarget(activePostId).catch((error) => {
+      console.error('Failed to sync preview post target:', error);
+    });
+  }, [activeTab]);
 
   // Clear selectedPostId if the post doesn't exist (e.g., after project switch)
   useEffect(() => {

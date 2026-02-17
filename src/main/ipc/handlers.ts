@@ -30,6 +30,22 @@ function safeHandle(channel: string, handler: (...args: any[]) => Promise<any>):
   });
 }
 
+function buildCanonicalPreviewPath(createdAt: Date, slug: string): string {
+  const year = createdAt.getFullYear();
+  const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+  const day = String(createdAt.getDate()).padStart(2, '0');
+  return `/${year}/${month}/${day}/${slug}`;
+}
+
+function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
+  if (post.createdAt instanceof Date) {
+    return post.createdAt;
+  }
+
+  const parsed = new Date(post.createdAt);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 export function registerIpcHandlers(): void {
   // ============ Git Handlers ============
 
@@ -254,6 +270,19 @@ export function registerIpcHandlers(): void {
   safeHandle('posts:get', async (_, id: string) => {
     const engine = getPostEngine();
     return engine.getPost(id);
+  });
+
+  safeHandle('posts:getPreviewUrl', async (_, id: string) => {
+    const engine = getPostEngine();
+    const post = await engine.getPost(id);
+
+    if (!post) {
+      return null;
+    }
+
+    const createdAt = resolvePostCreatedAt(post);
+    const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
+    return `http://127.0.0.1:4123${canonicalPath}`;
   });
 
   safeHandle('posts:getAll', async (_, options?: PaginationOptions) => {
