@@ -28,11 +28,12 @@ describe('WindowTitleBar', () => {
     render(<WindowTitleBar />);
 
     const toggleButton = screen.getByLabelText('Toggle Sidebar');
-    const svg = toggleButton.querySelector('svg');
-    const paths = svg?.querySelectorAll('path');
+    const iconFrame = toggleButton.querySelector('.window-titlebar-sidebar-icon');
+    const iconPane = toggleButton.querySelector('.window-titlebar-sidebar-pane');
 
-    expect(svg).not.toBeNull();
-    expect(paths?.[0]?.getAttribute('d')).toBe('M3 3.75A1.75 1.75 0 0 1 4.75 2h6.5A1.75 1.75 0 0 1 13 3.75v8.5A1.75 1.75 0 0 1 11.25 14h-6.5A1.75 1.75 0 0 1 3 12.25v-8.5z');
-    expect(paths?.[1]?.getAttribute('d')).toBe('M4.5 3.5h3.75v9H4.5z');
+    expect(iconFrame).not.toBeNull();
+    expect(iconPane).not.toBeNull();
+    expect(iconFrame).toHaveAttribute('data-shape', 'frame-square');
+    expect(iconPane).toHaveAttribute('data-shape', 'left-half');
   });
 });

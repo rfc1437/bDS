@@ -7,6 +7,7 @@
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, #1e1e1e);
   flex-shrink: 0;
   -webkit-app-region: drag;
+  padding-right: 10px;
 }
 
 .window-titlebar-drag-region {
@@ -18,25 +19,46 @@
   height: 100%;
   display: flex;
   align-items: center;
-  margin-right: 8px;
+  margin-right: 6px;
 }
 
 .window-titlebar-action-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   background: transparent;
   border: none;
-  color: var(--vscode-titleBar-activeForeground, var(--vscode-icon-foreground, #c5c5c5));
+  color: var(--vscode-foreground, #cccccc);
   cursor: pointer;
   border-radius: 4px;
   -webkit-app-region: no-drag;
 }
 
-.window-titlebar-action-button svg {
+.window-titlebar-action-button:focus,
+.window-titlebar-action-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.window-titlebar-sidebar-icon {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
   display: block;
+  position: relative;
+  overflow: hidden;
+}
+
+.window-titlebar-sidebar-pane {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  background-color: currentColor;
 }
 
 .window-titlebar-action-button:hover {

@@ -15,15 +15,9 @@ export const WindowTitleBar: React.FC = () => {
           onClick={toggleSidebar}
           title={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar (Ctrl+B)`}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <path
-              d="M3 3.75A1.75 1.75 0 0 1 4.75 2h6.5A1.75 1.75 0 0 1 13 3.75v8.5A1.75 1.75 0 0 1 11.25 14h-6.5A1.75 1.75 0 0 1 3 12.25v-8.5z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-            />
-            <path d="M4.5 3.5h3.75v9H4.5z" fill="currentColor"/>
-          </svg>
+          <span className="window-titlebar-sidebar-icon" data-shape="frame-square" aria-hidden="true">
+            <span className="window-titlebar-sidebar-pane" data-shape="left-half" />
+          </span>
         </button>
       </div>
     </div>
