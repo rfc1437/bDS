@@ -289,6 +289,31 @@ describe('PreviewServer', () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('Single Post');
+    expect(html).toContain('data-template="single-post"');
+    expect(html).toContain('.single-post { margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }');
+  });
+
+  it('renders single post title as h1', async () => {
+    const post = makePost({
+      id: 'single-title',
+      title: 'Explicit Single Post Title',
+      slug: 'single-title',
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+      content: 'Plain body without markdown heading',
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/2025/2/14/single-title/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('<h1>Explicit Single Post Title</h1>');
   });
 
   it('supports tag, category, and page-slug routes', async () => {
@@ -387,12 +412,22 @@ describe('PreviewServer', () => {
     await server.start(0);
 
     const rootPageTwoHtml = await (await fetch(`${server.getBaseUrl()}/page/2/`)).text();
+    expect(rootPageTwoHtml).toContain('data-template="post-list"');
+    expect(rootPageTwoHtml).toContain('data-first-page="false"');
+    expect(rootPageTwoHtml).toContain('data-last-page="false"');
+    expect(rootPageTwoHtml).toContain('href="/"');
+    expect(rootPageTwoHtml).toContain('href="/page/3/"');
+    expect(rootPageTwoHtml).toContain('class="preview-pagination-link"');
+    expect(rootPageTwoHtml).not.toContain('role="button"');
     expect(rootPageTwoHtml).toContain('History 51');
     expect(rootPageTwoHtml).toContain('History 100');
     expect(rootPageTwoHtml).not.toContain('History 50');
     expect(rootPageTwoHtml).not.toContain('History 101');
 
     const yearPageThreeHtml = await (await fetch(`${server.getBaseUrl()}/2020/page/3/`)).text();
+    expect(yearPageThreeHtml).toContain('data-last-page="true"');
+    expect(yearPageThreeHtml).toContain('href="/2020/page/2/"');
+    expect(yearPageThreeHtml).not.toContain('href="/2020/page/4/"');
     expect(yearPageThreeHtml).toContain('History 101');
     expect(yearPageThreeHtml).toContain('History 120');
     expect(yearPageThreeHtml).not.toContain('History 100');
@@ -767,5 +802,21 @@ describe('PreviewServer', () => {
     expect(response.status).toBe(200);
 
     expect(getPost).toHaveBeenCalledTimes(50);
+  });
+
+  it('renders custom 404 template for unknown routes', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/does-not-exist/`);
+    expect(response.status).toBe(404);
+    const html = await response.text();
+    expect(html).toContain('data-template="not-found"');
+    expect(html).toContain('class="not-found"');
   });
 });

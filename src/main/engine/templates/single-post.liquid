@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="{{ language }}">
+  {% render 'partials/head', page_title: page_title %}
+  <body>
+    <main>
+      <article class="single-post" data-template="single-post">
+        <h1>{{ post.title }}</h1>
+        <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}</div>
+      </article>
+    </main>
+  </body>
+</html>

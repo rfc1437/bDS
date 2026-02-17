@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { marked } from 'marked';
+import { Liquid } from 'liquidjs';
 import { getMetaEngine, type ProjectMetadata } from './MetaEngine';
 import { getMediaEngine, type MediaData } from './MediaEngine';
 import { getPostEngine, type PostData, type PostFilter } from './PostEngine';
@@ -44,6 +45,53 @@ interface HtmlRewriteContext {
 interface RoutePagination {
   pathname: string;
   page: number;
+}
+
+interface PaginationContext {
+  page: number;
+  maxPostsPerPage: number;
+  totalPosts: number;
+}
+
+interface TemplatePostEntry {
+  id: string;
+  title: string;
+  content: string;
+}
+
+interface DayBlockContext {
+  date_label: string;
+  show_date_marker: boolean;
+  show_separator: boolean;
+  posts: TemplatePostEntry[];
+}
+
+interface PostListTemplateContext {
+  page_title: string;
+  language: string;
+  is_list_page: boolean;
+  is_first_page: boolean;
+  is_last_page: boolean;
+  has_prev_page: boolean;
+  has_next_page: boolean;
+  prev_page_href: string;
+  next_page_href: string;
+  canonical_post_path_by_slug: Record<string, string>;
+  canonical_media_path_by_source_path: Record<string, string>;
+  day_blocks: DayBlockContext[];
+}
+
+interface SinglePostTemplateContext {
+  page_title: string;
+  language: string;
+  post: TemplatePostEntry;
+  canonical_post_path_by_slug: Record<string, string>;
+  canonical_media_path_by_source_path: Record<string, string>;
+}
+
+interface NotFoundTemplateContext {
+  page_title: string;
+  language: string;
 }
 
 interface MediaEngineContract {
@@ -291,17 +339,6 @@ function renderMacro(name: string, params: Record<string, string>, postId: strin
   return '';
 }
 
-async function renderPostHtml(post: PostData, rewriteContext: HtmlRewriteContext): Promise<string> {
-  const withMacros = post.content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
-    const params = parseMacroParams(rawParams);
-    return renderMacro(macroName.toLowerCase(), params, post.id);
-  });
-
-  const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
-  const rewrittenHtml = rewriteRenderedHtmlUrls(markdownHtml, rewriteContext);
-  return `<div class="post">${rewrittenHtml}</div>`;
-}
-
 function buildCanonicalPostPath(post: PostData): string {
   const year = post.createdAt.getFullYear();
   const month = String(post.createdAt.getMonth() + 1).padStart(2, '0');
@@ -323,37 +360,28 @@ function getArchiveDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getPageHtml(content: string, title: string, language: string): string {
-  return `<!doctype html>
-<html lang="${escapeHtml(language)}">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(title)}</title>
-    <link rel="stylesheet" href="/assets/pico.min.css" />
-    <link rel="stylesheet" href="/assets/lightbox.min.css" />
-    <style>
-      :root { color-scheme: light dark; }
-      body { max-width: 960px; margin: 0 auto; padding: 2rem 1rem 4rem; }
-      main { display: grid; gap: 1rem; }
-      .post { border: 1px solid var(--muted-border-color); padding: 1rem; background: var(--card-background-color); }
-      .post iframe { width: 100%; min-height: 20rem; }
-      .macro-gallery, .macro-photo-archive { border: 1px dashed var(--muted-border-color); padding: .75rem; }
-      .archive-day-group { display: grid; grid-template-columns: 5.25rem 1fr; gap: 1.25rem; align-items: stretch; }
-      .archive-day-marker { display: flex; justify-content: center; align-items: center; color: var(--muted-color); }
-      .archive-day-marker span { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .16em; font-size: 1.05rem; font-weight: 600; text-transform: uppercase; }
-      .archive-day-posts { display: grid; gap: 1rem; }
-      .archive-day-separator { position: relative; height: 2px; width: 100%; color: var(--color); border-top: 1px solid currentColor; opacity: .18; margin: .45rem 0 .65rem; }
-      .archive-day-separator::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to right, transparent 0%, transparent 18%, currentColor 58%, transparent 92%, transparent 100%); opacity: .85; }
-    </style>
-    <script defer src="/assets/lightbox.min.js"></script>
-  </head>
-  <body>
-    <main>
-      ${content}
-    </main>
-  </body>
-</html>`;
+function buildPaginationHref(basePathname: string, page: number): string {
+  const base = basePathname === '/' ? '' : basePathname;
+  if (page <= 1) {
+    return basePathname === '/' ? '/' : `${basePathname}/`;
+  }
+
+  return `${base}/page/${page}/`;
+}
+
+function mapToRecord(map: Map<string, string>): Record<string, string> {
+  return Object.fromEntries(map.entries());
+}
+
+function recordToMap(record: unknown): Map<string, string> {
+  if (!record || typeof record !== 'object') {
+    return new Map<string, string>();
+  }
+
+  return new Map<string, string>(
+    Object.entries(record as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
 }
 
 export class PreviewServer {
@@ -361,6 +389,7 @@ export class PreviewServer {
   private readonly mediaEngine: MediaEngineContract;
   private readonly settingsEngine: MetaEngineContract;
   private readonly getActiveProjectContext: () => Promise<ActiveProjectContext>;
+  private readonly liquid: Liquid;
   private server: Server | null = null;
   private port: number | null = null;
 
@@ -379,6 +408,34 @@ export class PreviewServer {
         projectName: activeProject?.name,
         projectDescription: activeProject?.description ?? undefined,
       };
+    });
+    const templateRoots = [
+      path.resolve(__dirname, 'templates'),
+      path.resolve(process.cwd(), 'dist', 'main', 'engine', 'templates'),
+      path.resolve(process.cwd(), 'src', 'main', 'engine', 'templates'),
+    ];
+
+    this.liquid = new Liquid({
+      root: templateRoots,
+      extname: '.liquid',
+      cache: true,
+    });
+
+    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown) => {
+      const content = typeof value === 'string' ? value : '';
+      const postId = typeof postIdArg === 'string' ? postIdArg : '';
+      const rewriteContext: HtmlRewriteContext = {
+        canonicalPostPathBySlug: recordToMap(canonicalPostsArg),
+        canonicalMediaPathBySourcePath: recordToMap(canonicalMediaArg),
+      };
+
+      const withMacros = content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
+        const params = parseMacroParams(rawParams);
+        return renderMacro(macroName.toLowerCase(), params, postId);
+      });
+
+      const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
+      return rewriteRenderedHtmlUrls(markdownHtml, rewriteContext);
     });
   }
 
@@ -471,6 +528,8 @@ export class PreviewServer {
       }
 
       const metadata = await this.settingsEngine.getProjectMetadata();
+      const language = metadata?.mainLanguage?.trim() || 'en';
+      const pageTitle = resolvePageTitle(metadata, context.projectName, context.projectDescription);
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
       const htmlRewriteContext = await this.buildHtmlRewriteContext();
 
@@ -495,21 +554,32 @@ export class PreviewServer {
         return;
       }
 
-      const result = await this.resolveRoute(pathname, maxPostsPerPage, htmlRewriteContext);
+      const result = await this.resolveRoute(pathname, maxPostsPerPage, htmlRewriteContext, {
+        pageTitle,
+        language,
+      });
       if (!result) {
-        this.respond(res, 404, 'Not Found');
+        const notFoundHtml = await this.renderNotFound({
+          page_title: '404 Not Found',
+          language,
+        });
+        this.respond(res, 404, notFoundHtml);
         return;
       }
 
-      const language = metadata?.mainLanguage?.trim() || 'en';
-      this.respond(res, 200, getPageHtml(result, resolvePageTitle(metadata, context.projectName, context.projectDescription), language));
+      this.respond(res, 200, result);
     } catch (error) {
       console.error('[PreviewServer] Request failed:', error);
       this.respond(res, 500, 'Internal Server Error');
     }
   }
 
-  private async resolveRoute(pathname: string, maxPostsPerPage: number, rewriteContext: HtmlRewriteContext): Promise<string | null> {
+  private async resolveRoute(
+    pathname: string,
+    maxPostsPerPage: number,
+    rewriteContext: HtmlRewriteContext,
+    pageContext: { pageTitle: string; language: string },
+  ): Promise<string | null> {
     const routePagination = parseRoutePagination(pathname);
     if (!routePagination) {
       return null;
@@ -522,61 +592,91 @@ export class PreviewServer {
       page,
     };
 
-        const postsYearMonthSlugMatch = pagedPathname.match(/^\/posts\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
-        if (postsYearMonthSlugMatch) {
-          const year = Number(postsYearMonthSlugMatch[1]);
-          const month = Number(postsYearMonthSlugMatch[2]);
-          const slug = postsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
-          if (month < 1 || month > 12) return null;
-          const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
-          if (!post) return null;
-          return this.renderPostList([post], rewriteContext);
-        }
+    const postsYearMonthSlugMatch = pagedPathname.match(/^\/posts\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
+    if (postsYearMonthSlugMatch) {
+      const year = Number(postsYearMonthSlugMatch[1]);
+      const month = Number(postsYearMonthSlugMatch[2]);
+      const slug = postsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
+      if (month < 1 || month > 12) return null;
+      const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
+      if (!post) return null;
+      return this.renderSinglePost(post, rewriteContext, {
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
+    }
 
-        const postsSlugMatch = pagedPathname.match(/^\/posts\/([^/]+)$/);
-        if (postsSlugMatch) {
-          const slug = postsSlugMatch[1].replace(/\.html?$/i, '');
-          const post = await this.findPublishedPostBySlug(slug);
-          if (!post) return null;
-          return this.renderPostList([post], rewriteContext);
-        }
+    const postsSlugMatch = pagedPathname.match(/^\/posts\/([^/]+)$/);
+    if (postsSlugMatch) {
+      const slug = postsSlugMatch[1].replace(/\.html?$/i, '');
+      const post = await this.findPublishedPostBySlug(slug);
+      if (!post) return null;
+      return this.renderSinglePost(post, rewriteContext, {
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
+    }
 
-        const legacyPostsYearMonthSlugMatch = pagedPathname.match(/^\/post\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
-        if (legacyPostsYearMonthSlugMatch) {
-          const year = Number(legacyPostsYearMonthSlugMatch[1]);
-          const month = Number(legacyPostsYearMonthSlugMatch[2]);
-          const slug = legacyPostsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
-          if (month < 1 || month > 12) return null;
-          const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
-          if (!post) return null;
-          return this.renderPostList([post], rewriteContext);
-        }
+    const legacyPostsYearMonthSlugMatch = pagedPathname.match(/^\/post\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
+    if (legacyPostsYearMonthSlugMatch) {
+      const year = Number(legacyPostsYearMonthSlugMatch[1]);
+      const month = Number(legacyPostsYearMonthSlugMatch[2]);
+      const slug = legacyPostsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
+      if (month < 1 || month > 12) return null;
+      const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
+      if (!post) return null;
+      return this.renderSinglePost(post, rewriteContext, {
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
+    }
 
-        const legacyPostsSlugMatch = pagedPathname.match(/^\/post\/([^/]+)$/);
-        if (legacyPostsSlugMatch) {
-          const slug = legacyPostsSlugMatch[1].replace(/\.html?$/i, '');
-          const post = await this.findPublishedPostBySlug(slug);
-          if (!post) return null;
-          return this.renderPostList([post], rewriteContext);
-        }
+    const legacyPostsSlugMatch = pagedPathname.match(/^\/post\/([^/]+)$/);
+    if (legacyPostsSlugMatch) {
+      const slug = legacyPostsSlugMatch[1].replace(/\.html?$/i, '');
+      const post = await this.findPublishedPostBySlug(slug);
+      if (!post) return null;
+      return this.renderSinglePost(post, rewriteContext, {
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
+    }
 
     if (pagedPathname === '/') {
-      const posts = await this.loadPublishedSnapshots({ status: 'published' }, pageOptions);
-      return this.renderPostList(posts, rewriteContext);
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published' }, pageOptions);
+      return this.renderPostList(result.posts, rewriteContext, {
+        archiveGrouping: false,
+        basePathname: pagedPathname,
+        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const tagMatch = pagedPathname.match(/^\/tag\/([^/]+)$/);
     if (tagMatch) {
       const tag = tagMatch[1];
-      const posts = await this.loadPublishedSnapshots({ status: 'published', tags: [tag] }, pageOptions);
-      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', tags: [tag] }, pageOptions);
+      return this.renderPostList(result.posts, rewriteContext, {
+        archiveGrouping: true,
+        basePathname: pagedPathname,
+        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
-      const posts = await this.loadPublishedSnapshots({ status: 'published', categories: [category] }, pageOptions);
-      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', categories: [category] }, pageOptions);
+      return this.renderPostList(result.posts, rewriteContext, {
+        archiveGrouping: true,
+        basePathname: pagedPathname,
+        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const daySlugMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
@@ -588,7 +688,10 @@ export class PreviewServer {
       const posts = await this.loadPostsForDay(year, month, day);
       const post = posts.find((candidate) => candidate.slug === slug) || null;
       if (!post) return null;
-      return this.renderPostList([post], rewriteContext);
+      return this.renderSinglePost(post, rewriteContext, {
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const dayMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
@@ -596,8 +699,14 @@ export class PreviewServer {
       const year = Number(dayMatch[1]);
       const month = Number(dayMatch[2]);
       const day = Number(dayMatch[3]);
-      const posts = await this.loadPostsForDay(year, month, day, pageOptions);
-      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
+      const result = await this.loadPostsForDayPage(year, month, day, pageOptions);
+      return this.renderPostList(result.posts, rewriteContext, {
+        archiveGrouping: true,
+        basePathname: pagedPathname,
+        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const monthMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})$/);
@@ -605,15 +714,27 @@ export class PreviewServer {
       const year = Number(monthMatch[1]);
       const month = Number(monthMatch[2]);
       if (month < 1 || month > 12) return null;
-      const posts = await this.loadPublishedSnapshots({ status: 'published', year, month: month - 1 }, pageOptions);
-      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1 }, pageOptions);
+      return this.renderPostList(result.posts, rewriteContext, {
+        archiveGrouping: true,
+        basePathname: pagedPathname,
+        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const yearMatch = pagedPathname.match(/^\/(\d{4})$/);
     if (yearMatch) {
       const year = Number(yearMatch[1]);
-      const posts = await this.loadPublishedSnapshots({ status: 'published', year }, pageOptions);
-      return this.renderPostList(posts, rewriteContext, { archiveGrouping: true });
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year }, pageOptions);
+      return this.renderPostList(result.posts, rewriteContext, {
+        archiveGrouping: true,
+        basePathname: pagedPathname,
+        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
@@ -622,7 +743,10 @@ export class PreviewServer {
       const pages = await this.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
       const page = pages.find((candidate) => candidate.slug === slug) || null;
       if (!page) return null;
-      return this.renderPostList([page], rewriteContext);
+      return this.renderSinglePost(page, rewriteContext, {
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+      });
     }
 
     return null;
@@ -648,25 +772,40 @@ export class PreviewServer {
     day: number,
     pagination?: { maxPostsPerPage: number; page?: number },
   ): Promise<PostData[]> {
+    const result = await this.loadPostsForDayPage(year, month, day, pagination);
+    return result.posts;
+  }
+
+  private async loadPostsForDayPage(
+    year: number,
+    month: number,
+    day: number,
+    pagination?: { maxPostsPerPage: number; page?: number },
+  ): Promise<{ posts: PostData[]; totalPosts: number }> {
     if (month < 1 || month > 12 || day < 1 || day > 31) {
-      return [];
+      return { posts: [], totalPosts: 0 };
     }
 
     const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
     const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
 
-    const posts = await this.loadPublishedSnapshots({
+    const result = await this.loadPublishedSnapshotsPage({
       status: 'published',
       startDate,
       endDate,
     }, pagination);
 
-    return posts.filter((post) => {
+    const posts = result.posts.filter((post) => {
       const createdAt = post.createdAt;
       return createdAt.getFullYear() === year
         && createdAt.getMonth() === month - 1
         && createdAt.getDate() === day;
     });
+
+    return {
+      posts,
+      totalPosts: result.totalPosts,
+    };
   }
 
   private buildSnapshotBaseFilter(filter: PostFilter): PostFilter {
@@ -696,8 +835,38 @@ export class PreviewServer {
     filter: PostFilter,
     pagination?: { maxPostsPerPage: number; page?: number },
   ): Promise<PostData[]> {
+    const result = await this.loadPublishedSnapshotsPage(filter, pagination);
+    return result.posts;
+  }
+
+  private paginateSnapshots(
+    snapshots: PostData[],
+    pagination?: { maxPostsPerPage: number; page?: number },
+  ): { posts: PostData[]; totalPosts: number } {
+    const totalPosts = snapshots.length;
+
+    if (typeof pagination?.maxPostsPerPage !== 'number') {
+      return { posts: snapshots, totalPosts };
+    }
+
+    const maxPostsPerPage = pagination.maxPostsPerPage;
+    const page = Number.isInteger(pagination.page) && (pagination.page ?? 0) > 0
+      ? (pagination.page as number)
+      : 1;
+    const offset = (page - 1) * maxPostsPerPage;
+
+    return {
+      posts: snapshots.slice(offset, offset + maxPostsPerPage),
+      totalPosts,
+    };
+  }
+
+  private async loadPublishedSnapshotsPage(
+    filter: PostFilter,
+    pagination?: { maxPostsPerPage: number; page?: number },
+  ): Promise<{ posts: PostData[]; totalPosts: number }> {
     if (filter.status && filter.status !== 'published') {
-      return [];
+      return { posts: [], totalPosts: 0 };
     }
 
     const baseFilter = this.buildSnapshotBaseFilter(filter);
@@ -727,66 +896,150 @@ export class PreviewServer {
 
     snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    if (typeof pagination?.maxPostsPerPage === 'number') {
-      const maxPostsPerPage = pagination.maxPostsPerPage;
-      const page = Number.isInteger(pagination.page) && (pagination.page ?? 0) > 0
-        ? (pagination.page as number)
-        : 1;
-      const offset = (page - 1) * maxPostsPerPage;
-      return snapshots.slice(offset, offset + maxPostsPerPage);
+    return this.paginateSnapshots(snapshots, pagination);
+  }
+
+  private async resolveRenderablePost(post: PostData): Promise<PostData> {
+    if (post.status === 'published' && !post.content) {
+      const fullPost = await this.postEngine.getPost(post.id);
+      return fullPost ?? post;
     }
 
-    return snapshots;
+    return post;
+  }
+
+  private buildListTemplateContext(
+    posts: PostData[],
+    rewriteContext: HtmlRewriteContext,
+    options: {
+      archiveGrouping: boolean;
+      basePathname: string;
+      page_title: string;
+      language: string;
+      pagination?: PaginationContext;
+    },
+  ): PostListTemplateContext {
+    const dayBlocks: DayBlockContext[] = [];
+
+    if (!options.archiveGrouping) {
+      dayBlocks.push({
+        date_label: '',
+        show_date_marker: false,
+        show_separator: false,
+        posts: posts.map((post) => ({
+          id: post.id,
+          title: post.title,
+          content: post.content,
+        })),
+      });
+    } else {
+      let currentBlock: { key: string; block: DayBlockContext } | null = null;
+
+      for (const post of posts) {
+        const key = getArchiveDateKey(post.createdAt);
+        if (!currentBlock || currentBlock.key !== key) {
+          currentBlock = {
+            key,
+            block: {
+              date_label: formatArchiveDate(post.createdAt),
+              show_date_marker: true,
+              show_separator: false,
+              posts: [],
+            },
+          };
+          dayBlocks.push(currentBlock.block);
+        }
+
+        currentBlock.block.posts.push({
+          id: post.id,
+          title: post.title,
+          content: post.content,
+        });
+      }
+
+      for (let index = 0; index < dayBlocks.length - 1; index += 1) {
+        dayBlocks[index].show_separator = true;
+      }
+    }
+
+    const pagination = options.pagination;
+    const isListPage = Boolean(pagination && pagination.totalPosts > pagination.maxPostsPerPage);
+    const isFirstPage = pagination ? pagination.page <= 1 : true;
+    const isLastPage = pagination
+      ? (pagination.page * pagination.maxPostsPerPage) >= pagination.totalPosts
+      : true;
+    const hasPrevPage = Boolean(pagination && pagination.page > 1);
+    const hasNextPage = Boolean(pagination && (pagination.page * pagination.maxPostsPerPage) < pagination.totalPosts);
+    const prevPageHref = hasPrevPage
+      ? buildPaginationHref(options.basePathname, (pagination as PaginationContext).page - 1)
+      : '';
+    const nextPageHref = hasNextPage
+      ? buildPaginationHref(options.basePathname, (pagination as PaginationContext).page + 1)
+      : '';
+
+    return {
+      page_title: options.page_title,
+      language: options.language,
+      is_list_page: isListPage,
+      is_first_page: isFirstPage,
+      is_last_page: isLastPage,
+      has_prev_page: hasPrevPage,
+      has_next_page: hasNextPage,
+      prev_page_href: prevPageHref,
+      next_page_href: nextPageHref,
+      canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
+      canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
+      day_blocks: dayBlocks,
+    };
   }
 
   private async renderPostList(
     posts: PostData[],
     rewriteContext: HtmlRewriteContext,
-    options?: { archiveGrouping?: boolean },
+    options: {
+      archiveGrouping: boolean;
+      basePathname: string;
+      page_title: string;
+      language: string;
+      pagination?: PaginationContext;
+    },
   ): Promise<string> {
-    const renderablePosts = await Promise.all(posts.map(async (post) => {
-      if (post.status === 'published' && !post.content) {
-        const fullPost = await this.postEngine.getPost(post.id);
-        return fullPost ?? post;
-      }
-      return post;
-    }));
-
-    if (!options?.archiveGrouping) {
-      const rendered = await Promise.all(renderablePosts.map((post) => renderPostHtml(post, rewriteContext)));
-      return rendered.join('\n');
+    if (posts.length === 0) {
+      return '';
     }
 
-    const groups: Array<{ dateLabel: string; posts: PostData[] }> = [];
-    let currentGroup: { key: string; dateLabel: string; posts: PostData[] } | null = null;
+    const renderablePosts = await Promise.all(posts.map(async (post) => this.resolveRenderablePost(post)));
+    const templateContext = this.buildListTemplateContext(
+      renderablePosts,
+      rewriteContext,
+      options,
+    );
 
-    for (const post of renderablePosts) {
-      const key = getArchiveDateKey(post.createdAt);
-      if (!currentGroup || currentGroup.key !== key) {
-        currentGroup = {
-          key,
-          dateLabel: formatArchiveDate(post.createdAt),
-          posts: [],
-        };
-        groups.push(currentGroup);
-      }
+    return this.liquid.renderFile('post-list', templateContext);
+  }
 
-      currentGroup.posts.push(post);
-    }
+  private async renderSinglePost(
+    post: PostData,
+    rewriteContext: HtmlRewriteContext,
+    pageContext: { page_title: string; language: string },
+  ): Promise<string> {
+    const renderablePost = await this.resolveRenderablePost(post);
+    const context: SinglePostTemplateContext = {
+      ...pageContext,
+      post: {
+        id: renderablePost.id,
+        title: renderablePost.title,
+        content: renderablePost.content,
+      },
+      canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
+      canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
+    };
 
-    const renderedGroups = await Promise.all(groups.map(async (group) => {
-      const renderedPosts = await Promise.all(group.posts.map((post) => renderPostHtml(post, rewriteContext)));
-      return `<section class="archive-day-group"><aside class="archive-day-marker"><span>${escapeHtml(group.dateLabel)}</span></aside><div class="archive-day-posts">${renderedPosts.join('\n')}</div></section>`;
-    }));
+    return this.liquid.renderFile('single-post', context);
+  }
 
-    return renderedGroups
-      .map((groupHtml, index) => {
-        if (index === renderedGroups.length - 1) {
-          return groupHtml;
-        }
-        return `${groupHtml}\n<div class="archive-day-separator" aria-hidden="true"></div>`;
-      })
-      .join('\n');
+  private async renderNotFound(context: NotFoundTemplateContext): Promise<string> {
+    return this.liquid.renderFile('not-found', context);
   }
 
   private async buildHtmlRewriteContext(): Promise<HtmlRewriteContext> {

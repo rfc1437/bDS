@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="{{ language }}">
+  {% render 'partials/head', page_title: page_title %}
+  <body>
+    <main>
+      <section class="post-list" data-template="post-list" data-list-page="{{ is_list_page }}" data-first-page="{{ is_first_page }}" data-last-page="{{ is_last_page }}">
+        {% for day_block in day_blocks %}
+          {% if day_block.show_date_marker %}
+            <section class="archive-day-group">
+              <aside class="archive-day-marker"><span>{{ day_block.date_label }}</span></aside>
+              <div class="archive-day-posts">
+                {% for post in day_block.posts %}
+                  <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}</div>
+                {% endfor %}
+              </div>
+            </section>
+          {% else %}
+            {% for post in day_block.posts %}
+              <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}</div>
+            {% endfor %}
+          {% endif %}
+
+          {% if day_block.show_separator %}
+            <div class="archive-day-separator" aria-hidden="true"></div>
+          {% endif %}
+        {% endfor %}
+      </section>
+
+      {% if has_prev_page or has_next_page %}
+        <nav class="preview-pagination" aria-label="Pagination">
+          {% if has_prev_page %}
+            <a href="{{ prev_page_href }}" class="preview-pagination-link" aria-label="Newer posts">neuer</a>
+          {% else %}
+            <span class="spacer"></span>
+          {% endif %}
+
+          {% if has_next_page %}
+            <a href="{{ next_page_href }}" class="preview-pagination-link" aria-label="Older posts">älter</a>
+          {% else %}
+            <span class="spacer"></span>
+          {% endif %}
+        </nav>
+      {% endif %}
+    </main>
+  </body>
+</html>
