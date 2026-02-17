@@ -51,6 +51,7 @@ Object.defineProperty(globalThis, 'window', {
         getDiff: vi.fn(),
         getDiffContent: vi.fn(),
         getHistory: vi.fn(),
+        getFileHistory: vi.fn(),
         init: vi.fn(),
       },
       posts: {
@@ -83,6 +84,7 @@ Object.defineProperty(globalThis, 'window', {
         regenerateThumbnails: vi.fn(),
         search: vi.fn(),
         getUrl: vi.fn(),
+        getFilePath: vi.fn(),
       },
       sync: {
         configure: vi.fn(),

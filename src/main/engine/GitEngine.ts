@@ -780,6 +780,19 @@ export class GitEngine {
       });
   }
 
+  async getFileHistory(projectPath: string, filePath: string, limit = 50): Promise<GitHistoryEntry[]> {
+    const git = simpleGit(projectPath);
+    const history = await git.log(['--max-count', String(limit), '--', filePath]);
+
+    return history.all.map((entry) => ({
+      hash: entry.hash,
+      shortHash: entry.hash.slice(0, 7),
+      date: entry.date,
+      subject: entry.message,
+      author: entry.author_name,
+    }));
+  }
+
   async getRemoteState(projectPath: string): Promise<GitRemoteStateDto> {
     const git = simpleGit(projectPath);
     const status = await git.status();

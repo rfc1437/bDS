@@ -405,6 +405,7 @@ export interface ElectronAPI {
     getDiffContent: (projectPath: string, filePath: string) => Promise<GitDiffContentDto>;
     getCommitDiffContent: (projectPath: string, commitHash: string) => Promise<GitCommitDiffContentDto>;
     getHistory: (projectPath: string, limit?: number) => Promise<GitHistoryEntry[]>;
+    getFileHistory: (projectPath: string, filePath: string, limit?: number) => Promise<GitHistoryEntry[]>;
     getRemoteState: (projectPath: string) => Promise<GitRemoteStateDto>;
     fetch: (projectPath: string) => Promise<GitActionResult>;
     pull: (projectPath: string) => Promise<GitActionResult>;

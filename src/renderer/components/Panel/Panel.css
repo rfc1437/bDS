@@ -22,11 +22,18 @@
 }
 
 .panel-tab {
+  background: transparent;
+  border: none;
   padding: 6px 12px;
   font-size: 12px;
   color: var(--vscode-tab-inactiveForeground);
   cursor: pointer;
   border-bottom: 2px solid transparent;
+}
+
+.panel-tab[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .panel-tab:hover {
@@ -148,6 +155,43 @@
   padding: 2px 8px;
   font-size: 11px;
   background-color: var(--vscode-button-secondaryBackground);
+}
+
+.git-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-log-target {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  padding: 0 2px 4px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.git-log-item {
+  background-color: var(--vscode-sideBar-background);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.git-log-subject {
+  font-size: 12px;
+  color: var(--vscode-editor-foreground);
+  margin-bottom: 4px;
+}
+
+.git-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.git-log-hash {
+  font-family: var(--vscode-editor-font-family);
 }
 
 @keyframes spin {

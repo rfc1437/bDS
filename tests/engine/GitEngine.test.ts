@@ -348,6 +348,47 @@ describe('GitEngine', () => {
     });
   });
 
+  describe('getFileHistory', () => {
+    it('should return commits for a specific file path', async () => {
+      mockLog.mockResolvedValue({
+        all: [
+          {
+            hash: 'abc123def456',
+            date: '2026-02-16T10:00:00.000Z',
+            message: 'docs: update first post',
+            author_name: 'Dev One',
+          },
+          {
+            hash: '789fed654321',
+            date: '2026-02-15T09:00:00.000Z',
+            message: 'feat: add frontmatter field',
+            author_name: 'Dev Two',
+          },
+        ],
+      });
+
+      const result = await gitEngine.getFileHistory('/tmp/project', 'posts/2026/02/first-post.md', 50);
+
+      expect(mockLog).toHaveBeenCalledWith(['--max-count', '50', '--', 'posts/2026/02/first-post.md']);
+      expect(result).toEqual([
+        {
+          hash: 'abc123def456',
+          shortHash: 'abc123d',
+          date: '2026-02-16T10:00:00.000Z',
+          subject: 'docs: update first post',
+          author: 'Dev One',
+        },
+        {
+          hash: '789fed654321',
+          shortHash: '789fed6',
+          date: '2026-02-15T09:00:00.000Z',
+          subject: 'feat: add frontmatter field',
+          author: 'Dev Two',
+        },
+      ]);
+    });
+  });
+
   describe('getRemoteState', () => {
     it('should return upstream tracking and ahead/behind counts when tracking branch exists', async () => {
       mockStatus.mockResolvedValue({
@@ -602,6 +643,15 @@ describe('GitEngine', () => {
   });
 
   describe('pruneLfsCache', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-02-16T12:00:00.000Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should run git lfs prune with verify-remote and aggressive recency defaults', async () => {
       mockLog.mockResolvedValue({
         all: [

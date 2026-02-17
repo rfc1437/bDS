@@ -124,6 +124,11 @@ export function registerIpcHandlers(): void {
     return engine.getHistory(projectPath, limit);
   });
 
+  safeHandle('git:fileHistory', async (_, projectPath: string, filePath: string, limit?: number) => {
+    const engine = getGitEngine();
+    return engine.getFileHistory(projectPath, filePath, limit);
+  });
+
   safeHandle('git:remoteState', async (_, projectPath: string) => {
     const engine = getGitEngine();
     return engine.getRemoteState(projectPath);
