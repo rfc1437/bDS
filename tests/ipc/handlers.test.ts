@@ -19,6 +19,9 @@ vi.mock('electron', () => ({
   app: {
     quit: vi.fn(),
   },
+  BrowserWindow: {
+    fromWebContents: vi.fn(),
+  },
   ipcMain: {
     handle: vi.fn((channel: string, handler: (...args: any[]) => Promise<any>) => {
       registeredHandlers.set(channel, handler);
@@ -1341,6 +1344,25 @@ describe('IPC Handlers', () => {
 
         expect(mockProjectEngine.getDefaultProjectBaseDir).toHaveBeenCalledWith('project-1');
         expect(result).toBe('/Users/test/bds/project-1');
+      });
+    });
+
+    describe('app:getTitleBarMetrics', () => {
+      it('should return dynamic macOS title bar left inset from native window button position', async () => {
+        const { BrowserWindow } = await import('electron');
+        const sender = {};
+        const event = { sender };
+
+        vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({
+          getWindowButtonPosition: vi.fn(() => ({ x: 14, y: 14 })),
+        } as unknown as ReturnType<typeof BrowserWindow.fromWebContents>);
+
+        const result = await invokeHandlerWithEvent(event, 'app:getTitleBarMetrics');
+
+        expect(BrowserWindow.fromWebContents).toHaveBeenCalledWith(sender);
+        expect(result).toEqual({
+          macosLeftInset: 78,
+        });
       });
     });
 

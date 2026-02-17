@@ -505,6 +505,7 @@ export interface ElectronAPI {
   };
   app: {
     getDataPaths: () => Promise<{ database: string; posts: string; media: string }>;
+    getTitleBarMetrics: () => Promise<{ macosLeftInset: number } | null>;
     openFolder: (folderPath: string) => Promise<string>;
     showItemInFolder: (itemPath: string) => Promise<void>;
     selectFolder: (title?: string) => Promise<string | null>;

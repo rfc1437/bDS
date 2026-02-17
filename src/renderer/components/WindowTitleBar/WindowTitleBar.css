@@ -23,6 +23,10 @@
   z-index: 2;
 }
 
+.window-titlebar.is-mac .window-titlebar-menu-bar {
+  margin-left: max(var(--bds-titlebar-macos-left-inset, 78px), calc(6px + var(--bds-titlebar-overlay-left, 0px)));
+}
+
 .window-titlebar-menu-button {
   height: 24px;
   border: none;

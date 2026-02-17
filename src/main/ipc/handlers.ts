@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
@@ -695,6 +695,20 @@ export function registerIpcHandlers(): void {
   safeHandle('app:getDefaultProjectPath', async (_, projectId: string) => {
     const projectEngine = getProjectEngine();
     return projectEngine.getDefaultProjectBaseDir(projectId);
+  });
+
+  safeHandle('app:getTitleBarMetrics', async (event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const buttonPosition = ownerWindow?.getWindowButtonPosition?.();
+    if (!buttonPosition) {
+      return null;
+    }
+
+    const estimatedClusterWidth = Math.max(52, Math.round(buttonPosition.y * 4));
+    const trailingPadding = Math.max(8, Math.round(buttonPosition.y * 0.6));
+    const macosLeftInset = Math.max(0, Math.round(buttonPosition.x + estimatedClusterWidth + trailingPadding));
+
+    return { macosLeftInset };
   });
 
   safeHandle('app:showItemInFolder', async (_, itemPath: string) => {

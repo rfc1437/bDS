@@ -5,11 +5,51 @@ import { WindowTitleBar } from '../../../src/renderer/components/WindowTitleBar/
 import { useAppStore } from '../../../src/renderer/store';
 
 describe('WindowTitleBar', () => {
+  const originalNavigatorPlatform = navigator.platform;
+
   beforeEach(() => {
+    Object.defineProperty(navigator, 'platform', {
+      value: originalNavigatorPlatform,
+      configurable: true,
+    });
+
     useAppStore.setState({
       sidebarVisible: true,
       panelVisible: false,
     });
+  });
+
+  it('applies a macOS class to the title bar root for platform-specific spacing', () => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
+
+    render(<WindowTitleBar />);
+
+    expect(screen.getByTestId('window-titlebar')).toHaveClass('is-mac');
+  });
+
+  it('sets macOS title bar inset CSS variable from dynamic native metrics', async () => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
+
+    const getTitleBarMetrics = vi.fn().mockResolvedValue({ macosLeftInset: 102 });
+    window.electronAPI.app = {
+      ...(window.electronAPI.app || {}),
+      getTitleBarMetrics,
+    };
+
+    render(<WindowTitleBar />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getTitleBarMetrics).toHaveBeenCalled();
+    expect(document.documentElement.style.getPropertyValue('--bds-titlebar-macos-left-inset')).toBe('102px');
   });
 
   it('renders a right-side sidebar toggle button and toggles store state', () => {
