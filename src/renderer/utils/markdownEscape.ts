@@ -38,8 +38,8 @@ export function unescapeMacroSyntax(markdown: string): string {
   return result;
 }
 
-const unorderedListItemPattern = /^\s{0,3}[-+*]\s/;
-const orderedListItemPattern = /^\s{0,3}\d+\.\s/;
+const unorderedListItemPattern = /^[-+*]\s/;
+const orderedListItemPattern = /^\d+\.\s/;
 
 function getListLineType(line: string): 'ordered' | 'unordered' | null {
   if (unorderedListItemPattern.test(line)) return 'unordered';
@@ -52,7 +52,7 @@ export function normalizeMilkdownMarkdown(markdown: string): string {
   const lines = unescaped.split('\n');
   const normalized: string[] = [];
 
-  for (let i = 0; i < lines.length; i += 1) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     const previousListType = i > 0 ? getListLineType(lines[i - 1]) : null;

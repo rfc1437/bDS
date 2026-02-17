@@ -10,7 +10,7 @@ import type { Root, List, ListItem } from 'mdast';
 import { visit } from 'unist-util-visit';
 import { normalizeMilkdownMarkdown } from '../../../src/renderer/utils/markdownEscape';
 
-const wxrRefDir = '/home/runner/work/bDS/bDS/tests/assets/wxr-ref';
+const wxrRefDir = path.join(__dirname, '../../assets/wxr-ref');
 
 const remarkTightListsPlugin: Plugin<[Record<string, unknown>], Root> = () => {
   return (tree: Root) => {
