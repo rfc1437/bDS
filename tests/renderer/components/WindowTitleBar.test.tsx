@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { WindowTitleBar } from '../../../src/renderer/components/WindowTitleBar/WindowTitleBar';
 import { useAppStore } from '../../../src/renderer/store';
 
@@ -62,6 +62,32 @@ describe('WindowTitleBar', () => {
     expect(iconPane).not.toBeNull();
     expect(iconFrame).toHaveAttribute('data-shape', 'frame-square');
     expect(iconPane).toHaveAttribute('data-shape', 'bottom-half');
+  });
+
+  it('renders active and inactive icon states based on sidebar/panel visibility', () => {
+    render(<WindowTitleBar />);
+
+    const sidebarIcon = document.querySelector('.window-titlebar-sidebar-icon');
+    const panelIcon = document.querySelector('.window-titlebar-panel-icon');
+
+    expect(sidebarIcon).toHaveClass('is-active');
+    expect(sidebarIcon).not.toHaveClass('is-inactive');
+    expect(panelIcon).toHaveClass('is-inactive');
+    expect(panelIcon).not.toHaveClass('is-active');
+  });
+
+  it('updates icon states when visibility changes outside titlebar buttons', () => {
+    render(<WindowTitleBar />);
+
+    act(() => {
+      useAppStore.setState({ sidebarVisible: false, panelVisible: true });
+    });
+
+    const sidebarIcon = document.querySelector('.window-titlebar-sidebar-icon');
+    const panelIcon = document.querySelector('.window-titlebar-panel-icon');
+
+    expect(sidebarIcon).toHaveClass('is-inactive');
+    expect(panelIcon).toHaveClass('is-active');
   });
 
   it('places panel toggle to the right of sidebar toggle', () => {

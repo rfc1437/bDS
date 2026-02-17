@@ -412,7 +412,11 @@ export const WindowTitleBar: React.FC = () => {
           onClick={toggleSidebar}
           title={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar (Ctrl+B)`}
         >
-          <span className="window-titlebar-sidebar-icon" data-shape="frame-square" aria-hidden="true">
+          <span
+            className={`window-titlebar-sidebar-icon ${sidebarVisible ? 'is-active' : 'is-inactive'}`}
+            data-shape="frame-square"
+            aria-hidden="true"
+          >
             <span className="window-titlebar-sidebar-pane" data-shape="left-half" />
           </span>
         </button>
@@ -422,7 +426,11 @@ export const WindowTitleBar: React.FC = () => {
           onClick={togglePanel}
           title={`${panelVisible ? 'Hide' : 'Show'} Panel (Ctrl+J)`}
         >
-          <span className="window-titlebar-panel-icon" data-shape="frame-square" aria-hidden="true">
+          <span
+            className={`window-titlebar-panel-icon ${panelVisible ? 'is-active' : 'is-inactive'}`}
+            data-shape="frame-square"
+            aria-hidden="true"
+          >
             <span className="window-titlebar-panel-pane" data-shape="bottom-half" />
           </span>
         </button>

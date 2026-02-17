@@ -172,13 +172,29 @@
   overflow: hidden;
 }
 
+.window-titlebar-sidebar-icon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 33.3333%;
+  width: 1.5px;
+  transform: translateX(-50%);
+  background-color: currentColor;
+}
+
 .window-titlebar-sidebar-pane {
   position: absolute;
   left: 0;
   top: 0;
-  width: 50%;
+  width: 33.3333%;
   height: 100%;
   background-color: currentColor;
+  transition: opacity 120ms ease;
+}
+
+.window-titlebar-sidebar-icon.is-inactive .window-titlebar-sidebar-pane {
+  opacity: 0;
 }
 
 .window-titlebar-panel-icon {
@@ -191,6 +207,17 @@
   overflow: hidden;
 }
 
+.window-titlebar-panel-icon::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 66.6667%;
+  height: 1.5px;
+  transform: translateY(-50%);
+  background-color: currentColor;
+}
+
 .window-titlebar-panel-pane {
   position: absolute;
   left: 0;
@@ -198,6 +225,11 @@
   width: 100%;
   height: 33.3333%;
   background-color: currentColor;
+  transition: opacity 120ms ease;
+}
+
+.window-titlebar-panel-icon.is-inactive .window-titlebar-panel-pane {
+  opacity: 0;
 }
 
 .window-titlebar-action-button:hover {
