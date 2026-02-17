@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import * as path from 'path';
 
 // Mock data stores
 const mockFiles = new Map<string, string>();
@@ -749,17 +750,20 @@ describe('MetaEngine', () => {
     });
 
     it('should use custom dataDir when provided in setProjectContext', () => {
-      metaEngine.setProjectContext('project-with-custom-dir', '/custom/data/path');
+      const customDataDir = path.join('custom', 'data', 'path');
+      metaEngine.setProjectContext('project-with-custom-dir', customDataDir);
       
       const metaDir = metaEngine.getMetaDir();
-      expect(metaDir).toContain('/custom/data/path');
+      expect(normalizePath(metaDir)).toContain(normalizePath(customDataDir));
     });
 
     it('should sync dataPath from database to project.json if different', async () => {
       const metaDir = metaEngine.getMetaDir();
+      const oldPath = path.join('old', 'path', 'from', 'file');
+      const newPath = path.join('new', 'path', 'from', 'database');
       mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
         name: 'Project',
-        dataPath: '/old/path/from/file',
+        dataPath: oldPath,
       }));
       
       // Database has the currently selected (authoritative) path
@@ -767,7 +771,7 @@ describe('MetaEngine', () => {
         id: 'test-project',
         name: 'Project',
         description: null,
-        dataPath: '/new/path/from/database',
+        dataPath: newPath,
         slug: 'project',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -779,7 +783,7 @@ describe('MetaEngine', () => {
       const savedProjectJson = mockFiles.get(normalizePath(`${metaDir}/project.json`));
       expect(savedProjectJson).toBeDefined();
       const parsed = JSON.parse(savedProjectJson!);
-      expect(parsed.dataPath).toBe('/new/path/from/database');
+      expect(normalizePath(parsed.dataPath)).toBe(normalizePath(newPath));
       expect(mockLocalDb.update).not.toHaveBeenCalled();
     });
   });

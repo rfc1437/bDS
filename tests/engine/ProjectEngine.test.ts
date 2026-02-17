@@ -6,8 +6,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as path from 'path';
 import { ProjectEngine, ProjectData } from '../../src/main/engine/ProjectEngine';
 import { resetMockCounters } from '../utils/factories';
+
+const normalizePath = (value: string): string => value.replace(/\\/g, '/');
 
 // Create mock data stores
 const mockProjects = new Map<string, any>();
@@ -550,7 +553,7 @@ describe('ProjectEngine', () => {
 
   describe('Custom dataPath', () => {
     it('should create project with custom dataPath', async () => {
-      const customPath = '/Users/test/Documents/MyBlog';
+      const customPath = path.join('Users', 'test', 'Documents', 'MyBlog');
       const project = await projectEngine.createProject({
         name: 'Custom Path Project',
         dataPath: customPath,
@@ -561,7 +564,8 @@ describe('ProjectEngine', () => {
 
     it('should create meta and thumbnails directories in custom dataPath', async () => {
       const fs = await import('fs/promises');
-      const customPath = '/Users/test/Documents/MyBlog';
+      const customPath = path.join('Users', 'test', 'Documents', 'MyBlog');
+      const normalizedCustomPath = normalizePath(customPath);
       
       await projectEngine.createProject({
         name: 'Custom Dirs Project',
@@ -569,17 +573,18 @@ describe('ProjectEngine', () => {
       });
 
       const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
-      const createdPaths = mkdirCalls.map(call => call[0]);
+      const createdPaths = mkdirCalls.map(call => normalizePath(String(call[0])));
       
       // Should create meta/ and thumbnails/ in custom dataPath
-      expect(createdPaths).toContainEqual(expect.stringContaining(customPath));
-      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('meta'))).toBe(true);
-      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('thumbnails'))).toBe(true);
+      expect(createdPaths).toContainEqual(expect.stringContaining(normalizedCustomPath));
+      expect(createdPaths.some(p => p.includes(normalizedCustomPath) && p.includes('meta'))).toBe(true);
+      expect(createdPaths.some(p => p.includes(normalizedCustomPath) && p.includes('thumbnails'))).toBe(true);
     });
 
     it('should create posts and media directories in custom dataPath', async () => {
       const fs = await import('fs/promises');
-      const customPath = '/Users/test/Documents/MyBlog';
+      const customPath = path.join('Users', 'test', 'Documents', 'MyBlog');
+      const normalizedCustomPath = normalizePath(customPath);
       
       await projectEngine.createProject({
         name: 'Custom Data Project',
@@ -587,11 +592,11 @@ describe('ProjectEngine', () => {
       });
 
       const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
-      const createdPaths = mkdirCalls.map(call => call[0]);
+      const createdPaths = mkdirCalls.map(call => normalizePath(String(call[0])));
       
       // Should create posts/ and media/ in custom dataPath
-      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('posts'))).toBe(true);
-      expect(createdPaths.some(p => String(p).includes(customPath) && String(p).includes('media'))).toBe(true);
+      expect(createdPaths.some(p => p.includes(normalizedCustomPath) && p.includes('posts'))).toBe(true);
+      expect(createdPaths.some(p => p.includes(normalizedCustomPath) && p.includes('media'))).toBe(true);
     });
 
     it('should create meta and thumbnails in internal storage when no dataPath', async () => {
@@ -611,7 +616,7 @@ describe('ProjectEngine', () => {
 
     it('should use getDataDir with custom dataPath', () => {
       const projectId = 'test-id';
-      const customPath = '/Users/test/MyBlog';
+      const customPath = path.join('Users', 'test', 'MyBlog');
       
       const dataDir = projectEngine.getDataDir(projectId, customPath);
       
@@ -826,7 +831,7 @@ describe('ProjectEngine', () => {
         name: 'My Project',
         slug: 'my-project',
         description: 'A test project',
-        dataPath: '/custom/path',
+        dataPath: path.join('custom', 'path'),
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-06-01'),
         isActive: true,
@@ -848,7 +853,7 @@ describe('ProjectEngine', () => {
       expect(result?.name).toBe('My Project');
       expect(result?.slug).toBe('my-project');
       expect(result?.description).toBe('A test project');
-      expect(result?.dataPath).toBe('/custom/path');
+      expect(result?.dataPath).toBe(path.join('custom', 'path'));
       expect(result?.isActive).toBe(true);
     });
 
@@ -1181,7 +1186,7 @@ describe('ProjectEngine', () => {
         id: 'resolved-project',
         name: 'Resolved Project',
         slug: 'resolved',
-        dataPath: '/custom/data/path',
+        dataPath: path.join('custom', 'data', 'path'),
         createdAt: new Date(),
         updatedAt: new Date(),
         isActive: false,
@@ -1198,8 +1203,9 @@ describe('ProjectEngine', () => {
 
       const paths = await projectEngine.getProjectPathsResolved('resolved-project');
 
-      expect(paths.posts).toContain('/custom/data/path');
-      expect(paths.media).toContain('/custom/data/path');
+      const normalizedBasePath = normalizePath(projectWithPath.dataPath);
+      expect(normalizePath(paths.posts)).toContain(normalizedBasePath);
+      expect(normalizePath(paths.media)).toContain(normalizedBasePath);
     });
 
     it('should use internal path when project has no dataPath', async () => {
