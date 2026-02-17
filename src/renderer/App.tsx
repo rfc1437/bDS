@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel } from './components';
+import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
 import './App.css';
@@ -315,6 +315,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app">
+      <WindowTitleBar />
       <div className="app-main">
         <ActivityBar />
         {sidebarVisible && (

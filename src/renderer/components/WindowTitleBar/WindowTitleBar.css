@@ -1,0 +1,48 @@
+.window-titlebar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, #1e1e1e);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-drag-region {
+  flex: 1;
+  height: 100%;
+}
+
+.window-titlebar-actions {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.window-titlebar-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--vscode-titleBar-activeForeground, var(--vscode-icon-foreground, #c5c5c5));
+  cursor: pointer;
+  border-radius: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.window-titlebar-action-button svg {
+  display: block;
+}
+
+.window-titlebar-action-button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.window-titlebar-action-button:active {
+  background-color: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31));
+}

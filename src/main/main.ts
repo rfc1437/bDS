@@ -48,6 +48,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Blogging Desktop Server',
     backgroundColor: '#1e1e1e', // VS Code dark background
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,

@@ -161,7 +161,6 @@ export const TabBar: React.FC = () => {
     media,
     activeProject,
     dirtyPosts,
-    sidebarVisible,
     toggleSidebar,
     setActiveTab, 
     closeTab,
@@ -475,18 +474,6 @@ export const TabBar: React.FC = () => {
 
   return (
     <div className="tab-bar">
-      <button
-        className="tab-bar-toggle-sidebar"
-        onClick={toggleSidebar}
-        title={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar (Ctrl+B)`}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M0 1h16v14H0V1zm1 1v12h4V2H1zm5 0v12h9V2H6z"/>
-          {!sidebarVisible && <path d="M2 4h2v1H2V4zm0 2h2v1H2V6zm0 2h2v1H2V8z" opacity="0.5"/>}
-          {sidebarVisible && <path d="M2 4h2v1H2V4zm0 2h2v1H2V6zm0 2h2v1H2V8z"/>}
-        </svg>
-      </button>
-      
       {showLeftArrow && (
         <button 
           className="tab-scroll-button tab-scroll-left"

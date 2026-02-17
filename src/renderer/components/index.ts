@@ -22,3 +22,4 @@ export { AISuggestionsModal, type AISuggestions, type CurrentValues } from './AI
 export { ChatPanel } from './ChatPanel';
 export { ImportAnalysisView } from './ImportAnalysisView';
 export { InsertModal } from './InsertModal';
+export { WindowTitleBar } from './WindowTitleBar';
