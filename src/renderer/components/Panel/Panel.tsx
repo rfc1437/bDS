@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import './Panel.css';
 
-type PanelTab = 'tasks' | 'output' | 'git-log';
-
 function getPostRelativePath(createdAt: string, slug: string): string | null {
   const createdDate = new Date(createdAt);
   if (Number.isNaN(createdDate.getTime())) {
@@ -36,8 +34,7 @@ function toRelativePath(absolutePath: string, projectPath: string): string {
 }
 
 export const Panel: React.FC = () => {
-  const { panelVisible, tasks, tabs, activeTabId, posts, media, activeProject } = useAppStore();
-  const [activePanelTab, setActivePanelTab] = useState<PanelTab>('tasks');
+  const { panelVisible, panelActiveTab, setPanelActiveTab, tasks, tabs, activeTabId, posts, media, activeProject } = useAppStore();
   const [gitLogLoading, setGitLogLoading] = useState(false);
   const [gitLogError, setGitLogError] = useState<string | null>(null);
   const [gitLogTargetLabel, setGitLogTargetLabel] = useState<string | null>(null);
@@ -53,14 +50,17 @@ export const Panel: React.FC = () => {
   const recentTasks = tasks.slice(-10).reverse();
   const activeEditorTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) ?? null, [tabs, activeTabId]);
   const canActivateGitLog = activeEditorTab?.type === 'post' || activeEditorTab?.type === 'media';
+  const effectiveActivePanelTab = panelActiveTab === 'git-log' && !canActivateGitLog
+    ? 'tasks'
+    : panelActiveTab;
 
   useEffect(() => {
-    if (!canActivateGitLog && activePanelTab === 'git-log') {
-      setActivePanelTab('tasks');
+    if (!panelVisible || effectiveActivePanelTab !== 'git-log') {
+      setGitLogLoading(false);
+      setGitLogError(null);
+      return;
     }
-  }, [canActivateGitLog, activePanelTab]);
 
-  useEffect(() => {
     const projectPath = activeProject?.dataPath;
     if (!projectPath || !activeEditorTab || (activeEditorTab.type !== 'post' && activeEditorTab.type !== 'media')) {
       setGitLogEntries([]);
@@ -140,7 +140,7 @@ export const Panel: React.FC = () => {
     };
 
     void loadFileHistory();
-  }, [activeEditorTab, activeProject?.dataPath, posts, media]);
+  }, [panelVisible, effectiveActivePanelTab, activeEditorTab, activeProject?.dataPath, posts, media]);
 
   if (!panelVisible) {
     return null;
@@ -153,30 +153,30 @@ export const Panel: React.FC = () => {
           <button
             type="button"
             role="tab"
-            className={`panel-tab ${activePanelTab === 'tasks' ? 'active' : ''}`}
-            aria-selected={activePanelTab === 'tasks'}
-            onClick={() => setActivePanelTab('tasks')}
+            className={`panel-tab ${effectiveActivePanelTab === 'tasks' ? 'active' : ''}`}
+            aria-selected={effectiveActivePanelTab === 'tasks'}
+            onClick={() => setPanelActiveTab('tasks')}
           >
             Tasks
           </button>
           <button
             type="button"
             role="tab"
-            className={`panel-tab ${activePanelTab === 'output' ? 'active' : ''}`}
-            aria-selected={activePanelTab === 'output'}
-            onClick={() => setActivePanelTab('output')}
+            className={`panel-tab ${effectiveActivePanelTab === 'output' ? 'active' : ''}`}
+            aria-selected={effectiveActivePanelTab === 'output'}
+            onClick={() => setPanelActiveTab('output')}
           >
             Output
           </button>
           <button
             type="button"
             role="tab"
-            className={`panel-tab ${activePanelTab === 'git-log' ? 'active' : ''}`}
-            aria-selected={activePanelTab === 'git-log'}
+            className={`panel-tab ${effectiveActivePanelTab === 'git-log' ? 'active' : ''}`}
+            aria-selected={effectiveActivePanelTab === 'git-log'}
             aria-disabled={!canActivateGitLog}
             onClick={() => {
               if (canActivateGitLog) {
-                setActivePanelTab('git-log');
+                setPanelActiveTab('git-log');
               }
             }}
           >
@@ -192,7 +192,7 @@ export const Panel: React.FC = () => {
         </button>
       </div>
       <div className="panel-content">
-        {activePanelTab === 'tasks' && (
+        {effectiveActivePanelTab === 'tasks' && (
           recentTasks.length === 0 ? (
             <div className="panel-empty">No recent tasks</div>
           ) : (
@@ -230,11 +230,11 @@ export const Panel: React.FC = () => {
           )
         )}
 
-        {activePanelTab === 'output' && (
+        {effectiveActivePanelTab === 'output' && (
           <div className="panel-empty">No output</div>
         )}
 
-        {activePanelTab === 'git-log' && (
+        {effectiveActivePanelTab === 'git-log' && (
           !canActivateGitLog ? (
             <div className="panel-empty">Open a post or media editor to view git log</div>
           ) : gitLogLoading ? (

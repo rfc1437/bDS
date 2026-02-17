@@ -167,6 +167,12 @@ describe('AppStore', () => {
       expect(getStore().preferredEditorMode).toBe('markdown');
     });
 
+    it('should set active panel tab', () => {
+      getStore().setPanelActiveTab('output');
+
+      expect(getStore().panelActiveTab).toBe('output');
+    });
+
     it('should default git diff preferences to wrapped inline and visible unchanged regions', () => {
       expect(getStore().gitDiffPreferences).toEqual({
         wordWrap: true,

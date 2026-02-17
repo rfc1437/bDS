@@ -39,6 +39,7 @@ export type { DeleteReference, ConfirmDeleteDetails };
 
 export type EditorMode = 'wysiwyg' | 'markdown' | 'preview';
 export type GitDiffViewStyle = 'inline' | 'side-by-side';
+export type PanelTab = 'tasks' | 'output' | 'git-log';
 
 export interface GitDiffPreferences {
   wordWrap: boolean;
@@ -60,6 +61,7 @@ interface AppState {
   activeView: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git';
   sidebarVisible: boolean;
   panelVisible: boolean;
+  panelActiveTab: PanelTab;
   selectedPostId: string | null;
   selectedMediaId: string | null;
   preferredEditorMode: EditorMode;
@@ -107,6 +109,7 @@ interface AppState {
   setActiveView: (view: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git') => void;
   toggleSidebar: () => void;
   togglePanel: () => void;
+  setPanelActiveTab: (tab: PanelTab) => void;
   setSelectedPost: (id: string | null) => void;
   setSelectedMedia: (id: string | null) => void;
   setPreferredEditorMode: (mode: EditorMode) => void;
@@ -159,6 +162,7 @@ export const useAppStore = create<AppState>()(
       activeView: 'posts',
       sidebarVisible: true,
       panelVisible: false,
+      panelActiveTab: 'tasks',
       selectedPostId: null,
       selectedMediaId: null,
       preferredEditorMode: 'wysiwyg',
@@ -281,6 +285,7 @@ export const useAppStore = create<AppState>()(
       setActiveView: (view) => set({ activeView: view }),
       toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
       togglePanel: () => set((state) => ({ panelVisible: !state.panelVisible })),
+      setPanelActiveTab: (panelActiveTab) => set({ panelActiveTab }),
       setSelectedPost: (id) => set({ selectedPostId: id }),
       setSelectedMedia: (id) => set({ selectedMediaId: id }),
       setPreferredEditorMode: (mode) => set({ preferredEditorMode: mode }),
@@ -367,6 +372,7 @@ export const useAppStore = create<AppState>()(
         activeView: state.activeView,
         sidebarVisible: state.sidebarVisible,
         panelVisible: state.panelVisible,
+        panelActiveTab: state.panelActiveTab,
         selectedPostId: state.selectedPostId,
         selectedMediaId: state.selectedMediaId,
         preferredEditorMode: state.preferredEditorMode,
@@ -385,6 +391,7 @@ export const useAppStore = create<AppState>()(
           ...persistedState,
           tabs: persistedState.tabs || [],
           activeTabId: persistedState.activeTabId || null,
+          panelActiveTab: persistedState.panelActiveTab || current.panelActiveTab,
           dirtyPosts: new Set(persistedState.dirtyPosts || []),
           gitDiffPreferences: persistedState.gitDiffPreferences || current.gitDiffPreferences,
         };

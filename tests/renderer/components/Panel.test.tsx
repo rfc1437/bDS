@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { Panel } from '../../../src/renderer/components/Panel/Panel';
 import { useAppStore } from '../../../src/renderer/store';
 import type { PostData, MediaData } from '../../../src/main/shared/electronApi';
@@ -54,6 +54,7 @@ describe('Panel', () => {
 
     useAppStore.setState({
       panelVisible: true,
+      panelActiveTab: 'tasks',
       tasks: [],
       activeProject: {
         id: 'project-1',
@@ -72,7 +73,7 @@ describe('Panel', () => {
   });
 
   afterEach(() => {
-    useAppStore.setState({ panelVisible: false });
+    useAppStore.setState({ panelVisible: false, panelActiveTab: 'tasks' });
   });
 
   it('renders a Git Log tab label instead of Sync Log', () => {
@@ -107,6 +108,8 @@ describe('Panel', () => {
 
     render(<Panel />);
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Git Log' }));
+
     await vi.waitFor(() => {
       expect(getFileHistory).toHaveBeenCalledWith('/repo/path', 'posts/2026/02/first-post.md', 50);
     });
@@ -123,6 +126,30 @@ describe('Panel', () => {
     });
   });
 
+  it('does not load git history when panel is closed', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    (window as any).electronAPI.git.getFileHistory = getFileHistory;
+
+    useAppStore.setState({ panelVisible: false, panelActiveTab: 'git-log' });
+
+    render(<Panel />);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getFileHistory).not.toHaveBeenCalled();
+  });
+
+  it('does not load git history when Git Log tab is not active', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    (window as any).electronAPI.git.getFileHistory = getFileHistory;
+
+    useAppStore.setState({ panelActiveTab: 'tasks' });
+
+    render(<Panel />);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getFileHistory).not.toHaveBeenCalled();
+  });
+
   it('disables Git Log tab when focused tab is not a post or media editor', () => {
     useAppStore.setState({
       tabs: [{ type: 'settings', id: 'settings', isTransient: false }],
@@ -132,5 +159,18 @@ describe('Panel', () => {
     render(<Panel />);
 
     expect(screen.getByRole('tab', { name: 'Git Log' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('restores the last selected panel tab after remounting the panel', () => {
+    const firstRender = render(<Panel />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Output' }));
+    expect(screen.getByRole('tab', { name: 'Output' })).toHaveAttribute('aria-selected', 'true');
+
+    firstRender.unmount();
+
+    render(<Panel />);
+
+    expect(screen.getByRole('tab', { name: 'Output' })).toHaveAttribute('aria-selected', 'true');
   });
 });
