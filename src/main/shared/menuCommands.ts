@@ -21,6 +21,7 @@ export type AppMenuAction =
   | 'rebuildDatabase'
   | 'reindexText'
   | 'metadataDiff'
+  | 'generateSitemap'
   | 'about'
   | 'viewOnGitHub'
   | 'reportIssue';
@@ -85,6 +86,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'Rebuild Database from Files', action: 'rebuildDatabase' },
       { label: 'Reindex Search Text', action: 'reindexText' },
       { label: 'Metadata Diff Tool', action: 'metadataDiff' },
+      { label: 'Generate Sitemap', action: 'generateSitemap' },
     ],
   },
   {
@@ -113,6 +115,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   rebuildDatabase: 'menu:rebuildDatabase',
   reindexText: 'menu:reindexText',
   metadataDiff: 'menu:metadataDiff',
+  generateSitemap: 'menu:generateSitemap',
   about: 'menu:about',
 };
 

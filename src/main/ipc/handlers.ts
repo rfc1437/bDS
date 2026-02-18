@@ -86,6 +86,31 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
   }
 }
 
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function buildSitemapUrl(
+  loc: string,
+  lastmod: string,
+  changefreq: 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never',
+  priority: string,
+): string {
+  return [
+    '  <url>',
+    `    <loc>${escapeXml(loc)}</loc>`,
+    `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+    `    <changefreq>${changefreq}</changefreq>`,
+    `    <priority>${priority}</priority>`,
+    '  </url>',
+  ].join('\n');
+}
+
 export function registerIpcHandlers(): void {
   // ============ Git Handlers ============
 
@@ -1275,6 +1300,175 @@ export function registerIpcHandlers(): void {
       engine.setProjectContext(activeProject.id);
     }
     return engine.runSyncFileToDbTask(postIds, field as 'tags' | 'categories' | 'title' | 'excerpt' | 'author', groupLabel);
+  });
+
+  // ============ Sitemap Generation ============
+
+  safeHandle('blog:generateSitemap', async () => {
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+    if (!project) {
+      throw new Error('No active project');
+    }
+
+    const postEngine = getPostEngine();
+    const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+    postEngine.setProjectContext(project.id, dataDir);
+
+    const metaEngine = getMetaEngine();
+    metaEngine.setProjectContext(project.id, project.dataPath);
+
+    const taskId = `sitemap-generate-${Date.now()}`;
+
+    return taskManager.runTask({
+      id: taskId,
+      name: 'Generate Sitemap',
+      execute: async (onProgress) => {
+        onProgress(0, 'Loading posts...');
+
+        const db = getDatabase().getLocal();
+        const { posts: postsTable } = await import('../database/schema');
+        const { eq: eqOp, desc: descOp } = await import('drizzle-orm');
+
+        const dbPosts = await db
+          .select()
+          .from(postsTable)
+          .where(eqOp(postsTable.projectId, project.id))
+          .orderBy(descOp(postsTable.createdAt))
+          .all();
+
+        // Only include published and archived posts (not drafts) in sitemap
+        const publishedPosts = dbPosts.filter(p => p.status === 'published' || p.status === 'archived');
+
+        onProgress(10, `Found ${publishedPosts.length} published posts`);
+
+        const baseUrl = 'http://127.0.0.1:4123';
+        const now = new Date().toISOString();
+
+        // Collect all unique tags, categories, and year/month/day archives
+        const allTags = new Set<string>();
+        const allCategories = new Set<string>();
+        const yearMonths = new Map<string, Date>(); // key -> most recent post date
+        const years = new Map<number, Date>(); // year -> most recent post date
+        const yearMonthDays = new Map<string, Date>(); // YYYY/MM/DD -> most recent post date
+
+        const postUrls: Array<{ loc: string; lastmod: string }> = [];
+
+        for (const post of publishedPosts) {
+          // Parse tags and categories
+          const tags: string[] = JSON.parse(post.tags || '[]');
+          const categories: string[] = JSON.parse(post.categories || '[]');
+
+          for (const tag of tags) allTags.add(tag);
+          for (const cat of categories) allCategories.add(cat);
+
+          // Build post URL: /:YYYY/:MM/:DD/:slug
+          const createdAt = post.createdAt instanceof Date ? post.createdAt : new Date(post.createdAt as unknown as number);
+          const year = createdAt.getFullYear();
+          const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+          const day = String(createdAt.getDate()).padStart(2, '0');
+
+          const postUrl = `${baseUrl}/${year}/${month}/${day}/${post.slug}`;
+          const updatedAt = post.updatedAt instanceof Date ? post.updatedAt : new Date(post.updatedAt as unknown as number);
+          postUrls.push({ loc: postUrl, lastmod: updatedAt.toISOString() });
+
+          // Track archives
+          const ymKey = `${year}/${month}`;
+          const ymdKey = `${year}/${month}/${day}`;
+
+          if (!yearMonths.has(ymKey) || updatedAt > yearMonths.get(ymKey)!) {
+            yearMonths.set(ymKey, updatedAt);
+          }
+          if (!years.has(year) || updatedAt > years.get(year)!) {
+            years.set(year, updatedAt);
+          }
+          if (!yearMonthDays.has(ymdKey) || updatedAt > yearMonthDays.get(ymdKey)!) {
+            yearMonthDays.set(ymdKey, updatedAt);
+          }
+        }
+
+        onProgress(40, 'Building sitemap XML...');
+
+        // Build XML sitemap
+        const urls: string[] = [];
+
+        // Homepage
+        urls.push(buildSitemapUrl(baseUrl + '/', now, 'daily', '1.0'));
+
+        // Individual posts
+        for (const post of postUrls) {
+          urls.push(buildSitemapUrl(post.loc, post.lastmod, 'monthly', '0.8'));
+        }
+
+        onProgress(55, 'Adding archive pages...');
+
+        // Year archives
+        for (const [year, lastmod] of Array.from(years.entries()).sort((a, b) => b[0] - a[0])) {
+          urls.push(buildSitemapUrl(`${baseUrl}/${year}`, lastmod.toISOString(), 'monthly', '0.5'));
+        }
+
+        // Year/Month archives
+        for (const [ym, lastmod] of Array.from(yearMonths.entries()).sort().reverse()) {
+          urls.push(buildSitemapUrl(`${baseUrl}/${ym}`, lastmod.toISOString(), 'monthly', '0.5'));
+        }
+
+        // Year/Month/Day archives
+        for (const [ymd, lastmod] of Array.from(yearMonthDays.entries()).sort().reverse()) {
+          urls.push(buildSitemapUrl(`${baseUrl}/${ymd}`, lastmod.toISOString(), 'monthly', '0.4'));
+        }
+
+        onProgress(70, 'Adding category pages...');
+
+        // Category pages
+        for (const category of Array.from(allCategories).sort()) {
+          urls.push(buildSitemapUrl(
+            `${baseUrl}/category/${encodeURIComponent(category)}`,
+            now,
+            'weekly',
+            '0.6',
+          ));
+        }
+
+        onProgress(80, 'Adding tag pages...');
+
+        // Tag pages
+        for (const tag of Array.from(allTags).sort()) {
+          urls.push(buildSitemapUrl(
+            `${baseUrl}/tag/${encodeURIComponent(tag)}`,
+            now,
+            'weekly',
+            '0.6',
+          ));
+        }
+
+        onProgress(90, 'Writing sitemap file...');
+
+        const xml = [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+          ...urls,
+          '</urlset>',
+          '',
+        ].join('\n');
+
+        // Write to html folder in the project data directory
+        const htmlDir = path.join(dataDir, 'html');
+        await fsPromises.mkdir(htmlDir, { recursive: true });
+        const sitemapPath = path.join(htmlDir, 'sitemap.xml');
+        await fsPromises.writeFile(sitemapPath, xml, 'utf-8');
+
+        onProgress(100, `Sitemap generated with ${urls.length} URLs`);
+
+        return {
+          path: sitemapPath,
+          urlCount: urls.length,
+          postCount: postUrls.length,
+          tagCount: allTags.size,
+          categoryCount: allCategories.size,
+          archiveCount: years.size + yearMonths.size + yearMonthDays.size,
+        };
+      },
+    });
   });
 
   // ============ Event Forwarding ============

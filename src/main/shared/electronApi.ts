@@ -589,6 +589,16 @@ export interface ElectronAPI {
     syncDbToFile: (postIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
     syncFileToDb: (postIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
   };
+  blog: {
+    generateSitemap: () => Promise<{
+      path: string;
+      urlCount: number;
+      postCount: number;
+      tagCount: number;
+      categoryCount: number;
+      archiveCount: number;
+    }>;
+  };
   chat: {
     // API Key Management
     checkReady: () => Promise<ChatReadyStatus>;

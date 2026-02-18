@@ -249,6 +249,11 @@ export const electronAPI: ElectronAPI = {
     syncFileToDb: (postIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncFileToDb', postIds, field, groupLabel),
   },
 
+  // Blog operations
+  blog: {
+    generateSitemap: () => ipcRenderer.invoke('blog:generateSitemap'),
+  },
+
   // AI Chat (OpenCode Zen API integration)
   chat: {
     // API Key Management

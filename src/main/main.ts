@@ -318,6 +318,7 @@ function createApplicationMenu(): Menu {
         buildSharedMenuItem('reindexText'),
         { type: 'separator' },
         buildSharedMenuItem('metadataDiff'),
+        buildSharedMenuItem('generateSitemap'),
       ],
     },
     {
