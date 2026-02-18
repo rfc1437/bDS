@@ -438,6 +438,7 @@ describe('GitEngine', () => {
       expect(result.updated).toBe(true);
       expect(result.created).toBe(true);
       expect(result.addedEntries.length).toBeGreaterThan(0);
+      expect(result.addedEntries).toContain('html/');
       expect(mockWriteFile).toHaveBeenCalledTimes(1);
     });
 
@@ -449,6 +450,7 @@ describe('GitEngine', () => {
       expect(result.updated).toBe(true);
       expect(result.created).toBe(false);
       expect(result.addedEntries).toContain('Thumbs.db');
+      expect(result.addedEntries).toContain('html/');
       expect(mockWriteFile).toHaveBeenCalledTimes(1);
     });
 
@@ -462,6 +464,7 @@ describe('GitEngine', () => {
         '.Trashes/',
         '._*',
         '.fseventsd',
+        'html/',
       ].join('\n'));
 
       const result = await gitEngine.ensureGitignore('/tmp/project');

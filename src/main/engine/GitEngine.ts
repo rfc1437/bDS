@@ -152,6 +152,7 @@ export class GitEngine {
     '.Trashes/',
     '._*',
     '.fseventsd',
+    'html/',
   ];
 
   private createNonInteractiveGit(projectPath: string): ReturnType<typeof simpleGit> {
