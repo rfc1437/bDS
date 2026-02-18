@@ -1311,13 +1311,7 @@ export function registerIpcHandlers(): void {
       throw new Error('No active project');
     }
 
-    const postEngine = getPostEngine();
     const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
-    postEngine.setProjectContext(project.id, dataDir);
-
-    const metaEngine = getMetaEngine();
-    metaEngine.setProjectContext(project.id, project.dataPath);
-
     const taskId = `sitemap-generate-${Date.now()}`;
 
     return taskManager.runTask({
@@ -1337,8 +1331,8 @@ export function registerIpcHandlers(): void {
           .orderBy(descOp(postsTable.createdAt))
           .all();
 
-        // Only include published and archived posts (not drafts) in sitemap
-        const publishedPosts = dbPosts.filter(p => p.status === 'published' || p.status === 'archived');
+        // Only include published posts (not drafts or archived) in sitemap
+        const publishedPosts = dbPosts.filter(p => p.status === 'published');
 
         onProgress(10, `Found ${publishedPosts.length} published posts`);
 
@@ -1362,17 +1356,19 @@ export function registerIpcHandlers(): void {
           for (const tag of tags) allTags.add(tag);
           for (const cat of categories) allCategories.add(cat);
 
-          // Build post URL: /:YYYY/:MM/:DD/:slug
-          const createdAt = post.createdAt instanceof Date ? post.createdAt : new Date(post.createdAt as unknown as number);
-          const year = createdAt.getFullYear();
-          const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-          const day = String(createdAt.getDate()).padStart(2, '0');
-
-          const postUrl = `${baseUrl}/${year}/${month}/${day}/${post.slug}`;
-          const updatedAt = post.updatedAt instanceof Date ? post.updatedAt : new Date(post.updatedAt as unknown as number);
+          // Build canonical post URL using shared helpers
+          const createdAt = resolvePostCreatedAt(post);
+          const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
+          const postUrl = `${baseUrl}${canonicalPath}`;
+          const updatedAt = post.updatedAt instanceof Date 
+            ? post.updatedAt 
+            : new Date(post.updatedAt as unknown as Date | string | number);
           postUrls.push({ loc: postUrl, lastmod: updatedAt.toISOString() });
 
           // Track archives
+          const year = createdAt.getFullYear();
+          const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+          const day = String(createdAt.getDate()).padStart(2, '0');
           const ymKey = `${year}/${month}`;
           const ymdKey = `${year}/${month}/${day}`;
 
