@@ -83,6 +83,33 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
     case 'toggleDevTools':
       sender.toggleDevTools?.();
       return true;
+    case 'reload':
+      sender.reload?.();
+      return true;
+    case 'forceReload':
+      sender.reloadIgnoringCache?.();
+      return true;
+    case 'resetZoom':
+      sender.setZoomLevel?.(0);
+      return true;
+    case 'zoomIn': {
+      const currentZoomLevel = sender.getZoomLevel?.() ?? 0;
+      sender.setZoomLevel?.(currentZoomLevel + 0.5);
+      return true;
+    }
+    case 'zoomOut': {
+      const currentZoomLevel = sender.getZoomLevel?.() ?? 0;
+      sender.setZoomLevel?.(currentZoomLevel - 0.5);
+      return true;
+    }
+    case 'toggleFullScreen': {
+      const ownerWindow = BrowserWindow.fromWebContents(sender);
+      if (!ownerWindow) {
+        return false;
+      }
+      ownerWindow.setFullScreen(!ownerWindow.isFullScreen());
+      return true;
+    }
     default:
       return false;
   }
@@ -745,6 +772,17 @@ export function registerIpcHandlers(): void {
 
     if (typedAction === 'viewOnGitHub') {
       await shell.openExternal('https://github.com/rfc1437/bDS');
+      return;
+    }
+
+    if (typedAction === 'openInBrowser') {
+      await shell.openExternal('http://localhost:4123/');
+      return;
+    }
+
+    if (typedAction === 'openDataFolder') {
+      const paths = getDatabase().getDataPaths();
+      await shell.openPath(path.dirname(paths.database));
       return;
     }
 

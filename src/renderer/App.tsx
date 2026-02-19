@@ -289,6 +289,25 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:previewPost', async () => {
+        try {
+          const selectedPostId = useAppStore.getState().selectedPostId;
+          if (!selectedPostId) {
+            return;
+          }
+
+          const previewUrl = await window.electronAPI?.posts.getPreviewUrl(selectedPostId);
+          if (typeof previewUrl === 'string' && previewUrl.length > 0) {
+            window.open(previewUrl, '_blank', 'noopener');
+          }
+        } catch (error) {
+          console.error('Failed to open selected post preview:', error);
+          showToast.error('Failed to open selected post preview');
+        }
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:openDocumentation', () => {
         openTab({ id: 'documentation', type: 'documentation', isTransient: false });
       }) || (() => {})

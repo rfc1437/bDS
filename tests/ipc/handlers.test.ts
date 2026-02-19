@@ -1461,6 +1461,110 @@ describe('IPC Handlers', () => {
         expect(shell.openExternal).toHaveBeenCalledWith('https://github.com/rfc1437/bDS');
         expect(send).not.toHaveBeenCalled();
       });
+
+      it('should open preview root URL when action is openInBrowser', async () => {
+        const { shell } = await import('electron');
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'openInBrowser');
+
+        expect(shell.openExternal).toHaveBeenCalledWith('http://localhost:4123/');
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should open the data folder when action is openDataFolder', async () => {
+        const { shell } = await import('electron');
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'openDataFolder');
+
+        expect(shell.openPath).toHaveBeenCalledWith('/mock/data');
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should forward previewPost to renderer menu channel', async () => {
+        const send = vi.fn();
+        const event = { sender: { send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'previewPost');
+
+        expect(send).toHaveBeenCalledWith('menu:previewPost');
+      });
+
+      it('should reload sender when action is reload', async () => {
+        const reload = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { reload, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'reload');
+
+        expect(reload).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should force reload sender when action is forceReload', async () => {
+        const reloadIgnoringCache = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { reloadIgnoringCache, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'forceReload');
+
+        expect(reloadIgnoringCache).toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should reset zoom level when action is resetZoom', async () => {
+        const setZoomLevel = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { setZoomLevel, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'resetZoom');
+
+        expect(setZoomLevel).toHaveBeenCalledWith(0);
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should zoom in when action is zoomIn', async () => {
+        const getZoomLevel = vi.fn(() => 0);
+        const setZoomLevel = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { getZoomLevel, setZoomLevel, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'zoomIn');
+
+        expect(setZoomLevel).toHaveBeenCalledWith(0.5);
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should zoom out when action is zoomOut', async () => {
+        const getZoomLevel = vi.fn(() => 0.5);
+        const setZoomLevel = vi.fn();
+        const send = vi.fn();
+        const event = { sender: { getZoomLevel, setZoomLevel, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'zoomOut');
+
+        expect(setZoomLevel).toHaveBeenCalledWith(0);
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should toggle fullscreen on owner window when action is toggleFullScreen', async () => {
+        const { BrowserWindow } = await import('electron');
+        const sender = { send: vi.fn() };
+        const ownerWindow = {
+          isFullScreen: vi.fn(() => false),
+          setFullScreen: vi.fn(),
+        };
+
+        vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(ownerWindow as unknown as ReturnType<typeof BrowserWindow.fromWebContents>);
+
+        await invokeHandlerWithEvent({ sender }, 'app:triggerMenuAction', 'toggleFullScreen');
+
+        expect(BrowserWindow.fromWebContents).toHaveBeenCalledWith(sender);
+        expect(ownerWindow.setFullScreen).toHaveBeenCalledWith(true);
+      });
     });
   });
 

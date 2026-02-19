@@ -19,7 +19,7 @@ describe('WindowTitleBar', () => {
     });
   });
 
-  it('applies a macOS class to the title bar root for platform-specific spacing', () => {
+  it('renders title bar on macOS but hides simulated menu buttons', () => {
     Object.defineProperty(navigator, 'platform', {
       value: 'MacIntel',
       configurable: true,
@@ -27,10 +27,14 @@ describe('WindowTitleBar', () => {
 
     render(<WindowTitleBar />);
 
-    expect(screen.getByTestId('window-titlebar')).toHaveClass('is-mac');
+    expect(screen.getByTestId('window-titlebar')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'File' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.getByLabelText('Toggle Sidebar')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle Panel')).toBeInTheDocument();
   });
 
-  it('sets macOS title bar inset CSS variable from dynamic native metrics', async () => {
+  it('does not request macOS title bar metrics when simulated title bar is disabled', async () => {
     Object.defineProperty(navigator, 'platform', {
       value: 'MacIntel',
       configurable: true,
@@ -48,8 +52,8 @@ describe('WindowTitleBar', () => {
       await Promise.resolve();
     });
 
-    expect(getTitleBarMetrics).toHaveBeenCalled();
-    expect(document.documentElement.style.getPropertyValue('--bds-titlebar-macos-left-inset')).toBe('102px');
+    expect(getTitleBarMetrics).not.toHaveBeenCalled();
+    expect(document.documentElement.style.getPropertyValue('--bds-titlebar-macos-left-inset')).toBe('');
   });
 
   it('renders a right-side sidebar toggle button and toggles store state', () => {

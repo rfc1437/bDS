@@ -8,13 +8,13 @@ import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { PreviewServer } from './engine/PreviewServer';
-import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
+import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 
 let mainWindow: BrowserWindow | null = null;
 let previewServer: PreviewServer | null = null;
 let activePreviewPostId: string | null = null;
 const PREVIEW_SERVER_PORT = 4123;
-const BLOG_PREVIEW_POST_MENU_ID = 'blog.previewPost';
+const BLOG_PREVIEW_POST_MENU_ID = APP_MENU_ITEM_IDS.previewPost;
 
 // Check if dev server is likely running (only in development)
 const isDev = process.env.NODE_ENV === 'development';
@@ -178,9 +178,67 @@ function createApplicationMenu(): Menu {
       return acc;
     }, {});
 
-  const triggerMenuAction = (action: AppMenuAction): void => {
+  const triggerMenuAction = async (action: AppMenuAction): Promise<void> => {
     if (action === 'quit') {
       app.quit();
+      return;
+    }
+
+    if (action === 'openInBrowser') {
+      await openPreviewInBrowser().catch((error) => {
+        console.error('Failed to open preview in browser:', error);
+      });
+      return;
+    }
+
+    if (action === 'openDataFolder') {
+      const paths = getDatabase().getDataPaths();
+      void shell.openPath(path.dirname(paths.database));
+      return;
+    }
+
+    if (action === 'previewPost') {
+      await openActivePostPreviewInBrowser().catch((error) => {
+        console.error('Failed to preview active post in browser:', error);
+      });
+      return;
+    }
+
+    if (action === 'reload') {
+      mainWindow?.webContents.reload();
+      return;
+    }
+
+    if (action === 'forceReload') {
+      mainWindow?.webContents.reloadIgnoringCache();
+      return;
+    }
+
+    if (action === 'resetZoom') {
+      mainWindow?.webContents.setZoomLevel(0);
+      return;
+    }
+
+    if (action === 'zoomIn') {
+      if (mainWindow) {
+        const zoomLevel = mainWindow.webContents.getZoomLevel();
+        mainWindow.webContents.setZoomLevel(zoomLevel + 0.5);
+      }
+      return;
+    }
+
+    if (action === 'zoomOut') {
+      if (mainWindow) {
+        const zoomLevel = mainWindow.webContents.getZoomLevel();
+        mainWindow.webContents.setZoomLevel(zoomLevel - 0.5);
+      }
+      return;
+    }
+
+    if (action === 'toggleFullScreen') {
+      if (mainWindow) {
+        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+      }
       return;
     }
 
@@ -217,8 +275,10 @@ function createApplicationMenu(): Menu {
     return {
       label: definition.label,
       accelerator: definition.accelerator,
-      click: () => {
-        triggerMenuAction(action);
+      id: definition.id,
+      enabled: definition.enabled,
+      click: async () => {
+        await triggerMenuAction(action);
       },
     };
   };
@@ -229,7 +289,9 @@ function createApplicationMenu(): Menu {
       return [];
     }
 
-    return group.items.map((item) => {
+    const filteredItems = group.items.filter(item => isDev || item.action !== 'toggleDevTools');
+
+    return filteredItems.map((item) => {
       if (item.separator) {
         return { type: 'separator' };
       }
@@ -241,33 +303,7 @@ function createApplicationMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [
     {
       label: 'File',
-      submenu: [
-        buildSharedMenuItem('newPost'),
-        buildSharedMenuItem('importMedia'),
-        { type: 'separator' },
-        buildSharedMenuItem('save'),
-        { type: 'separator' },
-        {
-          label: 'Open in Browser',
-          click: async () => {
-            try {
-              await openPreviewInBrowser();
-            } catch (error) {
-              console.error('Failed to open preview in browser:', error);
-            }
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Open Data Folder',
-          click: async () => {
-            const paths = getDatabase().getDataPaths();
-            shell.openPath(path.dirname(paths.database));
-          },
-        },
-        { type: 'separator' },
-        buildSharedMenuItem('quit'),
-      ],
+      submenu: buildSharedGroupMenuItems('File'),
     },
     {
       label: 'Edit',
@@ -275,51 +311,11 @@ function createApplicationMenu(): Menu {
     },
     {
       label: 'View',
-      submenu: [
-        ...buildSharedGroupMenuItems('View'),
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        {
-          label: 'Toggle Developer Tools',
-          accelerator: process.platform === 'darwin' ? 'Cmd+Option+I' : 'Ctrl+Shift+I',
-          click: () => {
-            mainWindow?.webContents.toggleDevTools();
-          },
-        },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
+      submenu: buildSharedGroupMenuItems('View'),
     },
     {
       label: 'Blog',
-      submenu: [
-        buildSharedMenuItem('publishSelected'),
-        { type: 'separator' },
-        {
-          label: 'Preview Post',
-          id: BLOG_PREVIEW_POST_MENU_ID,
-          enabled: false,
-          accelerator: 'CmdOrCtrl+Shift+V',
-          click: async () => {
-            try {
-              await openActivePostPreviewInBrowser();
-            } catch (error) {
-              console.error('Failed to preview active post in browser:', error);
-            }
-          },
-        },
-        { type: 'separator' },
-        buildSharedMenuItem('rebuildDatabase'),
-        buildSharedMenuItem('reindexText'),
-        { type: 'separator' },
-        buildSharedMenuItem('metadataDiff'),
-        buildSharedMenuItem('generateSitemap'),
-      ],
+      submenu: buildSharedGroupMenuItems('Blog'),
     },
     {
       label: 'Help',

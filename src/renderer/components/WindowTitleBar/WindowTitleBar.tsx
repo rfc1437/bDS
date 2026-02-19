@@ -134,83 +134,6 @@ export const WindowTitleBar: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isMac) {
-      return;
-    }
-
-    const rootStyle = document.documentElement.style;
-    let isDisposed = false;
-    let resolutionQuery: MediaQueryList | null = null;
-
-    const syncMacInset = async () => {
-      const metrics = await window.electronAPI?.app?.getTitleBarMetrics?.();
-      if (isDisposed) {
-        return;
-      }
-
-      if (metrics && Number.isFinite(metrics.macosLeftInset)) {
-        rootStyle.setProperty('--bds-titlebar-macos-left-inset', `${Math.max(0, Math.round(metrics.macosLeftInset))}px`);
-      }
-    };
-
-    const bindResolutionListener = () => {
-      if (typeof window.matchMedia !== 'function') {
-        return;
-      }
-
-      if (resolutionQuery && typeof resolutionQuery.removeEventListener === 'function') {
-        resolutionQuery.removeEventListener('change', onResolutionChange);
-      }
-
-      resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-      if (typeof resolutionQuery.addEventListener === 'function') {
-        resolutionQuery.addEventListener('change', onResolutionChange);
-      }
-    };
-
-    const onResolutionChange = () => {
-      void syncMacInset();
-      bindResolutionListener();
-    };
-
-    const onResize = () => {
-      void syncMacInset();
-    };
-
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        void syncMacInset();
-      }
-    };
-
-    const canListenToWindowEvents = typeof window.addEventListener === 'function';
-    const canListenToDocumentEvents = typeof document.addEventListener === 'function';
-
-    void syncMacInset();
-    bindResolutionListener();
-    if (canListenToWindowEvents) {
-      window.addEventListener('resize', onResize);
-    }
-    if (canListenToDocumentEvents) {
-      document.addEventListener('visibilitychange', onVisibilityChange);
-    }
-
-    return () => {
-      isDisposed = true;
-      if (canListenToWindowEvents && typeof window.removeEventListener === 'function') {
-        window.removeEventListener('resize', onResize);
-      }
-      if (canListenToDocumentEvents && typeof document.removeEventListener === 'function') {
-        document.removeEventListener('visibilitychange', onVisibilityChange);
-      }
-
-      if (resolutionQuery && typeof resolutionQuery.removeEventListener === 'function') {
-        resolutionQuery.removeEventListener('change', onResolutionChange);
-      }
-    };
-  }, [isMac]);
-
-  useEffect(() => {
     const updateTitle = () => {
       setWindowTitle(document.title || 'Blogging Desktop Server');
     };
@@ -363,6 +286,10 @@ export const WindowTitleBar: React.FC = () => {
   }, [openMenu?.label]);
 
   useEffect(() => {
+    if (isMac) {
+      return;
+    }
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey) {
         return;
@@ -401,7 +328,7 @@ export const WindowTitleBar: React.FC = () => {
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('mousedown', onDocumentMouseDown);
     };
-  }, [mnemonicByKey, showMnemonics]);
+  }, [isMac, mnemonicByKey, showMnemonics]);
 
   const handleMenuButtonClick = (event: React.MouseEvent<HTMLButtonElement>, label: string) => {
     const left = getMenuLeft(label);
@@ -461,23 +388,25 @@ export const WindowTitleBar: React.FC = () => {
 
   return (
     <div className={`window-titlebar${isMac ? ' is-mac' : ''}`} data-testid="window-titlebar" ref={menuRootRef}>
-      <div className="window-titlebar-menu-bar" data-testid="window-titlebar-menu-bar">
-        {visibleMenuGroups.map(group => (
-          <button
-            key={group.label}
-            ref={(element) => {
-              menuButtonRefs.current[group.label] = element;
-            }}
-            className={`window-titlebar-menu-button${openMenu?.label === group.label ? ' is-active' : ''}`}
-            type="button"
-            onClick={(event) => handleMenuButtonClick(event, group.label)}
-            onMouseEnter={(event) => handleMenuButtonMouseEnter(event, group.label)}
-            aria-label={group.label}
-          >
-            {renderMenuLabel(group.label)}
-          </button>
-        ))}
-      </div>
+      {!isMac && (
+        <div className="window-titlebar-menu-bar" data-testid="window-titlebar-menu-bar">
+          {visibleMenuGroups.map(group => (
+            <button
+              key={group.label}
+              ref={(element) => {
+                menuButtonRefs.current[group.label] = element;
+              }}
+              className={`window-titlebar-menu-button${openMenu?.label === group.label ? ' is-active' : ''}`}
+              type="button"
+              onClick={(event) => handleMenuButtonClick(event, group.label)}
+              onMouseEnter={(event) => handleMenuButtonMouseEnter(event, group.label)}
+              aria-label={group.label}
+            >
+              {renderMenuLabel(group.label)}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="window-titlebar-drag-region" />
       <div className="window-titlebar-title" data-testid="window-titlebar-title" title={windowTitle}>
         {windowTitle}
@@ -512,7 +441,7 @@ export const WindowTitleBar: React.FC = () => {
           </span>
         </button>
       </div>
-      {openMenu && activeMenu && (
+      {!isMac && openMenu && activeMenu && (
         <div
           className="window-titlebar-menu-dropdown"
           data-testid="window-titlebar-menu-dropdown"
