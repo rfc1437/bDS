@@ -1,135 +1,136 @@
 # Blogging Desktop Server (bDS)
 
-A desktop blogging application with offline-first capabilities.
+Desktop-first blogging workspace built with Electron + TypeScript + React + SQLite (Drizzle), with filesystem-based content as source of truth.
 
-## Features
+## Current State (February 2026)
 
-- **Offline-First**: All data is stored locally in SQLite, works without internet
-- **VS Code-Inspired UI**: Familiar, clean interface with activity bar, sidebar, and editor
-- **Markdown Posts**: Write blog posts in Markdown with YAML frontmatter
-- **Media Management**: Import and manage images with metadata sidecar files
-- **Clean Architecture**: Engine classes handle business logic, UI is purely presentational
+Implemented and actively used:
+
+- **Offline-first by default** with full local editing, preview, and git-based workflows; all online features are optional
+- **Multi-project workflow** with active project switching and optional custom data paths
+- **Post management** (draft/published/archived), pagination, filtering, full-text search, canonical URL handling
+- **Media pipeline** with import, metadata sidecars, thumbnails, linked-media references, and cleanup tooling
+- **Tag management** including merge/rename/sync from content
+- **WordPress WXR import pipeline** (analysis, import definitions, execution/progress)
+- **Preview server** with local assets only, Liquid templates, macro processing, archive routes, sitemap generation
+- **Git integration** (status, diff, history, fetch/pull/push, init, .gitignore ensure, LFS prune)
+- **Metadata diff tooling** for comparing filesystem metadata vs database metadata
+- **AI chat persistence layer** (conversations/messages/model metadata) with OpenCode integration support
+- **Task system** for progress reporting across long-running operations
 
 ## Architecture
 
-```
+```text
 src/
-├── main/                  # Electron main process
-│   ├── database/         # Drizzle ORM schema and connection
-│   ├── engine/           # Business logic engines
-│   │   ├── PostEngine    # Post CRUD, file operations
-│   │   ├── MediaEngine   # Media import/management
-│   │   └── TaskManager   # Async task handling
-│   ├── ipc/              # IPC handlers for renderer communication
-│   └── main.ts           # App entry point
-│
-└── renderer/             # Electron renderer process (React)
-    ├── components/       # UI components (VS Code style)
-    ├── store/            # Zustand state management
-    └── styles/           # Global CSS variables
+├── main/
+│   ├── database/        # Drizzle schema, migrations, connection
+│   ├── engine/          # Core business logic (no UI)
+│   │   ├── PostEngine
+│   │   ├── MediaEngine
+│   │   ├── PostMediaEngine
+│   │   ├── ProjectEngine
+│   │   ├── MetaEngine
+│   │   ├── TagEngine
+│   │   ├── PreviewServer
+│   │   ├── Import* engines
+│   │   ├── GitEngine
+│   │   ├── MetadataDiffEngine
+│   │   ├── ChatEngine / OpenCodeManager
+│   │   └── TaskManager
+│   ├── ipc/             # IPC handlers; bridges renderer to engines
+│   ├── shared/          # Shared contracts/types (Electron API)
+│   └── main.ts          # Electron app + menu + window lifecycle
+└── renderer/
+        ├── components/      # UI (editor, sidebars, panels, modals, views)
+        ├── store/           # Zustand app state
+        ├── macros/          # Macro authoring/runtime support
+        └── App.tsx          # App composition + event wiring
 ```
 
-## Data Storage
+## Data Model & Storage
 
-All user data is stored in the application's user data folder:
+- **Primary DB**: `{userData}/bds.db`
+- **Projects**: stored in DB with an active project
+- **Per-project data**:
+    - default/internal: `{userData}/projects/{projectId}/`
+    - optional custom `dataPath` (posts/media/meta/thumbnails live together)
+- **Filesystem remains source of truth** for post/media files; DB is query/index/state layer
 
-- **Database**: `{userData}/bds.db` - SQLite database with post/media metadata
-- **Posts**: `{userData}/posts/*.md` - Markdown files with YAML frontmatter
-- **Media**: `{userData}/media/` - Image files with `.meta` sidecar files
+Typical per-project folders:
 
-### Post Format
-
-```markdown
----
-id: uuid-here
-title: "My Blog Post"
-slug: my-blog-post
-status: draft
-author: John Doe
-createdAt: 2024-01-15T10:30:00.000Z
-updatedAt: 2024-01-15T10:30:00.000Z
-tags: ["javascript", "tutorial"]
-categories: ["development"]
----
-
-# My Blog Post
-
-Your markdown content here...
+```text
+{projectDataDir}/
+├── posts/
+├── media/
+├── meta/
+└── thumbnails/
 ```
 
-### Media Sidecar Format
+## Menu / Shortcuts (Cross-Platform)
 
-```yaml
----
-id: uuid-here
-originalName: "photo.jpg"
-mimeType: image/jpeg
-size: 102400
-width: 1920
-height: 1080
-alt: "A beautiful sunset"
-caption: "Sunset over the mountains"
-createdAt: 2024-01-15T10:30:00.000Z
-updatedAt: 2024-01-15T10:30:00.000Z
-tags: ["nature", "sunset"]
----
-```
+Key shortcuts (defined as `CmdOrCtrl`):
 
-### Internal Link Formats
-
-Canonical formats for new content:
-
-- Post links: `/YYYY/MM/DD/slug` (example: `/2025/02/16/my-post`)
-- Media links: `/media/YYYY/MM/file.ext` (example: `/media/2025/02/photo.jpg`)
-
-Also supported (legacy/alternative input formats):
-
-- Post links: `/posts/slug`, `/posts/YYYY/MM/slug`, `post/slug`, `post/YYYY/MM/slug`
-- Media links: `media/YYYY/MM/file.ext`
-
-Preview HTML generation rewrites supported post/media link formats to preview-routable URLs. Markdown source remains unchanged except when inserting new media links from the editor, which now use `/media/...`.
+- `CmdOrCtrl+N` New post
+- `CmdOrCtrl+I` Import media
+- `CmdOrCtrl+S` Save
+- `CmdOrCtrl+1` Posts view
+- `CmdOrCtrl+2` Media view
+- `CmdOrCtrl+B` Toggle sidebar
+- `CmdOrCtrl+J` Toggle panel
+- `CmdOrCtrl+Shift+P` Publish selected
+- `CmdOrCtrl+Shift+V` Preview active post in browser
 
 ## Development
 
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
+- npm
 
-### Setup
+### Install
 
 ```bash
-# Install dependencies
 npm install
+```
 
-# Start development mode
+### Run (Development)
+
+```bash
+# Runs main TypeScript watch, Vite dev server, and Electron together
 npm run dev
+```
 
-# In another terminal, start Electron
+Alternative renderer+Electron flow:
+
+```bash
 npm start
 ```
 
-### Building
+### Tests
 
 ```bash
-# Build for production
+npm test
+npm run test:watch
+npm run test:coverage
+```
+
+### Build
+
+```bash
+# Generates drizzle artifacts, builds main process and renderer
 npm run build
 
-# Package for distribution (uses electron-builder)
+# Package distributables
 npx electron-builder
 ```
 
-## Keyboard Shortcuts
+### Database Utilities
 
-| Shortcut | Action |
-|----------|--------|
-| Ctrl+N | New Post |
-| Ctrl+S | Save |
-| Ctrl+B | Toggle Sidebar |
-| Ctrl+J | Toggle Panel |
-| Ctrl+1 | View Posts |
-| Ctrl+2 | View Media |
-| Ctrl+Shift+P | Publish Selected |
+```bash
+npm run db:generate
+npm run db:migrate
+npm run db:studio
+```
 
 ## License
 
