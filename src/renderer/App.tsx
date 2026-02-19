@@ -277,6 +277,17 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:generateSitemap', async () => {
+        try {
+          await window.electronAPI?.blog.generateSitemap();
+        } catch (error) {
+          console.error('Sitemap generation failed:', error);
+          showToast.error('Sitemap generation failed');
+        }
+      }) || (() => {})
+    );
+
     // Import completion event - refresh posts and media stores
     unsubscribers.push(
       window.electronAPI?.import.onComplete(async (data) => {

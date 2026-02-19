@@ -18,6 +18,7 @@ export interface ProjectMetadata {
   name: string;
   description?: string;
   dataPath?: string; // Custom path for project data
+  publicUrl?: string; // Public base URL for the published blog (e.g., https://example.com)
   mainLanguage?: string; // Main language for AI-generated content (ISO code, e.g., 'en', 'de', 'es')
   defaultAuthor?: string; // Default author for new posts and media
   maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
@@ -48,10 +49,21 @@ function sanitizeMaxPostsPerPage(value: unknown): number | undefined {
   return rounded;
 }
 
+function sanitizePublicUrl(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
+  const publicUrl = sanitizePublicUrl(metadata.publicUrl);
   return {
     ...metadata,
+    publicUrl,
     maxPostsPerPage,
   };
 }
@@ -173,6 +185,7 @@ export class MetaEngine extends EventEmitter {
         name: normalizedUpdates.name || '',
         description: normalizedUpdates.description,
         dataPath: normalizedUpdates.dataPath,
+        publicUrl: normalizedUpdates.publicUrl,
         mainLanguage: normalizedUpdates.mainLanguage,
         defaultAuthor: normalizedUpdates.defaultAuthor,
         maxPostsPerPage: normalizedUpdates.maxPostsPerPage,

@@ -590,6 +590,30 @@ describe('MetaEngine', () => {
       expect(metadata?.maxPostsPerPage).toBe(42);
     });
 
+    it('should set and get publicUrl in project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        publicUrl: 'https://example.com/blog',
+      });
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.publicUrl).toBe('https://example.com/blog');
+    });
+
+    it('should persist publicUrl to filesystem', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Test Project',
+        publicUrl: 'https://example.com',
+      });
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+      expect(parsed.publicUrl).toBe('https://example.com');
+    });
+
     it('should sanitize invalid maxPostsPerPage values from filesystem', async () => {
       const metaDir = metaEngine.getMetaDir();
       const projectPath = normalizePath(`${metaDir}/project.json`);

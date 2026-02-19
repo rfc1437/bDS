@@ -30,6 +30,7 @@ vi.mock('electron', () => ({
   dialog: {
     showOpenDialog: vi.fn(),
     showSaveDialog: vi.fn(),
+    showMessageBox: vi.fn(),
   },
   shell: {
     openPath: vi.fn(),
@@ -52,6 +53,7 @@ const mockPostEngine = {
   publishPost: vi.fn(),
   discardChanges: vi.fn(),
   hasPublishedVersion: vi.fn(),
+  getPublishedVersion: vi.fn(),
   isSlugAvailable: vi.fn(),
   generateUniqueSlug: vi.fn(),
   rebuildDatabaseFromFiles: vi.fn(),
@@ -168,6 +170,7 @@ const mockGitEngine = {
 const mockTaskManager = {
   getAllTasks: vi.fn(),
   cancelTask: vi.fn(),
+  runTask: vi.fn(),
   on: vi.fn(),
   off: vi.fn(),
 };
@@ -1433,6 +1436,436 @@ describe('IPC Handlers', () => {
 
         expect(shell.openExternal).toHaveBeenCalledWith('https://github.com/rfc1437/bDS');
         expect(send).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ============ Blog Handlers ============
+  describe('Blog Handlers', () => {
+    describe('blog:generateSitemap', () => {
+      it('should call taskManager.runTask with sitemap generation task', async () => {
+        const mockProject = createMockProject({ 
+          id: 'test-project',
+          dataPath: '/mock/data'
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        // Mock post engine to return published posts and drafts
+        const mockPublishedPosts = [
+          {
+            id: 'post-1',
+            projectId: 'test-project',
+            slug: 'test-post',
+            status: 'published',
+            createdAt: new Date('2024-01-15T10:00:00Z'),
+            updatedAt: new Date('2024-01-20T15:00:00Z'),
+            tags: ['tag1', 'tag2'],
+            categories: ['category1'],
+          },
+          {
+            id: 'post-2',
+            projectId: 'test-project',
+            slug: 'another-post',
+            status: 'published',
+            createdAt: new Date('2024-02-10T12:00:00Z'),
+            updatedAt: new Date('2024-02-12T09:00:00Z'),
+            tags: ['tag2', 'tag3'],
+            categories: ['category2'],
+          },
+        ];
+
+        const mockDraftPosts = [
+          {
+            id: 'post-3',
+            projectId: 'test-project',
+            slug: 'draft-post',
+            status: 'draft',
+            createdAt: new Date('2024-03-01T08:00:00Z'),
+            updatedAt: new Date('2024-03-01T08:00:00Z'),
+            tags: [],
+            categories: [],
+          },
+        ];
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return mockPublishedPosts;
+          }
+          if (filter.status === 'draft') {
+            return mockDraftPosts;
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        // Mock fs.writeFile
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        // Mock taskManager.runTask to execute the task immediately
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        const result = await invokeHandler('blog:generateSitemap');
+
+        // Verify taskManager.runTask was called
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: expect.stringMatching(/^sitemap-generate-\d+$/),
+            name: 'Generate Sitemap',
+            execute: expect.any(Function),
+          })
+        );
+
+        // Verify result contains expected data
+        expect(result).toEqual(
+          expect.objectContaining({
+            path: expect.stringContaining('sitemap.xml'),
+            postCount: 2, // Only published posts, not drafts
+            tagCount: 3, // tag1, tag2, tag3
+            categoryCount: 2, // category1, category2
+          })
+        );
+
+        // Verify fs operations
+        expect(mkdir).toHaveBeenCalledWith('/mock/data/dir/html', { recursive: true });
+        expect(writeFile).toHaveBeenCalledWith(
+          expect.stringContaining('sitemap.xml'),
+          expect.stringContaining('<?xml version="1.0" encoding="UTF-8"?>'),
+          'utf-8'
+        );
+      });
+
+      it('should throw error when no active project', async () => {
+        mockProjectEngine.getActiveProject.mockResolvedValue(null);
+
+        await expect(invokeHandler('blog:generateSitemap')).rejects.toThrow('No active project');
+
+        expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+      });
+
+      it('should filter out draft and archived posts from sitemap', async () => {
+        const mockProject = createMockProject({ 
+          id: 'test-project',
+          dataPath: '/mock/data'
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        const mockPublishedPosts = [
+          {
+            id: 'post-1',
+            projectId: 'test-project',
+            slug: 'published-post',
+            status: 'published',
+            createdAt: new Date('2024-01-15T10:00:00Z'),
+            updatedAt: new Date('2024-01-20T15:00:00Z'),
+            tags: [],
+            categories: [],
+          },
+        ];
+
+        const mockDraftPosts = [
+          {
+            id: 'post-2',
+            projectId: 'test-project',
+            slug: 'draft-post',
+            status: 'draft',
+            createdAt: new Date('2024-02-10T12:00:00Z'),
+            updatedAt: new Date('2024-02-12T09:00:00Z'),
+            tags: [],
+            categories: [],
+          },
+        ];
+
+        const mockArchivedPosts = [
+          {
+            id: 'post-3',
+            projectId: 'test-project',
+            slug: 'archived-post',
+            status: 'archived',
+            createdAt: new Date('2024-03-01T08:00:00Z'),
+            updatedAt: new Date('2024-03-01T08:00:00Z'),
+            tags: [],
+            categories: [],
+          },
+        ];
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return mockPublishedPosts;
+          }
+          if (filter.status === 'draft') {
+            return mockDraftPosts;
+          }
+          if (filter.status === 'archived') {
+            return mockArchivedPosts;
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        const result = await invokeHandler('blog:generateSitemap');
+
+        // Verify only published posts are included
+        expect(result.postCount).toBe(1);
+        
+        // Verify the sitemap XML only contains the published post
+        const writeFileCall = vi.mocked(writeFile).mock.calls[0];
+        const sitemapXml = writeFileCall[1] as string;
+        
+        expect(sitemapXml).toContain('published-post');
+        expect(sitemapXml).not.toContain('draft-post');
+        expect(sitemapXml).not.toContain('archived-post');
+      });
+
+      it('should include published snapshot for drafts with a former published version', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        const publishedPost = {
+          id: 'post-published',
+          projectId: 'test-project',
+          slug: 'published-post',
+          status: 'published',
+          createdAt: new Date('2024-01-15T10:00:00Z'),
+          updatedAt: new Date('2024-01-20T15:00:00Z'),
+          tags: [],
+          categories: [],
+        };
+
+        const neverPublishedDraft = {
+          id: 'post-draft-new',
+          projectId: 'test-project',
+          slug: 'draft-no-published-version',
+          status: 'draft',
+          createdAt: new Date('2024-02-10T12:00:00Z'),
+          updatedAt: new Date('2024-02-12T09:00:00Z'),
+          tags: [],
+          categories: [],
+        };
+
+        const draftWithPublishedVersion = {
+          id: 'post-draft-with-published',
+          projectId: 'test-project',
+          slug: 'draft-current-slug',
+          status: 'draft',
+          createdAt: new Date('2024-03-01T08:00:00Z'),
+          updatedAt: new Date('2024-03-03T08:00:00Z'),
+          tags: [],
+          categories: [],
+        };
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return [publishedPost];
+          }
+          if (filter.status === 'draft') {
+            return [neverPublishedDraft, draftWithPublishedVersion];
+          }
+          return [];
+        });
+
+        mockPostEngine.getPublishedVersion.mockImplementation(async (id: string) => {
+          if (id !== 'post-draft-with-published') {
+            return null;
+          }
+
+          return {
+            id,
+            projectId: 'test-project',
+            slug: 'published-snapshot-slug',
+            status: 'published',
+            createdAt: new Date('2023-10-05T07:00:00Z'),
+            updatedAt: new Date('2023-10-20T09:00:00Z'),
+            tags: [],
+            categories: [],
+          };
+        });
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        const result = await invokeHandler('blog:generateSitemap');
+
+        expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith({ status: 'published' });
+        expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith({ status: 'draft' });
+        expect(mockPostEngine.getPublishedVersion).toHaveBeenCalledWith('post-draft-new');
+        expect(mockPostEngine.getPublishedVersion).toHaveBeenCalledWith('post-draft-with-published');
+
+        expect(result.postCount).toBe(2);
+
+        const writeFileCall = vi.mocked(writeFile).mock.calls[0];
+        const sitemapXml = writeFileCall[1] as string;
+
+        expect(sitemapXml).toContain('published-post');
+        expect(sitemapXml).toContain('published-snapshot-slug');
+        expect(sitemapXml).not.toContain('draft-no-published-version');
+        expect(sitemapXml).not.toContain('draft-current-slug');
+      });
+
+      it('should use canonical path helpers for post URLs', async () => {
+        const mockProject = createMockProject({ 
+          id: 'test-project',
+          dataPath: '/mock/data'
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        const mockPublishedPosts = [
+          {
+            id: 'post-1',
+            projectId: 'test-project',
+            slug: 'my-test-post',
+            status: 'published',
+            createdAt: new Date('2024-03-25T10:00:00Z'),
+            updatedAt: new Date('2024-03-26T15:00:00Z'),
+            tags: [],
+            categories: [],
+          },
+        ];
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return mockPublishedPosts;
+          }
+          if (filter.status === 'draft') {
+            return [];
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        await invokeHandler('blog:generateSitemap');
+
+        const writeFileCall = vi.mocked(writeFile).mock.calls[0];
+        const sitemapXml = writeFileCall[1] as string;
+        
+        // Verify canonical URL format: /YYYY/MM/DD/slug
+        expect(sitemapXml).toContain('https://blog.example.com/2024/03/25/my-test-post');
+      });
+
+      it('should show setup dialog and abort when project public URL is missing', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+        });
+
+        const { dialog } = await import('electron');
+
+        await expect(invokeHandler('blog:generateSitemap')).rejects.toThrow('Project public URL is not configured');
+
+        expect(dialog.showMessageBox).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'warning',
+            title: 'Public URL Required',
+          }),
+        );
+        expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+      });
+
+      it('should use project public URL from metadata as sitemap base URL', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com/',
+        });
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return [
+              {
+                id: 'post-1',
+                projectId: 'test-project',
+                slug: 'public-url-test-post',
+                status: 'published',
+                createdAt: new Date('2024-03-25T10:00:00Z'),
+                updatedAt: new Date('2024-03-26T15:00:00Z'),
+                tags: [],
+                categories: [],
+              },
+            ];
+          }
+          if (filter.status === 'draft') {
+            return [];
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        await invokeHandler('blog:generateSitemap');
+
+        const writeFileCall = vi.mocked(writeFile).mock.calls[0];
+        const sitemapXml = writeFileCall[1] as string;
+
+        expect(sitemapXml).toContain('https://blog.example.com/2024/03/25/public-url-test-post');
+        expect(sitemapXml).not.toContain('http://127.0.0.1:4123/2024/03/25/public-url-test-post');
       });
     });
   });

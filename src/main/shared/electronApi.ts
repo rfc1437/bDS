@@ -38,6 +38,7 @@ export interface ProjectMetadata {
   name: string;
   description?: string;
   dataPath?: string;
+  publicUrl?: string;
   mainLanguage?: string;
   defaultAuthor?: string;
   maxPostsPerPage?: number;
@@ -510,7 +511,7 @@ export interface ElectronAPI {
     showItemInFolder: (itemPath: string) => Promise<void>;
     selectFolder: (title?: string) => Promise<string | null>;
     getDefaultProjectPath: (projectId: string) => Promise<string>;
-    readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; mainLanguage?: string } | null>;
+    readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; publicUrl?: string; mainLanguage?: string } | null>;
     setPreviewPostTarget: (postId: string | null) => Promise<void>;
     triggerMenuAction: (action: string) => Promise<void>;
   };
@@ -524,7 +525,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;
@@ -588,6 +589,16 @@ export interface ElectronAPI {
     }>;
     syncDbToFile: (postIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
     syncFileToDb: (postIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
+  };
+  blog: {
+    generateSitemap: () => Promise<{
+      path: string;
+      urlCount: number;
+      postCount: number;
+      tagCount: number;
+      categoryCount: number;
+      archiveCount: number;
+    }>;
   };
   chat: {
     // API Key Management
