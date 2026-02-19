@@ -1,352 +1,304 @@
-# bDS User Documentation
+# bDS User Guide
 
-This guide is written for end users who work in bDS day to day. It explains how to use the app effectively, how to avoid common data-loss mistakes, and how to collaborate safely with version control.
+## In this article
 
-## Index
-
-- [Who this is for](#who-this-is-for)
-- [Basics](#basics)
-- [Core workflow model](#core-workflow-model)
-- [Getting oriented in the UI](#getting-oriented-in-the-ui)
-- [Typical workflows](#typical-workflows)
-- [Preferences and setup](#preferences-and-setup)
-- [Git handling and sync workflow](#git-handling-and-sync-workflow)
-- [Publishing (current stage)](#publishing-current-stage)
+- [Who this guide is for](#who-this-guide-is-for)
+- [How bDS works](#how-bds-works)
+- [Getting started](#getting-started)
+- [Understanding the interface](#understanding-the-interface)
+- [Working with posts](#working-with-posts)
+- [Working with pages](#working-with-pages)
+- [Working with media](#working-with-media)
+- [Organizing with tags](#organizing-with-tags)
+- [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
+- [Using Git (Source Control)](#using-git-source-control)
+- [Configuring settings](#configuring-settings)
+- [Publishing in bDS (current scope)](#publishing-in-bds-current-scope)
+- [Typical editorial workflows](#typical-editorial-workflows)
 - [Working fully offline](#working-fully-offline)
-- [Suggested team conventions](#suggested-team-conventions)
-- [Document growth plan](#document-growth-plan)
+- [Troubleshooting and recovery](#troubleshooting-and-recovery)
+- [Team conventions](#team-conventions)
 
-## Who this is for
+## Who this guide is for
 
-Use this guide if you want to:
+This guide is written for people who use bDS day to day to create, edit, and manage blog content. It is intended for editors, content managers, and project owners who want clear guidance on what each part of the application does and how to use it safely. The focus is practical usage: what an element is, when it should be used, and how it fits into a reliable workflow.
 
-- Write and manage posts and pages
-- Work with photos and media metadata
-- Organize content with tags, categories, and archives
-- Set up projects and maintenance actions correctly
-- Use Git to version and sync work with others
-- Prepare for publishing (currently sitemap generation is available)
+If you are looking for implementation details, architecture notes, or development setup, use the project README. This document stays focused on end-user operation and editorial decisions.
 
-[↑ Back to Index](#index)
+### Key takeaways
 
-## Basics
+- bDS documentation should help you make better day-to-day decisions, not just complete isolated clicks.
+- Each chapter explains purpose first, then usage.
+- Safe content handling and recoverability are central themes throughout this guide.
 
-Before jumping into workflows, it helps to understand what bDS is optimizing for.
-
-bDS is a local-first writing workspace. You can create, edit, preview, publish, and version your content entirely on your machine. Collaboration and multi-device usage are handled through versioning (Git), not through immediate cloud dependency.
-
-Three terms matter most:
-
-- **Draft**: your in-progress editing state. Draft work is convenient, but it is not your long-term backup strategy.
-- **Publish (inside bDS)**: marks your content as published in your local project state and files. This is still local.
-- **Version (Git commit)**: creates a recoverable snapshot. This is the basis for reliable sync and collaboration.
-
-Important implication: if your local database/storage fails, uncommitted draft-only work may not be recoverable. For that reason, the core best practice is:
-
-1. Edit draft
-2. Publish when content is ready
-3. Commit to Git immediately after publish
-
-This sequence gives you recoverable history and predictable synchronization with collaborators.
-
-[↑ Back to Index](#index)
-
-## Core workflow model
-
-This chapter explains the operating model that all other chapters assume.
-
-bDS follows an offline-first model:
-
-- Writing/editing/previewing all work without internet
-- Optional online integrations (AI, remote Git push/pull, future deployment targets)
-- Local preview and local Git workflows always available
-
-Think of bDS as your local source-of-truth workspace. Network features extend your workflow, but they do not replace local control.
-
-[↑ Back to Index](#index)
-
-## Getting oriented in the UI
-
-This chapter explains where actions happen, so workflows are easier to follow.
-
-### Main areas
-
-- **Activity Bar (left icons):** switch between Posts, Pages, Media, Tags, AI, Import, Git, and Settings
-- **Sidebar:** list/filter/navigation for the active section
-- **Editor area:** tabbed workspace for posts, media, settings, imports, chat, diffs, and documentation
-- **Bottom panel/status area:** progress and output for long-running tasks
-- **Toasts:** short success/error feedback
-
-### Tab behavior
-
-- Single-click often opens a transient preview tab
-- Double-click pins a tab for persistent work
-- Open tabs are restored per project
-
-> **System-specific note:** On macOS use `Cmd` shortcuts; on Windows/Linux use `Ctrl`.
-
-[↑ Back to Index](#index)
+[↑ Back to In this article](#in-this-article)
 
 ---
 
-## Typical workflows
+## How bDS works
 
-This chapter focuses on realistic editing sessions rather than isolated actions.
+bDS is a local-first writing and publishing workspace. In practice, that means your core work does not depend on constant internet access. You can draft, revise, structure, preview, and publish content entirely on your local machine. Optional online features, such as remote Git synchronization or AI-assisted workflows, extend this model but do not replace it.
 
-### 1) Quickly post a link-style entry (short blog note)
+Understanding three terms is important for using bDS correctly. A draft is your in-progress state and is meant for active editing. Publishing in bDS marks a local content state as published inside your project. A Git commit creates a versioned snapshot that can be recovered, shared, and synchronized. These three states are related, but they are not the same operation.
 
-Use this when you want to publish a short link note with brief commentary.
+The recommended sequence is simple: edit in draft, publish when the content is ready, and then commit immediately. This sequence is the safest way to protect work, collaborate with others, and keep project history understandable over time.
 
-1. Open **Posts** in the Activity Bar.
-2. Create a new post (`Cmd/Ctrl+N`).
-3. Enter a concise title and short text.
-4. Choose a short-form category (commonly `aside`).
-5. Insert your external link (insert action or markdown syntax).
-6. Add tags for discoverability.
-7. Preview quickly and click **Publish**.
-8. Open **Source Control** and commit the change.
+### Key takeaways
 
-Recommended commit pattern: “publish-ready content” in one commit so link notes are easy to audit later.
+- bDS is designed for local reliability first.
+- Publish and commit are different actions and both matter.
+- The default safe lifecycle is: Draft → Publish → Commit.
 
-### 2) Write a full article with photos
-
-Use this for long-form posts where structure, media, and metadata all matter.
-
-1. Create/open the post.
-2. Write in **WYSIWYG** or **Markdown** mode.
-3. Add title, body, category, tags, and author metadata.
-4. Import media (if needed) and insert images from the media library.
-5. Review linked media and preview output.
-6. Publish when ready.
-7. Commit immediately after publishing.
-
-Why this matters: publishing confirms content state locally; committing creates the recoverable version used for sync and collaboration.
-
-### 3) Draft → publish → commit (recommended lifecycle)
-
-This is the most important routine for reliable content operations.
-
-1. **Draft phase:** write and refine content; autosave helps but do not treat draft-only state as final backup.
-2. **Publish phase:** when content is ready, publish in bDS. This updates local published state.
-3. **Version phase:** commit right away in Git with a meaningful message.
-4. **Sync phase (optional):** push/pull when network is available.
-
-If you skip step 3, you keep convenience but lose robust recoverability and team synchronization safety.
-
-### 4) Add images to posts (media-first workflow)
-
-1. Open **Media** view and import files.
-2. Fill metadata (title, alt text, caption, tags).
-3. Return to post and insert media from the library.
-4. Preview and publish.
-5. Commit the resulting post+media changes together.
-
-Best practice: commit post and referenced media updates in the same commit so history remains coherent.
-
-> **System-specific note:** file/folder pickers use native OS dialogs and selection behavior.
-
-### 5) Create and manage pages separately from posts
-
-1. Switch to **Pages**.
-2. Create/edit page content with the same editor and preview flow.
-3. Publish and commit with page-focused commit messages.
-
-Pages often support navigation structures, so stable naming and clear commit messages are especially useful.
-
-### 6) Find and organize content in larger projects
-
-Use **Posts** and **Media** sidebar controls to narrow scope:
-
-- archive filters by year/month
-- tag/category filters
-- status-based grouping
-
-Use **Tags** for taxonomy maintenance (create/rename/merge/delete). When making major taxonomy changes, commit soon after to capture the state transition clearly.
-
-### 7) Import from WordPress WXR
-
-1. Open **Import** and create an import definition.
-2. Set WXR file and uploads folder.
-3. Run analysis and review conflicts/mappings.
-4. Execute import and monitor progress.
-5. Validate imported results, then commit.
-
-Recommended approach: import iteratively (analyze → adjust mappings → re-run) instead of trying to resolve everything in one pass.
-
-[↑ Back to Index](#index)
+[↑ Back to In this article](#in-this-article)
 
 ---
 
-## Preferences and setup
+## Getting started
 
-This chapter explains configuration choices and why they matter operationally.
+Before beginning editorial work, confirm that your project context is set correctly. Start by opening bDS and selecting the correct project. If this is a new project, create it and define its identity early, including project name and description. This helps keep exports, metadata, and team workflows aligned from the beginning.
 
-Open **Settings** from the gear icon in the Activity Bar.
+Next, open Settings and verify the project data path. The data path determines where content and related files are stored, so it should reflect your backup strategy and how your team expects to work. You should also set the Public Base URL as soon as possible, because sitemap generation depends on it.
 
-### Project
+Finally, define language and author defaults. These defaults reduce repetitive editing work and keep output consistent across content created by multiple contributors.
 
-Project settings define identity and publishing context:
+### Key takeaways
 
-- project name/description
-- project data path
-- public base URL (needed for sitemap)
-- main language and default author
-- max posts per page
+- Set identity, data location, and Public Base URL at the beginning.
+- Configure language and author defaults before regular editing starts.
+- Early setup decisions reduce cleanup work later.
 
-Recommended first setup order:
-
-1. Set identity (name/description).
-2. Confirm data location strategy.
-3. Set public URL.
-4. Set language/author defaults.
-5. Save settings.
-
-### Editor
-
-Set your default editing mode (`WYSIWYG`, `Markdown`, or `Preview`) based on your daily workflow. Teams may benefit from agreeing on a primary mode for consistency.
-
-### Content
-
-Define and maintain category conventions early. Stable category usage improves filtering, templates, and long-term content consistency.
-
-### AI
-
-AI is optional. If configured, it can assist with drafting and analysis. If not configured, all core writing, publishing, and versioning workflows remain fully functional.
-
-### Publishing settings
-
-FTP/SSH credential sections are preparation for broader publishing workflows. Configure them when your team is ready for deployment steps beyond local publishing.
-
-### Data maintenance
-
-Use rebuild actions when files changed externally or indices need reconciliation:
-
-- Rebuild Posts Database
-- Rebuild Media Database
-- Rebuild Post Links
-
-Treat these as repair tools, not routine daily actions.
-
-[↑ Back to Index](#index)
+[↑ Back to In this article](#in-this-article)
 
 ---
 
-## Git handling and sync workflow
+## Understanding the interface
 
-This chapter covers the versioning model that makes collaboration and recovery reliable.
+The bDS interface is organized to support content workflows rather than isolated forms. The Activity Bar on the left is your primary navigation between major areas such as Posts, Pages, Media, Tags, Import, Source Control, and Settings. The Sidebar changes based on the active area and helps with filtering, selection, and navigation. The Editor area is where most work happens and supports tabbed editing for content, configuration, and analysis views.
 
-Open **Source Control** (Git icon in the Activity Bar).
+The bottom panel and status area are especially important during long operations such as imports, rebuild actions, or larger media tasks. They provide progress and completion feedback so you can verify that a task finished correctly. Toast messages provide short success or error confirmation and should be treated as quick status signals, not detailed logs.
 
-### Git basics in bDS
+Tab behavior is optimized for quick scanning and focused editing. Single-clicking often opens a transient tab, while double-clicking pins a tab for ongoing work. This pattern lets you inspect many items quickly while keeping active tasks stable.
 
-- Publishing in bDS is local content state.
-- Git commit is your recoverable version snapshot.
-- Push/pull shares those snapshots with collaborators/remotes.
+### Key takeaways
 
-### Typical setup (new project)
+- Use the Activity Bar for section-level context switching.
+- Use the Sidebar for finding and narrowing content.
+- Pin tabs when you are doing deeper editing work.
 
-1. Open Source Control.
-2. Initialize Git if no repository exists.
-3. Optionally set remote URL.
-4. Verify branch/repository status.
-
-### Typical daily sync cycle
-
-1. Fetch remote updates.
-2. Pull when needed.
-3. Review changes.
-4. Commit local work.
-5. Push to remote.
-
-### Best-practice commit rhythm for content work
-
-- Commit after meaningful editing milestones.
-- Always commit after publish actions.
-- Keep commits focused (for example one article and its media updates together).
-- Use descriptive commit messages (for example `publish: article on taxonomy workflow`).
-
-### Recovery and cleanup actions
-
-- Refresh/fetch if status appears stale.
-- Use LFS prune tooling where applicable for large media history.
-
-> **System-specific note:** Git must be installed and available in PATH.
-
-Helpful external references:
-
-- [Git official docs](https://git-scm.com/doc)
-- [Pro Git Book](https://git-scm.com/book/en/v2)
-
-[↑ Back to Index](#index)
+[↑ Back to In this article](#in-this-article)
 
 ---
 
-## Publishing (current stage)
+## Working with posts
 
-This chapter explains what publishing means today in bDS and what is planned next.
+The Posts section is intended for chronological content such as articles, notes, and recurring updates. Choose Posts when publication timing, archive behavior, and regular update cycles are part of your content strategy. In most editorial teams, Posts represent the primary stream of outward-facing content.
 
-### Current scope
+A post usually combines several layers of information: title, body content, category, tags, and status. The title establishes the main topic. The body carries the full narrative or note. Categories provide broad structural grouping, while tags support more specific discovery and filtering. Status indicates lifecycle stage and should be used intentionally to avoid ambiguity in collaborative workflows.
 
-Currently available publishing output:
+A reliable post workflow starts by drafting content to completion, then reviewing structure and metadata, and finally previewing the output before publishing. After publishing, commit in Source Control immediately so the editorially approved state is recoverable and shareable.
 
-- sitemap generation from project metadata and content
+### Key takeaways
 
-### Generate sitemap now
+- Use Posts for date-oriented, regularly updated content.
+- Treat category and tags as distinct tools: broad grouping versus precise discovery.
+- Publish only when editorially ready, then commit right away.
 
-1. Set **Settings → Project → Public Base URL**.
-2. Run **Blog → Generate Sitemap**.
-3. Wait for toast/task completion.
-4. Verify generated `sitemap.xml` at the reported path.
+[↑ Back to In this article](#in-this-article)
 
-If generation fails, confirm URL configuration first.
+---
 
-### Important publishing implication
+## Working with pages
 
-Publishing in bDS currently represents local project publishing state. It does not by itself deploy to remote hosting. For shared workflows, commit published changes so the published state is versioned and transferable.
+Pages are for durable, non-chronological content such as About, Contact, legal notices, and other structural information. Use Pages when content should remain stable in navigation and should not be interpreted as part of a time-based feed.
 
-### Planned expansion
+Because pages are often revisited over long periods, naming consistency matters. Keep titles and slugs predictable, and avoid unnecessary structural churn. If your project has navigation conventions, apply them consistently so contributors can find and update page content without guesswork.
 
-- broader static export pipeline
-- expanded deployment workflows
-- additional publishing controls in UI
+The working pattern is similar to posts—draft, review, preview, publish, commit—but editorial intent is different. With pages, the emphasis is on clarity and long-term maintainability rather than release cadence.
 
-[↑ Back to Index](#index)
+### Key takeaways
+
+- Use Pages for stable, structural content.
+- Keep titles and slugs consistent for long-term maintainability.
+- Apply the same safe lifecycle: Draft → Publish → Commit.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Working with media
+
+The Media section is where you import, describe, and maintain assets used by posts and pages. It is not only a file list; it is also the place where accessibility and content quality are reinforced through metadata. In day-to-day work, media quality often determines whether published content feels complete and professional.
+
+When importing media, add metadata immediately while context is still fresh. Alt text should describe image meaning for accessibility, captions should support reader understanding, and media tags should help with retrieval and reuse. The goal is to make media usable both now and later, including by teammates who did not import the asset.
+
+After placing media in content, run a quick preview pass to confirm placement and context. When possible, commit post changes and their related media changes together. This keeps history coherent and makes future rollback or investigation much easier.
+
+### Key takeaways
+
+- Media management includes metadata quality, not only file import.
+- Add alt text and captions during import, not as a postponed task.
+- Commit content and related media in the same change when possible.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Organizing with tags
+
+Tags are your precision taxonomy tool. Over time, even well-managed projects accumulate near-duplicate tags, naming inconsistencies, and labels that no longer serve users. The Tags section exists to keep taxonomy useful and prevent search and filtering quality from degrading.
+
+Use this section to rename unclear tags, merge duplicates, remove obsolete labels, and establish naming consistency. These changes can have broad effects across content discovery, so they should be made deliberately and reviewed before publishing a large batch of edits.
+
+After significant taxonomy cleanup, create a commit that captures the transition clearly. A focused commit message for tag work makes later troubleshooting and editorial audits much easier.
+
+### Key takeaways
+
+- Tags improve discovery only if naming stays consistent.
+- Merge and rename operations should be deliberate and reviewed.
+- Commit taxonomy changes in focused, understandable snapshots.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Importing from WordPress (WXR)
+
+The Import section supports migration from WordPress exports and should be treated as a structured process rather than a one-click operation. A good migration flow reduces surprises by separating analysis from execution.
+
+Begin by creating an import definition and selecting the WXR file and uploads folder. Run analysis first to inspect mappings, identify conflicts, and understand how source content aligns with your target structure. Adjust definitions as needed, then execute import only after the analysis view is acceptable.
+
+For larger or older sites, prefer iterative passes. It is usually safer to analyze, adjust, and re-run than to force all decisions into a single import cycle. After import completes, validate representative content and media references before creating the commit that captures the migrated state.
+
+### Key takeaways
+
+- Treat WXR import as a staged workflow: analyze, adjust, execute.
+- Iterative passes are safer than one large, rigid import attempt.
+- Validate output before committing migrated content.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Using Git (Source Control)
+
+Source Control in bDS is the foundation for reliable recovery and collaboration. Publishing marks local editorial state, but Git commits provide durable history. If your team works across devices or contributors, this distinction is essential.
+
+In a normal day, synchronize first by fetching or pulling, then complete your editorial changes, publish when ready, and commit with a specific message. Push after the commit when you want to share the updated state with others. This rhythm keeps local and remote history aligned and reduces avoidable merge friction.
+
+Commit messages should describe intent, not just activity. Messages such as “publish: interview article with media updates” or “tags: merge two overlapping taxonomy labels” are much more useful than generic phrases. Clear commits make collaboration and rollback safer.
+
+### Key takeaways
+
+- Git provides recoverable history; publishing alone does not.
+- A stable daily rhythm is: sync first, edit, publish, commit, push.
+- Specific commit messages improve teamwork and incident recovery.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Configuring settings
+
+Settings define how your project behaves and should be treated as operational controls, not one-time preferences. Project settings establish identity, data location, and public URL context. Editor settings control default working mode and should match how your team writes and reviews content. Content settings support taxonomy consistency and reduce drift across contributors.
+
+AI settings are optional. If configured, they can support drafting and analysis tasks, but core workflows remain fully functional without them. The key principle is that editorial reliability must never depend on optional integrations.
+
+Data maintenance actions are repair tools for specific situations, such as external file changes or stale indexes. They are useful when state appears inconsistent, but they are not part of normal daily editing. Use them intentionally and verify outcomes after running each action.
+
+### Key takeaways
+
+- Settings influence long-term consistency across your whole project.
+- Optional integrations should enhance, not define, your core workflow.
+- Rebuild actions are corrective tools, not routine operations.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Publishing in bDS (current scope)
+
+In the current product stage, publishing in bDS means marking local content state and generating supported local outputs, not automatically deploying to remote hosting. This distinction is important for planning release workflows and setting team expectations.
+
+At present, the key publishing output is sitemap generation. To generate a sitemap successfully, ensure the Public Base URL is configured in project settings before running the sitemap command. If generation fails, URL configuration should be your first verification step.
+
+Because publish does not equal deploy, Source Control remains the mechanism for versioned distribution and collaboration. Teams should treat publish plus commit as the minimum handoff standard.
+
+### Key takeaways
+
+- Current publish behavior is local-state focused.
+- Sitemap generation depends on a valid Public Base URL.
+- For team workflows, publish should be followed by commit.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Typical editorial workflows
+
+A short link post workflow is appropriate when you want to share a reference quickly with brief commentary. In this case, the value comes from speed and clarity: create the post, add concise context, classify it appropriately, preview once, then publish and commit.
+
+A long-form article workflow is better when argument structure, supporting media, and metadata quality matter. Draft the full narrative, import and describe media assets, review composition in preview, and then publish. Commit content and media together so the final state is recoverable as one coherent snapshot.
+
+Across both patterns, the recommended lifecycle remains unchanged: draft carefully, publish intentionally, and commit immediately. This keeps editorial quality and operational safety aligned.
+
+### Key takeaways
+
+- Use lightweight workflow for short notes and links.
+- Use full workflow for long-form content with media.
+- Keep the same safety baseline in both cases: Draft → Publish → Commit.
+
+[↑ Back to In this article](#in-this-article)
 
 ---
 
 ## Working fully offline
 
-This chapter summarizes a complete offline-safe routine.
+bDS is designed so your core work can continue without network access. You can create and revise content, manage metadata, preview locally, and publish in local project state while offline. This is especially useful for uninterrupted writing sessions and travel workflows.
 
-1. Edit and refine drafts.
-2. Preview locally.
-3. Publish locally.
-4. Commit locally in Git.
-5. Continue work without network dependency.
+Offline work is still safer when combined with local commits. Even without pushing to a remote, committing meaningful milestones gives you recovery points and reduces risk from accidental data loss.
 
-When network is available, sync by pull/push as needed.
+When network access returns, synchronize in a controlled order: pull if needed, resolve differences, and push your committed updates.
 
-[↑ Back to Index](#index)
+### Key takeaways
 
----
+- Core editing and publishing workflows work offline.
+- Local commits remain important even when no remote is available.
+- Synchronize carefully after reconnecting.
 
-## Suggested team conventions
-
-Shared conventions reduce confusion and merge friction. Teams should align on:
-
-- category meanings
-- tag naming rules
-- publish checklist before commit
-- commit message style
-
-At minimum, define one non-negotiable rule: published content must be committed promptly.
-
-[↑ Back to Index](#index)
+[↑ Back to In this article](#in-this-article)
 
 ---
 
-## Document growth plan
+## Troubleshooting and recovery
 
-This documentation is the baseline structure for future product growth. Extend each chapter as new capabilities are released, but keep the style user-centered: explain what to do, why it matters, and what risks to avoid.
+If content appears published locally but not visible to collaborators, the most common cause is that changes were published but not committed and pushed. In this case, confirm repository status, create a commit, and then push to the expected remote branch.
 
-[↑ Back to Index](#index)
+If content lists or references seem inconsistent after manual file operations outside bDS, run the rebuild tools in Settings to re-align database/index state with filesystem reality. After each rebuild, verify a small set of representative posts and media items rather than assuming full correctness immediately.
+
+If you are concerned about losing work, increase commit frequency at meaningful milestones, especially after publish actions. Frequent, focused commits are the most reliable and practical recovery strategy for editorial teams.
+
+### Key takeaways
+
+- Most “missing remote content” issues are commit/push gaps.
+- Rebuild tools help when external file changes desynchronize state.
+- Frequent meaningful commits are the best safety net.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Team conventions
+
+Shared conventions reduce ambiguity and merge friction. Teams should agree on category definitions, tag naming rules, publish-readiness criteria, and commit message patterns. These conventions do not need to be complex, but they should be explicit and documented where all contributors can find them.
+
+A practical minimum rule is simple: any content considered published must be committed promptly. This one rule alone significantly improves recoverability, auditability, and collaborative reliability.
+
+As your team matures, evolve conventions gradually based on real friction points rather than introducing many rules at once.
+
+### Key takeaways
+
+- Explicit conventions improve speed and reduce avoidable conflict.
+- Start with a small rule set and enforce it consistently.
+- Minimum standard: published content should be committed promptly.
+
+[↑ Back to In this article](#in-this-article)
