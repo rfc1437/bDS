@@ -111,6 +111,25 @@ function buildSitemapUrl(
   ].join('\n');
 }
 
+function resolvePublicBaseUrl(publicUrl?: string): string | null {
+  const trimmed = (publicUrl || '').trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.origin}${normalizedPath === '/' ? '' : normalizedPath}`;
+  } catch {
+    return null;
+  }
+}
+
 export function registerIpcHandlers(): void {
   // ============ Git Handlers ============
 
@@ -749,6 +768,7 @@ export function registerIpcHandlers(): void {
       return {
         name: metadata.name || undefined,
         description: metadata.description || undefined,
+        publicUrl: metadata.publicUrl || undefined,
         mainLanguage: metadata.mainLanguage || undefined,
       };
     } catch {
@@ -847,7 +867,7 @@ export function registerIpcHandlers(): void {
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => {
     const engine = getMetaEngine();
     await engine.updateProjectMetadata(updates);
     return engine.getProjectMetadata();
@@ -1306,12 +1326,33 @@ export function registerIpcHandlers(): void {
 
   safeHandle('blog:generateSitemap', async () => {
     const projectEngine = getProjectEngine();
+    const postEngine = getPostEngine();
+    const metaEngine = getMetaEngine();
     const project = await projectEngine.getActiveProject();
     if (!project) {
       throw new Error('No active project');
     }
 
     const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+    postEngine.setProjectContext(project.id, dataDir);
+    metaEngine.setProjectContext(project.id, dataDir);
+
+    if (!metaEngine.isInitialized()) {
+      await metaEngine.syncOnStartup();
+    }
+
+    const metadata = await metaEngine.getProjectMetadata();
+    const baseUrl = resolvePublicBaseUrl(metadata?.publicUrl);
+    if (!baseUrl) {
+      await dialog.showMessageBox({
+        type: 'warning',
+        title: 'Public URL Required',
+        message: 'Sitemap generation requires a public URL.',
+        detail: 'Set Project → Public URL in Settings before generating a sitemap.',
+      });
+      throw new Error('Project public URL is not configured');
+    }
+
     const taskId = `sitemap-generate-${Date.now()}`;
 
     return taskManager.runTask({
@@ -1320,23 +1361,28 @@ export function registerIpcHandlers(): void {
       execute: async (onProgress) => {
         onProgress(0, 'Loading posts...');
 
-        const db = getDatabase().getLocal();
-        const { posts: postsTable } = await import('../database/schema');
-        const { eq: eqOp, desc: descOp } = await import('drizzle-orm');
+        const publishedCandidates = await postEngine.getPostsFiltered({ status: 'published' });
+        const draftCandidates = await postEngine.getPostsFiltered({ status: 'draft' });
 
-        const dbPosts = await db
-          .select()
-          .from(postsTable)
-          .where(eqOp(postsTable.projectId, project.id))
-          .orderBy(descOp(postsTable.createdAt))
-          .all();
+        const draftPublishedSnapshots = await Promise.all(
+          draftCandidates.map(async (post) => postEngine.getPublishedVersion(post.id)),
+        );
 
-        // Only include published posts (not drafts or archived) in sitemap
-        const publishedPosts = dbPosts.filter(p => p.status === 'published');
+        const publishedPostById = new Map<string, PostData>();
+        for (const post of publishedCandidates) {
+          publishedPostById.set(post.id, post);
+        }
+        for (const snapshot of draftPublishedSnapshots) {
+          if (snapshot) {
+            publishedPostById.set(snapshot.id, snapshot);
+          }
+        }
+
+        const publishedPosts = Array.from(publishedPostById.values())
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
         onProgress(10, `Found ${publishedPosts.length} published posts`);
 
-        const baseUrl = 'http://127.0.0.1:4123';
         const now = new Date().toISOString();
 
         // Collect all unique tags, categories, and year/month/day archives
@@ -1349,9 +1395,8 @@ export function registerIpcHandlers(): void {
         const postUrls: Array<{ loc: string; lastmod: string }> = [];
 
         for (const post of publishedPosts) {
-          // Parse tags and categories
-          const tags: string[] = JSON.parse(post.tags || '[]');
-          const categories: string[] = JSON.parse(post.categories || '[]');
+          const tags = post.tags || [];
+          const categories = post.categories || [];
 
           for (const tag of tags) allTags.add(tag);
           for (const cat of categories) allCategories.add(cat);
@@ -1360,9 +1405,7 @@ export function registerIpcHandlers(): void {
           const createdAt = resolvePostCreatedAt(post);
           const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
           const postUrl = `${baseUrl}${canonicalPath}`;
-          const updatedAt = post.updatedAt instanceof Date 
-            ? post.updatedAt 
-            : new Date(post.updatedAt as unknown as Date | string | number);
+          const updatedAt = post.updatedAt;
           postUrls.push({ loc: postUrl, lastmod: updatedAt.toISOString() });
 
           // Track archives

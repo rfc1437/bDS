@@ -107,6 +107,7 @@ export const SettingsView: React.FC = () => {
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [projectDataPath, setProjectDataPath] = useState('');
+  const [projectPublicUrl, setProjectPublicUrl] = useState('');
   const [defaultProjectPath, setDefaultProjectPath] = useState('');
   const [projectMainLanguage, setProjectMainLanguage] = useState('en');
   const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
@@ -145,8 +146,13 @@ export const SettingsView: React.FC = () => {
         setDefaultProjectPath(path);
       });
 
-      // Load project metadata (includes mainLanguage and defaultAuthor)
+      // Load project metadata (includes public URL, language, and default author)
       window.electronAPI?.meta.getProjectMetadata().then(metadata => {
+        if (metadata?.publicUrl) {
+          setProjectPublicUrl(metadata.publicUrl);
+        } else {
+          setProjectPublicUrl('');
+        }
         if (metadata?.mainLanguage) {
           setProjectMainLanguage(metadata.mainLanguage);
         }
@@ -256,6 +262,7 @@ export const SettingsView: React.FC = () => {
           name: projectName.trim() || activeProject.name,
           description: projectDescription.trim(),
           dataPath: projectDataPath.trim() || undefined,
+          publicUrl: projectPublicUrl.trim() || undefined,
           mainLanguage: projectMainLanguage,
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
@@ -280,7 +287,7 @@ export const SettingsView: React.FC = () => {
   };
 
   // Keywords for each section for search filtering
-  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page'];
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'url', 'public', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
@@ -344,6 +351,20 @@ export const SettingsView: React.FC = () => {
             </button>
           )}
         </div>
+      </SettingRow>
+
+      <SettingRow
+        id="project-public-url"
+        label="Public URL"
+        description="The public base URL of your published blog (used for sitemap generation)."
+      >
+        <input
+          id="project-public-url"
+          type="url"
+          placeholder="https://example.com"
+          value={projectPublicUrl}
+          onChange={(e) => setProjectPublicUrl(e.target.value)}
+        />
       </SettingRow>
 
       <SettingRow

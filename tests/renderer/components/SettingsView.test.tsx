@@ -43,8 +43,8 @@ describe('SettingsView Diff Preferences', () => {
       meta: {
         ...(window as any).electronAPI?.meta,
         getCategories: vi.fn().mockResolvedValue(['article', 'picture', 'aside', 'page']),
-        getProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 75 }),
-        updateProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 12 }),
+        getProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 75, publicUrl: 'https://example.com' }),
+        updateProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 12, publicUrl: 'https://example.com' }),
       },
       chat: {
         ...(window as any).electronAPI?.chat,
@@ -90,6 +90,21 @@ describe('SettingsView Diff Preferences', () => {
 
     expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
       expect.objectContaining({ maxPostsPerPage: 75 })
+    );
+  });
+
+  it('includes project public URL in metadata save payload', async () => {
+    render(<SettingsView />);
+
+    await screen.findByDisplayValue('https://example.com');
+
+    const saveButton = screen.getByRole('button', { name: /save project settings/i });
+    fireEvent.click(saveButton);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ publicUrl: 'https://example.com' })
     );
   });
 });
