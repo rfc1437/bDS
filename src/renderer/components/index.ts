@@ -23,3 +23,4 @@ export { ChatPanel } from './ChatPanel';
 export { ImportAnalysisView } from './ImportAnalysisView';
 export { InsertModal } from './InsertModal';
 export { WindowTitleBar } from './WindowTitleBar';
+export { DocumentationView } from './DocumentationView/DocumentationView';

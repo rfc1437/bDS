@@ -288,6 +288,12 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:openDocumentation', () => {
+        openTab({ id: 'documentation', type: 'documentation', isTransient: false });
+      }) || (() => {})
+    );
+
     // Import completion event - refresh posts and media stores
     unsubscribers.push(
       window.electronAPI?.import.onComplete(async (data) => {

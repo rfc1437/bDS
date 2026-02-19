@@ -22,6 +22,7 @@ export type AppMenuAction =
   | 'reindexText'
   | 'metadataDiff'
   | 'generateSitemap'
+  | 'openDocumentation'
   | 'about'
   | 'viewOnGitHub'
   | 'reportIssue';
@@ -93,6 +94,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
     label: 'Help',
     items: [
       { label: 'About Blogging Desktop Server', action: 'about' },
+      { label: 'Open Documentation', action: 'openDocumentation' },
       { label: '', action: 'help-separator-1', separator: true },
       { label: 'View on GitHub', action: 'viewOnGitHub' },
       { label: 'Report Issue', action: 'reportIssue' },
@@ -116,6 +118,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   reindexText: 'menu:reindexText',
   metadataDiff: 'menu:metadataDiff',
   generateSitemap: 'menu:generateSitemap',
+  openDocumentation: 'menu:openDocumentation',
   about: 'menu:about',
 };
 

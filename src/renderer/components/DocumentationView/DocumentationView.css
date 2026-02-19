@@ -1,0 +1,118 @@
+.documentation-view {
+  --doc-bg: var(--pico-background-color);
+  --doc-surface: var(--pico-card-background-color);
+  --doc-border: var(--pico-muted-border-color);
+  --doc-text: var(--pico-color);
+  --doc-muted: var(--pico-muted-color);
+  --doc-link: var(--pico-primary);
+  --doc-code-bg: var(--pico-code-background-color, var(--pico-muted-background-color));
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--doc-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  .documentation-view {
+    --doc-bg: #15181d;
+    --doc-surface: #1b2027;
+    --doc-border: #2a313b;
+    --doc-text: #d2d8e2;
+    --doc-muted: #98a2b3;
+    --doc-link: #b2bccd;
+    --doc-code-bg: #171c23;
+  }
+}
+
+.documentation-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--doc-border);
+  background: var(--doc-surface);
+}
+
+.documentation-header h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--doc-text);
+}
+
+.documentation-header p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--doc-muted);
+}
+
+.documentation-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 28px 24px 40px;
+  background: var(--doc-bg);
+}
+
+.documentation-content {
+  max-width: 920px;
+  margin: 0 auto;
+  color: var(--doc-text);
+}
+
+.documentation-article {
+  background: var(--doc-surface);
+  padding: 18px 20px 24px;
+  border: 1px solid var(--doc-border);
+  border-radius: 10px;
+}
+
+.documentation-content.markdown-body h1,
+.documentation-content.markdown-body h2,
+.documentation-content.markdown-body h3 {
+  color: var(--doc-text);
+  border-bottom: 1px solid var(--doc-border);
+  padding-bottom: 6px;
+}
+
+.documentation-content.markdown-body a {
+  color: var(--doc-link);
+}
+
+.documentation-content.markdown-body hr {
+  border-color: var(--doc-border);
+  opacity: 0.8;
+}
+
+.documentation-content.markdown-body code {
+  background: var(--doc-code-bg);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.documentation-content.markdown-body pre {
+  background: var(--doc-code-bg);
+  border: 1px solid var(--doc-border);
+  border-radius: 6px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.documentation-content.markdown-body blockquote {
+  margin: 10px 0;
+  padding: 0 0 0 12px;
+  border-left: 3px solid var(--doc-border);
+  color: var(--doc-muted);
+}
+
+.documentation-content.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.documentation-content.markdown-body th,
+.documentation-content.markdown-body td {
+  border: 1px solid var(--doc-border);
+  padding: 8px 10px;
+}
+
+.documentation-content.markdown-body ul,
+.documentation-content.markdown-body ol {
+  margin-bottom: 1rem;
+}

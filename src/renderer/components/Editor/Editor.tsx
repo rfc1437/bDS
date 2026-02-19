@@ -15,6 +15,7 @@ import { ChatPanel } from '../ChatPanel';
 import { ImportAnalysisView } from '../ImportAnalysisView';
 import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { GitDiffView } from '../GitDiffView/GitDiffView';
+import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
@@ -1701,6 +1702,7 @@ export const Editor: React.FC = () => {
   const showImport = activeTab?.type === 'import';
   const showMetadataDiff = activeTab?.type === 'metadata-diff';
   const showGitDiff = activeTab?.type === 'git-diff';
+  const showDocumentation = activeTab?.type === 'documentation';
 
   useEffect(() => {
     const activePostId = activeTab?.type === 'post' ? activeTab.id : null;
@@ -1813,6 +1815,16 @@ export const Editor: React.FC = () => {
     return (
       <div className="editor">
         <GitDiffView key={activeTabId} filePath={filePath} />
+        {renderErrorModal()}
+        {renderConfirmDeleteModal()}
+      </div>
+    );
+  }
+
+  if (showDocumentation) {
+    return (
+      <div className="editor">
+        <DocumentationView />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

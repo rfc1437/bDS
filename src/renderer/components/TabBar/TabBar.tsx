@@ -74,6 +74,10 @@ const getTabTitle = (
     return 'Metadata Diff';
   }
 
+  if (tab.type === 'documentation') {
+    return 'Documentation';
+  }
+
   return 'Unknown';
 };
 
@@ -125,6 +129,13 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M2 3h5v1H2V3zm0 3h5v1H2V6zm0 3h5v1H2V9zm0 3h5v1H2v-1zm7-9h5v1H9V3zm0 3h5v1H9V6zm0 3h5v1H9V9zm0 3h5v1H9v-1z"/>
+        </svg>
+      );
+    case 'documentation':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h7A1.5 1.5 0 0 1 13 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-11zm1.5-.5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7z"/>
+          <path d="M5 4h6v1H5V4zm0 2h6v1H5V6zm0 2h6v1H5V8zm0 2h4v1H5v-1z"/>
         </svg>
       );
     default:
