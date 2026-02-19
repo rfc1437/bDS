@@ -9,10 +9,11 @@ describe('documentation structure and presentation', () => {
     const docPath = path.resolve(process.cwd(), 'DOCUMENTATION.md');
     const markdown = readFileSync(docPath, 'utf8');
 
-    expect(markdown).toContain('## Index');
+    expect(markdown).toContain('## In this article');
     expect(markdown).not.toMatch(/^\s{2,}-\s+\[/m);
     expect(markdown).not.toMatch(/^##\s+\d+\)/m);
-    expect(markdown).toMatch(/^###\s+1\)/m);
+    expect(markdown).toContain('[Who this guide is for](#who-this-guide-is-for)');
+    expect(markdown).toContain('## Who this guide is for');
   });
 
   it('scopes Pico conditional styling to the documentation view', () => {

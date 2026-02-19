@@ -86,3 +86,10 @@ export {
   type GitStatusCounts,
   type GitInitResult,
 } from './GitEngine';
+export {
+  BlogGenerationEngine,
+  getBlogGenerationEngine,
+  resolvePublicBaseUrl,
+  type BlogGenerationOptions,
+  type BlogGenerationResult,
+} from './BlogGenerationEngine';

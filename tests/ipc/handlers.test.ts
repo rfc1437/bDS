@@ -175,6 +175,8 @@ const mockTaskManager = {
   off: vi.fn(),
 };
 
+const mockSettingsStore = new Map<string, string>();
+
 const mockDatabase = {
   getLocal: vi.fn(() => ({
     select: vi.fn(() => ({
@@ -184,6 +186,27 @@ const mockDatabase = {
         })),
       })),
     })),
+  })),
+  getLocalClient: vi.fn(() => ({
+    execute: vi.fn(async ({ sql, args }: { sql: string; args?: any[] }) => {
+      if (sql.startsWith('SELECT value FROM settings WHERE key = ?')) {
+        const key = String(args?.[0] ?? '');
+        return {
+          rows: mockSettingsStore.has(key)
+            ? [{ value: mockSettingsStore.get(key) as string }]
+            : [],
+        };
+      }
+
+      if (sql.startsWith('INSERT INTO settings')) {
+        const key = String(args?.[0] ?? '');
+        const value = String(args?.[1] ?? '');
+        mockSettingsStore.set(key, value);
+        return { rowsAffected: 1 };
+      }
+
+      return { rows: [] };
+    }),
   })),
   getDataPaths: vi.fn(() => ({
     database: '/mock/data/bds.db',
@@ -271,6 +294,7 @@ describe('IPC Handlers', () => {
     // Clear all mocks
     vi.clearAllMocks();
     registeredHandlers.clear();
+    mockSettingsStore.clear();
     resetMockCounters();
     
     // Import and register handlers fresh for each test
@@ -1542,6 +1566,175 @@ describe('IPC Handlers', () => {
           expect.stringContaining('<?xml version="1.0" encoding="UTF-8"?>'),
           'utf-8'
         );
+      });
+
+      it('should generate rss and atom feeds with newest maxPostsPerPage published snapshots', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          description: 'Test Description',
+          publicUrl: 'https://blog.example.com',
+          maxPostsPerPage: 1,
+        });
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return [
+              {
+                id: 'post-new',
+                projectId: 'test-project',
+                title: 'Newest <Post>',
+                slug: 'newest-post',
+                excerpt: '',
+                content: '',
+                status: 'published',
+                createdAt: new Date('2024-03-05T10:00:00Z'),
+                updatedAt: new Date('2024-03-05T11:00:00Z'),
+                publishedAt: new Date('2024-03-05T10:00:00Z'),
+                tags: ['tag-one'],
+                categories: ['category-one'],
+              },
+              {
+                id: 'post-old',
+                projectId: 'test-project',
+                title: 'Old Post',
+                slug: 'old-post',
+                excerpt: '',
+                content: '',
+                status: 'published',
+                createdAt: new Date('2024-02-01T10:00:00Z'),
+                updatedAt: new Date('2024-02-01T11:00:00Z'),
+                publishedAt: new Date('2024-02-01T10:00:00Z'),
+                tags: ['tag-two'],
+                categories: ['category-two'],
+              },
+            ];
+          }
+          if (filter.status === 'draft') {
+            return [];
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockImplementation(async (id: string) => {
+          if (id !== 'post-new') return null;
+          return {
+            id: 'post-new',
+            projectId: 'test-project',
+            title: 'Newest <Post>',
+            slug: 'newest-post',
+            excerpt: undefined,
+            content: 'First paragraph with <tag> & symbol.\n\nSecond paragraph.',
+            status: 'published',
+            author: 'Author A',
+            createdAt: new Date('2024-03-05T10:00:00Z'),
+            updatedAt: new Date('2024-03-05T11:00:00Z'),
+            publishedAt: new Date('2024-03-05T10:00:00Z'),
+            tags: ['tag-one'],
+            categories: ['category-one'],
+          };
+        });
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        await invokeHandler('blog:generateSitemap');
+
+        const writtenFiles = vi.mocked(writeFile).mock.calls.map(([filePath, body]) => ({
+          filePath: filePath as string,
+          body: body as string,
+        }));
+        const rss = writtenFiles.find((entry) => entry.filePath.endsWith('/rss.xml'))?.body;
+        const atom = writtenFiles.find((entry) => entry.filePath.endsWith('/atom.xml'))?.body;
+
+        expect(rss).toBeTruthy();
+        expect(atom).toBeTruthy();
+        expect(rss).toContain('newest-post');
+        expect(rss).not.toContain('old-post');
+        expect(atom).toContain('newest-post');
+        expect(atom).not.toContain('old-post');
+        expect(rss).toContain('Newest &lt;Post&gt;');
+        expect(rss).toContain('First paragraph with &lt;tag&gt; &amp; symbol.');
+        expect(atom).toContain('<category term="tag-one"');
+        expect(atom).toContain('<category term="category-one"');
+      });
+
+      it('should skip rewriting sitemap and feeds when content hash is unchanged', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+          maxPostsPerPage: 5,
+        });
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return [
+              {
+                id: 'post-1',
+                projectId: 'test-project',
+                title: 'Hash test',
+                slug: 'hash-test',
+                excerpt: 'Hash excerpt',
+                content: '',
+                status: 'published',
+                createdAt: new Date('2024-01-15T10:00:00Z'),
+                updatedAt: new Date('2024-01-20T15:00:00Z'),
+                publishedAt: new Date('2024-01-15T10:00:00Z'),
+                tags: [],
+                categories: [],
+              },
+            ];
+          }
+          if (filter.status === 'draft') {
+            return [];
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockImplementation(async () => ({
+          id: 'post-1',
+          projectId: 'test-project',
+          title: 'Hash test',
+          slug: 'hash-test',
+          excerpt: 'Hash excerpt',
+          content: 'Hash content',
+          status: 'published',
+          createdAt: new Date('2024-01-15T10:00:00Z'),
+          updatedAt: new Date('2024-01-20T15:00:00Z'),
+          publishedAt: new Date('2024-01-15T10:00:00Z'),
+          tags: [],
+          categories: [],
+        }));
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          const onProgress = vi.fn();
+          return await task.execute(onProgress);
+        });
+
+        await invokeHandler('blog:generateSitemap');
+        vi.mocked(writeFile).mockClear();
+        await invokeHandler('blog:generateSitemap');
+
+        expect(writeFile).not.toHaveBeenCalled();
       });
 
       it('should throw error when no active project', async () => {
