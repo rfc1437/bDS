@@ -120,7 +120,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'Reindex Search Text', action: 'reindexText' },
       { label: '', action: 'blog-separator-3', separator: true },
       { label: 'Metadata Diff Tool', action: 'metadataDiff' },
-      { label: 'Generate Sitemap', action: 'generateSitemap' },
+      { label: 'Render Site', action: 'generateSitemap', accelerator: 'CmdOrCtrl+R' },
     ],
   },
   {

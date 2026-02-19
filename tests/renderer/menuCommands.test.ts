@@ -39,4 +39,13 @@ describe('Help menu documentation entry', () => {
     expect(viewGroup?.items.some((item) => item.action === 'zoomOut')).toBe(true);
     expect(viewGroup?.items.some((item) => item.action === 'toggleFullScreen')).toBe(true);
   });
+
+  it('renames generateSitemap menu item to Render Site and assigns Command/Ctrl+R', () => {
+    const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
+    const generateSiteItem = blogGroup?.items.find((item) => item.action === 'generateSitemap');
+
+    expect(generateSiteItem).toBeDefined();
+    expect(generateSiteItem?.label).toBe('Render Site');
+    expect(generateSiteItem?.accelerator).toBe('CmdOrCtrl+R');
+  });
 });
