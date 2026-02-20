@@ -86,6 +86,35 @@
   gap: 4px;
 }
 
+.task-group-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-group-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background-color: var(--vscode-list-hoverBackground);
+  color: var(--vscode-editor-foreground);
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-group-chevron {
+  color: var(--vscode-descriptionForeground);
+}
+
+.task-group-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .task-item {
   display: flex;
   align-items: center;
@@ -131,18 +160,47 @@
   min-width: 0;
 }
 
-.task-message {
+.task-child-row {
+  margin-left: 16px;
+}
+
+.task-name {
+  font-size: 12px;
+  color: var(--vscode-editor-foreground);
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.task-message {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .task-progress-bar {
+  flex: 1;
   height: 3px;
   background-color: var(--vscode-input-background);
   border-radius: 2px;
-  margin-top: 4px;
   overflow: hidden;
+}
+
+.task-progress-value {
+  min-width: 32px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  text-align: right;
 }
 
 .task-progress-fill {

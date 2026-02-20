@@ -175,7 +175,7 @@ const mockTaskManager = {
   off: vi.fn(),
 };
 
-const mockSettingsStore = new Map<string, string>();
+const mockGeneratedFileHashStore = new Map<string, string>();
 
 const mockDatabase = {
   getLocal: vi.fn(() => ({
@@ -189,19 +189,23 @@ const mockDatabase = {
   })),
   getLocalClient: vi.fn(() => ({
     execute: vi.fn(async ({ sql, args }: { sql: string; args?: any[] }) => {
-      if (sql.startsWith('SELECT value FROM settings WHERE key = ?')) {
-        const key = String(args?.[0] ?? '');
+      if (sql.includes('CREATE TABLE IF NOT EXISTS generated_file_hashes')) {
+        return { rows: [] };
+      }
+
+      if (sql.startsWith('SELECT content_hash FROM generated_file_hashes')) {
+        const key = `${String(args?.[0] ?? '')}:${String(args?.[1] ?? '')}`;
         return {
-          rows: mockSettingsStore.has(key)
-            ? [{ value: mockSettingsStore.get(key) as string }]
+          rows: mockGeneratedFileHashStore.has(key)
+            ? [{ content_hash: mockGeneratedFileHashStore.get(key) as string }]
             : [],
         };
       }
 
-      if (sql.startsWith('INSERT INTO settings')) {
-        const key = String(args?.[0] ?? '');
-        const value = String(args?.[1] ?? '');
-        mockSettingsStore.set(key, value);
+      if (sql.includes('INSERT INTO generated_file_hashes')) {
+        const key = `${String(args?.[0] ?? '')}:${String(args?.[1] ?? '')}`;
+        const value = String(args?.[2] ?? '');
+        mockGeneratedFileHashStore.set(key, value);
         return { rowsAffected: 1 };
       }
 
@@ -258,6 +262,10 @@ vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => mockDatabase),
 }));
 
+vi.mock('../../src/main/database/connection', () => ({
+  getDatabase: vi.fn(() => mockDatabase),
+}));
+
 vi.mock('../../src/main/engine/stemmer', () => ({
   isoToStemmerLanguage: vi.fn((iso: string) => iso === 'en' ? 'english' : 'german'),
 }));
@@ -294,7 +302,7 @@ describe('IPC Handlers', () => {
     // Clear all mocks
     vi.clearAllMocks();
     registeredHandlers.clear();
-    mockSettingsStore.clear();
+    mockGeneratedFileHashStore.clear();
     resetMockCounters();
     
     // Import and register handlers fresh for each test
@@ -1571,6 +1579,62 @@ describe('IPC Handlers', () => {
   // ============ Blog Handlers ============
   describe('Blog Handlers', () => {
     describe('blog:generateSitemap', () => {
+      it('should create separate background tasks for single, category, tag, and date rendering', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return [
+              {
+                id: 'post-1',
+                projectId: 'test-project',
+                title: 'Test Post',
+                slug: 'test-post',
+                excerpt: '',
+                content: '# Test',
+                status: 'published',
+                createdAt: new Date('2024-01-15T10:00:00Z'),
+                updatedAt: new Date('2024-01-20T15:00:00Z'),
+                publishedAt: new Date('2024-01-15T10:00:00Z'),
+                tags: ['tag1'],
+                categories: ['category1'],
+              },
+            ];
+          }
+          if (filter.status === 'draft') {
+            return [];
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { writeFile, mkdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          return task.execute(vi.fn());
+        });
+
+        await invokeHandler('blog:generateSitemap');
+
+        const names = mockTaskManager.runTask.mock.calls.map((call: any[]) => call[0]?.name);
+        expect(names).toContain('Render Site Core');
+        expect(names).toContain('Render Single Posts');
+        expect(names).toContain('Render Category Archives');
+        expect(names).toContain('Render Tag Archives');
+        expect(names).toContain('Render Date Archives');
+      });
+
       it('should call taskManager.runTask with sitemap generation task', async () => {
         const mockProject = createMockProject({ 
           id: 'test-project',
@@ -1644,11 +1708,11 @@ describe('IPC Handlers', () => {
 
         const result = await invokeHandler('blog:generateSitemap');
 
-        // Verify taskManager.runTask was called
+        // Verify taskManager.runTask was called for core task orchestration
         expect(mockTaskManager.runTask).toHaveBeenCalledWith(
           expect.objectContaining({
-            id: expect.stringMatching(/^sitemap-generate-\d+$/),
-            name: 'Generate Sitemap',
+            id: expect.stringMatching(/^site-render-core-\d+$/),
+            name: 'Render Site Core',
             execute: expect.any(Function),
           })
         );
@@ -1838,7 +1902,11 @@ describe('IPC Handlers', () => {
         vi.mocked(writeFile).mockClear();
         await invokeHandler('blog:generateSitemap');
 
-        expect(writeFile).not.toHaveBeenCalled();
+        // Assets are always copied, but sitemap/feeds/pages should not be rewritten
+        const xmlWrites = vi.mocked(writeFile).mock.calls.filter(
+          ([filePath]) => typeof filePath === 'string' && (filePath.endsWith('.xml') || filePath.endsWith('index.html')),
+        );
+        expect(xmlWrites).toHaveLength(0);
       });
 
       it('should throw error when no active project', async () => {

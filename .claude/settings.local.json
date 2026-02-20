@@ -4,7 +4,8 @@
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
       "Bash(node ./node_modules/typescript/bin/tsc:*)",
-      "Bash(npm run build:main:*)"
+      "Bash(npm run build:main:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

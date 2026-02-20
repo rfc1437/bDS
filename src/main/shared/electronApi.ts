@@ -122,12 +122,15 @@ export interface MediaSearchResult {
 
 export interface TaskProgress {
   taskId: string;
+  name: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   message: string;
   startTime: string;
   endTime?: string;
   error?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 export interface SyncConfig {
@@ -598,6 +601,7 @@ export interface ElectronAPI {
       tagCount: number;
       categoryCount: number;
       archiveCount: number;
+      pagesGenerated: number;
     }>;
   };
   chat: {

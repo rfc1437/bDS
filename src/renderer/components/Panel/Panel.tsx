@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
+import type { TaskProgress } from '../../../main/shared/electronApi';
 import './Panel.css';
 
 function getPostRelativePath(createdAt: string, slug: string): string | null {
@@ -33,6 +34,72 @@ function toRelativePath(absolutePath: string, projectPath: string): string {
   return normalizedAbsolute;
 }
 
+interface GroupedTaskEntry {
+  kind: 'group';
+  groupId: string;
+  groupName: string;
+  tasks: TaskProgress[];
+}
+
+interface SingleTaskEntry {
+  kind: 'single';
+  task: TaskProgress;
+}
+
+type TaskEntry = GroupedTaskEntry | SingleTaskEntry;
+
+function buildTaskEntries(tasks: TaskProgress[]): TaskEntry[] {
+  const groupMap = new Map<string, { groupName: string; tasks: TaskProgress[]; firstIndex: number }>();
+  const singles: Array<{ task: TaskProgress; index: number }> = [];
+
+  tasks.forEach((task, index) => {
+    if (!task.groupId) {
+      singles.push({ task, index });
+      return;
+    }
+
+    const existing = groupMap.get(task.groupId);
+    if (existing) {
+      existing.tasks.push(task);
+      return;
+    }
+
+    groupMap.set(task.groupId, {
+      groupName: task.groupName || task.groupId,
+      tasks: [task],
+      firstIndex: index,
+    });
+  });
+
+  const entries: Array<{ entry: TaskEntry; index: number }> = [];
+
+  for (const single of singles) {
+    entries.push({
+      index: single.index,
+      entry: {
+        kind: 'single',
+        task: single.task,
+      },
+    });
+  }
+
+  for (const [groupId, group] of groupMap.entries()) {
+    entries.push({
+      index: group.firstIndex,
+      entry: {
+        kind: 'group',
+        groupId,
+        groupName: group.groupName,
+        tasks: group.tasks,
+      },
+    });
+  }
+
+  return entries
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.entry);
+}
+
 export const Panel: React.FC = () => {
   const {
     panelVisible,
@@ -48,6 +115,7 @@ export const Panel: React.FC = () => {
     setSelectedPost,
     setActiveView,
   } = useAppStore();
+  const [collapsedTaskGroups, setCollapsedTaskGroups] = useState<Set<string>>(new Set());
   const [gitLogLoading, setGitLogLoading] = useState(false);
   const [gitLogError, setGitLogError] = useState<string | null>(null);
   const [postLinksLoading, setPostLinksLoading] = useState(false);
@@ -69,6 +137,7 @@ export const Panel: React.FC = () => {
   const requestIdRef = useRef(0);
 
   const recentTasks = tasks.slice(-10).reverse();
+  const recentTaskEntries = useMemo(() => buildTaskEntries(recentTasks), [recentTasks]);
   const activeEditorTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) ?? null, [tabs, activeTabId]);
   const canActivatePostLinks = activeEditorTab?.type === 'post';
   const canActivateGitLog = activeEditorTab?.type === 'post' || activeEditorTab?.type === 'media';
@@ -230,6 +299,52 @@ export const Panel: React.FC = () => {
     setActiveView('posts');
   };
 
+  const toggleTaskGroup = (groupId: string) => {
+    setCollapsedTaskGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
+  const renderTaskRow = (task: TaskProgress, isChild = false) => (
+    <div key={task.taskId} className={`task-item status-${task.status} ${isChild ? 'task-child-row' : ''}`.trim()}>
+      <div className="task-status">
+        {task.status === 'running' && <span className="task-spinner" />}
+        {task.status === 'completed' && <span className="task-check">✓</span>}
+        {task.status === 'failed' && <span className="task-error">✗</span>}
+        {task.status === 'pending' && <span className="task-pending">○</span>}
+      </div>
+      <div className="task-info">
+        <div className="task-name">{task.name || task.taskId}</div>
+        <div className="task-message">{task.message}</div>
+        {(task.status === 'running' || task.status === 'pending') && (
+          <div className="task-progress-row">
+            <div className="task-progress-bar">
+              <div
+                className="task-progress-fill"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+            <span className="task-progress-value">{Math.round(task.progress)}%</span>
+          </div>
+        )}
+      </div>
+      {task.status === 'running' && (
+        <button
+          className="task-cancel"
+          onClick={() => window.electronAPI?.tasks.cancel(task.taskId)}
+        >
+          Cancel
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="panel">
       <div className="panel-header">
@@ -292,35 +407,28 @@ export const Panel: React.FC = () => {
             <div className="panel-empty">No recent tasks</div>
           ) : (
             <div className="task-list">
-              {recentTasks.map(task => (
-                <div key={task.taskId} className={`task-item status-${task.status}`}>
-                  <div className="task-status">
-                    {task.status === 'running' && <span className="task-spinner" />}
-                    {task.status === 'completed' && <span className="task-check">✓</span>}
-                    {task.status === 'failed' && <span className="task-error">✗</span>}
-                    {task.status === 'pending' && <span className="task-pending">○</span>}
-                  </div>
-                  <div className="task-info">
-                    <div className="task-message">{task.message}</div>
-                    {task.status === 'running' && (
-                      <div className="task-progress-bar">
-                        <div
-                          className="task-progress-fill"
-                          style={{ width: `${task.progress}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  {task.status === 'running' && (
+              {recentTaskEntries.map((entry) => {
+                if (entry.kind === 'single') {
+                  return renderTaskRow(entry.task);
+                }
+
+                const expanded = !collapsedTaskGroups.has(entry.groupId);
+                return (
+                  <div key={entry.groupId} className="task-group-row">
                     <button
-                      className="task-cancel"
-                      onClick={() => window.electronAPI?.tasks.cancel(task.taskId)}
+                      type="button"
+                      className="task-group-toggle"
+                      onClick={() => toggleTaskGroup(entry.groupId)}
+                      aria-expanded={expanded}
+                      aria-label={`${entry.groupName} (${entry.tasks.length})`}
                     >
-                      Cancel
+                      <span className="task-group-chevron">{expanded ? '▾' : '▸'}</span>
+                      <span className="task-group-title">{entry.groupName} ({entry.tasks.length})</span>
                     </button>
-                  )}
-                </div>
-              ))}
+                    {expanded && entry.tasks.map((task) => renderTaskRow(task, true))}
+                  </div>
+                );
+              })}
             </div>
           )
         )}

@@ -73,6 +73,16 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Generated file hashes - tracks html/xml output content hashes to skip unchanged writes
+export const generatedFileHashes = sqliteTable('generated_file_hashes', {
+  projectId: text('project_id').notNull(),
+  relativePath: text('relative_path').notNull(),
+  contentHash: text('content_hash').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  projectPathIdx: uniqueIndex('generated_file_hashes_project_path_idx').on(table.projectId, table.relativePath),
+}));
+
 // Post links - tracks internal links between posts
 export const postLinks = sqliteTable('post_links', {
   id: text('id').primaryKey(),
@@ -150,6 +160,8 @@ export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
+export type GeneratedFileHash = typeof generatedFileHashes.$inferSelect;
+export type NewGeneratedFileHash = typeof generatedFileHashes.$inferInsert;
 export type PostLink = typeof postLinks.$inferSelect;
 export type NewPostLink = typeof postLinks.$inferInsert;
 export type PostMediaLink = typeof postMedia.$inferSelect;

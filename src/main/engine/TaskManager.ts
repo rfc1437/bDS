@@ -4,12 +4,15 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cance
 
 export interface TaskProgress {
   taskId: string;
+  name: string;
   status: TaskStatus;
   progress: number; // 0-100
   message: string;
   startTime: Date;
   endTime?: Date;
   error?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 export interface Task<T = unknown> {
@@ -17,6 +20,8 @@ export interface Task<T = unknown> {
   name: string;
   execute: (onProgress: (progress: number, message: string) => void) => Promise<T>;
   cancel?: () => void;
+  groupId?: string;
+  groupName?: string;
 }
 
 export class TaskManager extends EventEmitter {
@@ -44,10 +49,13 @@ export class TaskManager extends EventEmitter {
   async runTask<T>(task: Task<T>): Promise<T> {
     const progress: TaskProgress = {
       taskId: task.id,
+      name: task.name,
       status: 'pending',
       progress: 0,
       message: 'Waiting to start...',
       startTime: new Date(),
+      groupId: task.groupId,
+      groupName: task.groupName,
     };
 
     this.tasks.set(task.id, progress);

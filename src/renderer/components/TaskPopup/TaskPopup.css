@@ -108,6 +108,41 @@
   background-color: var(--vscode-list-hoverBackground);
 }
 
+.task-group {
+  display: block;
+}
+
+.task-group-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-group-toggle:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.task-group-chevron {
+  color: var(--vscode-descriptionForeground);
+  width: 10px;
+}
+
+.task-group-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.task-group-child {
+  padding-left: 28px;
+}
+
 .task-item-info {
   display: flex;
   align-items: flex-start;

@@ -234,4 +234,39 @@ describe('Panel', () => {
 
     expect(screen.getByRole('tab', { name: 'Output' })).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('renders grouped tasks as expandable parent rows with child task names in tasks tab', async () => {
+    useAppStore.setState({
+      tasks: [
+        {
+          taskId: 'site-render-core-1',
+          name: 'Render Site Core',
+          status: 'running',
+          progress: 42,
+          message: 'Generating root pages...',
+          startTime: '2026-02-20T10:00:00.000Z',
+          groupId: 'site-render-1',
+          groupName: 'Render Site',
+        },
+        {
+          taskId: 'site-render-tag-1',
+          name: 'Render Tag Archives',
+          status: 'pending',
+          progress: 0,
+          message: 'Waiting to start...',
+          startTime: '2026-02-20T10:00:01.000Z',
+          groupId: 'site-render-1',
+          groupName: 'Render Site',
+        },
+      ] as any,
+    });
+
+    render(<Panel />);
+
+    const parent = screen.getByRole('button', { name: 'Render Site (2)' });
+    expect(parent).toBeInTheDocument();
+    expect(await screen.findByText('Render Site Core')).toBeInTheDocument();
+    expect(screen.getByText('Render Tag Archives')).toBeInTheDocument();
+    expect(screen.getByText('42%')).toBeInTheDocument();
+  });
 });

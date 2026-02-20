@@ -135,6 +135,13 @@ const App: React.FC = () => {
 
     // Task events
     unsubscribers.push(
+      window.electronAPI?.on('task:created', (task: unknown) => {
+        const t = task as TaskProgress;
+        updateTask(t.taskId, t);
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('task:started', (task: unknown) => {
         const t = task as TaskProgress;
         updateTask(t.taskId, t);

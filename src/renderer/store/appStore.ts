@@ -358,7 +358,7 @@ export const useAppStore = create<AppState>()(
           return { tasks: state.tasks.map((t) => (t.taskId === taskId ? { ...t, ...task } : t)) };
         }
         // Add new task if it doesn't exist yet
-        return { tasks: [...state.tasks, { taskId, status: 'running', progress: 0, message: '', startTime: new Date().toISOString(), ...task } as TaskProgress] };
+        return { tasks: [...state.tasks, { taskId, name: '', status: 'running', progress: 0, message: '', startTime: new Date().toISOString(), ...task } as TaskProgress] };
       }),
       
       // Loading Actions
