@@ -184,6 +184,7 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', 'assets', 'pico.min.css'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'assets', 'lightbox.min.css'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'assets', 'lightbox.min.js'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'assets', 'tag-cloud.js'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'images', 'prev.png'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'images', 'next.png'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'images', 'close.png'))).toBe(true);
@@ -209,6 +210,8 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('data-template="post-list"');
     expect(html).toContain('/assets/pico.min.css');
     expect(html).toContain('/assets/lightbox.min.css');
+    expect(html).toContain('/assets/tag-cloud.js');
+    expect(html).not.toContain('function parseWords(');
     expect(html).toContain('archive-day-marker');
     expect(html).toContain('15.01.2025');
     expect(html).toContain('14.01.2025');

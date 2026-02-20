@@ -611,9 +611,10 @@ export class BlogGenerationEngine {
     await fs.mkdir(imagesDir, { recursive: true });
 
     for (const [filename, definition] of Object.entries(PREVIEW_ASSETS)) {
-      const sourcePath = require.resolve(definition.modulePath);
       const destPath = path.join(assetsDir, filename);
-      const content = await readFile(sourcePath);
+      const content = definition.sourceText !== undefined
+        ? Buffer.from(definition.sourceText, 'utf-8')
+        : await readFile(require.resolve(definition.modulePath as string));
       await fs.writeFile(destPath, content);
     }
 

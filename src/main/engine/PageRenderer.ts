@@ -4,6 +4,7 @@ import { Liquid } from 'liquidjs';
 import type { MediaData } from './MediaEngine';
 import type { PostData } from './PostEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
+import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
 
 export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
@@ -110,6 +111,12 @@ export interface PostEngineContract {
   getPostsFiltered?: (filter: { status?: 'draft' | 'published' | 'archived' }) => Promise<PostData[]>;
 }
 
+export interface PreviewAssetDefinition {
+  contentType: string;
+  modulePath?: string;
+  sourceText?: string;
+}
+
 export interface TagUsageEntry {
   tag: string;
   count: number;
@@ -131,7 +138,7 @@ export function normalizeTagCloudOrientation(value: string | undefined): TagClou
   return 'horizontal';
 }
 
-export const PREVIEW_ASSETS: Record<string, { modulePath: string; contentType: string }> = {
+export const PREVIEW_ASSETS: Record<string, PreviewAssetDefinition> = {
   'pico.min.css': {
     modulePath: '@picocss/pico/css/pico.min.css',
     contentType: 'text/css; charset=utf-8',
@@ -156,6 +163,10 @@ export const PREVIEW_ASSETS: Record<string, { modulePath: string; contentType: s
   'd3.layout.cloud.js': {
     modulePath: 'd3-cloud/build/d3.layout.cloud.js',
     contentType: 'application/javascript; charset=utf-8',
+  },
+  'tag-cloud.js': {
+    contentType: 'application/javascript; charset=utf-8',
+    sourceText: TAG_CLOUD_RUNTIME_JS,
   },
 };
 

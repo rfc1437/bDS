@@ -687,14 +687,15 @@ export class PreviewServer {
     if (!assetDefinition) return null;
 
     try {
-      const absolutePath = require.resolve(assetDefinition.modulePath);
-      const body = await readFile(absolutePath);
+      const body = assetDefinition.sourceText !== undefined
+        ? Buffer.from(assetDefinition.sourceText, 'utf-8')
+        : await readFile(require.resolve(assetDefinition.modulePath as string));
       return {
         contentType: assetDefinition.contentType,
         body,
       };
     } catch (error) {
-      console.error(`[PreviewServer] Failed to read local asset: ${assetDefinition.modulePath}`, error);
+      console.error(`[PreviewServer] Failed to read local asset: ${assetDefinition.modulePath ?? assetName}`, error);
       return null;
     }
   }

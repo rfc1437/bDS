@@ -178,6 +178,8 @@ describe('PreviewServer', () => {
     expect(rootHtml).toContain('href="/assets/lightbox.min.css"');
     expect(rootHtml).toContain('src="/assets/lightbox.min.js"');
     expect(rootHtml).toContain('src="/assets/d3.layout.cloud.js"');
+    expect(rootHtml).toContain('src="/assets/tag-cloud.js"');
+    expect(rootHtml).not.toContain('function parseWords(');
     expect(rootHtml).not.toContain('cdn.jsdelivr.net');
 
     const picoResponse = await fetch(`${server.getBaseUrl()}/assets/pico.min.css`);
@@ -195,6 +197,10 @@ describe('PreviewServer', () => {
     const d3CloudJsResponse = await fetch(`${server.getBaseUrl()}/assets/d3.layout.cloud.js`);
     expect(d3CloudJsResponse.status).toBe(200);
     expect(d3CloudJsResponse.headers.get('content-type')).toContain('application/javascript');
+
+    const tagCloudJsResponse = await fetch(`${server.getBaseUrl()}/assets/tag-cloud.js`);
+    expect(tagCloudJsResponse.status).toBe(200);
+    expect(tagCloudJsResponse.headers.get('content-type')).toContain('application/javascript');
 
     const lightboxPrevImageResponse = await fetch(`${server.getBaseUrl()}/images/prev.png`);
     expect(lightboxPrevImageResponse.status).toBe(200);
