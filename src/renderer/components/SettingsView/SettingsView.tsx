@@ -27,6 +27,11 @@ interface Credentials {
   sshKeyPath: string;
 }
 
+interface CategoryRenderSettings {
+  renderInLists: boolean;
+  showTitle: boolean;
+}
+
 const defaultCredentials: Credentials = {
   ftpHost: '',
   ftpUser: '',
@@ -45,6 +50,13 @@ const SearchIcon = () => (
 
 // Default post categories based on VISION.md
 const DEFAULT_POST_CATEGORIES = ['article', 'picture', 'aside', 'page'];
+
+const DEFAULT_CATEGORY_SETTINGS: Record<string, CategoryRenderSettings> = {
+  article: { renderInLists: true, showTitle: true },
+  picture: { renderInLists: true, showTitle: true },
+  aside: { renderInLists: true, showTitle: false },
+  page: { renderInLists: false, showTitle: true },
+};
 
 // Standard categories that cannot be deleted
 const PROTECTED_CATEGORIES = ['article', 'aside', 'page', 'picture'];
@@ -115,6 +127,7 @@ export const SettingsView: React.FC = () => {
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
+  const [categorySettings, setCategorySettings] = useState<Record<string, CategoryRenderSettings>>(DEFAULT_CATEGORY_SETTINGS);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
   // AI Assistant settings
@@ -165,6 +178,20 @@ export const SettingsView: React.FC = () => {
           ? metadata.maxPostsPerPage
           : 50;
         setProjectMaxPostsPerPage(maxPostsPerPage);
+
+        const incomingCategorySettings = (metadata as any)?.categorySettings as Record<string, CategoryRenderSettings> | undefined;
+        setCategorySettings((current) => {
+          const merged = { ...DEFAULT_CATEGORY_SETTINGS, ...current };
+          if (incomingCategorySettings && typeof incomingCategorySettings === 'object') {
+            for (const [category, settings] of Object.entries(incomingCategorySettings)) {
+              merged[category] = {
+                renderInLists: settings?.renderInLists !== false,
+                showTitle: settings?.showTitle !== false,
+              };
+            }
+          }
+          return merged;
+        });
       });
     }
   }, [activeProject]);
@@ -182,9 +209,19 @@ export const SettingsView: React.FC = () => {
         const categories = await window.electronAPI?.meta.getCategories();
         if (categories && categories.length > 0) {
           setPostCategories(categories);
+          setCategorySettings((current) => {
+            const next = { ...DEFAULT_CATEGORY_SETTINGS, ...current };
+            for (const category of categories) {
+              if (!next[category]) {
+                next[category] = { renderInLists: true, showTitle: true };
+              }
+            }
+            return next;
+          });
         } else {
           // Initialize with defaults if no categories exist
           setPostCategories(DEFAULT_POST_CATEGORIES);
+          setCategorySettings(DEFAULT_CATEGORY_SETTINGS);
         }
 
         // Load AI settings
@@ -266,6 +303,7 @@ export const SettingsView: React.FC = () => {
           mainLanguage: projectMainLanguage,
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
+          categorySettings,
         });
       }
       showToast.success('Project settings saved');
@@ -537,6 +575,12 @@ export const SettingsView: React.FC = () => {
         if (updatedCategories) {
           setPostCategories(updatedCategories);
         }
+        const nextSettings = {
+          ...categorySettings,
+          [trimmed]: categorySettings[trimmed] || { renderInLists: true, showTitle: true },
+        };
+        setCategorySettings(nextSettings);
+        await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
         setNewCategoryInput('');
         showToast.success(`Category "${trimmed}" added`);
       } catch (error) {
@@ -562,6 +606,10 @@ export const SettingsView: React.FC = () => {
       if (updatedCategories) {
         setPostCategories(updatedCategories);
       }
+      const nextSettings = { ...categorySettings };
+      delete nextSettings[categoryToRemove];
+      setCategorySettings(nextSettings);
+      await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
       showToast.success(`Category "${categoryToRemove}" removed`);
     } catch (error) {
       console.error('Failed to remove category:', error);
@@ -585,10 +633,36 @@ export const SettingsView: React.FC = () => {
       // Refresh the list
       const updatedCategories = await window.electronAPI?.meta.getCategories();
       setPostCategories(updatedCategories || DEFAULT_POST_CATEGORIES);
+      const defaults = { ...DEFAULT_CATEGORY_SETTINGS };
+      setCategorySettings(defaults);
+      await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: defaults });
       showToast.success('Categories reset to defaults');
     } catch (error) {
       console.error('Failed to reset categories:', error);
       showToast.error('Failed to reset categories');
+    }
+  };
+
+  const handleCategorySettingToggle = async (
+    category: string,
+    field: keyof CategoryRenderSettings,
+    value: boolean,
+  ) => {
+    const nextSettings: Record<string, CategoryRenderSettings> = {
+      ...categorySettings,
+      [category]: {
+        ...(categorySettings[category] || { renderInLists: true, showTitle: true }),
+        [field]: value,
+      },
+    };
+
+    setCategorySettings(nextSettings);
+
+    try {
+      await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
+    } catch (error) {
+      console.error('Failed to update category settings:', error);
+      showToast.error('Failed to update category settings');
     }
   };
 
@@ -602,9 +676,32 @@ export const SettingsView: React.FC = () => {
         <div className="categories-list">
           {postCategories.map((cat) => {
             const isProtected = PROTECTED_CATEGORIES.includes(cat);
+            const setting = categorySettings[cat] || { renderInLists: true, showTitle: true };
             return (
             <div key={cat} className="category-item">
               <span className="category-name">{cat}{isProtected && ' (standard)'}</span>
+              <div className="category-settings-controls">
+                <label className="category-setting-toggle" htmlFor={`category-${cat}-render-in-lists`}>
+                  <input
+                    id={`category-${cat}-render-in-lists`}
+                    aria-label={`${cat} render in lists`}
+                    type="checkbox"
+                    checked={setting.renderInLists}
+                    onChange={(event) => handleCategorySettingToggle(cat, 'renderInLists', event.target.checked)}
+                  />
+                  <span>Render in lists</span>
+                </label>
+                <label className="category-setting-toggle" htmlFor={`category-${cat}-show-title`}>
+                  <input
+                    id={`category-${cat}-show-title`}
+                    aria-label={`${cat} show titles`}
+                    type="checkbox"
+                    checked={setting.showTitle}
+                    onChange={(event) => handleCategorySettingToggle(cat, 'showTitle', event.target.checked)}
+                  />
+                  <span>Show titles</span>
+                </label>
+              </div>
               {!isProtected && (
               <button
                 className="category-remove"

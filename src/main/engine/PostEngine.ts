@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import matter from 'gray-matter';
-import { eq, and, desc, gte, lte, like, inArray, ne } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, like, inArray, ne, sql } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { posts, Post, NewPost, postLinks } from '../database/schema';
@@ -54,6 +54,7 @@ export interface PostFilter {
   status?: 'draft' | 'published' | 'archived';
   tags?: string[];
   categories?: string[];
+  excludeCategories?: string[];
   startDate?: Date;
   endDate?: Date;
   year?: number;
@@ -736,6 +737,28 @@ export class PostEngine extends EventEmitter {
       conditions.push(lte(posts.createdAt, endOfMonth));
     }
 
+    if (filter.categories && filter.categories.length > 0) {
+      const includePredicates = filter.categories.map((category) =>
+        sql`exists (
+          select 1
+          from json_each(${posts.categories}) as included_category
+          where included_category.value = ${category}
+        )`
+      );
+      conditions.push(sql`(${sql.join(includePredicates, sql` OR `)})`);
+    }
+
+    if (filter.excludeCategories && filter.excludeCategories.length > 0) {
+      const excludePredicates = filter.excludeCategories.map((category) =>
+        sql`exists (
+          select 1
+          from json_each(${posts.categories}) as excluded_category
+          where excluded_category.value = ${category}
+        )`
+      );
+      conditions.push(sql`NOT (${sql.join(excludePredicates, sql` OR `)})`);
+    }
+
     const dbPosts = await db
       .select()
       .from(posts)
@@ -749,15 +772,10 @@ export class PostEngine extends EventEmitter {
       // Use DB data directly instead of reading from filesystem
       const postData = this.dbRowToPostData(dbPost, dbPost.content || '');
       
-      // Client-side filtering for tags/categories (JSON array)
+      // Client-side filtering for tags only (category filtering is done in SQL)
       if (filter.tags && filter.tags.length > 0) {
         const hasAllTags = filter.tags.every(tag => postData.tags.includes(tag));
         if (!hasAllTags) continue;
-      }
-
-      if (filter.categories && filter.categories.length > 0) {
-        const hasAnyCategory = filter.categories.some(cat => postData.categories.includes(cat));
-        if (!hasAnyCategory) continue;
       }
 
       result.push(postData);

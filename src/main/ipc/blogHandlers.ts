@@ -65,6 +65,8 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       maxPostsPerPage: metadata?.maxPostsPerPage,
       language,
       pageTitle,
+      picoTheme: metadata?.picoTheme,
+      categorySettings: (metadata as any)?.categorySettings,
     };
 
     const runSectionTask = async (

@@ -43,7 +43,16 @@ describe('SettingsView Diff Preferences', () => {
       meta: {
         ...(window as any).electronAPI?.meta,
         getCategories: vi.fn().mockResolvedValue(['article', 'picture', 'aside', 'page']),
-        getProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 75, publicUrl: 'https://example.com' }),
+        getProjectMetadata: vi.fn().mockResolvedValue({
+          maxPostsPerPage: 75,
+          publicUrl: 'https://example.com',
+          categorySettings: {
+            article: { renderInLists: true, showTitle: true },
+            picture: { renderInLists: true, showTitle: true },
+            aside: { renderInLists: true, showTitle: false },
+            page: { renderInLists: false, showTitle: true },
+          },
+        }),
         updateProjectMetadata: vi.fn().mockResolvedValue({ maxPostsPerPage: 12, publicUrl: 'https://example.com' }),
       },
       chat: {
@@ -105,6 +114,37 @@ describe('SettingsView Diff Preferences', () => {
 
     expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
       expect.objectContaining({ publicUrl: 'https://example.com' })
+    );
+  });
+
+  it('renders category settings checkboxes with required defaults', async () => {
+    render(<SettingsView />);
+
+    const asideShowTitle = await screen.findByLabelText(/aside show titles/i);
+    const asideRenderInLists = screen.getByLabelText(/aside render in lists/i);
+    const pageRenderInLists = screen.getByLabelText(/page render in lists/i);
+    const articleShowTitle = screen.getByLabelText(/article show titles/i);
+
+    expect((asideShowTitle as HTMLInputElement).checked).toBe(false);
+    expect((asideRenderInLists as HTMLInputElement).checked).toBe(true);
+    expect((pageRenderInLists as HTMLInputElement).checked).toBe(false);
+    expect((articleShowTitle as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('persists category settings changes via project metadata update', async () => {
+    render(<SettingsView />);
+
+    const pageRenderInLists = await screen.findByLabelText(/page render in lists/i);
+    fireEvent.click(pageRenderInLists);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categorySettings: expect.objectContaining({
+          page: expect.objectContaining({ renderInLists: true, showTitle: true }),
+        }),
+      })
     );
   });
 });

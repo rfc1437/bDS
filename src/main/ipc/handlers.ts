@@ -863,7 +863,7 @@ export function registerIpcHandlers(): void {
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('../shared/picoThemes').PicoThemeName }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('../shared/picoThemes').PicoThemeName; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => {
     const engine = getMetaEngine();
     await engine.updateProjectMetadata(updates);
     return engine.getProjectMetadata();

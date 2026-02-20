@@ -14,6 +14,12 @@ export interface TemplatePostEntry {
   id: string;
   title: string;
   content: string;
+  show_title: boolean;
+}
+
+export interface CategoryRenderSettings {
+  renderInLists: boolean;
+  showTitle: boolean;
 }
 
 export interface DayBlockContext {
@@ -635,8 +641,24 @@ export class PageRenderer {
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
       pagination?: PaginationContext;
+      categorySettings?: Record<string, CategoryRenderSettings>;
     },
   ): PostListTemplateContext {
+    const shouldShowListTitle = (post: PostData): boolean => {
+      const categories = Array.isArray(post.categories) ? post.categories : [];
+      if (categories.length === 0) {
+        return true;
+      }
+
+      const settings = options.categorySettings ?? {};
+      const hasAnyNoTitleCategory = categories.some((category) => settings[category]?.showTitle === false);
+      if (hasAnyNoTitleCategory) {
+        return false;
+      }
+
+      return true;
+    };
+
     const dayBlocks: DayBlockContext[] = [];
 
     if (!options.archiveGrouping) {
@@ -648,6 +670,7 @@ export class PageRenderer {
           id: post.id,
           title: post.title,
           content: post.content,
+          show_title: shouldShowListTitle(post),
         })),
       });
     } else {
@@ -672,6 +695,7 @@ export class PageRenderer {
           id: post.id,
           title: post.title,
           content: post.content,
+          show_title: shouldShowListTitle(post),
         });
       }
 
@@ -786,6 +810,7 @@ export class PageRenderer {
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
       pagination?: PaginationContext;
+      categorySettings?: Record<string, CategoryRenderSettings>;
     },
     postEngine?: PostEngineContract,
   ): Promise<string> {
@@ -820,6 +845,7 @@ export class PageRenderer {
         id: renderablePost.id,
         title: renderablePost.title,
         content: renderablePost.content,
+        show_title: false,
       },
       canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
       canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),

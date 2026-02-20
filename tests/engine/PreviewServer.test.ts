@@ -65,6 +65,10 @@ function makeEngine(posts: PostData[]): PostEngineLike {
         result = result.filter((post) => filter.categories!.some((category) => post.categories.includes(category)));
       }
 
+      if ((filter as any).excludeCategories && (filter as any).excludeCategories.length > 0) {
+        result = result.filter((post) => !(filter as any).excludeCategories.some((category: string) => post.categories.includes(category)));
+      }
+
       if (filter.year !== undefined) {
         result = result.filter((post) => post.createdAt.getUTCFullYear() === filter.year);
       }
@@ -517,6 +521,108 @@ describe('PreviewServer', () => {
 
     const secondPageHtml = await (await fetch(`${server.getBaseUrl()}/category/news/page/2/`)).text();
     expect(secondPageHtml).toContain('<h1 class="archive-heading">news - 1.1.2020 - 2.1.2020</h1>');
+  });
+
+  it('filters out categories disabled for list rendering on list routes', async () => {
+    const posts = [
+      makePost({ id: 'list-1', slug: 'list-1', title: 'List Included', categories: ['article'], createdAt: new Date('2025-02-05T10:00:00.000Z') }),
+      makePost({ id: 'list-2', slug: 'list-2', title: 'List Excluded', categories: ['page'], createdAt: new Date('2025-02-04T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            categorySettings: {
+              article: { renderInLists: true, showTitle: true },
+              page: { renderInLists: false, showTitle: true },
+            },
+          };
+        },
+      } as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(html).toContain('List Included');
+    expect(html).not.toContain('List Excluded');
+  });
+
+  it('suppresses all list category titles when any assigned category has showTitle disabled', async () => {
+    const posts = [
+      makePost({
+        id: 'ct-1',
+        slug: 'ct-1',
+        title: 'Category Title Test',
+        categories: ['aside', 'article'],
+        content: 'Body without markdown headings',
+        createdAt: new Date('2025-02-05T10:00:00.000Z'),
+      }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            categorySettings: {
+              article: { renderInLists: true, showTitle: true },
+              aside: { renderInLists: true, showTitle: false },
+            },
+          };
+        },
+      } as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(html).not.toContain('<h2 class="post-title">Category Title Test</h2>');
+  });
+
+  it('renders post title in list when category titles are enabled', async () => {
+    const posts = [
+      makePost({
+        id: 'pt-1',
+        slug: 'pt-1',
+        title: 'Article Title',
+        categories: ['article'],
+        content: 'Body without markdown headings',
+        createdAt: new Date('2025-02-06T10:00:00.000Z'),
+      }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            categorySettings: {
+              article: { renderInLists: true, showTitle: true },
+              aside: { renderInLists: true, showTitle: false },
+              page: { renderInLists: false, showTitle: true },
+            },
+          };
+        },
+      } as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(html).toContain('<h2 class="post-title">Article Title</h2>');
+    expect(html).not.toContain('<h2 class="post-category-title">article</h2>');
   });
 
   it('supports tag, category, and page-slug routes', async () => {
@@ -982,7 +1088,7 @@ describe('PreviewServer', () => {
       slug: 'published-slug',
       content: '# Published content only',
       tags: ['published-tag'],
-      categories: ['page'],
+      categories: ['article'],
       createdAt: new Date('2025-02-14T10:00:00.000Z'),
     });
 

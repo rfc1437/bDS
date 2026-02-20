@@ -14,6 +14,7 @@ import {
   clampMaxPostsPerPage,
   parseRoutePagination,
   resolvePageTitle,
+  type CategoryRenderSettings,
   type HtmlRewriteContext,
   type MediaEngineContract,
   type PostMediaEngineContract,
@@ -170,6 +171,8 @@ export class PreviewServer {
       }
 
       const metadata = await this.settingsEngine.getProjectMetadata();
+      const categorySettings = this.resolveCategorySettings(metadata);
+      const listExcludedCategories = this.resolveListExcludedCategories(categorySettings);
       const language = metadata?.mainLanguage?.trim() || 'en';
       const pageTitle = resolvePageTitle(metadata, context.projectName, context.projectDescription);
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
@@ -187,7 +190,7 @@ export class PreviewServer {
           language,
           picoStylesheetHref,
           htmlThemeAttribute: previewThemeMode && previewThemeMode !== 'auto' ? `data-theme="${previewThemeMode}"` : undefined,
-        });
+        }, categorySettings, listExcludedCategories);
         this.respond(res, 200, stylePreviewHtml);
         return;
       }
@@ -215,7 +218,7 @@ export class PreviewServer {
         language,
         picoStylesheetHref,
         htmlThemeAttribute: undefined,
-      });
+      }, categorySettings, listExcludedCategories);
       if (!result) {
         const notFoundHtml = await this.pageRenderer.renderNotFound({
           page_title: '404 Not Found',
@@ -239,6 +242,8 @@ export class PreviewServer {
     maxPostsPerPage: number,
     rewriteContext: HtmlRewriteContext,
     pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
+    categorySettings: Record<string, CategoryRenderSettings>,
+    listExcludedCategories: string[],
   ): Promise<string | null> {
     const routePagination = parseRoutePagination(pathname);
     if (!routePagination) {
@@ -311,13 +316,14 @@ export class PreviewServer {
     }
 
     if (pagedPathname === '/') {
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published' }, pageOptions);
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'date',
         archiveContext: { kind: 'root' },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -328,13 +334,14 @@ export class PreviewServer {
     const tagMatch = pagedPathname.match(/^\/tag\/([^/]+)$/);
     if (tagMatch) {
       const tag = tagMatch[1];
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', tags: [tag] }, pageOptions);
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', tags: [tag], excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'non-date',
         archiveContext: { kind: 'tag', name: tag },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -345,13 +352,14 @@ export class PreviewServer {
     const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', categories: [category] }, pageOptions);
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', categories: [category], excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'non-date',
         archiveContext: { kind: 'category', name: category },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -381,13 +389,17 @@ export class PreviewServer {
       const year = Number(dayMatch[1]);
       const month = Number(dayMatch[2]);
       const day = Number(dayMatch[3]);
-      const result = await this.loadPostsForDayPage(year, month, day, pageOptions);
+      const result = await this.loadPostsForDayPage(year, month, day, {
+        ...pageOptions,
+        excludeCategories: listExcludedCategories,
+      });
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'date',
         archiveContext: { kind: 'day', year, month, day },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -400,13 +412,14 @@ export class PreviewServer {
       const year = Number(monthMatch[1]);
       const month = Number(monthMatch[2]);
       if (month < 1 || month > 12) return null;
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1 }, pageOptions);
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1, excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'date',
         archiveContext: { kind: 'month', year, month },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -417,13 +430,14 @@ export class PreviewServer {
     const yearMatch = pagedPathname.match(/^\/(\d{4})$/);
     if (yearMatch) {
       const year = Number(yearMatch[1]);
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year }, pageOptions);
+      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'date',
         archiveContext: { kind: 'year', year },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+        categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -451,8 +465,10 @@ export class PreviewServer {
   private async renderStylePreview(
     rewriteContext: HtmlRewriteContext,
     pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
+    categorySettings: Record<string, CategoryRenderSettings>,
+    listExcludedCategories: string[],
   ): Promise<string> {
-    const result = await this.loadPublishedSnapshotsPage({ status: 'published' }, {
+    const result = await this.loadPublishedSnapshotsPage({ status: 'published', excludeCategories: listExcludedCategories }, {
       maxPostsPerPage: 10,
       page: 1,
     });
@@ -472,6 +488,7 @@ export class PreviewServer {
       archiveContext: { kind: 'root' },
       basePathname: '/__style-preview',
       pagination: { page: 1, maxPostsPerPage: 10, totalPosts: result.totalPosts },
+      categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
@@ -497,7 +514,7 @@ export class PreviewServer {
     year: number,
     month: number,
     day: number,
-    pagination?: { maxPostsPerPage: number; page?: number },
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ): Promise<PostData[]> {
     const result = await this.loadPostsForDayPage(year, month, day, pagination);
     return result.posts;
@@ -507,7 +524,7 @@ export class PreviewServer {
     year: number,
     month: number,
     day: number,
-    pagination?: { maxPostsPerPage: number; page?: number },
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ): Promise<{ posts: PostData[]; totalPosts: number }> {
     if (month < 1 || month > 12 || day < 1 || day > 31) {
       return { posts: [], totalPosts: 0 };
@@ -518,6 +535,7 @@ export class PreviewServer {
 
     const result = await this.loadPublishedSnapshotsPage({
       status: 'published',
+      excludeCategories: pagination?.excludeCategories,
       startDate,
       endDate,
     }, pagination);
@@ -560,7 +578,7 @@ export class PreviewServer {
 
   private async loadPublishedSnapshots(
     filter: PostFilter,
-    pagination?: { maxPostsPerPage: number; page?: number },
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ): Promise<PostData[]> {
     const result = await this.loadPublishedSnapshotsPage(filter, pagination);
     return result.posts;
@@ -568,7 +586,7 @@ export class PreviewServer {
 
   private paginateSnapshots(
     snapshots: PostData[],
-    pagination?: { maxPostsPerPage: number; page?: number },
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ): { posts: PostData[]; totalPosts: number } {
     const totalPosts = snapshots.length;
 
@@ -590,7 +608,7 @@ export class PreviewServer {
 
   private async loadPublishedSnapshotsPage(
     filter: PostFilter,
-    pagination?: { maxPostsPerPage: number; page?: number },
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ): Promise<{ posts: PostData[]; totalPosts: number }> {
     if (filter.status && filter.status !== 'published') {
       return { posts: [], totalPosts: 0 };
@@ -600,10 +618,12 @@ export class PreviewServer {
     const publishedCandidates = await this.postEngine.getPostsFiltered({
       ...baseFilter,
       status: 'published',
+      excludeCategories: filter.excludeCategories,
     });
     const draftCandidates = await this.postEngine.getPostsFiltered({
       ...baseFilter,
       status: 'draft',
+      excludeCategories: filter.excludeCategories,
     });
 
     const snapshotCandidates = await Promise.all([
@@ -757,6 +777,41 @@ export class PreviewServer {
       default:
         return 'application/octet-stream';
     }
+  }
+
+  private resolveCategorySettings(metadata: ProjectMetadata | null): Record<string, CategoryRenderSettings> {
+    const defaults: Record<string, CategoryRenderSettings> = {
+      article: { renderInLists: true, showTitle: true },
+      picture: { renderInLists: true, showTitle: true },
+      aside: { renderInLists: true, showTitle: false },
+      page: { renderInLists: false, showTitle: true },
+    };
+
+    const rawSettings = (metadata as { categorySettings?: unknown } | null)?.categorySettings;
+    if (!rawSettings || typeof rawSettings !== 'object') {
+      return defaults;
+    }
+
+    const mergedSettings: Record<string, CategoryRenderSettings> = { ...defaults };
+    for (const [category, rawValue] of Object.entries(rawSettings as Record<string, unknown>)) {
+      if (!rawValue || typeof rawValue !== 'object') {
+        continue;
+      }
+
+      const typedRawValue = rawValue as Record<string, unknown>;
+      mergedSettings[category] = {
+        renderInLists: typedRawValue.renderInLists !== false,
+        showTitle: typedRawValue.showTitle !== false,
+      };
+    }
+
+    return mergedSettings;
+  }
+
+  private resolveListExcludedCategories(categorySettings: Record<string, CategoryRenderSettings>): string[] {
+    return Object.entries(categorySettings)
+      .filter(([, settings]) => settings.renderInLists === false)
+      .map(([category]) => category);
   }
 
   private respond(res: ServerResponse, status: number, body: string): void {

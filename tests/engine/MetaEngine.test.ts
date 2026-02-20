@@ -423,10 +423,10 @@ describe('MetaEngine', () => {
       });
       
       const metadata = await metaEngine.getProjectMetadata();
-      expect(metadata).toEqual({
+      expect(metadata).toEqual(expect.objectContaining({
         name: 'My Blog',
         description: 'A personal blog about technology',
-      });
+      }));
     });
 
     it('should update project name only', async () => {
@@ -593,6 +593,70 @@ describe('MetaEngine', () => {
       expect(parsed.picoTheme).toBe('slate');
     });
 
+    it('should apply default category settings for standard categories', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Category Defaults Project',
+      } as any);
+
+      const metadata = await metaEngine.getProjectMetadata() as any;
+      expect(metadata.categorySettings).toEqual(
+        expect.objectContaining({
+          article: { renderInLists: true, showTitle: true },
+          picture: { renderInLists: true, showTitle: true },
+          aside: { renderInLists: true, showTitle: false },
+          page: { renderInLists: false, showTitle: true },
+        })
+      );
+    });
+
+    it('should persist category settings to project.json', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Persisted Category Settings',
+        categorySettings: {
+          article: { renderInLists: true, showTitle: true },
+          aside: { renderInLists: true, showTitle: false },
+          page: { renderInLists: false, showTitle: true },
+          custom: { renderInLists: false, showTitle: true },
+        },
+      } as any);
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+
+      expect(parsed.categorySettings).toEqual(
+        expect.objectContaining({
+          custom: { renderInLists: false, showTitle: true },
+          aside: { renderInLists: true, showTitle: false },
+          page: { renderInLists: false, showTitle: true },
+        })
+      );
+    });
+
+    it('should merge missing category settings with defaults when loading from filesystem', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      mockFiles.set(projectPath, JSON.stringify({
+        name: 'Loaded Project',
+        categorySettings: {
+          custom: { renderInLists: false, showTitle: false },
+        },
+      }));
+
+      await metaEngine.loadProjectMetadata();
+
+      const metadata = await metaEngine.getProjectMetadata() as any;
+      expect(metadata.categorySettings).toEqual(
+        expect.objectContaining({
+          custom: { renderInLists: false, showTitle: false },
+          article: { renderInLists: true, showTitle: true },
+          aside: { renderInLists: true, showTitle: false },
+          page: { renderInLists: false, showTitle: true },
+        })
+      );
+    });
+
     it('should load picoTheme from filesystem', async () => {
       const metaDir = metaEngine.getMetaDir();
       const projectPath = normalizePath(`${metaDir}/project.json`);
@@ -691,10 +755,10 @@ describe('MetaEngine', () => {
         description: 'Testing events',
       });
       
-      expect(handler).toHaveBeenCalledWith({
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({
         name: 'Event Test',
         description: 'Testing events',
-      });
+      }));
     });
 
     it('should clear project metadata when project context changes', () => {

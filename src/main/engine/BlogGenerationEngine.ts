@@ -11,8 +11,10 @@ import {
   PREVIEW_ASSETS,
   PREVIEW_IMAGE_ASSETS,
   buildCanonicalPostPath,
+  type CategoryRenderSettings,
   type HtmlRewriteContext,
 } from './PageRenderer';
+import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -27,6 +29,8 @@ export interface BlogGenerationOptions {
   maxPostsPerPage?: number;
   language?: string;
   pageTitle?: string;
+  picoTheme?: PicoThemeName;
+  categorySettings?: Record<string, CategoryRenderSettings>;
   sections?: BlogGenerationSection[];
 }
 
@@ -79,6 +83,30 @@ function clampMaxPostsPerPage(value: unknown): number {
   if (normalized < MIN_MAX_POSTS_PER_PAGE) return DEFAULT_MAX_POSTS_PER_PAGE;
   if (normalized > MAX_MAX_POSTS_PER_PAGE) return MAX_MAX_POSTS_PER_PAGE;
   return normalized;
+}
+
+function resolveCategorySettings(
+  value: Record<string, CategoryRenderSettings> | undefined,
+): Record<string, CategoryRenderSettings> {
+  const defaults: Record<string, CategoryRenderSettings> = {
+    article: { renderInLists: true, showTitle: true },
+    picture: { renderInLists: true, showTitle: true },
+    aside: { renderInLists: true, showTitle: false },
+    page: { renderInLists: false, showTitle: true },
+  };
+
+  if (!value) {
+    return defaults;
+  }
+
+  const merged = { ...defaults };
+  for (const [category, settings] of Object.entries(value)) {
+    merged[category] = {
+      renderInLists: settings?.renderInLists !== false,
+      showTitle: settings?.showTitle !== false,
+    };
+  }
+  return merged;
 }
 
 function buildCanonicalPreviewPath(createdAt: Date, slug: string): string {
@@ -201,9 +229,22 @@ export class BlogGenerationEngine {
     const includeTag = selectedSections.has('tag');
     const includeDate = selectedSections.has('date');
 
+    const categorySettings = resolveCategorySettings(options.categorySettings);
+    const listExcludedCategories = Object.entries(categorySettings)
+      .filter(([, settings]) => settings.renderInLists === false)
+      .map(([category]) => category);
+
     const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
     const publishedCandidates = await this.postEngine.getPostsFiltered({ status: 'published' });
     const draftCandidates = await this.postEngine.getPostsFiltered({ status: 'draft' });
+    const publishedListCandidates = await this.postEngine.getPostsFiltered({
+      status: 'published',
+      excludeCategories: listExcludedCategories,
+    });
+    const draftListCandidates = await this.postEngine.getPostsFiltered({
+      status: 'draft',
+      excludeCategories: listExcludedCategories,
+    });
 
     const publishedSnapshots = await Promise.all(
       publishedCandidates.map(async (post) => {
@@ -213,6 +254,15 @@ export class BlogGenerationEngine {
     );
     const draftPublishedSnapshots = await Promise.all(
       draftCandidates.map(async (post) => this.postEngine.getPublishedVersion(post.id)),
+    );
+    const publishedListSnapshots = await Promise.all(
+      publishedListCandidates.map(async (post) => {
+        const snapshot = await this.postEngine.getPublishedVersion(post.id);
+        return snapshot || post;
+      }),
+    );
+    const draftListPublishedSnapshots = await Promise.all(
+      draftListCandidates.map(async (post) => this.postEngine.getPublishedVersion(post.id)),
     );
 
     const publishedPostById = new Map<string, PostData>();
@@ -227,6 +277,17 @@ export class BlogGenerationEngine {
 
     const publishedPosts = Array.from(publishedPostById.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const publishedListPostById = new Map<string, PostData>();
+    for (const post of publishedListSnapshots) {
+      publishedListPostById.set(post.id, post);
+    }
+    for (const snapshot of draftListPublishedSnapshots) {
+      if (snapshot) {
+        publishedListPostById.set(snapshot.id, snapshot);
+      }
+    }
+    const publishedListPosts = Array.from(publishedListPostById.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const feedPosts = publishedPosts.slice(0, maxPostsPerPage);
 
     onProgress(3, `Found ${publishedPosts.length} published posts`);
@@ -240,14 +301,19 @@ export class BlogGenerationEngine {
     const postUrls: Array<{ loc: string; lastmod: string }> = [];
 
     for (const post of publishedPosts) {
-      for (const tag of post.tags || []) allTags.add(tag);
-      for (const category of post.categories || []) allCategories.add(category);
-
       const createdAt = resolvePostCreatedAt(post);
       const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
       const postUrl = `${options.baseUrl}${canonicalPath}`;
       const updatedAt = post.updatedAt;
       postUrls.push({ loc: postUrl, lastmod: updatedAt.toISOString() });
+    }
+
+    for (const post of publishedListPosts) {
+      for (const tag of post.tags || []) allTags.add(tag);
+      for (const category of post.categories || []) allCategories.add(category);
+
+      const createdAt = resolvePostCreatedAt(post);
+      const updatedAt = post.updatedAt;
 
       const year = createdAt.getFullYear();
       const month = String(createdAt.getMonth() + 1).padStart(2, '0');
@@ -266,7 +332,7 @@ export class BlogGenerationEngine {
       }
     }
 
-    const latestPostUpdatedAt = publishedPosts[0]?.updatedAt.toISOString() || now;
+    const latestPostUpdatedAt = publishedListPosts[0]?.updatedAt.toISOString() || now;
 
     onProgress(5, 'Building sitemap XML...');
 
@@ -396,7 +462,7 @@ export class BlogGenerationEngine {
     const atomPath = path.join(htmlDir, 'atom.xml');
 
     const estimatedUnitsBySection = this.estimateGenerationUnitsBySection(
-      publishedPosts,
+      publishedListPosts,
       allCategories,
       allTags,
       years,
@@ -442,7 +508,11 @@ export class BlogGenerationEngine {
 
     const pageTitle = options.pageTitle || options.projectName;
     const language = options.language || 'en';
-    const pageContext = { page_title: pageTitle, language };
+    const pageContext = {
+      page_title: pageTitle,
+      language,
+      pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
+    };
 
     const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine);
     const rewriteContext = this.buildHtmlRewriteContext(publishedPosts);
@@ -451,7 +521,7 @@ export class BlogGenerationEngine {
 
     if (includeCore) {
       onProgress(20, 'Generating root pages...');
-      pagesGenerated += await this.generateRootPages(options.projectId, publishedPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, reportUnitProgress);
+      pagesGenerated += await this.generateRootPages(options.projectId, publishedListPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
       pagesGenerated += await this.generatePageRoutes(options.projectId, publishedPosts, rewriteContext, htmlDir, pageContext, pageRenderer, reportUnitProgress);
     }
 
@@ -462,17 +532,17 @@ export class BlogGenerationEngine {
 
     if (includeCategory) {
       onProgress(50, 'Generating category pages...');
-      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedPosts, allCategories, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, reportUnitProgress);
+      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
     }
 
     if (includeTag) {
       onProgress(65, 'Generating tag pages...');
-      pagesGenerated += await this.generateTagPages(options.projectId, publishedPosts, allTags, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, reportUnitProgress);
+      pagesGenerated += await this.generateTagPages(options.projectId, publishedListPosts, allTags, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
     }
 
     if (includeDate) {
       onProgress(80, 'Generating date archive pages...');
-      pagesGenerated += await this.generateDateArchivePages(options.projectId, publishedPosts, years, yearMonths, yearMonthDays, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, reportUnitProgress);
+      pagesGenerated += await this.generateDateArchivePages(options.projectId, publishedListPosts, years, yearMonths, yearMonthDays, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
     }
 
     onProgress(100, `Site generated (${publishedPosts.length} posts, ${pagesGenerated} pages)`);
@@ -561,8 +631,9 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
+    categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     const totalPages = Math.max(1, Math.ceil(posts.length / maxPostsPerPage));
@@ -579,6 +650,7 @@ export class BlogGenerationEngine {
         archiveContext: { kind: 'root' },
         basePathname: '/',
         pagination: { page, maxPostsPerPage, totalPosts: posts.length },
+        categorySettings,
         ...pageContext,
       });
 
@@ -598,7 +670,7 @@ export class BlogGenerationEngine {
     posts: PostData[],
     rewriteContext: HtmlRewriteContext,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
@@ -627,8 +699,9 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
+    categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -652,6 +725,7 @@ export class BlogGenerationEngine {
           archiveContext: { kind: 'category', name: category },
           basePathname,
           pagination: { page, maxPostsPerPage, totalPosts: categoryPosts.length },
+          categorySettings,
           ...pageContext,
         });
 
@@ -676,8 +750,9 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
+    categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -701,6 +776,7 @@ export class BlogGenerationEngine {
           archiveContext: { kind: 'tag', name: tag },
           basePathname,
           pagination: { page, maxPostsPerPage, totalPosts: tagPosts.length },
+          categorySettings,
           ...pageContext,
         });
 
@@ -727,8 +803,9 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
+    categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -736,7 +813,7 @@ export class BlogGenerationEngine {
     for (const [year] of Array.from(yearsMap.entries()).sort((a, b) => b[0] - a[0])) {
       const yearPosts = posts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year);
       count += await this.generatePaginatedListPages(
-        projectId, yearPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, onPageGenerated,
+        projectId, yearPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, onPageGenerated,
         `${year}`, `/${year}`, { kind: 'year', year }, 'date',
       );
     }
@@ -750,7 +827,7 @@ export class BlogGenerationEngine {
         return d.getFullYear() === year && (d.getMonth() + 1) === month;
       });
       count += await this.generatePaginatedListPages(
-        projectId, monthPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, onPageGenerated,
+        projectId, monthPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, onPageGenerated,
         ym, `/${ym}`, { kind: 'month', year, month }, 'date',
       );
     }
@@ -765,7 +842,7 @@ export class BlogGenerationEngine {
         return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
       });
       count += await this.generatePaginatedListPages(
-        projectId, dayPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, onPageGenerated,
+        projectId, dayPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, onPageGenerated,
         ymd, `/${ymd}`, { kind: 'day', year, month, day }, 'date',
       );
     }
@@ -779,8 +856,9 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
+    categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
     urlPrefix: string,
     basePathname: string,
@@ -803,6 +881,7 @@ export class BlogGenerationEngine {
         archiveContext,
         basePathname,
         pagination: { page, maxPostsPerPage, totalPosts: posts.length },
+        categorySettings,
         ...pageContext,
       });
 

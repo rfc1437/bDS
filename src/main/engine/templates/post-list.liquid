@@ -37,13 +37,23 @@
               <aside class="archive-day-marker"><span>{{ day_block.date_label }}</span></aside>
               <div class="archive-day-posts">
                 {% for post in day_block.posts %}
-                  <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}</div>
+                  <div class="post">
+                    {% if post.show_title %}
+                      <h2 class="post-title">{{ post.title }}</h2>
+                    {% endif %}
+                    {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}
+                  </div>
                 {% endfor %}
               </div>
             </section>
           {% else %}
             {% for post in day_block.posts %}
-              <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}</div>
+              <div class="post">
+                {% if post.show_title %}
+                  <h2 class="post-title">{{ post.title }}</h2>
+                {% endif %}
+                {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}
+              </div>
             {% endfor %}
           {% endif %}
 

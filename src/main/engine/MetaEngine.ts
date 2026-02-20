@@ -24,6 +24,12 @@ export interface ProjectMetadata {
   defaultAuthor?: string; // Default author for new posts and media
   maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
   picoTheme?: PicoThemeName; // Selected Pico CSS theme for preview/rendering
+  categorySettings?: Record<string, CategoryRenderSettings>; // Per-category list rendering preferences
+}
+
+export interface CategoryRenderSettings {
+  renderInLists: boolean;
+  showTitle: boolean;
 }
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
@@ -64,11 +70,13 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
   const publicUrl = sanitizePublicUrl(metadata.publicUrl);
   const picoTheme = sanitizePicoTheme(metadata.picoTheme);
+  const categorySettings = normalizeCategorySettings(metadata.categorySettings);
   return {
     ...metadata,
     publicUrl,
     maxPostsPerPage,
     picoTheme,
+    categorySettings,
   };
 }
 
@@ -76,6 +84,38 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
  * Default categories for new projects (from VISION.md)
  */
 export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
+
+export function getDefaultCategorySettings(): Record<string, CategoryRenderSettings> {
+  return {
+    article: { renderInLists: true, showTitle: true },
+    picture: { renderInLists: true, showTitle: true },
+    aside: { renderInLists: true, showTitle: false },
+    page: { renderInLists: false, showTitle: true },
+  };
+}
+
+function normalizeCategorySettings(value: unknown): Record<string, CategoryRenderSettings> {
+  const defaults = getDefaultCategorySettings();
+  if (!value || typeof value !== 'object') {
+    return defaults;
+  }
+
+  const normalized: Record<string, CategoryRenderSettings> = { ...defaults };
+  for (const [rawCategory, rawSettings] of Object.entries(value as Record<string, unknown>)) {
+    const category = normalizeTaxonomyTerm(rawCategory);
+    if (!category || !rawSettings || typeof rawSettings !== 'object') {
+      continue;
+    }
+
+    const settings = rawSettings as Record<string, unknown>;
+    normalized[category] = {
+      renderInLists: settings.renderInLists !== false,
+      showTitle: settings.showTitle !== false,
+    };
+  }
+
+  return normalized;
+}
 
 /**
  * MetaEngine manages project metadata like available tags and categories.
@@ -238,6 +278,21 @@ export class MetaEngine extends EventEmitter {
     const normalizedCategory = normalizeTaxonomyTerm(category);
     if (normalizedCategory && !this.categories.has(normalizedCategory)) {
       this.categories.add(normalizedCategory);
+      const currentMetadata = this.projectMetadata;
+      if (currentMetadata) {
+        const currentSettings = normalizeCategorySettings(currentMetadata.categorySettings);
+        if (!currentSettings[normalizedCategory]) {
+          currentSettings[normalizedCategory] = {
+            renderInLists: true,
+            showTitle: true,
+          };
+          this.projectMetadata = normalizeProjectMetadata({
+            ...currentMetadata,
+            categorySettings: currentSettings,
+          });
+          await this.saveProjectMetadata();
+        }
+      }
       this.emit('categoriesChanged', await this.getCategories());
       await this.saveCategories();
     }
@@ -249,6 +304,16 @@ export class MetaEngine extends EventEmitter {
   async removeCategory(category: string): Promise<void> {
     const normalizedCategory = normalizeTaxonomyTerm(category);
     if (this.categories.delete(normalizedCategory)) {
+      const currentMetadata = this.projectMetadata;
+      if (currentMetadata?.categorySettings?.[normalizedCategory]) {
+        const nextSettings = { ...currentMetadata.categorySettings };
+        delete nextSettings[normalizedCategory];
+        this.projectMetadata = normalizeProjectMetadata({
+          ...currentMetadata,
+          categorySettings: nextSettings,
+        });
+        await this.saveProjectMetadata();
+      }
       this.emit('categoriesChanged', await this.getCategories());
       await this.saveCategories();
     }
@@ -477,8 +542,29 @@ export class MetaEngine extends EventEmitter {
         name: projectData.name,
         description: projectData.description || undefined,
         maxPostsPerPage: DEFAULT_MAX_POSTS_PER_PAGE,
+        categorySettings: getDefaultCategorySettings(),
       };
       await this.saveProjectMetadata();
+    }
+
+    if (this.projectMetadata) {
+      const mergedSettings = normalizeCategorySettings(this.projectMetadata.categorySettings);
+      let metadataChanged = false;
+
+      for (const category of this.categories) {
+        if (!mergedSettings[category]) {
+          mergedSettings[category] = { renderInLists: true, showTitle: true };
+          metadataChanged = true;
+        }
+      }
+
+      if (metadataChanged) {
+        this.projectMetadata = normalizeProjectMetadata({
+          ...this.projectMetadata,
+          categorySettings: mergedSettings,
+        });
+        await this.saveProjectMetadata();
+      }
     }
     
     this.initialized = true;

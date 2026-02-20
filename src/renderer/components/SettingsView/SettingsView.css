@@ -353,8 +353,8 @@
 .category-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 12px;
+  padding: 8px 10px;
   background-color: var(--vscode-badge-background);
   color: var(--vscode-badge-foreground);
   border-radius: 4px;
@@ -363,6 +363,25 @@
 
 .category-name {
   font-weight: 500;
+  min-width: 140px;
+}
+
+.category-settings-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.category-setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.category-setting-toggle input[type="checkbox"] {
+  margin: 0;
 }
 
 .category-remove {
