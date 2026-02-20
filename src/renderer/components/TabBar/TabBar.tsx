@@ -179,6 +179,7 @@ export const TabBar: React.FC = () => {
   const { 
     tabs, 
     activeTabId, 
+    posts,
     media,
     activeProject,
     dirtyPosts,
@@ -199,6 +200,34 @@ export const TabBar: React.FC = () => {
   // Fetch post titles from database for post tabs
   useEffect(() => {
     const postTabs = tabs.filter(t => t.type === 'post');
+    const postTabIds = new Set(postTabs.map(t => t.id));
+
+    setPostTitles((previous) => {
+      const next = new Map(previous);
+      let changed = false;
+
+      for (const id of Array.from(next.keys())) {
+        if (!postTabIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+
+      for (const post of posts) {
+        if (!postTabIds.has(post.id)) {
+          continue;
+        }
+
+        const title = post.title || 'Untitled';
+        if (next.get(post.id) !== title) {
+          next.set(post.id, title);
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+
     if (postTabs.length === 0) return;
 
     const fetchTitles = async () => {
@@ -206,7 +235,9 @@ export const TabBar: React.FC = () => {
       let changed = false;
 
       for (const tab of postTabs) {
-        if (!postTitles.has(tab.id)) {
+        const postInStore = posts.find((post) => post.id === tab.id);
+
+        if (!postInStore) {
           try {
             const post = await window.electronAPI?.posts.get(tab.id);
             if (post) {
@@ -225,7 +256,7 @@ export const TabBar: React.FC = () => {
     };
 
     fetchTitles();
-  }, [tabs]); // Note: intentionally not including postTitles to avoid infinite loops
+  }, [tabs, posts]); // Note: intentionally not including postTitles to avoid infinite loops
 
   // Listen for post updates to refresh titles
   useEffect(() => {

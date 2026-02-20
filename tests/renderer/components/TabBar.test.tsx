@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { TabBar } from '../../../src/renderer/components/TabBar/TabBar';
 import { useAppStore } from '../../../src/renderer/store';
 
@@ -96,5 +96,44 @@ describe('TabBar', () => {
     render(<TabBar />);
 
     expect(await screen.findByText('Style')).toBeInTheDocument();
+  });
+
+  it('updates post tab title when post title changes in store', async () => {
+    useAppStore.setState({
+      tabs: [{ type: 'post', id: 'post-1', isTransient: false }],
+      activeTabId: 'post-1',
+      posts: [{
+        id: 'post-1',
+        title: '',
+        slug: 'post-1',
+        content: '',
+        excerpt: null,
+        author: null,
+        status: 'draft',
+        publishedAt: null,
+        scheduledAt: null,
+        tags: [],
+        categories: [],
+        metadata: {},
+        projectId: 'project-1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }],
+    });
+
+    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue({
+      id: 'post-1',
+      title: '',
+    });
+
+    render(<TabBar />);
+
+    expect(await screen.findByText('Untitled')).toBeInTheDocument();
+
+    act(() => {
+      useAppStore.getState().updatePost('post-1', { title: 'Updated Title' });
+    });
+
+    expect(await screen.findByText('Updated Title')).toBeInTheDocument();
   });
 });
