@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="{{ language }}">
-  {% render 'partials/head', page_title: page_title %}
+<html lang="{{ language }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
+  {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href %}
   <body>
     <main>
       <section class="not-found" data-template="not-found">

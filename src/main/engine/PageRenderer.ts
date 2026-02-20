@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { Liquid } from 'liquidjs';
 import type { MediaData } from './MediaEngine';
 import type { PostData } from './PostEngine';
+import { PICO_THEME_NAMES } from '../shared/picoThemes';
 
 export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
@@ -41,6 +42,8 @@ export type DateArchiveContext = {
 export interface PostListTemplateContext {
   page_title: string;
   language: string;
+  pico_stylesheet_href?: string;
+  html_theme_attribute?: string;
   is_date_archive: boolean;
   show_archive_range_heading: boolean;
   archive_context: {
@@ -67,6 +70,8 @@ export interface PostListTemplateContext {
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
+  pico_stylesheet_href?: string;
+  html_theme_attribute?: string;
   post: TemplatePostEntry;
   canonical_post_path_by_slug: Record<string, string>;
   canonical_media_path_by_source_path: Record<string, string>;
@@ -75,6 +80,8 @@ export interface SinglePostTemplateContext {
 export interface NotFoundTemplateContext {
   page_title: string;
   language: string;
+  pico_stylesheet_href?: string;
+  html_theme_attribute?: string;
 }
 
 export interface RoutePagination {
@@ -96,11 +103,20 @@ export interface PostEngineContract {
   getPost: (id: string) => Promise<PostData | null>;
 }
 
-export const PREVIEW_ASSETS = {
+export const PREVIEW_ASSETS: Record<string, { modulePath: string; contentType: string }> = {
   'pico.min.css': {
     modulePath: '@picocss/pico/css/pico.min.css',
     contentType: 'text/css; charset=utf-8',
   },
+  ...Object.fromEntries(
+    PICO_THEME_NAMES.map((theme) => [
+      `pico.${theme}.min.css`,
+      {
+        modulePath: `@picocss/pico/css/pico.${theme}.min.css`,
+        contentType: 'text/css; charset=utf-8',
+      },
+    ])
+  ),
   'lightbox.min.css': {
     modulePath: 'lightbox2/dist/css/lightbox.min.css',
     contentType: 'text/css; charset=utf-8',
@@ -109,7 +125,7 @@ export const PREVIEW_ASSETS = {
     modulePath: 'lightbox2/dist/js/lightbox-plus-jquery.min.js',
     contentType: 'application/javascript; charset=utf-8',
   },
-} as const;
+};
 
 export const PREVIEW_IMAGE_ASSETS = {
   'prev.png': {
@@ -616,6 +632,8 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      pico_stylesheet_href?: string;
+      html_theme_attribute?: string;
       pagination?: PaginationContext;
     },
   ): PostListTemplateContext {
@@ -710,6 +728,8 @@ export class PageRenderer {
     return {
       page_title: options.page_title,
       language: options.language,
+      pico_stylesheet_href: options.pico_stylesheet_href,
+      html_theme_attribute: options.html_theme_attribute,
       is_date_archive: options.routeKind === 'date',
       show_archive_range_heading: hasRangeHeading,
       archive_context: options.routeKind === 'date'
@@ -763,6 +783,8 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      pico_stylesheet_href?: string;
+      html_theme_attribute?: string;
       pagination?: PaginationContext;
     },
     postEngine?: PostEngineContract,
@@ -786,7 +808,7 @@ export class PageRenderer {
   async renderSinglePost(
     post: PostData,
     rewriteContext: HtmlRewriteContext,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string; html_theme_attribute?: string },
     postEngine?: PostEngineContract,
   ): Promise<string> {
     const renderablePost = postEngine

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
+import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
 import './App.css';
 
 const App: React.FC = () => {
@@ -22,6 +23,7 @@ const App: React.FC = () => {
     setActiveView,
     setSelectedPost,
     setActiveProject,
+    setPicoTheme,
     openTab,
     restoreTabState,
   } = useAppStore();
@@ -35,6 +37,11 @@ const App: React.FC = () => {
         const activeProject = await window.electronAPI?.projects.getActive();
         if (activeProject) {
           setActiveProject(activeProject as import('./store').ProjectData);
+
+          const metadata = await window.electronAPI?.meta.getProjectMetadata();
+          setPicoTheme(metadata?.picoTheme);
+          const resolvedTheme = getRendererPicoTheme(metadata?.picoTheme);
+          await ensureRendererPicoThemeStylesheet(resolvedTheme);
         }
         
         // Load posts (now with correct project context, limited to 500)

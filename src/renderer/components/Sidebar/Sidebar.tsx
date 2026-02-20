@@ -1244,6 +1244,7 @@ const SettingsNav: React.FC = () => {
 
   // Check if settings panel is currently active
   const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
+  const isStyleTabActive = tabs.some(t => t.type === 'style' && t.id === activeTabId);
 
   const handleNavClick = (category: SettingsCategory) => {
     // If settings panel is not open or not active, open it first
@@ -1255,6 +1256,10 @@ const SettingsNav: React.FC = () => {
     setTimeout(() => {
       scrollToSettingsSection(category);
     }, isSettingsTabActive ? 0 : 100);
+  };
+
+  const handleStyleClick = () => {
+    openTab({ type: 'style', id: 'style', isTransient: false });
   };
 
   return (
@@ -1307,6 +1312,13 @@ const SettingsNav: React.FC = () => {
         >
           <span className="settings-nav-entry-icon">🗄️</span>
           <span>Data</span>
+        </button>
+        <button
+          className={`settings-nav-entry ${isStyleTabActive ? 'active' : ''}`}
+          onClick={handleStyleClick}
+        >
+          <span className="settings-nav-entry-icon">🎨</span>
+          <span>Style</span>
         </button>
       </div>
     </div>

@@ -156,4 +156,26 @@ describe('Pages shortcut UI', () => {
     expect(wrappers.length).toBeGreaterThanOrEqual(2);
     expect((wrappers[0] as HTMLElement).style.display).toBe('flex');
   });
+
+  it('opens style tab from settings sidebar navigation', async () => {
+    useAppStore.setState({
+      sidebarVisible: true,
+      tabs: [],
+      activeTabId: null,
+    });
+    useAppStore.getState().setActiveView('settings');
+
+    render(<Sidebar />);
+
+    const styleButton = await screen.findByRole('button', { name: /style/i });
+    styleButton.click();
+
+    const state = useAppStore.getState();
+    expect(state.tabs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'style', id: 'style' }),
+      ])
+    );
+    expect(state.activeTabId).toBe('style');
+  });
 });

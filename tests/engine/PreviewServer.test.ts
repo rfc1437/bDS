@@ -196,6 +196,60 @@ describe('PreviewServer', () => {
     expect(lightboxLoadingImageResponse.headers.get('content-type')).toContain('image/gif');
   });
 
+  it('uses selected pico theme stylesheet from project metadata', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            picoTheme: 'slate',
+          };
+        },
+      } as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const rootResponse = await fetch(`${server.getBaseUrl()}/`);
+    expect(rootResponse.status).toBe(200);
+    const rootHtml = await rootResponse.text();
+
+    expect(rootHtml).toContain('href="/assets/pico.slate.min.css"');
+    expect(rootHtml).not.toContain('href="/assets/pico.min.css"');
+
+    const themedCss = await fetch(`${server.getBaseUrl()}/assets/pico.slate.min.css`);
+    expect(themedCss.status).toBe(200);
+    expect(themedCss.headers.get('content-type')).toContain('text/css');
+  });
+
+  it('supports preview mode override for style preview route', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            picoTheme: 'slate',
+          };
+        },
+      } as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/__style-preview?theme=slate&mode=dark`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('<html lang="en" data-theme="dark">');
+    expect(html).toContain('href="/assets/pico.slate.min.css"');
+  });
+
   it('limits list routes to 50 posts', async () => {
     const posts = Array.from({ length: 60 }).map((_, index) =>
       makePost({
@@ -279,7 +333,7 @@ describe('PreviewServer', () => {
     expect(separatorCount).toBe(1);
 
     expect(html).toContain('.archive-day-separator { position: relative; height: 2px;');
-    expect(html).toContain('color: var(--color);');
+    expect(html).toContain('color: var(--pico-color, var(--color));');
     expect(html).toContain('border-top: 1px solid currentColor;');
     expect(html).toContain('opacity: .18;');
     expect(html).toContain('.archive-day-separator::before');

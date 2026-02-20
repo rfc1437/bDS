@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
 import { ProjectSelector } from '../ProjectSelector';
+import { getRendererPicoTheme } from '../../utils/picoTheme';
 import './StatusBar.css';
 
 export const StatusBar: React.FC = () => {
@@ -9,6 +10,7 @@ export const StatusBar: React.FC = () => {
     tasks,
     selectedPostId,
     totalPosts,
+    picoTheme,
   } = useAppStore();
 
   const [selectedPostStatus, setSelectedPostStatus] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export const StatusBar: React.FC = () => {
   }, [selectedPostId]);
 
   const runningTasks = tasks.filter(t => t.status === 'running');
+  const activeTheme = getRendererPicoTheme(picoTheme);
 
   return (
     <div className="status-bar">
@@ -59,6 +62,10 @@ export const StatusBar: React.FC = () => {
         </div>
         <div className="status-bar-item">
           <span>{media.length} media</span>
+        </div>
+
+        <div className="status-bar-item theme-badge">
+          <span>Theme: {activeTheme}</span>
         </div>
 
         {/* App Name */}

@@ -12,7 +12,7 @@ import type {
 const STORAGE_KEY = 'bds-app-state';
 
 // Tab types
-export type TabType = 'post' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'metadata-diff' | 'git-diff' | 'documentation';
+export type TabType = 'post' | 'media' | 'settings' | 'style' | 'tags' | 'chat' | 'import' | 'metadata-diff' | 'git-diff' | 'documentation';
 
 export interface Tab {
   type: TabType;
@@ -65,6 +65,7 @@ interface AppState {
   selectedPostId: string | null;
   selectedMediaId: string | null;
   preferredEditorMode: EditorMode;
+  picoTheme: import('../../main/shared/picoThemes').PicoThemeName | undefined;
   gitDiffPreferences: GitDiffPreferences;
   
   // Data
@@ -113,6 +114,7 @@ interface AppState {
   setSelectedPost: (id: string | null) => void;
   setSelectedMedia: (id: string | null) => void;
   setPreferredEditorMode: (mode: EditorMode) => void;
+  setPicoTheme: (theme: import('../../main/shared/picoThemes').PicoThemeName | undefined) => void;
   setGitDiffPreferences: (preferences: GitDiffPreferences) => void;
   
   setPosts: (posts: PostData[], hasMore?: boolean, total?: number) => void;
@@ -166,6 +168,7 @@ export const useAppStore = create<AppState>()(
       selectedPostId: null,
       selectedMediaId: null,
       preferredEditorMode: 'wysiwyg',
+      picoTheme: undefined,
       gitDiffPreferences: {
         wordWrap: true,
         viewStyle: 'inline',
@@ -289,6 +292,7 @@ export const useAppStore = create<AppState>()(
       setSelectedPost: (id) => set({ selectedPostId: id }),
       setSelectedMedia: (id) => set({ selectedMediaId: id }),
       setPreferredEditorMode: (mode) => set({ preferredEditorMode: mode }),
+      setPicoTheme: (theme) => set({ picoTheme: theme }),
       setGitDiffPreferences: (preferences) => set({ gitDiffPreferences: preferences }),
       
       // Post Actions
@@ -376,6 +380,7 @@ export const useAppStore = create<AppState>()(
         selectedPostId: state.selectedPostId,
         selectedMediaId: state.selectedMediaId,
         preferredEditorMode: state.preferredEditorMode,
+        picoTheme: state.picoTheme,
         gitDiffPreferences: state.gitDiffPreferences,
         // Tabs are persisted here for now (project-specific persistence handled separately)
         tabs: state.tabs,
@@ -393,6 +398,7 @@ export const useAppStore = create<AppState>()(
           activeTabId: persistedState.activeTabId || null,
           panelActiveTab: persistedState.panelActiveTab || current.panelActiveTab,
           dirtyPosts: new Set(persistedState.dirtyPosts || []),
+          picoTheme: persistedState.picoTheme || current.picoTheme,
           gitDiffPreferences: persistedState.gitDiffPreferences || current.gitDiffPreferences,
         };
       },

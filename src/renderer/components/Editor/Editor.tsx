@@ -9,6 +9,7 @@ import { LinkedMediaPanel } from '../LinkedMediaPanel';
 import { ErrorModal } from '../ErrorModal';
 import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 import { SettingsView } from '../SettingsView';
+import { StyleView } from '../StyleView/StyleView';
 import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
@@ -1697,6 +1698,7 @@ export const Editor: React.FC = () => {
   const showPost = activeTab?.type === 'post';
   const showMedia = activeTab?.type === 'media';
   const showSettings = activeTab?.type === 'settings';
+  const showStyle = activeTab?.type === 'style';
   const showTags = activeTab?.type === 'tags';
   const showChat = activeTab?.type === 'chat';
   const showImport = activeTab?.type === 'import';
@@ -1759,6 +1761,16 @@ export const Editor: React.FC = () => {
     return (
       <div className="editor">
         <SettingsView />
+        {renderErrorModal()}
+        {renderConfirmDeleteModal()}
+      </div>
+    );
+  }
+
+  if (showStyle) {
+    return (
+      <div className="editor">
+        <StyleView />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

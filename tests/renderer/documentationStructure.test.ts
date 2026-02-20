@@ -23,7 +23,8 @@ describe('documentation structure and presentation', () => {
     );
     const source = readFileSync(viewPath, 'utf8');
 
-    expect(source).toContain('@picocss/pico/css/pico.conditional.slate.min.css');
+    expect(source).toContain('ensureRendererPicoThemeStylesheet');
+    expect(source).toContain('getRendererPicoTheme');
     expect(source).toContain('className="documentation-content markdown-body pico"');
     expect(source).toContain('data-theme="auto"');
   });

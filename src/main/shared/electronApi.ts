@@ -42,6 +42,7 @@ export interface ProjectMetadata {
   mainLanguage?: string;
   defaultAuthor?: string;
   maxPostsPerPage?: number;
+  picoTheme?: import('./picoThemes').PicoThemeName;
 }
 
 export interface ProjectData {
@@ -528,7 +529,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('./picoThemes').PicoThemeName }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;

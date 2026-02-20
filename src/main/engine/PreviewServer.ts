@@ -18,6 +18,7 @@ import {
   type MediaEngineContract,
   type PostMediaEngineContract,
 } from './PageRenderer';
+import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
 
 interface ActiveProjectContext {
   projectId: string;
@@ -172,10 +173,24 @@ export class PreviewServer {
       const language = metadata?.mainLanguage?.trim() || 'en';
       const pageTitle = resolvePageTitle(metadata, context.projectName, context.projectDescription);
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
-      const htmlRewriteContext = await this.buildHtmlRewriteContext();
-
       const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+      const requestTheme = sanitizePicoTheme(requestUrl.searchParams.get('theme'));
+      const previewThemeMode = sanitizePicoThemeMode(requestUrl.searchParams.get('mode'));
+      const appliedTheme = requestTheme ?? sanitizePicoTheme((metadata as { picoTheme?: unknown } | null)?.picoTheme);
+      const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
+      const htmlRewriteContext = await this.buildHtmlRewriteContext();
       const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
+
+      if (pathname === '/__style-preview') {
+        const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
+          pageTitle,
+          language,
+          picoStylesheetHref,
+          htmlThemeAttribute: previewThemeMode && previewThemeMode !== 'auto' ? `data-theme="${previewThemeMode}"` : undefined,
+        });
+        this.respond(res, 200, stylePreviewHtml);
+        return;
+      }
 
       const asset = await this.resolveAsset(pathname);
       if (asset) {
@@ -198,11 +213,15 @@ export class PreviewServer {
       const result = await this.resolveRoute(pathname, maxPostsPerPage, htmlRewriteContext, {
         pageTitle,
         language,
+        picoStylesheetHref,
+        htmlThemeAttribute: undefined,
       });
       if (!result) {
         const notFoundHtml = await this.pageRenderer.renderNotFound({
           page_title: '404 Not Found',
           language,
+          pico_stylesheet_href: picoStylesheetHref,
+          html_theme_attribute: undefined,
         });
         this.respond(res, 404, notFoundHtml);
         return;
@@ -219,7 +238,7 @@ export class PreviewServer {
     pathname: string,
     maxPostsPerPage: number,
     rewriteContext: HtmlRewriteContext,
-    pageContext: { pageTitle: string; language: string },
+    pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
   ): Promise<string | null> {
     const routePagination = parseRoutePagination(pathname);
     if (!routePagination) {
@@ -244,6 +263,8 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -255,6 +276,8 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -269,6 +292,8 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -280,6 +305,8 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -293,6 +320,8 @@ export class PreviewServer {
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -308,6 +337,8 @@ export class PreviewServer {
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -323,6 +354,8 @@ export class PreviewServer {
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -338,6 +371,8 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -355,6 +390,8 @@ export class PreviewServer {
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -372,6 +409,8 @@ export class PreviewServer {
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -387,6 +426,8 @@ export class PreviewServer {
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
@@ -399,10 +440,43 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
     }
 
     return null;
+  }
+
+  private async renderStylePreview(
+    rewriteContext: HtmlRewriteContext,
+    pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
+  ): Promise<string> {
+    const result = await this.loadPublishedSnapshotsPage({ status: 'published' }, {
+      maxPostsPerPage: 10,
+      page: 1,
+    });
+
+    if (result.posts.length === 0) {
+      return this.pageRenderer.renderNotFound({
+        page_title: pageContext.pageTitle,
+        language: pageContext.language,
+        pico_stylesheet_href: pageContext.picoStylesheetHref,
+        html_theme_attribute: pageContext.htmlThemeAttribute,
+      });
+    }
+
+    return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'date',
+      archiveContext: { kind: 'root' },
+      basePathname: '/__style-preview',
+      pagination: { page: 1, maxPostsPerPage: 10, totalPosts: result.totalPosts },
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, this.postEngine);
   }
 
   private async findPublishedPostBySlug(slug: string, dateFilter?: { year: number; month: number }): Promise<PostData | null> {
@@ -588,7 +662,7 @@ export class PreviewServer {
     const match = pathname.match(/^\/assets\/([^/]+)$/);
     if (!match) return null;
 
-    const assetName = match[1] as keyof typeof PREVIEW_ASSETS;
+    const assetName = match[1];
     const assetDefinition = PREVIEW_ASSETS[assetName];
     if (!assetDefinition) return null;
 

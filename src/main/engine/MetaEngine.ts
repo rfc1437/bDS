@@ -5,6 +5,7 @@ import { app } from 'electron';
 import { eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, projects } from '../database/schema';
+import { sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
 import {
   normalizeTaxonomyTerm,
   normalizeNonEmptyTaxonomyTerm,
@@ -22,6 +23,7 @@ export interface ProjectMetadata {
   mainLanguage?: string; // Main language for AI-generated content (ISO code, e.g., 'en', 'de', 'es')
   defaultAuthor?: string; // Default author for new posts and media
   maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
+  picoTheme?: PicoThemeName; // Selected Pico CSS theme for preview/rendering
 }
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
@@ -61,10 +63,12 @@ function sanitizePublicUrl(value: unknown): string | undefined {
 function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
   const publicUrl = sanitizePublicUrl(metadata.publicUrl);
+  const picoTheme = sanitizePicoTheme(metadata.picoTheme);
   return {
     ...metadata,
     publicUrl,
     maxPostsPerPage,
+    picoTheme,
   };
 }
 
@@ -179,6 +183,9 @@ export class MetaEngine extends EventEmitter {
     if (updates.maxPostsPerPage !== undefined) {
       normalizedUpdates.maxPostsPerPage = sanitizeMaxPostsPerPage(updates.maxPostsPerPage);
     }
+    if (updates.picoTheme !== undefined) {
+      normalizedUpdates.picoTheme = sanitizePicoTheme(updates.picoTheme);
+    }
 
     if (!this.projectMetadata) {
       this.projectMetadata = normalizeProjectMetadata({
@@ -189,6 +196,7 @@ export class MetaEngine extends EventEmitter {
         mainLanguage: normalizedUpdates.mainLanguage,
         defaultAuthor: normalizedUpdates.defaultAuthor,
         maxPostsPerPage: normalizedUpdates.maxPostsPerPage,
+        picoTheme: normalizedUpdates.picoTheme,
       });
     } else {
       this.projectMetadata = normalizeProjectMetadata({

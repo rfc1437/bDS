@@ -89,3 +89,8 @@
   font-weight: 600;
   letter-spacing: 0.5px;
 }
+
+.status-bar-item.theme-badge {
+  border: 1px solid var(--vscode-statusBar-border, transparent);
+  border-radius: 3px;
+}

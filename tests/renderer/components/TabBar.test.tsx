@@ -86,4 +86,15 @@ describe('TabBar', () => {
 
     expect(container.querySelector('.tab-bar')).toBeNull();
   });
+
+  it('renders style tab label', async () => {
+    useAppStore.setState({
+      tabs: [{ type: 'style', id: 'style', isTransient: false }],
+      activeTabId: 'style',
+    });
+
+    render(<TabBar />);
+
+    expect(await screen.findByText('Style')).toBeInTheDocument();
+  });
 });

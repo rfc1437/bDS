@@ -343,6 +343,29 @@ describe('Tab Management', () => {
 
       expect(getStore().tabs).toHaveLength(1);
     });
+
+    it('should open style as a dedicated tab', () => {
+      getStore().openTab({ type: 'style', id: 'style', isTransient: false });
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().tabs[0].type).toBe('style');
+      expect(getStore().activeTabId).toBe('style');
+    });
+
+    it('should restore style tab from persisted state', () => {
+      const tabState = {
+        tabs: [
+          { type: 'style' as const, id: 'style', isTransient: false },
+        ],
+        activeTabId: 'style',
+      };
+
+      getStore().restoreTabState(tabState);
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().tabs[0].type).toBe('style');
+      expect(getStore().activeTabId).toBe('style');
+    });
   });
 
   describe('Multiple Tab Types', () => {

@@ -580,6 +580,33 @@ describe('MetaEngine', () => {
       expect(metadata?.defaultAuthor).toBe('Loaded Author');
     });
 
+    it('should persist picoTheme to filesystem', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Styled Project',
+        picoTheme: 'slate',
+      } as any);
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+      expect(parsed.picoTheme).toBe('slate');
+    });
+
+    it('should load picoTheme from filesystem', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      mockFiles.set(projectPath, JSON.stringify({
+        name: 'Loaded Project',
+        picoTheme: 'zinc',
+      }));
+
+      await metaEngine.loadProjectMetadata();
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect((metadata as any)?.picoTheme).toBe('zinc');
+    });
+
     it('should set and get maxPostsPerPage in project metadata', async () => {
       await metaEngine.setProjectMetadata({
         name: 'My Blog',
