@@ -299,6 +299,47 @@ describe('PreviewServer', () => {
     expect(diagonalHtml).toContain('data-orientation="mixed-diagonal"');
   });
 
+  it('serves draft content for single post route when draft query flag and postId are provided', async () => {
+    const publishedPost = makePost({
+      id: 'post-1',
+      slug: 'shared-slug',
+      title: 'Published Title',
+      content: 'Published body',
+      status: 'published',
+      createdAt: new Date('2025-01-03T10:00:00.000Z'),
+    });
+    const draftPost = makePost({
+      id: 'post-2',
+      slug: 'shared-slug',
+      title: 'Draft Title',
+      content: 'Draft-only body',
+      status: 'draft',
+      createdAt: new Date('2025-01-03T10:00:00.000Z'),
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([publishedPost, draftPost]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const publishedResponse = await fetch(`${server.getBaseUrl()}/posts/shared-slug`);
+    expect(publishedResponse.status).toBe(200);
+    const publishedHtml = await publishedResponse.text();
+    expect(publishedHtml).toContain('Published Title');
+    expect(publishedHtml).toContain('Published body');
+    expect(publishedHtml).not.toContain('Draft-only body');
+
+    const draftResponse = await fetch(`${server.getBaseUrl()}/posts/shared-slug?draft=true&postId=post-2`);
+    expect(draftResponse.status).toBe(200);
+    const draftHtml = await draftResponse.text();
+    expect(draftHtml).toContain('Draft Title');
+    expect(draftHtml).toContain('Draft-only body');
+    expect(draftHtml).not.toContain('Published body');
+  });
+
   it('uses selected pico theme stylesheet from project metadata', async () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),

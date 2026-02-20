@@ -179,6 +179,8 @@ export class PreviewServer {
       const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
       const requestTheme = sanitizePicoTheme(requestUrl.searchParams.get('theme'));
       const previewThemeMode = sanitizePicoThemeMode(requestUrl.searchParams.get('mode'));
+      const useDraftContent = requestUrl.searchParams.get('draft') === 'true';
+      const draftPostId = requestUrl.searchParams.get('postId') || undefined;
       const appliedTheme = requestTheme ?? sanitizePicoTheme((metadata as { picoTheme?: unknown } | null)?.picoTheme);
       const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
       const htmlRewriteContext = await this.buildHtmlRewriteContext();
@@ -218,7 +220,10 @@ export class PreviewServer {
         language,
         picoStylesheetHref,
         htmlThemeAttribute: undefined,
-      }, categorySettings, listExcludedCategories);
+      }, categorySettings, listExcludedCategories, {
+        useDraftContent,
+        draftPostId,
+      });
       if (!result) {
         const notFoundHtml = await this.pageRenderer.renderNotFound({
           page_title: '404 Not Found',
@@ -244,6 +249,7 @@ export class PreviewServer {
     pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
     listExcludedCategories: string[],
+    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
   ): Promise<string | null> {
     const routePagination = parseRoutePagination(pathname);
     if (!routePagination) {
@@ -263,7 +269,7 @@ export class PreviewServer {
       const month = Number(postsYearMonthSlugMatch[2]);
       const slug = postsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
       if (month < 1 || month > 12) return null;
-      const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
+      const post = await this.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1 });
       if (!post) return null;
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
@@ -276,7 +282,7 @@ export class PreviewServer {
     const postsSlugMatch = pagedPathname.match(/^\/posts\/([^/]+)$/);
     if (postsSlugMatch) {
       const slug = postsSlugMatch[1].replace(/\.html?$/i, '');
-      const post = await this.findPublishedPostBySlug(slug);
+      const post = await this.findSinglePostBySlug(slug, singlePostOptions);
       if (!post) return null;
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
@@ -292,7 +298,7 @@ export class PreviewServer {
       const month = Number(legacyPostsYearMonthSlugMatch[2]);
       const slug = legacyPostsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
       if (month < 1 || month > 12) return null;
-      const post = await this.findPublishedPostBySlug(slug, { year, month: month - 1 });
+      const post = await this.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1 });
       if (!post) return null;
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
@@ -305,7 +311,7 @@ export class PreviewServer {
     const legacyPostsSlugMatch = pagedPathname.match(/^\/post\/([^/]+)$/);
     if (legacyPostsSlugMatch) {
       const slug = legacyPostsSlugMatch[1].replace(/\.html?$/i, '');
-      const post = await this.findPublishedPostBySlug(slug);
+      const post = await this.findSinglePostBySlug(slug, singlePostOptions);
       if (!post) return null;
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
@@ -373,8 +379,7 @@ export class PreviewServer {
       const month = Number(daySlugMatch[2]);
       const day = Number(daySlugMatch[3]);
       const slug = daySlugMatch[4];
-      const posts = await this.loadPostsForDay(year, month, day);
-      const post = posts.find((candidate) => candidate.slug === slug) || null;
+      const post = await this.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1, day });
       if (!post) return null;
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
@@ -508,6 +513,31 @@ export class PreviewServer {
     if (!match) return null;
 
     return match;
+  }
+
+  private async findSinglePostBySlug(
+    slug: string,
+    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+    dateFilter?: { year: number; month: number; day?: number },
+  ): Promise<PostData | null> {
+    if (singlePostOptions?.useDraftContent && singlePostOptions.draftPostId) {
+      const draftCandidate = await this.postEngine.getPost(singlePostOptions.draftPostId);
+      if (draftCandidate && draftCandidate.status === 'draft' && draftCandidate.slug === slug) {
+        if (!dateFilter) {
+          return draftCandidate;
+        }
+
+        const sameYear = draftCandidate.createdAt.getFullYear() === dateFilter.year;
+        const sameMonth = draftCandidate.createdAt.getMonth() === dateFilter.month;
+        const sameDay = dateFilter.day === undefined || draftCandidate.createdAt.getDate() === dateFilter.day;
+        if (sameYear && sameMonth && sameDay) {
+          return draftCandidate;
+        }
+      }
+    }
+
+    const fallbackDateFilter = dateFilter ? { year: dateFilter.year, month: dateFilter.month } : undefined;
+    return this.findPublishedPostBySlug(slug, fallbackDateFilter);
   }
 
   private async loadPostsForDay(

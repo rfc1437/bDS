@@ -765,6 +765,19 @@ describe('IPC Handlers', () => {
 
         expect(result).toBeNull();
       });
+
+      it('should return draft preview URL when draft option is enabled', async () => {
+        mockPostEngine.getPost.mockResolvedValue(createMockPost({
+          id: 'post-1',
+          slug: 'my-post',
+          createdAt: new Date('2026-02-16T12:00:00.000Z'),
+        }));
+
+        const result = await invokeHandler('posts:getPreviewUrl', 'post-1', { draft: true });
+
+        expect(mockPostEngine.getPost).toHaveBeenCalledWith('post-1');
+        expect(result).toBe('http://127.0.0.1:4123/2026/02/16/my-post?draft=true&postId=post-1');
+      });
     });
 
     describe('posts:getAll', () => {

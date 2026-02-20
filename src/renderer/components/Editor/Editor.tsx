@@ -205,7 +205,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     let cancelled = false;
     setPreviewUrl(null);
 
-    window.electronAPI?.posts.getPreviewUrl(postId)
+    window.electronAPI?.posts.getPreviewUrl(postId, { draft: true })
       .then((url) => {
         if (!cancelled) {
           setPreviewUrl(url);

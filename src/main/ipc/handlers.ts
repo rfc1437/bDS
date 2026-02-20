@@ -346,7 +346,7 @@ export function registerIpcHandlers(): void {
     return engine.getPost(id);
   });
 
-  safeHandle('posts:getPreviewUrl', async (_, id: string) => {
+  safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean }) => {
     const engine = getPostEngine();
     const post = await engine.getPost(id);
 
@@ -356,6 +356,10 @@ export function registerIpcHandlers(): void {
 
     const createdAt = resolvePostCreatedAt(post);
     const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
+    if (options?.draft) {
+      return `http://127.0.0.1:4123${canonicalPath}?draft=true&postId=${encodeURIComponent(id)}`;
+    }
+
     return `http://127.0.0.1:4123${canonicalPath}`;
   });
 

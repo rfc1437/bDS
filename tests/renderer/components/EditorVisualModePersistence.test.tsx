@@ -161,7 +161,7 @@ describe('Editor visual mode persistence', () => {
     (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost());
     (window as any).electronAPI.posts.hasPublishedVersion = vi.fn().mockReturnValue(neverSettles);
     (window as any).electronAPI.posts.update = vi.fn().mockResolvedValue(null);
-    (window as any).electronAPI.posts.getPreviewUrl = vi.fn().mockResolvedValue('http://127.0.0.1:4123/2026/02/16/test-post');
+    (window as any).electronAPI.posts.getPreviewUrl = vi.fn().mockResolvedValue('http://127.0.0.1:4123/2026/02/16/test-post?draft=true&postId=post-1');
     (window as any).electronAPI.meta.getCategories = vi.fn().mockReturnValue(neverSettles);
 
     useAppStore.setState({
@@ -202,7 +202,7 @@ describe('Editor visual mode persistence', () => {
     });
   });
 
-  it('uses canonical preview server URL in preview mode iframe', async () => {
+  it('uses editor preview HTML in preview mode iframe', async () => {
     const { getByTitle, container } = render(<PostEditor postId="post-1" />);
 
     await act(async () => {
@@ -216,11 +216,12 @@ describe('Editor visual mode persistence', () => {
       await Promise.resolve();
     });
 
-    expect((window as any).electronAPI.posts.getPreviewUrl).toHaveBeenCalledWith('post-1');
+    expect((window as any).electronAPI.posts.getPreviewUrl).toHaveBeenCalledWith('post-1', { draft: true });
 
     const frame = container.querySelector('.editor-preview-frame') as HTMLIFrameElement | null;
     expect(frame).not.toBeNull();
-    expect(frame?.getAttribute('src')).toBe('http://127.0.0.1:4123/2026/02/16/test-post');
+    expect(frame?.getAttribute('src')).toBe('http://127.0.0.1:4123/2026/02/16/test-post?draft=true&postId=post-1');
+    expect(frame?.getAttribute('srcdoc')).toBeNull();
 
     expect(container.querySelector('.preview-content')).toBeNull();
   });
