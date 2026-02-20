@@ -177,6 +177,7 @@ describe('PreviewServer', () => {
     expect(rootHtml).toContain('href="/assets/pico.min.css"');
     expect(rootHtml).toContain('href="/assets/lightbox.min.css"');
     expect(rootHtml).toContain('src="/assets/lightbox.min.js"');
+    expect(rootHtml).toContain('src="/assets/d3.layout.cloud.js"');
     expect(rootHtml).not.toContain('cdn.jsdelivr.net');
 
     const picoResponse = await fetch(`${server.getBaseUrl()}/assets/pico.min.css`);
@@ -191,6 +192,10 @@ describe('PreviewServer', () => {
     expect(lightboxJsResponse.status).toBe(200);
     expect(lightboxJsResponse.headers.get('content-type')).toContain('application/javascript');
 
+    const d3CloudJsResponse = await fetch(`${server.getBaseUrl()}/assets/d3.layout.cloud.js`);
+    expect(d3CloudJsResponse.status).toBe(200);
+    expect(d3CloudJsResponse.headers.get('content-type')).toContain('application/javascript');
+
     const lightboxPrevImageResponse = await fetch(`${server.getBaseUrl()}/images/prev.png`);
     expect(lightboxPrevImageResponse.status).toBe(200);
     expect(lightboxPrevImageResponse.headers.get('content-type')).toContain('image/png');
@@ -198,6 +203,90 @@ describe('PreviewServer', () => {
     const lightboxLoadingImageResponse = await fetch(`${server.getBaseUrl()}/images/loading.gif`);
     expect(lightboxLoadingImageResponse.status).toBe(200);
     expect(lightboxLoadingImageResponse.headers.get('content-type')).toContain('image/gif');
+  });
+
+  it('renders tag_cloud macro with normalized tag usage and tag archive links', async () => {
+    const posts = [
+      makePost({
+        id: 'tags-1',
+        slug: 'tag-cloud-source',
+        title: 'Tag Cloud Source',
+        tags: ['TypeScript', 'Electron'],
+        content: '[[tag_cloud]]',
+      }),
+      makePost({
+        id: 'tags-2',
+        slug: 'second',
+        title: 'Second',
+        tags: ['TypeScript'],
+      }),
+      makePost({
+        id: 'tags-3',
+        slug: 'third',
+        title: 'Third',
+        tags: ['Electron', 'SQLite', 'TypeScript'],
+      }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/posts/tag-cloud-source`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('class="macro-tag-cloud"');
+    expect(html).toContain('data-tag-cloud="true"');
+    expect(html).toContain('data-orientation="horizontal"');
+    expect(html).toContain('TypeScript');
+    expect(html).toContain('/tag/TypeScript/');
+    expect(html).toContain('/tag/Electron/');
+    expect(html).toContain('/tag/SQLite/');
+    expect(html).toContain('&quot;color&quot;:&quot;rgb(');
+    expect(html).toContain('&quot;color&quot;:&quot;red&quot;');
+    expect(html).toContain('&quot;color&quot;:&quot;blue&quot;');
+  });
+
+  it('supports tag_cloud orientation parameter modes', async () => {
+    const posts = [
+      makePost({
+        id: 'orientation-1',
+        slug: 'orientation-hv',
+        title: 'Orientation HV',
+        tags: ['alpha', 'beta'],
+        content: '[[tag_cloud orientation="mixed_hv"]]',
+      }),
+      makePost({
+        id: 'orientation-2',
+        slug: 'orientation-diagonal',
+        title: 'Orientation Diagonal',
+        tags: ['alpha'],
+        content: '[[tag_cloud orientation="mixed_diagonal"]]',
+      }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const hvResponse = await fetch(`${server.getBaseUrl()}/posts/orientation-hv`);
+    expect(hvResponse.status).toBe(200);
+    const hvHtml = await hvResponse.text();
+    expect(hvHtml).toContain('data-orientation="mixed-hv"');
+
+    const diagonalResponse = await fetch(`${server.getBaseUrl()}/posts/orientation-diagonal`);
+    expect(diagonalResponse.status).toBe(200);
+    const diagonalHtml = await diagonalResponse.text();
+    expect(diagonalHtml).toContain('data-orientation="mixed-diagonal"');
   });
 
   it('uses selected pico theme stylesheet from project metadata', async () => {

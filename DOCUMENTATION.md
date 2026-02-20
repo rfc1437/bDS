@@ -9,6 +9,7 @@
 - [Working with posts](#working-with-posts)
 - [Working with pages](#working-with-pages)
 - [Working with media](#working-with-media)
+- [Using macros](#using-macros)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
@@ -138,6 +139,56 @@ After placing media in content, run a quick preview pass to confirm placement an
 - Media management includes metadata quality, not only file import.
 - Add alt text and captions during import, not as a postponed task.
 - Commit content and related media in the same change when possible.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Using macros
+
+Macros let you insert dynamic content blocks directly inside post/page Markdown by using `[[macro_name ...]]` syntax. bDS expands these macros during preview and generated output using local assets only.
+
+Use macros when you need reusable rich blocks (for example embedded videos, media galleries, archive grids, or computed tag clouds) without writing raw HTML.
+
+### Supported macros
+
+- `[[youtube id="VIDEO_ID" title="Optional title"]]`
+	- Embeds a YouTube video.
+	- `id` is required.
+	- `title` is optional (used for accessibility label).
+
+- `[[vimeo id="VIDEO_ID" title="Optional title"]]`
+	- Embeds a Vimeo video.
+	- `id` is required.
+	- `title` is optional.
+
+- `[[gallery columns="3" caption="Optional caption"]]`
+	- Renders a lightbox-enabled gallery using media linked to the current post.
+	- `columns` is optional (`1` to `6`, default `3`).
+	- `caption` is optional.
+
+- `[[photo_archive year="2025" month="2"]]`
+	- Renders a photo archive grid from media dates.
+	- `year` is optional (when omitted, recent months are shown).
+	- `month` is optional (used with `year` for a single month view).
+	- Legacy alias `[[photo_album ...]]` is also supported.
+
+- `[[tag_cloud orientation="mixed_diagonal" width="900" height="420"]]`
+	- Builds a word cloud from published tag usage counts.
+	- Word size scales by usage quantity.
+	- Word color scales by quantity from least to most: blue → green → yellow → orange → red.
+	- Clicking a word opens that tag archive route.
+	- `orientation` is optional and supports:
+		- `horizontal` (all words horizontal)
+		- `mixed_hv` (mix of horizontal and vertical)
+		- `mixed_diagonal` (mix of horizontal/vertical/diagonal angles)
+	- `width` and `height` are optional (defaults `900` and `420`).
+
+### Key takeaways
+
+- Macros are inserted directly in Markdown and expanded during preview/publish rendering.
+- Use macro parameters to control behavior without leaving the editor.
+- `tag_cloud` is data-driven and links directly into tag archive navigation.
 
 [↑ Back to In this article](#in-this-article)
 

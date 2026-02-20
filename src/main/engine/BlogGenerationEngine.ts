@@ -514,7 +514,7 @@ export class BlogGenerationEngine {
       pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
     };
 
-    const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine);
+    const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
     const rewriteContext = this.buildHtmlRewriteContext(publishedPosts);
 
     let pagesGenerated = 0;

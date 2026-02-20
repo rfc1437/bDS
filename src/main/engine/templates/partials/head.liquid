@@ -6,5 +6,120 @@
   <link rel="stylesheet" href="{{ resolved_pico_stylesheet_href }}" />
   <link rel="stylesheet" href="/assets/lightbox.min.css" />
   {% render 'partials/styles' %}
+  <script defer src="/assets/d3.layout.cloud.js"></script>
   <script defer src="/assets/lightbox.min.js"></script>
+  <script>
+    (function () {
+      function parseWords(rawWords) {
+        if (!rawWords || typeof rawWords !== 'string') {
+          return [];
+        }
+
+        try {
+          const parsed = JSON.parse(rawWords);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function drawTagCloud(container) {
+        const cloudFactory = window.d3 && window.d3.layout && typeof window.d3.layout.cloud === 'function'
+          ? window.d3.layout.cloud
+          : null;
+
+        if (!cloudFactory) {
+          return;
+        }
+
+        const rawWords = container.getAttribute('data-tag-cloud-words');
+        const words = parseWords(rawWords);
+        if (words.length === 0) {
+          return;
+        }
+
+        const width = Number.parseInt(container.getAttribute('data-width') || '900', 10) || 900;
+        const height = Number.parseInt(container.getAttribute('data-height') || '420', 10) || 420;
+        const orientation = container.getAttribute('data-orientation') || 'horizontal';
+
+        const resolveRotation = () => {
+          if (orientation === 'mixed-hv') {
+            return Math.random() < 0.5 ? 0 : 90;
+          }
+
+          if (orientation === 'mixed-diagonal') {
+            const diagonalAngles = [-60, -30, 0, 30, 60, 90];
+            const index = Math.floor(Math.random() * diagonalAngles.length);
+            return diagonalAngles[index];
+          }
+
+          return 0;
+        };
+
+        const svgNode = container.querySelector('svg.tag-cloud-canvas');
+        if (!svgNode) {
+          return;
+        }
+
+        while (svgNode.firstChild) {
+          svgNode.removeChild(svgNode.firstChild);
+        }
+
+        cloudFactory()
+          .size([width, height])
+          .words(words.map((word) => ({ ...word })))
+          .padding(4)
+          .rotate(() => resolveRotation())
+          .font('sans-serif')
+          .fontSize((word) => word.size)
+          .on('end', (layoutWords) => {
+            svgNode.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            svgNode.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('transform', `translate(${width / 2},${height / 2})`);
+
+            for (const word of layoutWords) {
+              const textNode = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              textNode.textContent = word.text;
+              textNode.setAttribute('text-anchor', 'middle');
+              textNode.setAttribute('transform', `translate(${word.x},${word.y})rotate(${word.rotate || 0})`);
+              textNode.style.fontFamily = 'sans-serif';
+              textNode.style.fontSize = `${word.size}px`;
+              textNode.style.fill = typeof word.color === 'string' && word.color.length > 0
+                ? word.color
+                : 'currentColor';
+              textNode.style.cursor = 'pointer';
+              textNode.style.opacity = '0.9';
+
+              const titleNode = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+              titleNode.textContent = `${word.text} (${word.count})`;
+              textNode.appendChild(titleNode);
+
+              textNode.addEventListener('click', () => {
+                if (word && typeof word.url === 'string' && word.url.length > 0) {
+                  window.location.assign(word.url);
+                }
+              });
+
+              group.appendChild(textNode);
+            }
+
+            svgNode.appendChild(group);
+          })
+          .start();
+      }
+
+      function initTagClouds() {
+        const containers = document.querySelectorAll('[data-tag-cloud="true"]');
+        containers.forEach((container) => drawTagCloud(container));
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTagClouds, { once: true });
+      } else {
+        initTagClouds();
+      }
+    })();
+  </script>
 </head>

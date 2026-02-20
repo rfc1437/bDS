@@ -70,6 +70,7 @@
     "@picocss/pico": "^2.1.1",
     "@xmldom/xmldom": "^0.8.11",
     "chokidar": "^5.0.0",
+    "d3-cloud": "^1.2.8",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
     "dropbox": "^10.34.0",

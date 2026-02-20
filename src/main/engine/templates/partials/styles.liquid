@@ -4,7 +4,7 @@
   main { display: grid; gap: 1rem; }
   .post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); }
   .post iframe { width: 100%; min-height: 20rem; }
-  .macro-gallery, .macro-photo-archive { border: 1px dashed var(--pico-muted-border-color, var(--muted-border-color)); padding: .75rem; margin: 1rem 0; }
+  .macro-gallery, .macro-photo-archive, .macro-tag-cloud { border: 1px dashed var(--pico-muted-border-color, var(--muted-border-color)); padding: .75rem; margin: 1rem 0; }
   .gallery-container { display: grid; gap: .5rem; }
   .macro-gallery.gallery-cols-1 .gallery-container { grid-template-columns: 1fr; }
   .macro-gallery.gallery-cols-2 .gallery-container { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -22,6 +22,9 @@
   .photo-archive-month-label span { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .08em; text-transform: uppercase; color: var(--pico-muted-color, var(--muted-color)); }
   .photo-archive-gallery { display: grid; gap: .5rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .photo-archive-single-month .photo-archive-gallery { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .macro-tag-cloud { min-height: 14rem; }
+  .tag-cloud-canvas { display: block; width: 100%; height: auto; min-height: 12rem; }
+  .tag-cloud-empty { color: var(--pico-muted-color, var(--muted-color)); font-style: italic; }
   .archive-day-group { display: grid; grid-template-columns: 5.25rem 1fr; gap: 1.25rem; align-items: stretch; }
   .archive-day-marker { display: flex; justify-content: center; align-items: center; color: var(--pico-muted-color, var(--muted-color)); }
   .archive-day-marker span { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .16em; font-size: 1.05rem; font-weight: 600; text-transform: uppercase; }

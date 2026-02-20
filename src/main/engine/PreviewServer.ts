@@ -78,7 +78,7 @@ export class PreviewServer {
         projectDescription: activeProject?.description ?? undefined,
       };
     });
-    this.pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine);
+    this.pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
   }
 
   async start(preferredPort = 0): Promise<number> {

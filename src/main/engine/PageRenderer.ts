@@ -107,6 +107,64 @@ export interface PostMediaEngineContract {
 
 export interface PostEngineContract {
   getPost: (id: string) => Promise<PostData | null>;
+  getPostsFiltered?: (filter: { status?: 'draft' | 'published' | 'archived' }) => Promise<PostData[]>;
+}
+
+export interface TagUsageEntry {
+  tag: string;
+  count: number;
+}
+
+export type TagCloudOrientationMode = 'horizontal' | 'mixed-hv' | 'mixed-diagonal';
+
+export function normalizeTagCloudOrientation(value: string | undefined): TagCloudOrientationMode {
+  const normalized = (value || '').trim().toLowerCase();
+
+  if (normalized === 'mixed_hv' || normalized === 'mixed-hv' || normalized === 'hv' || normalized === 'horizontal_vertical') {
+    return 'mixed-hv';
+  }
+
+  if (normalized === 'mixed_diagonal' || normalized === 'mixed-diagonal' || normalized === 'diagonal' || normalized === 'diag') {
+    return 'mixed-diagonal';
+  }
+
+  return 'horizontal';
+}
+
+function interpolateChannel(start: number, end: number, t: number): number {
+  return Math.round(start + ((end - start) * t));
+}
+
+export function resolveTagCloudColor(normalizedRatio: number): string {
+  if (normalizedRatio >= 1) {
+    return 'red';
+  }
+
+  if (normalizedRatio <= 0) {
+    return 'blue';
+  }
+
+  const palette = [
+    [0, 0, 255],
+    [0, 128, 0],
+    [255, 255, 0],
+    [255, 165, 0],
+    [255, 0, 0],
+  ];
+
+  const scaled = normalizedRatio * (palette.length - 1);
+  const lowerIndex = Math.floor(scaled);
+  const upperIndex = Math.min(palette.length - 1, lowerIndex + 1);
+  const segmentRatio = scaled - lowerIndex;
+
+  const lowerColor = palette[lowerIndex];
+  const upperColor = palette[upperIndex];
+
+  const red = interpolateChannel(lowerColor[0], upperColor[0], segmentRatio);
+  const green = interpolateChannel(lowerColor[1], upperColor[1], segmentRatio);
+  const blue = interpolateChannel(lowerColor[2], upperColor[2], segmentRatio);
+
+  return `rgb(${red},${green},${blue})`;
 }
 
 export const PREVIEW_ASSETS: Record<string, { modulePath: string; contentType: string }> = {
@@ -129,6 +187,10 @@ export const PREVIEW_ASSETS: Record<string, { modulePath: string; contentType: s
   },
   'lightbox.min.js': {
     modulePath: 'lightbox2/dist/js/lightbox-plus-jquery.min.js',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+  'd3.layout.cloud.js': {
+    modulePath: 'd3-cloud/build/d3.layout.cloud.js',
     contentType: 'application/javascript; charset=utf-8',
   },
 };
@@ -377,6 +439,44 @@ export function renderPhotoArchiveMacro(params: Record<string, string>, mediaIte
   return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container">${monthsHtml}</div></div>`;
 }
 
+export function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageEntry[]): string {
+  const widthParam = parseIntegerParam(params.width);
+  const heightParam = parseIntegerParam(params.height);
+  const orientation = normalizeTagCloudOrientation(params.orientation);
+  const width = widthParam && widthParam >= 320 && widthParam <= 1600 ? widthParam : 900;
+  const height = heightParam && heightParam >= 180 && heightParam <= 900 ? heightParam : 420;
+
+  if (tagUsage.length === 0) {
+    return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}"><div class="tag-cloud-empty">No tags found.</div></div>`;
+  }
+
+  const minCount = Math.min(...tagUsage.map((entry) => entry.count));
+  const maxCount = Math.max(...tagUsage.map((entry) => entry.count));
+  const minFont = 14;
+  const maxFont = 56;
+
+  const words = tagUsage.map((entry) => {
+    const ratio = maxCount === minCount
+      ? 1
+      : (entry.count - minCount) / (maxCount - minCount);
+    const normalizedSize = maxCount === minCount
+      ? Math.round((minFont + maxFont) / 2)
+      : Math.round(minFont + ((entry.count - minCount) / (maxCount - minCount)) * (maxFont - minFont));
+
+    return {
+      text: entry.tag,
+      size: normalizedSize,
+      count: entry.count,
+      color: resolveTagCloudColor(ratio),
+      url: `/tag/${encodeURIComponent(entry.tag)}/`,
+    };
+  });
+
+  const wordsJson = escapeHtml(JSON.stringify(words));
+
+  return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-tag-cloud-words="${wordsJson}" data-width="${width}" data-height="${height}"><svg class="tag-cloud-canvas" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-label="Tag cloud"></svg></div>`;
+}
+
 export function isExternalOrSpecialUrl(value: string): boolean {
   const normalized = value.trim();
   if (!normalized) return false;
@@ -479,6 +579,7 @@ export function renderMacro(
   postId: string,
   mediaItems: MediaData[],
   linkedMediaIds: Set<string> | null,
+  tagUsage: TagUsageEntry[],
 ): string {
   const normalizedName = normalizeMacroName(name);
 
@@ -502,6 +603,10 @@ export function renderMacro(
 
   if (normalizedName === 'photo_archive') {
     return renderPhotoArchiveMacro(params, mediaItems);
+  }
+
+  if (normalizedName === 'tag_cloud') {
+    return renderTagCloudMacro(params, tagUsage);
   }
 
   return '';
@@ -581,11 +686,13 @@ export function recordToMap(record: unknown): Map<string, string> {
 export class PageRenderer {
   private readonly mediaEngine: MediaEngineContract;
   private readonly postMediaEngine: PostMediaEngineContract;
+  private readonly postEngineForMacros?: PostEngineContract;
   private readonly liquid: Liquid;
 
-  constructor(mediaEngine: MediaEngineContract, postMediaEngine: PostMediaEngineContract) {
+  constructor(mediaEngine: MediaEngineContract, postMediaEngine: PostMediaEngineContract, postEngineForMacros?: PostEngineContract) {
     this.mediaEngine = mediaEngine;
     this.postMediaEngine = postMediaEngine;
+    this.postEngineForMacros = postEngineForMacros;
 
     const templateRoots = [
       path.resolve(__dirname, 'templates'),
@@ -608,8 +715,13 @@ export class PageRenderer {
       };
 
       const needsMediaLookup = /\[\[(gallery|photo_archive|photo_album)\b/i.test(content);
+      const needsTagCloudLookup = /\[\[(tag_cloud)\b/i.test(content);
       const mediaItems = needsMediaLookup
         ? await this.mediaEngine.getAllMedia().catch(() => [] as MediaData[])
+        : [];
+
+      const tagUsage = needsTagCloudLookup
+        ? await this.getTagUsageData()
         : [];
 
       const linkedMediaIds = needsMediaLookup && postId
@@ -620,12 +732,38 @@ export class PageRenderer {
 
       const withMacros = content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
         const params = parseMacroParams(rawParams);
-        return renderMacro(macroName.toLowerCase(), params, postId, mediaItems, linkedMediaIds);
+        return renderMacro(macroName.toLowerCase(), params, postId, mediaItems, linkedMediaIds, tagUsage);
       });
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
       return rewriteRenderedHtmlUrls(markdownHtml, rewriteContext);
     });
+  }
+
+  private async getTagUsageData(): Promise<TagUsageEntry[]> {
+    if (!this.postEngineForMacros?.getPostsFiltered) {
+      return [];
+    }
+
+    const posts = await this.postEngineForMacros.getPostsFiltered({ status: 'published' }).catch(() => [] as PostData[]);
+    const tagCounts = new Map<string, number>();
+
+    for (const post of posts) {
+      const postTags = Array.isArray(post.tags) ? post.tags : [];
+      const uniqueTags = new Set<string>(
+        postTags
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0),
+      );
+
+      for (const tag of uniqueTags) {
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      }
+    }
+
+    return Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
   }
 
   buildListTemplateContext(

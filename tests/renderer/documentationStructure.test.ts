@@ -16,6 +16,18 @@ describe('documentation structure and presentation', () => {
     expect(markdown).toContain('## Who this guide is for');
   });
 
+  it('documents all supported macros in the user guide', () => {
+    const docPath = path.resolve(process.cwd(), 'DOCUMENTATION.md');
+    const markdown = readFileSync(docPath, 'utf8');
+
+    expect(markdown).toContain('## Using macros');
+    expect(markdown).toContain('[[youtube');
+    expect(markdown).toContain('[[vimeo');
+    expect(markdown).toContain('[[gallery');
+    expect(markdown).toContain('[[photo_archive');
+    expect(markdown).toContain('[[tag_cloud');
+  });
+
   it('scopes Pico conditional styling to the documentation view', () => {
     const viewPath = path.resolve(
       process.cwd(),
