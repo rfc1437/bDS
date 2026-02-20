@@ -243,13 +243,17 @@ describe('PreviewServer', () => {
     expect(html).toContain('class="macro-tag-cloud"');
     expect(html).toContain('data-tag-cloud="true"');
     expect(html).toContain('data-orientation="horizontal"');
+    expect(html).toContain('data-color-distribution="quantile"');
+    expect(html).toContain('data-color-easing="0.7"');
+    expect(html).toContain('data-color-theme="pico"');
     expect(html).toContain('TypeScript');
     expect(html).toContain('/tag/TypeScript/');
     expect(html).toContain('/tag/Electron/');
     expect(html).toContain('/tag/SQLite/');
-    expect(html).toContain('&quot;color&quot;:&quot;rgb(');
-    expect(html).toContain('&quot;color&quot;:&quot;red&quot;');
-    expect(html).toContain('&quot;color&quot;:&quot;blue&quot;');
+    expect(html).toContain('&quot;count&quot;:3');
+    expect(html).toContain('&quot;count&quot;:2');
+    expect(html).toContain('&quot;count&quot;:1');
+    expect(html).not.toContain('&quot;color&quot;');
   });
 
   it('supports tag_cloud orientation parameter modes', async () => {

@@ -131,42 +131,6 @@ export function normalizeTagCloudOrientation(value: string | undefined): TagClou
   return 'horizontal';
 }
 
-function interpolateChannel(start: number, end: number, t: number): number {
-  return Math.round(start + ((end - start) * t));
-}
-
-export function resolveTagCloudColor(normalizedRatio: number): string {
-  if (normalizedRatio >= 1) {
-    return 'red';
-  }
-
-  if (normalizedRatio <= 0) {
-    return 'blue';
-  }
-
-  const palette = [
-    [0, 0, 255],
-    [0, 128, 0],
-    [255, 255, 0],
-    [255, 165, 0],
-    [255, 0, 0],
-  ];
-
-  const scaled = normalizedRatio * (palette.length - 1);
-  const lowerIndex = Math.floor(scaled);
-  const upperIndex = Math.min(palette.length - 1, lowerIndex + 1);
-  const segmentRatio = scaled - lowerIndex;
-
-  const lowerColor = palette[lowerIndex];
-  const upperColor = palette[upperIndex];
-
-  const red = interpolateChannel(lowerColor[0], upperColor[0], segmentRatio);
-  const green = interpolateChannel(lowerColor[1], upperColor[1], segmentRatio);
-  const blue = interpolateChannel(lowerColor[2], upperColor[2], segmentRatio);
-
-  return `rgb(${red},${green},${blue})`;
-}
-
 export const PREVIEW_ASSETS: Record<string, { modulePath: string; contentType: string }> = {
   'pico.min.css': {
     modulePath: '@picocss/pico/css/pico.min.css',
@@ -447,7 +411,7 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
   const height = heightParam && heightParam >= 180 && heightParam <= 900 ? heightParam : 420;
 
   if (tagUsage.length === 0) {
-    return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}"><div class="tag-cloud-empty">No tags found.</div></div>`;
+    return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico"><div class="tag-cloud-empty">No tags found.</div></div>`;
   }
 
   const minCount = Math.min(...tagUsage.map((entry) => entry.count));
@@ -456,9 +420,6 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
   const maxFont = 56;
 
   const words = tagUsage.map((entry) => {
-    const ratio = maxCount === minCount
-      ? 1
-      : (entry.count - minCount) / (maxCount - minCount);
     const normalizedSize = maxCount === minCount
       ? Math.round((minFont + maxFont) / 2)
       : Math.round(minFont + ((entry.count - minCount) / (maxCount - minCount)) * (maxFont - minFont));
@@ -467,14 +428,13 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
       text: entry.tag,
       size: normalizedSize,
       count: entry.count,
-      color: resolveTagCloudColor(ratio),
       url: `/tag/${encodeURIComponent(entry.tag)}/`,
     };
   });
 
   const wordsJson = escapeHtml(JSON.stringify(words));
 
-  return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-tag-cloud-words="${wordsJson}" data-width="${width}" data-height="${height}"><svg class="tag-cloud-canvas" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-label="Tag cloud"></svg></div>`;
+  return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico" data-tag-cloud-words="${wordsJson}" data-width="${width}" data-height="${height}"><svg class="tag-cloud-canvas" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-label="Tag cloud"></svg></div>`;
 }
 
 export function isExternalOrSpecialUrl(value: string): boolean {

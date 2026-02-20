@@ -176,7 +176,9 @@ Use macros when you need reusable rich blocks (for example embedded videos, medi
 - `[[tag_cloud orientation="mixed_diagonal" width="900" height="420"]]`
 	- Builds a word cloud from published tag usage counts.
 	- Word size scales by usage quantity.
-	- Word color scales by quantity from least to most: blue → green → yellow → orange → red.
+	- Word color is theme-aware and uses Pico CSS semantic colors.
+	- Colors are distributed by quantity quantiles with easing, so dense datasets still show visible variation.
+	- Visual order remains least-to-most: blue → green → yellow → orange → red.
 	- Clicking a word opens that tag archive route.
 	- `orientation` is optional and supports:
 		- `horizontal` (all words horizontal)
