@@ -286,7 +286,7 @@ export class PreviewServer {
     if (pagedPathname === '/') {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published' }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: false,
+        archiveGrouping: true,
         routeKind: 'date',
         archiveContext: { kind: 'root' },
         basePathname: pagedPathname,

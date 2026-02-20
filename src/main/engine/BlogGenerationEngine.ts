@@ -574,7 +574,7 @@ export class BlogGenerationEngine {
       if (pagePosts.length === 0) break;
 
       const html = await pageRenderer.renderPostList(pagePosts, rewriteContext, {
-        archiveGrouping: false,
+        archiveGrouping: true,
         routeKind: 'date',
         archiveContext: { kind: 'root' },
         basePathname: '/',

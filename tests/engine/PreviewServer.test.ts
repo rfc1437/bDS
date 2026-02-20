@@ -152,6 +152,9 @@ describe('PreviewServer', () => {
     const html = await response.text();
     expect(html).toContain('<div class="post">');
     expect(html).toContain('<h1>Newest</h1>');
+    expect(html).toContain('archive-day-marker');
+    expect(html).toContain('03.01.2025');
+    expect(html).toContain('02.01.2025');
   });
 
   it('uses local CSS/JS assets and serves them from the preview server', async () => {

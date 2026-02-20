@@ -195,8 +195,8 @@ describe('BlogGenerationEngine', () => {
 
   it('generates root index.html for published posts', async () => {
     const posts = [
-      makePost({ id: '1', slug: 'first', title: 'First Post' }),
-      makePost({ id: '2', slug: 'second', title: 'Second Post' }),
+      makePost({ id: '1', slug: 'first', title: 'First Post', createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'second', title: 'Second Post', createdAt: new Date('2025-01-14T10:00:00Z') }),
     ];
 
     const result = await generate(posts);
@@ -209,6 +209,9 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('data-template="post-list"');
     expect(html).toContain('/assets/pico.min.css');
     expect(html).toContain('/assets/lightbox.min.css');
+    expect(html).toContain('archive-day-marker');
+    expect(html).toContain('15.01.2025');
+    expect(html).toContain('14.01.2025');
   });
 
   it('generates single post pages at /{year}/{month}/{day}/{slug}/index.html', async () => {
