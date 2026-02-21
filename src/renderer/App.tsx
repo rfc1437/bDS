@@ -4,6 +4,7 @@ import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
 import { openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
+import { executeActivityClick } from './navigation/activityExecution';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
 import { useI18n } from './i18n';
 import './App.css';
@@ -216,13 +217,39 @@ const App: React.FC = () => {
 
     unsubscribers.push(
       window.electronAPI?.on('menu:viewPosts', () => {
-        setActiveView('posts');
+        const state = useAppStore.getState();
+        executeActivityClick(
+          {
+            activeView: state.activeView,
+            sidebarVisible: state.sidebarVisible,
+            tabs: state.tabs,
+            activeTabId: state.activeTabId,
+          },
+          'posts',
+          {
+            setActiveView: state.setActiveView,
+            toggleSidebar: state.toggleSidebar,
+          },
+        );
       }) || (() => {})
     );
 
     unsubscribers.push(
       window.electronAPI?.on('menu:viewMedia', () => {
-        setActiveView('media');
+        const state = useAppStore.getState();
+        executeActivityClick(
+          {
+            activeView: state.activeView,
+            sidebarVisible: state.sidebarVisible,
+            tabs: state.tabs,
+            activeTabId: state.activeTabId,
+          },
+          'media',
+          {
+            setActiveView: state.setActiveView,
+            toggleSidebar: state.toggleSidebar,
+          },
+        );
       }) || (() => {})
     );
 

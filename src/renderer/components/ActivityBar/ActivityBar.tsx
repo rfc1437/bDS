@@ -2,12 +2,12 @@ import React from 'react';
 import { useAppStore } from '../../store';
 import { useI18n } from '../../i18n';
 import {
-  getActivityClickActions,
   getActivityConfig,
   isActivityActive,
   type ActivityId,
   type ActivitySnapshot,
 } from '../../navigation/activityBehavior';
+import { executeActivityClick as runActivityClick } from '../../navigation/activityExecution';
 import './ActivityBar.css';
 
 // Simple SVG icons
@@ -74,15 +74,10 @@ export const ActivityBar: React.FC = () => {
   };
 
   const executeActivityClick = (activityId: ActivityId) => {
-    const actions = getActivityClickActions(snapshot, activityId);
-
-    for (const action of actions) {
-      if (action.type === 'toggleSidebar') {
-        toggleSidebar();
-      } else if (action.type === 'setActiveView') {
-        setActiveView(action.view);
-      }
-    }
+    runActivityClick(snapshot, activityId, {
+      toggleSidebar,
+      setActiveView,
+    });
   };
 
   const getTitle = (activityId: ActivityId) => `${t(getActivityConfig(activityId).labelKey)} ${t('activity.toggleHint')}`;

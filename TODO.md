@@ -217,8 +217,8 @@ Pure tab-policy helpers that decide:
 - [x] Keep special cases explicit (e.g., tab ID transforms such as git-diff commit/file parsing).
 
 ## Phase 5 — Menu/Event Harmonization
-- Route menu-driven view/tab actions through the same behavior layer where applicable.
-- Reduce drift between keyboard/menu/toolbar interactions.
+- [x] Route menu-driven view/tab actions through the same behavior layer where applicable.
+- [x] Reduce drift between keyboard/menu/toolbar interactions.
 
 ## Phase 6 — Cleanup + Exception Review
 - Reassess every exception in this file and decide keep/remove.
@@ -259,4 +259,6 @@ Pure tab-policy helpers that decide:
 - [x] Phase 3 completion slice: centralized `chat` and `import` tab-open specs and migrated sidebar call sites.
 - [x] Phase 3 completion slice: centralized `git-diff` file/commit ID/spec/open helpers and reused shared parsing in `TabBar`.
 - [x] Phase 4 complete: introduced `editorRouting` registry/resolver and migrated `Editor` to declarative route->view rendering.
-- [ ] Next implementation slice: Phase 5 (menu/event harmonization).
+- [x] Phase 5 complete: introduced shared activity action executor and reused it in `ActivityBar` and menu view handlers.
+- [x] Phase 5 complete: `menu:viewPosts` and `menu:viewMedia` now follow the same action pipeline as activity-bar clicks.
+- [ ] Next implementation slice: Phase 6 (cleanup + exception review).
