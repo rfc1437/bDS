@@ -1223,11 +1223,19 @@ import { scrollToTagsSection, TagsCategory } from '../TagsView';
 
 const TagsNav: React.FC = () => {
   const { t } = useI18n();
+  const { tabs, activeTabId, openTab } = useAppStore();
   const [activeSection, setActiveSection] = useState<TagsCategory | null>(null);
 
+  const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
+
   const handleNavClick = (category: TagsCategory) => {
+    if (!isTagsTabActive) {
+      openTab({ type: 'tags', id: 'tags', isTransient: false });
+    }
     setActiveSection(category);
-    scrollToTagsSection(category);
+    setTimeout(() => {
+      scrollToTagsSection(category);
+    }, isTagsTabActive ? 0 : 100);
   };
 
   return (

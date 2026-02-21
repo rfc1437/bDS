@@ -66,8 +66,8 @@ export const ActivityBar: React.FC = () => {
   // Check if settings view is active (either tab or sidebar)
   const isSettingsActive = (activeView === 'settings' && sidebarVisible) || isSettingsTabActive;
   
-  // Check if tags tab is currently active
-  const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
+  // Check if tags sidebar is active
+  const isTagsActive = activeView === 'tags' && sidebarVisible;
 
   // Check if chat sidebar is active (activeView === 'chat' and sidebar is visible)
   const isChatActive = activeView === 'chat' && sidebarVisible;
@@ -108,8 +108,16 @@ export const ActivityBar: React.FC = () => {
   };
 
   const handleTagsClick = () => {
-    // Open tags as a dedicated (non-transient) tab
-    openTab({ type: 'tags', id: 'tags', isTransient: false });
+    // Toggle sidebar if tags is already active, otherwise switch to tags
+    if (activeView === 'tags' && sidebarVisible) {
+      toggleSidebar();
+    } else {
+      openTab({ type: 'tags', id: 'tags', isTransient: false });
+      setActiveView('tags');
+      if (!sidebarVisible) {
+        toggleSidebar();
+      }
+    }
   };
 
   const handleImportClick = () => {
@@ -148,9 +156,9 @@ export const ActivityBar: React.FC = () => {
           <MediaIcon />
         </button>
         <button
-          className={`activity-bar-item ${isTagsTabActive ? 'active' : ''}`}
+          className={`activity-bar-item ${isTagsActive ? 'active' : ''}`}
           onClick={handleTagsClick}
-          title={t('activity.tags')}
+          title={`${t('activity.tags')} ${t('activity.toggleHint')}`}
         >
           <TagsIcon />
         </button>
