@@ -40,12 +40,12 @@ describe('Help menu documentation entry', () => {
     expect(viewGroup?.items.some((item) => item.action === 'toggleFullScreen')).toBe(true);
   });
 
-  it('includes Validate Site action in Blog menu with a V shortcut', () => {
+  it('includes Validate Site action in Blog menu with an L shortcut', () => {
     const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
     const validateSiteItem = blogGroup?.items.find((item) => item.action === 'validateSite');
 
     expect(validateSiteItem).toBeDefined();
-    expect(validateSiteItem?.accelerator).toContain('V');
+    expect(validateSiteItem?.accelerator).toContain('L');
   });
 
   it('maps Validate Site to a renderer menu event', () => {
