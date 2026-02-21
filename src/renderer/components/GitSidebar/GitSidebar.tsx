@@ -7,6 +7,7 @@ import './GitSidebar.css';
 import '../Sidebar/Sidebar.css';
 
 type GitSidebarStatusFile = { path: string; status: string };
+const HISTORY_PAGE_SIZE = 20;
 
 const mergeStatusFilesIncremental = (
   previous: GitSidebarStatusFile[],
@@ -45,6 +46,8 @@ export const GitSidebar: React.FC = () => {
   const [commitMessage, setCommitMessage] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<GitHistoryEntry[]>([]);
+  const [historyLocalLimit, setHistoryLocalLimit] = useState(HISTORY_PAGE_SIZE);
+  const [hasMoreLocalHistory, setHasMoreLocalHistory] = useState(false);
   const [remoteState, setRemoteState] = useState<GitRemoteStateDto | null>(null);
   const [remoteStateError, setRemoteStateError] = useState<string | null>(null);
   const [initProgress, setInitProgress] = useState<GitInitProgress | null>(null);
@@ -56,12 +59,13 @@ export const GitSidebar: React.FC = () => {
   const remoteRefreshInFlightRef = useRef(false);
 
   const refreshRepoDetails = useCallback(
-    async (targetProjectPath: string, options?: { background?: boolean }) => {
+    async (targetProjectPath: string, options?: { background?: boolean; historyLimit?: number }) => {
       if (statusRefreshInFlightRef.current) {
         return;
       }
 
       const background = options?.background ?? false;
+      const historyLimit = options?.historyLimit ?? historyLocalLimit;
 
       statusRefreshInFlightRef.current = true;
       if (!background) {
@@ -72,10 +76,12 @@ export const GitSidebar: React.FC = () => {
       try {
         const [status, history] = await Promise.all([
           window.electronAPI.git.getStatus(targetProjectPath),
-          window.electronAPI.git.getHistory(targetProjectPath, 20),
+          window.electronAPI.git.getHistory(targetProjectPath, historyLimit),
         ]);
         setStatusFiles((previous) => mergeStatusFilesIncremental(previous, status.files));
         setHistoryEntries(history);
+        const nonRemoteOnlyCount = history.filter((entry) => entry.syncStatus !== 'remote-only').length;
+        setHasMoreLocalHistory(nonRemoteOnlyCount >= historyLimit);
       } finally {
         statusRefreshInFlightRef.current = false;
         if (!background) {
@@ -84,7 +90,7 @@ export const GitSidebar: React.FC = () => {
         }
       }
     },
-    [],
+    [historyLocalLimit],
   );
 
   const refreshRemoteState = useCallback(
@@ -192,6 +198,7 @@ export const GitSidebar: React.FC = () => {
       if (!availability.gitFound) {
         setError(tr('gitSidebar.error.gitMissing'));
         setIsRepo(false);
+        setHasMoreLocalHistory(false);
         return;
       }
 
@@ -201,6 +208,7 @@ export const GitSidebar: React.FC = () => {
       if (!resolvedProjectPath) {
         setError(tr('gitSidebar.error.noActiveProject'));
         setIsRepo(false);
+        setHasMoreLocalHistory(false);
         return;
       }
 
@@ -220,6 +228,7 @@ export const GitSidebar: React.FC = () => {
       } else {
         setStatusFiles([]);
         setHistoryEntries([]);
+        setHasMoreLocalHistory(false);
         setRemoteState(null);
         setRemoteStateError(null);
       }
@@ -229,6 +238,7 @@ export const GitSidebar: React.FC = () => {
       setHasRemote(false);
       setStatusFiles([]);
       setHistoryEntries([]);
+      setHasMoreLocalHistory(false);
       setRemoteState(null);
       setRemoteStateError(null);
     } finally {
@@ -239,6 +249,11 @@ export const GitSidebar: React.FC = () => {
   useEffect(() => {
     void loadRepoState();
   }, [loadRepoState]);
+
+  useEffect(() => {
+    setHistoryLocalLimit(HISTORY_PAGE_SIZE);
+    setHasMoreLocalHistory(false);
+  }, [activeProject?.id]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.git.onInitProgress((progress) => {
@@ -394,6 +409,17 @@ export const GitSidebar: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleLoadMoreHistory = async () => {
+    const effectiveProjectPath = projectPath ?? (await resolveProjectPath());
+    if (!effectiveProjectPath) {
+      return;
+    }
+
+    const nextLimit = historyLocalLimit + HISTORY_PAGE_SIZE;
+    setHistoryLocalLimit(nextLimit);
+    void refreshRepoDetails(effectiveProjectPath, { historyLimit: nextLimit });
   };
 
   if (loading) {
@@ -571,6 +597,16 @@ export const GitSidebar: React.FC = () => {
                   </button>
                 ))}
               </div>
+            )}
+            {!historyLoading && hasMoreLocalHistory && (
+              <button
+                type="button"
+                className="git-sidebar-button"
+                onClick={() => void handleLoadMoreHistory()}
+                disabled={statusRefreshInFlightRef.current}
+              >
+                {tr('gitSidebar.action.loadMoreHistory')}
+              </button>
             )}
             {currentBranch && <div className="git-sidebar-empty-state">{tr('gitSidebar.branch', { branch: currentBranch })}</div>}
             {remoteState?.hasUpstream && remoteState.localBranch && remoteState.upstreamBranch && (

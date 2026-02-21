@@ -276,6 +276,7 @@
   "gitSidebar.action.pruning": "Pulizia...",
   "gitSidebar.action.commit": "Registra commit",
   "gitSidebar.action.committing": "Commit in corso...",
+  "gitSidebar.action.loadMoreHistory": "Carica altro",
   "gitSidebar.action.initializeGit": "Inizializza Git",
   "gitSidebar.action.initializing": "Inizializzazione...",
   "gitSidebar.openChanges": "Modifiche aperte ({count})",

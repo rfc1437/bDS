@@ -732,7 +732,9 @@ export class GitEngine {
       }));
     }
 
-    const remoteHistory = await git.log([status.tracking, '--max-count', String(limit)]);
+    const behindCount = typeof status.behind === 'number' ? status.behind : Number(status.behind ?? 0);
+    const remoteHistoryLimit = Math.max(limit, limit + Math.max(behindCount, 0));
+    const remoteHistory = await git.log([status.tracking, '--max-count', String(remoteHistoryLimit)]);
 
     type CommitLike = {
       hash: string;
@@ -762,9 +764,8 @@ export class GitEngine {
       }
     }
 
-    return Array.from(combined.values())
+    const classifiedEntries = Array.from(combined.values())
       .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
-      .slice(0, limit)
       .map((entry) => {
         const inLocal = localMap.has(entry.hash);
         const inRemote = remoteMap.has(entry.hash);
@@ -779,6 +780,12 @@ export class GitEngine {
           syncStatus,
         };
       });
+
+    const remoteOnlyEntries = classifiedEntries.filter((entry) => entry.syncStatus === 'remote-only');
+    const localAndSyncedEntries = classifiedEntries.filter((entry) => entry.syncStatus !== 'remote-only').slice(0, limit);
+
+    return [...localAndSyncedEntries, ...remoteOnlyEntries]
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime());
   }
 
   async getFileHistory(projectPath: string, filePath: string, limit = 50): Promise<GitHistoryEntry[]> {

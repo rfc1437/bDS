@@ -346,6 +346,94 @@ describe('GitEngine', () => {
         },
       ]);
     });
+
+    it('should include all remote-only commits in addition to the local history limit', async () => {
+      mockStatus.mockResolvedValue({ current: 'main', tracking: 'origin/main', behind: 2 });
+      mockLog
+        .mockResolvedValueOnce({
+          all: [
+            {
+              hash: 'loc1111',
+              date: '2026-02-16T12:00:00.000Z',
+              message: 'feat: newest local',
+              author_name: 'Local Dev',
+            },
+            {
+              hash: 'both222',
+              date: '2026-02-16T11:00:00.000Z',
+              message: 'feat: shared local',
+              author_name: 'Shared Dev',
+            },
+            {
+              hash: 'loc3333',
+              date: '2026-02-16T10:00:00.000Z',
+              message: 'feat: older local',
+              author_name: 'Local Dev',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          all: [
+            {
+              hash: 'rem9999',
+              date: '2026-02-16T13:00:00.000Z',
+              message: 'fix: newest remote waiting',
+              author_name: 'Remote Dev',
+            },
+            {
+              hash: 'rem8888',
+              date: '2026-02-16T12:30:00.000Z',
+              message: 'fix: older remote waiting',
+              author_name: 'Remote Dev',
+            },
+            {
+              hash: 'both222',
+              date: '2026-02-16T11:00:00.000Z',
+              message: 'feat: shared local',
+              author_name: 'Shared Dev',
+            },
+          ],
+        });
+
+      const result = await gitEngine.getHistory('/tmp/project', 2);
+
+      expect(mockLog).toHaveBeenNthCalledWith(1, { maxCount: 2 });
+      expect(mockLog).toHaveBeenNthCalledWith(2, ['origin/main', '--max-count', '4']);
+      expect(result).toEqual([
+        {
+          hash: 'rem9999',
+          shortHash: 'rem9999',
+          date: '2026-02-16T13:00:00.000Z',
+          subject: 'fix: newest remote waiting',
+          author: 'Remote Dev',
+          syncStatus: 'remote-only',
+        },
+        {
+          hash: 'rem8888',
+          shortHash: 'rem8888',
+          date: '2026-02-16T12:30:00.000Z',
+          subject: 'fix: older remote waiting',
+          author: 'Remote Dev',
+          syncStatus: 'remote-only',
+        },
+        {
+          hash: 'loc1111',
+          shortHash: 'loc1111',
+          date: '2026-02-16T12:00:00.000Z',
+          subject: 'feat: newest local',
+          author: 'Local Dev',
+          syncStatus: 'local-only',
+        },
+        {
+          hash: 'both222',
+          shortHash: 'both222',
+          date: '2026-02-16T11:00:00.000Z',
+          subject: 'feat: shared local',
+          author: 'Shared Dev',
+          syncStatus: 'both',
+        },
+      ]);
+    });
   });
 
   describe('getFileHistory', () => {

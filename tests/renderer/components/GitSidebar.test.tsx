@@ -156,6 +156,101 @@ describe('GitSidebar', () => {
     expect(syncedCommit).toHaveClass('git-sidebar-history-item--both');
   });
 
+  it('loads 20 commits by default and requests more when load more is clicked', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    const createEntry = (index: number, syncStatus: 'both' | 'local-only' | 'remote-only' = 'both') => ({
+      hash: `hash-${index}`,
+      shortHash: `h${index}`,
+      date: `2026-02-${String(28 - index).padStart(2, '0')}T10:00:00.000Z`,
+      subject: `commit ${index}`,
+      author: `Dev ${index}`,
+      syncStatus,
+    });
+
+    (window as any).electronAPI.git.getHistory = vi.fn().mockImplementation((_projectPath: string, limit: number) => {
+      if (limit <= 20) {
+        return Promise.resolve([
+          ...Array.from({ length: 20 }, (_, index) => createEntry(index + 1)),
+          createEntry(101, 'remote-only'),
+          createEntry(102, 'remote-only'),
+        ]);
+      }
+
+      return Promise.resolve([
+        ...Array.from({ length: 25 }, (_, index) => createEntry(index + 1)),
+        createEntry(101, 'remote-only'),
+        createEntry(102, 'remote-only'),
+      ]);
+    });
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText('commit 20')).toBeInTheDocument();
+    expect(screen.queryByText('commit 25')).not.toBeInTheDocument();
+    expect(screen.getByText('commit 101')).toBeInTheDocument();
+    expect(screen.getByText('commit 102')).toBeInTheDocument();
+    expect((window as any).electronAPI.git.getHistory).toHaveBeenCalledWith('/repo/path', 20);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /load more/i }));
+    });
+
+    await vi.waitFor(() => {
+      expect((window as any).electronAPI.git.getHistory).toHaveBeenCalledWith('/repo/path', 40);
+    });
+    expect(await screen.findByText('commit 25')).toBeInTheDocument();
+  });
+
+  it('keeps remote-only commits visible even when local history is limited to 20', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    const localEntries = Array.from({ length: 20 }, (_, index) => ({
+      hash: `local-${index}`,
+      shortHash: `l${index}`,
+      date: `2026-01-${String(28 - index).padStart(2, '0')}T10:00:00.000Z`,
+      subject: `local commit ${index + 1}`,
+      author: 'Local Dev',
+      syncStatus: 'both' as const,
+    }));
+
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([
+      ...localEntries,
+      {
+        hash: 'remote-1',
+        shortHash: 'r1',
+        date: '2026-02-26T10:00:00.000Z',
+        subject: 'remote waiting 1',
+        author: 'Remote Dev',
+        syncStatus: 'remote-only',
+      },
+      {
+        hash: 'remote-2',
+        shortHash: 'r2',
+        date: '2026-02-25T10:00:00.000Z',
+        subject: 'remote waiting 2',
+        author: 'Remote Dev',
+        syncStatus: 'remote-only',
+      },
+    ]);
+
+    render(<GitSidebar />);
+
+    expect(await screen.findByText('local commit 20')).toBeInTheDocument();
+    expect(screen.getByText('remote waiting 1')).toBeInTheDocument();
+    expect(screen.getByText('remote waiting 2')).toBeInTheDocument();
+  });
+
   it('renders commit status legend in version history section', async () => {
     (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
       isRepo: true,
