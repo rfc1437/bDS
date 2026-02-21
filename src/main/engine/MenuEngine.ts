@@ -5,14 +5,14 @@ import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
-export type MenuItemKind = 'page' | 'submenu' | 'category-archive';
+export type MenuItemKind = 'page' | 'submenu' | 'category-archive' | 'home';
 
 const HOME_MENU_ID = 'menu-home';
 
 const DEFAULT_HOME_ITEM: MenuItemData = {
   id: HOME_MENU_ID,
   title: 'Home',
-  kind: 'page',
+  kind: 'home',
   pageId: undefined,
   pageSlug: 'home',
   categoryName: undefined,
@@ -79,6 +79,8 @@ function sanitizeMenuItem(input: unknown): MenuItemData {
     ? 'submenu'
     : candidate.kind === 'category-archive'
       ? 'category-archive'
+      : candidate.kind === 'home'
+        ? 'home'
       : 'page';
   const childrenSource = Array.isArray(candidate.children) ? candidate.children : [];
   const title = normalizeNonEmptyString(candidate.title) || 'Untitled';
@@ -88,7 +90,7 @@ function sanitizeMenuItem(input: unknown): MenuItemData {
     title,
     kind,
     pageId: kind === 'page' ? normalizeNonEmptyString(candidate.pageId) : undefined,
-    pageSlug: kind === 'page' ? normalizeNonEmptyString(candidate.pageSlug) : undefined,
+    pageSlug: kind === 'page' || kind === 'home' ? normalizeNonEmptyString(candidate.pageSlug) : undefined,
     categoryName: kind === 'category-archive' ? normalizeNonEmptyString(candidate.categoryName) : undefined,
     children: childrenSource.map((child) => sanitizeMenuItem(child)),
   };
@@ -99,7 +101,7 @@ function normalizeHomeItem(item: MenuItemData): MenuItemData {
     ...item,
     id: HOME_MENU_ID,
     title: 'Home',
-    kind: 'page',
+    kind: 'home',
     pageId: undefined,
     pageSlug: 'home',
     categoryName: undefined,
@@ -167,6 +169,8 @@ function parseOutlineNode(node: OpmlOutlineNode): MenuItemData {
     ? 'submenu'
     : rawType === 'category-archive'
       ? 'category-archive'
+      : rawType === 'home'
+        ? 'home'
       : 'page';
   const title = normalizeNonEmptyString(node['@_text']) || normalizeNonEmptyString(node['@_title']) || 'Untitled';
 
@@ -175,7 +179,7 @@ function parseOutlineNode(node: OpmlOutlineNode): MenuItemData {
     title,
     kind,
     pageId: kind === 'page' ? normalizeNonEmptyString(node['@_pageId']) : undefined,
-    pageSlug: kind === 'page' ? normalizeNonEmptyString(node['@_pageSlug']) : undefined,
+    pageSlug: kind === 'page' || kind === 'home' ? normalizeNonEmptyString(node['@_pageSlug']) : undefined,
     categoryName: kind === 'category-archive' ? normalizeNonEmptyString(node['@_categoryName']) : undefined,
     children: normalizeOutlineNodes(node.outline).map((child) => parseOutlineNode(child)),
   };
@@ -192,7 +196,7 @@ function toOpmlOutlineNode(item: MenuItemData): OpmlOutlineNode {
     outlineNode['@_pageId'] = item.pageId;
   }
 
-  if (item.kind === 'page' && item.pageSlug) {
+  if ((item.kind === 'page' || item.kind === 'home') && item.pageSlug) {
     outlineNode['@_pageSlug'] = item.pageSlug;
   }
 

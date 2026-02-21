@@ -124,8 +124,19 @@
 }
 
 .menu-editor-row-kind {
-  font-size: 0.75rem;
-  opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  min-width: 1rem;
+  opacity: 0.9;
+}
+
+.menu-editor-row-kind-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
 }
 
 .menu-editor-row-title {

@@ -422,7 +422,7 @@ export interface SiteValidationApplyResult {
   removedEmptyDirCount: number;
 }
 
-export type MenuItemKind = 'page' | 'submenu' | 'category-archive';
+export type MenuItemKind = 'page' | 'submenu' | 'category-archive' | 'home';
 
 export interface MenuItemData {
   id: string;

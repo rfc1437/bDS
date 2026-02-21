@@ -54,7 +54,7 @@ describe('MenuEngine', () => {
     expect(result.items[0]).toMatchObject({
       id: 'menu-home',
       title: 'Home',
-      kind: 'page',
+      kind: 'home',
       pageSlug: 'home',
     });
   });
@@ -72,7 +72,7 @@ describe('MenuEngine', () => {
     expect(result.items[0]).toMatchObject({
       id: 'menu-home',
       title: 'Home',
-      kind: 'page',
+      kind: 'home',
       pageSlug: 'home',
     });
     expect(result.items[1]).toMatchObject({

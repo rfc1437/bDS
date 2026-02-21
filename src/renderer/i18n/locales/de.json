@@ -76,6 +76,7 @@
   "menuEditor.field.pageSlug": "Seiten-Slug",
   "menuEditor.field.pageId": "Seiten-ID",
   "menuEditor.type.page": "Seite",
+  "menuEditor.type.home": "Startseite",
   "menuEditor.type.submenu": "Untermenü",
   "menuEditor.type.categoryArchive": "Kategorie-Archiv",
   "menuEditor.empty": "Noch keine Menüeinträge. Füge eine Seite oder ein Untermenü hinzu.",

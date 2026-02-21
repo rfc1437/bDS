@@ -167,6 +167,22 @@ function createDraftEntry(kind: MenuItemData['kind'] = 'submenu'): MenuItemData 
   };
 }
 
+function renderMenuKindIcon(kind: MenuItemData['kind']): React.ReactNode {
+  if (kind === 'home') {
+    return <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2 2 7v7h4V9h4v5h4V7L8 2z" /></svg>;
+  }
+
+  if (kind === 'page') {
+    return <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2h7l3 3v9H3V2zm7 1.5V6h2.5L10 3.5z" /></svg>;
+  }
+
+  if (kind === 'category-archive') {
+    return <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3h12v3H2V3zm1 4h10v6H3V7zm2 1v1h6V8H5z" /></svg>;
+  }
+
+  return <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h12v2H2v-2z" /></svg>;
+}
+
 export const MenuEditorView: React.FC = () => {
   const { t: tr } = useI18n();
   const [items, setItems] = useState<MenuItemData[]>([]);
@@ -718,11 +734,30 @@ export const MenuEditorView: React.FC = () => {
                   >
                     <>
                       <span className="menu-editor-row-kind">
-                        {node.data.kind === 'page'
-                          ? tr('menuEditor.type.page')
-                          : node.data.kind === 'category-archive'
-                            ? tr('menuEditor.type.categoryArchive')
-                            : tr('menuEditor.type.submenu')}
+                        <span
+                          className="menu-editor-row-kind-icon"
+                          data-kind={node.data.kind}
+                          aria-label={
+                            node.data.kind === 'home'
+                              ? tr('menuEditor.type.home')
+                              : node.data.kind === 'page'
+                                ? tr('menuEditor.type.page')
+                                : node.data.kind === 'category-archive'
+                                  ? tr('menuEditor.type.categoryArchive')
+                                  : tr('menuEditor.type.submenu')
+                          }
+                          title={
+                            node.data.kind === 'home'
+                              ? tr('menuEditor.type.home')
+                              : node.data.kind === 'page'
+                                ? tr('menuEditor.type.page')
+                                : node.data.kind === 'category-archive'
+                                  ? tr('menuEditor.type.categoryArchive')
+                                  : tr('menuEditor.type.submenu')
+                          }
+                        >
+                          {renderMenuKindIcon(node.data.kind)}
+                        </span>
                       </span>
                       <span className={`menu-editor-row-title ${editingEntryId === node.data.id ? 'is-editing' : ''}`}>
                         {editingEntryId === node.data.id ? (

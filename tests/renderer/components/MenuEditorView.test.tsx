@@ -16,7 +16,7 @@ describe('MenuEditorView entry editor', () => {
             {
               id: 'menu-home',
               title: 'Home',
-              kind: 'page',
+              kind: 'home',
               pageSlug: 'home',
               children: [],
             },
@@ -215,6 +215,17 @@ describe('MenuEditorView entry editor', () => {
     await screen.findByText('Home');
     const deleteButton = screen.getByRole('button', { name: /^delete$/i });
     expect(deleteButton).toBeDisabled();
+  });
+
+  it('shows type as icon only (no visible type text label)', async () => {
+    const { container } = render(<MenuEditorView />);
+
+    await screen.findByText('Home');
+
+    const icon = container.querySelector('.menu-editor-row-kind-icon[data-kind="home"]');
+    expect(icon).not.toBeNull();
+    expect(screen.queryByText(/^page$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^submenu$/i)).not.toBeInTheDocument();
   });
 
 });

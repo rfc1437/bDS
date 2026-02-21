@@ -76,6 +76,7 @@
   "menuEditor.field.pageSlug": "Slug pagina",
   "menuEditor.field.pageId": "ID pagina",
   "menuEditor.type.page": "Pagina",
+  "menuEditor.type.home": "Home",
   "menuEditor.type.submenu": "Sottomenu",
   "menuEditor.type.categoryArchive": "Archivio categoria",
   "menuEditor.empty": "Nessuna voce menu. Aggiungi una pagina o un sottomenu per iniziare.",
