@@ -51,7 +51,7 @@ export const StatusBar: React.FC = () => {
             <span className="task-spinner" />
             <span>{runningTasks[0].message}</span>
             {runningTasks.length > 1 && (
-              <span className="text-muted">+{runningTasks.length - 1} more</span>
+              <span className="text-muted">{t('statusBar.more', { count: runningTasks.length - 1 })}</span>
             )}
           </div>
         )}

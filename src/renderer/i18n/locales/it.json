@@ -698,6 +698,7 @@
   "postSearch.hint": "Cerca per titolo, slug o contenuto",
   "statusBar.posts": "Articoli",
   "statusBar.media": "Media",
+  "statusBar.more": "+{count} in più",
   "statusBar.theme": "Tema: {theme}",
   "statusBar.ui": "UI",
   "statusBar.uiLanguage": "Lingua interfaccia",

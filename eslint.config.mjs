@@ -28,8 +28,8 @@ export default [
       i18next,
     },
     rules: {
-      'i18next/no-literal-string': ['warn', {
-        mode: 'jsx-only',
+      'i18next/no-literal-string': ['error', {
+        mode: 'jsx-text-only',
         'jsx-components': {
           exclude: ['Trans'],
         },
@@ -83,6 +83,13 @@ export default [
             '[0-9!-/:-@[-`{-~]+',
             '[A-Z_-]+',
             /^\p{Emoji}+$/u,
+            /^[\s\p{Emoji}\uFE0F]+$/u,
+            /^[\s0-9%—()\-+.]+$/,
+            /^[\s+×•○●⊘→←↶↷―✕✖✔❝]+$/,
+            /^H[1-6]$/,
+            /^(DB\s*→\s*File|File\s*→\s*DB)$/,
+            /^\/posts\/$/,
+            'bDS',
             '[✓✗▼▶◀▲]+'
           ],
         },

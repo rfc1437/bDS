@@ -95,8 +95,6 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
   const [insertMode, setInsertMode] = useState<InsertModalMode>(null);
   const [selectedText, setSelectedText] = useState('');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const runCommand = useCallback((commandKey: any, payload?: unknown) => {
     if (loading) return;
     const editor = getEditor();

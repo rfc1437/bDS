@@ -698,6 +698,7 @@
   "postSearch.hint": "Use ↑↓ to navigate, Enter to select, Esc to close",
   "statusBar.posts": "{count} posts",
   "statusBar.media": "{count} media",
+  "statusBar.more": "+{count} more",
   "statusBar.theme": "Theme: {theme}",
   "statusBar.ui": "UI",
   "statusBar.uiLanguage": "UI language",
