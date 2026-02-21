@@ -26,12 +26,11 @@ Create one shared behavior system for Activity Bar buttons, sidebar ownership, a
 ### B. Click behavior exceptions
 1. No known per-activity click behavior exceptions in `ActivityBar`.
    - Activity buttons now follow one shared posts-style switch/toggle pattern.
-2. Remaining coupling is in sidebar section navigation (`SettingsNav`/`TagsNav`) and is planned for unified section activation API migration.
+2. Sidebar section navigation (`SettingsNav`/`TagsNav`) now uses the shared section activation API.
 
 ### C. Sidebar content exceptions
-1. **Posts/Pages** sidebars are mounted in wrappers with `display: none` when inactive.
-2. **Media/Settings/Tags/Chat/Import/Git** sidebars are conditionally mounted.
-3. **SettingsNav/TagsNav** perform section scrolling and can auto-open corresponding tabs before scroll.
+1. Sidebars use global Variant B conditional mounting.
+2. `SettingsNav`/`TagsNav` section state is persisted for remount-safe UX.
 
 ### D. Editor content exceptions
 1. Editor is primarily tab-driven for tool views (`settings`, `tags`, `chat`, `import`, etc.).
@@ -39,8 +38,8 @@ Create one shared behavior system for Activity Bar buttons, sidebar ownership, a
 3. Some menu commands open tabs directly without harmonizing sidebar ownership.
 
 ### E. API shape exceptions
-1. Multiple places directly implement activity behavior logic instead of shared rules.
-2. Open-tab semantics for singleton activities are duplicated across components.
+1. Activity behavior logic is centralized via shared behavior + execution helpers.
+2. Open-tab semantics are centralized in shared tab policy helpers by tab kind.
 
 ---
 
@@ -221,9 +220,9 @@ Pure tab-policy helpers that decide:
 - [x] Reduce drift between keyboard/menu/toolbar interactions.
 
 ## Phase 6 — Cleanup + Exception Review
-- Reassess every exception in this file and decide keep/remove.
-- Remove dead paths and duplicate helpers.
-- Update tests and docs.
+- [x] Reassess every exception in this file and decide keep/remove.
+- [x] Remove dead paths and duplicate helpers.
+- [x] Update tests and docs.
 
 ---
 
@@ -261,4 +260,5 @@ Pure tab-policy helpers that decide:
 - [x] Phase 4 complete: introduced `editorRouting` registry/resolver and migrated `Editor` to declarative route->view rendering.
 - [x] Phase 5 complete: introduced shared activity action executor and reused it in `ActivityBar` and menu view handlers.
 - [x] Phase 5 complete: `menu:viewPosts` and `menu:viewMedia` now follow the same action pipeline as activity-bar clicks.
-- [ ] Next implementation slice: Phase 6 (cleanup + exception review).
+- [x] Phase 6 complete: removed unused activity behavior metadata/constants and refreshed the exception matrix to current architecture.
+- [ ] Next implementation slice: optional follow-up (further simplification/perf tuning only if new drift appears).

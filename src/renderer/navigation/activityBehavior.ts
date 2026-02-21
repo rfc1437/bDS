@@ -17,7 +17,6 @@ interface ActivityConfig {
   id: ActivityId;
   view: SidebarView;
   labelKey: string;
-  placement: 'top' | 'bottom';
   activeStrategy: ActiveStrategy;
   clickStrategy: ClickStrategy;
 }
@@ -27,7 +26,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'posts',
     view: 'posts',
     labelKey: 'activity.posts',
-    placement: 'top',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -35,7 +33,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'pages',
     view: 'pages',
     labelKey: 'activity.pages',
-    placement: 'top',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -43,7 +40,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'media',
     view: 'media',
     labelKey: 'activity.media',
-    placement: 'top',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -51,7 +47,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'tags',
     view: 'tags',
     labelKey: 'activity.tags',
-    placement: 'top',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -59,7 +54,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'chat',
     view: 'chat',
     labelKey: 'activity.aiAssistant',
-    placement: 'top',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -67,7 +61,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'import',
     view: 'import',
     labelKey: 'activity.import',
-    placement: 'top',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -75,7 +68,6 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'git',
     view: 'git',
     labelKey: 'activity.sourceControl',
-    placement: 'bottom',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
@@ -83,14 +75,10 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'settings',
     view: 'settings',
     labelKey: 'common.settings',
-    placement: 'bottom',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },
 };
-
-export const TOP_ACTIVITY_IDS: ActivityId[] = ['posts', 'pages', 'media', 'tags', 'chat', 'import'];
-export const BOTTOM_ACTIVITY_IDS: ActivityId[] = ['git', 'settings'];
 
 export function getActivityConfig(activityId: ActivityId): ActivityConfig {
   return ACTIVITY_CONFIG[activityId];
