@@ -1,7 +1,7 @@
 import type { Tab } from '../store/appStore';
+import type { SidebarView } from './sidebarViewRegistry';
 
 export type ActivityId = 'posts' | 'pages' | 'media' | 'tags' | 'chat' | 'import' | 'git' | 'settings';
-export type SidebarView = 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git';
 
 export interface ActivitySnapshot {
   activeView: SidebarView;

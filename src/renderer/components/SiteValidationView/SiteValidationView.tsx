@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
+import { getPersistedSiteValidationReport } from '../../navigation/siteValidationPersistence';
 import './SiteValidationView.css';
 
 type SiteValidationReport = {
@@ -20,27 +22,43 @@ type SiteValidationApplyResult = {
 
 export const SiteValidationView: React.FC = () => {
   const { t: tr } = useI18n();
+  const { activeProject } = useAppStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isApplying, setIsApplying] = useState(false);
   const [report, setReport] = useState<SiteValidationReport | null>(null);
 
-  const loadReport = async () => {
+  const loadPersistedReport = () => {
     setIsLoading(true);
     try {
-      const result = await window.electronAPI.blog.validateSite();
-      setReport(result as SiteValidationReport);
-    } catch (error) {
-      console.error('Site validation failed:', error);
-      showToast.error(tr('siteValidation.error.validate'));
-      setReport(null);
+      const projectId = activeProject?.id;
+      if (!projectId) {
+        setReport(null);
+        return;
+      }
+
+      const persistedReport = getPersistedSiteValidationReport(projectId);
+      setReport(persistedReport);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadReport();
-  }, []);
+    loadPersistedReport();
+  }, [activeProject?.id]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail;
+      if (!activeProject?.id || detail?.projectId !== activeProject.id) {
+        return;
+      }
+      loadPersistedReport();
+    };
+
+    window.addEventListener('bds:site-validation-updated', handler);
+    return () => window.removeEventListener('bds:site-validation-updated', handler);
+  }, [activeProject?.id]);
 
   const canApply = useMemo(() => {
     if (!report) return false;
@@ -59,7 +77,6 @@ export const SiteValidationView: React.FC = () => {
         rendered: result.renderedUrlCount,
         deleted: result.deletedUrlCount,
       }));
-      await loadReport();
     } catch (error) {
       console.error('Applying site validation failed:', error);
       showToast.error(tr('siteValidation.error.apply'));

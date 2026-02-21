@@ -19,6 +19,7 @@
   "menu.item.selectAll": "Select All",
   "menu.item.find": "Find",
   "menu.item.replace": "Replace",
+  "menu.item.editPreferences": "Edit Preferences",
   "menu.item.viewPosts": "Posts",
   "menu.item.viewMedia": "Media",
   "menu.item.toggleSidebar": "Toggle Sidebar",

@@ -51,4 +51,16 @@ describe('Help menu documentation entry', () => {
   it('maps Validate Site to a renderer menu event', () => {
     expect(APP_MENU_ACTION_EVENT_MAP.validateSite).toBe('menu:validateSite');
   });
+
+  it('includes Edit Preferences action in Edit menu with comma shortcut', () => {
+    const editGroup = APP_MENU_GROUPS.find((group) => group.label === 'Edit');
+    const preferencesItem = editGroup?.items.find((item) => item.action === 'editPreferences');
+
+    expect(preferencesItem).toBeDefined();
+    expect(preferencesItem?.accelerator).toContain(',');
+  });
+
+  it('maps Edit Preferences to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.editPreferences).toBe('menu:editPreferences');
+  });
 });

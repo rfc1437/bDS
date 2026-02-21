@@ -19,6 +19,7 @@
   "menu.item.selectAll": "Tout sélectionner",
   "menu.item.find": "Rechercher",
   "menu.item.replace": "Remplacer",
+  "menu.item.editPreferences": "Modifier les préférences",
   "menu.item.viewPosts": "Articles",
   "menu.item.viewMedia": "Médias",
   "menu.item.toggleSidebar": "Basculer la barre latérale",

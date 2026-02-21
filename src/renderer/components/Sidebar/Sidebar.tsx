@@ -4,6 +4,12 @@ import { showToast } from '../Toast';
 import { getContrastColor, groupPostsByStatus } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import { GitSidebar } from '../GitSidebar/GitSidebar';
+import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
+import { scrollToTagsSection, TagsCategory } from '../TagsView';
+import { activateSidebarSection } from '../../navigation/sectionActivation';
+import { getPersistedSidebarSection, setPersistedSidebarSection } from '../../navigation/sidebarUiPersistence';
+import { openSingletonToolTab } from '../../navigation/tabPolicy';
+import type { SidebarView } from '../../navigation/sidebarViewRegistry';
 import { useI18n } from '../../i18n';
 import './Sidebar.css';
 
@@ -1218,24 +1224,27 @@ const MediaList: React.FC = () => {
   );
 };
 
-import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
-import { scrollToTagsSection, TagsCategory } from '../TagsView';
-
 const TagsNav: React.FC = () => {
   const { t } = useI18n();
   const { tabs, activeTabId, openTab } = useAppStore();
-  const [activeSection, setActiveSection] = useState<TagsCategory | null>(null);
+  const [activeSection, setActiveSection] = useState<TagsCategory | null>(() => {
+    const persisted = getPersistedSidebarSection('tags');
+    if (persisted === 'cloud' || persisted === 'manage' || persisted === 'merge') {
+      return persisted;
+    }
+    return null;
+  });
 
   const isTagsTabActive = tabs.some(t => t.type === 'tags' && t.id === activeTabId);
 
   const handleNavClick = (category: TagsCategory) => {
-    if (!isTagsTabActive) {
-      openTab({ type: 'tags', id: 'tags', isTransient: false });
-    }
     setActiveSection(category);
-    setTimeout(() => {
-      scrollToTagsSection(category);
-    }, isTagsTabActive ? 0 : 100);
+    setPersistedSidebarSection('tags', category);
+    activateSidebarSection({
+      isEditorTabActive: isTagsTabActive,
+      ensureEditorTabActive: () => openSingletonToolTab(openTab, 'tags'),
+      activateSection: () => scrollToTagsSection(category),
+    });
   };
 
   return (
@@ -1276,26 +1285,30 @@ const TagsNav: React.FC = () => {
 const SettingsNav: React.FC = () => {
   const { t } = useI18n();
   const { tabs, activeTabId, openTab } = useAppStore();
-  const [activeSection, setActiveSection] = useState<SettingsCategory | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsCategory | null>(() => {
+    const persisted = getPersistedSidebarSection('settings');
+    if (persisted === 'project' || persisted === 'editor' || persisted === 'content' || persisted === 'ai' || persisted === 'publishing' || persisted === 'data') {
+      return persisted;
+    }
+    return null;
+  });
 
   // Check if settings panel is currently active
   const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
   const isStyleTabActive = tabs.some(t => t.type === 'style' && t.id === activeTabId);
 
   const handleNavClick = (category: SettingsCategory) => {
-    // If settings panel is not open or not active, open it first
-    if (!isSettingsTabActive) {
-      openTab({ type: 'settings', id: 'settings', isTransient: false });
-    }
     setActiveSection(category);
-    // Use setTimeout to allow panel to open before scrolling
-    setTimeout(() => {
-      scrollToSettingsSection(category);
-    }, isSettingsTabActive ? 0 : 100);
+    setPersistedSidebarSection('settings', category);
+    activateSidebarSection({
+      isEditorTabActive: isSettingsTabActive,
+      ensureEditorTabActive: () => openSingletonToolTab(openTab, 'settings'),
+      activateSection: () => scrollToSettingsSection(category),
+    });
   };
 
   const handleStyleClick = () => {
-    openTab({ type: 'style', id: 'style', isTransient: false });
+    openSingletonToolTab(openTab, 'style');
   };
 
   return (
@@ -1666,34 +1679,20 @@ export const Sidebar: React.FC = () => {
     return null;
   }
 
+  const sidebarViewMap: Record<SidebarView, React.ReactNode> = {
+    posts: <PostsList mode="posts" isActive={true} />,
+    pages: <PostsList mode="pages" isActive={true} />,
+    media: <MediaList />,
+    settings: <SettingsNav />,
+    tags: <TagsNav />,
+    chat: <ChatList />,
+    import: <ImportList />,
+    git: <GitSidebar />,
+  };
+
   return (
     <div className="sidebar">
-      <div
-        style={{
-          display: activeView === 'posts' ? 'flex' : 'none',
-          flexDirection: 'column',
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
-        <PostsList mode="posts" isActive={activeView === 'posts'} />
-      </div>
-      <div
-        style={{
-          display: activeView === 'pages' ? 'flex' : 'none',
-          flexDirection: 'column',
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
-        <PostsList mode="pages" isActive={activeView === 'pages'} />
-      </div>
-      {activeView === 'media' && <MediaList />}
-      {activeView === 'settings' && <SettingsNav />}
-      {activeView === 'tags' && <TagsNav />}
-      {activeView === 'chat' && <ChatList />}
-      {activeView === 'import' && <ImportList />}
-      {activeView === 'git' && <GitSidebar />}
+      {sidebarViewMap[activeView]}
     </div>
   );
 };

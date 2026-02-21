@@ -142,7 +142,7 @@ describe('Pages shortcut UI', () => {
     expect(window.electronAPI.posts.filter).not.toHaveBeenCalledWith({ categories: ['page'] });
   });
 
-  it('uses a flex-height wrapper for active posts/pages sidebar view', async () => {
+  it('conditionally mounts only the active posts/pages sidebar content', async () => {
     useAppStore.setState({
       activeView: 'posts',
       sidebarVisible: true,
@@ -153,8 +153,7 @@ describe('Pages shortcut UI', () => {
     expect(await screen.findByText('POSTS')).toBeInTheDocument();
 
     const wrappers = container.querySelectorAll('.sidebar > div');
-    expect(wrappers.length).toBeGreaterThanOrEqual(2);
-    expect((wrappers[0] as HTMLElement).style.display).toBe('flex');
+    expect(wrappers.length).toBe(1);
   });
 
   it('opens style tab from settings sidebar navigation', async () => {

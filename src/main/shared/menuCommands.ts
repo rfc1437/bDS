@@ -14,6 +14,7 @@ export type AppMenuAction =
   | 'selectAll'
   | 'find'
   | 'replace'
+  | 'editPreferences'
   | 'viewPosts'
   | 'viewMedia'
   | 'toggleSidebar'
@@ -89,6 +90,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: '', action: 'edit-separator-3', separator: true },
       { label: 'menu.item.find', action: 'find', accelerator: 'CmdOrCtrl+F' },
       { label: 'menu.item.replace', action: 'replace', accelerator: 'CmdOrCtrl+H' },
+      { label: 'menu.item.editPreferences', action: 'editPreferences', accelerator: 'CmdOrCtrl+,' },
     ],
   },
   {
@@ -143,6 +145,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   save: 'menu:save',
   find: 'menu:find',
   replace: 'menu:replace',
+  editPreferences: 'menu:editPreferences',
   viewPosts: 'menu:viewPosts',
   viewMedia: 'menu:viewMedia',
   toggleSidebar: 'menu:toggleSidebar',

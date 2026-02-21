@@ -179,16 +179,17 @@ Pure tab-policy helpers that decide:
 - [x] Update/expand contract tests for unified activity behavior and `ActivityBar` integration.
 
 ## Phase 2 — Normalize Sidebar Mounting + Ownership Mapping
-- Introduce a sidebar view registry mapping in one place.
-- Pick one global mounting strategy (A or B) and apply to all sidebars.
-- If needed, add explicit state persistence for remount-safe UX.
-- Introduce unified section activation API and migrate `SettingsNav`/`TagsNav` to use it.
+- [x] Introduce a sidebar view registry mapping in one place.
+- [x] Pick one global mounting strategy (A or B) and apply to all sidebars.
+- [x] Add explicit state persistence for remount-safe sidebar section UX where needed.
+- [x] Introduce unified section activation API and migrate `SettingsNav`/`TagsNav` to use it.
 
 ## Phase 3 — Centralize Editor/Tab Management (expanded)
-- Implement shared tab policy layer for all editor tabs.
-- Centralize singleton tab policies (`settings`, `tags`, `style`, `documentation`, etc.).
+- [x] Implement shared tab policy layer for singleton tool tabs.
+- [x] Centralize singleton tab policies (`settings`, `tags`, `style`, `documentation`, `metadata-diff`, `site-validation`).
 - Centralize transient/pin lifecycle rules (including promotion behavior).
 - Remove duplicated tab-open logic from sidebars/nav components where possible.
+- [x] Ensure site-validation tab reopens with persisted last report and refreshes only on explicit validation trigger.
 
 ### Editor Tab Management Variations (current analysis)
 1. **Singleton, pinned tool tabs**
@@ -232,7 +233,7 @@ Pure tab-policy helpers that decide:
 - [x] Implement a unified section activation API for editor/tool sections.
 - [x] Choose global sidebar mounting variant: **B conditional mount**.
 - [x] Define sidebar action rule: section clicks always activate/open corresponding editor.
-- [ ] Migrate existing `SettingsNav`/`TagsNav` auto-open + delayed scroll to the unified section activation API that enforces this rule.
+- [x] Migrate existing `SettingsNav`/`TagsNav` auto-open + delayed scroll to the unified section activation API that enforces this rule.
 
 ---
 
@@ -244,4 +245,12 @@ Pure tab-policy helpers that decide:
 - [x] Decision captured: sidebar mounting strategy Variant B (conditional mount).
 - [x] Decision captured: sidebar section actions always activate/open corresponding editor.
 - [x] Phase 1b complete: removed `sidebar-or-tab`, unified activity click behavior, and updated tests.
-- [ ] Next implementation slice: Phase 2 (sidebar registry + unified section activation API migration).
+- [x] Added `Edit Preferences` menu item (`CmdOrCtrl+,`) to open preferences editor directly.
+- [x] Phase 2 slice complete: added shared section activation API and migrated `SettingsNav`/`TagsNav`.
+- [x] Phase 2 slice complete: normalized posts/pages sidebar rendering to Variant B conditional mount.
+- [x] Phase 2 slice complete: introduced canonical sidebar view registry and applied it across navigation/store/sidebar mapping.
+- [x] Phase 2 slice complete: persisted settings/tags active section selection for remount-safe UX.
+- [x] Phase 3 slice complete: added singleton tab policy helper and migrated menu/sidebar singleton tool openings to it.
+- [x] Phase 3 slice complete: site validation report is persisted per project and reloaded by `SiteValidationView`.
+- [x] Phase 3 slice complete: site validation view refreshes via explicit `bds:site-validation-updated` event (no auto-validate on mount).
+- [ ] Next implementation slice: Phase 3 continuation (centralize non-singleton tab lifecycle/promotion rules).

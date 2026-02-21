@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
+import { openSingletonToolTab } from './navigation/tabPolicy';
+import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
 import { useI18n } from './i18n';
 import './App.css';
@@ -224,6 +226,12 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:editPreferences', () => {
+        openSingletonToolTab(openTab, 'settings');
+      }) || (() => {})
+    );
+
     // Rebuild events - clear store on start, reload on complete
     unsubscribers.push(
       window.electronAPI?.on('posts:rebuildStarted', () => {
@@ -288,8 +296,7 @@ const App: React.FC = () => {
 
     unsubscribers.push(
       window.electronAPI?.on('menu:metadataDiff', () => {
-        // Open metadata diff tool tab
-        openTab({ id: 'metadata-diff', type: 'metadata-diff', title: tr('app.metadataDiff') });
+        openSingletonToolTab(openTab, 'metadata-diff');
       }) || (() => {})
     );
 
@@ -306,7 +313,23 @@ const App: React.FC = () => {
 
     unsubscribers.push(
       window.electronAPI?.on('menu:validateSite', () => {
-        openTab({ id: 'site-validation-report', type: 'site-validation', isTransient: true });
+        const validateAndOpen = async () => {
+          try {
+            const report = await window.electronAPI?.blog.validateSite();
+            const projectId = useAppStore.getState().activeProject?.id;
+            if (projectId && report) {
+              persistSiteValidationReport(projectId, report);
+              window.dispatchEvent(new CustomEvent('bds:site-validation-updated', {
+                detail: { projectId },
+              }));
+            }
+            openSingletonToolTab(openTab, 'site-validation');
+          } catch (error) {
+            console.error('Site validation failed:', error);
+            showToast.error(tr('siteValidation.error.validate'));
+          }
+        };
+        void validateAndOpen();
       }) || (() => {})
     );
 
@@ -331,7 +354,7 @@ const App: React.FC = () => {
 
     unsubscribers.push(
       window.electronAPI?.on('menu:openDocumentation', () => {
-        openTab({ id: 'documentation', type: 'documentation', isTransient: false });
+        openSingletonToolTab(openTab, 'documentation');
       }) || (() => {})
     );
 

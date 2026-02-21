@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { DeleteReference, ConfirmDeleteDetails } from '../components/ConfirmDeleteModal';
+import type { SidebarView } from '../navigation/sidebarViewRegistry';
 import type {
   ProjectData,
   PostData,
@@ -58,7 +59,7 @@ interface AppState {
   activeTabId: string | null;
   
   // UI State
-  activeView: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git';
+  activeView: SidebarView;
   sidebarVisible: boolean;
   panelVisible: boolean;
   panelActiveTab: PanelTab;
@@ -107,7 +108,7 @@ interface AppState {
   restoreTabState: (state: TabState) => void;
   
   // Actions
-  setActiveView: (view: 'posts' | 'pages' | 'media' | 'settings' | 'tags' | 'chat' | 'import' | 'git') => void;
+  setActiveView: (view: SidebarView) => void;
   toggleSidebar: () => void;
   togglePanel: () => void;
   setPanelActiveTab: (tab: PanelTab) => void;
