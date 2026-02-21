@@ -3,9 +3,10 @@ import { Tree } from 'react-arborist';
 import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
 import type { MenuDocument, MenuItemData, PostData } from '../../../main/shared/electronApi';
+import { PageInput } from '../PageInput';
 import { createAutoExpandController } from './menuAutoExpand';
 import { resolveInsertTarget } from './menuInsertTarget';
-import { filterPagePosts, isPickerCloseKey, isPickerFocusShortcut } from './menuPagePicker';
+import { isPickerCloseKey } from './menuPagePicker';
 import { applyTreeMove } from './menuTreeMove';
 import './MenuEditorView.css';
 
@@ -171,11 +172,8 @@ export const MenuEditorView: React.FC = () => {
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pagePosts, setPagePosts] = useState<PostData[]>([]);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
-  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [toolbarTooltip, setToolbarTooltip] = useState<string>('');
   const [recentParentInsertId, setRecentParentInsertId] = useState<string | null>(null);
-  const entryInputRef = useRef<HTMLInputElement | null>(null);
   const recentInsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoExpandController = useMemo(() => createAutoExpandController(450), []);
 
@@ -212,13 +210,6 @@ export const MenuEditorView: React.FC = () => {
     }
 
     const onWindowKeyDown = (event: KeyboardEvent): void => {
-      if (isPickerFocusShortcut({ key: event.key, metaKey: event.metaKey, ctrlKey: event.ctrlKey })) {
-        event.preventDefault();
-        entryInputRef.current?.focus();
-        entryInputRef.current?.select();
-        return;
-      }
-
       if (isPickerCloseKey(event.key)) {
         event.preventDefault();
         setItems((previous) => {
@@ -229,24 +220,37 @@ export const MenuEditorView: React.FC = () => {
           return removeItemByPath(previous, path).next;
         });
         setEditingEntryId(null);
-        setEditingText('');
-        setSelectedPageId(null);
       }
     };
 
-    window.addEventListener('keydown', onWindowKeyDown);
+    document.addEventListener('keydown', onWindowKeyDown);
     return () => {
-      window.removeEventListener('keydown', onWindowKeyDown);
+      document.removeEventListener('keydown', onWindowKeyDown);
     };
   }, [editingEntryId]);
 
   useEffect(() => {
-    if (!editingEntryId) {
+    if (!editingEntryId || isLoadingPages) {
       return;
     }
 
-    entryInputRef.current?.focus();
-  }, [editingEntryId]);
+    const focusInput = (): void => {
+      const input = document.querySelector('.menu-editor-row-title.is-editing .tag-input-field') as HTMLInputElement | null;
+      if (!input) {
+        return;
+      }
+      input.focus();
+      input.select();
+    };
+
+    const immediate = setTimeout(focusInput, 0);
+    const delayed = setTimeout(focusInput, 32);
+
+    return () => {
+      clearTimeout(immediate);
+      clearTimeout(delayed);
+    };
+  }, [editingEntryId, isLoadingPages]);
 
   const selectedPath = useMemo(() => {
     if (!selectedId) {
@@ -254,13 +258,6 @@ export const MenuEditorView: React.FC = () => {
     }
     return findPathById(items, selectedId);
   }, [items, selectedId]);
-
-  const filteredPagePosts = useMemo(() => {
-    if (!editingEntryId) {
-      return [];
-    }
-    return filterPagePosts(pagePosts, editingText);
-  }, [editingEntryId, pagePosts, editingText]);
 
   const ensurePagePostsLoaded = async (): Promise<void> => {
     if (pagePosts.length > 0) {
@@ -280,59 +277,32 @@ export const MenuEditorView: React.FC = () => {
     }
   };
 
-  const finalizeEntry = (): void => {
+  const setDraftAsSubmenu = (label: string): void => {
     if (!editingEntryId) {
       return;
     }
 
-    const selectedPage = selectedPageId ? pagePosts.find((post) => post.id === selectedPageId) : null;
-    const trimmed = editingText.trim();
+    const trimmed = label.trim();
+    const nextTitle = trimmed || tr('menuEditor.newSubmenu');
 
-    if (selectedPage) {
-      setItems((previous) => mapItems(previous, (item) => {
-        if (item.id !== editingEntryId) {
-          return item;
-        }
+    setItems((previous) => mapItems(previous, (item) => {
+      if (item.id !== editingEntryId) {
+        return item;
+      }
 
-        return {
-          ...item,
-          title: selectedPage.title,
-          kind: 'page',
-          pageId: selectedPage.id,
-          pageSlug: selectedPage.slug,
-        };
-      }));
-    } else if (trimmed) {
-      setItems((previous) => mapItems(previous, (item) => {
-        if (item.id !== editingEntryId) {
-          return item;
-        }
-
-        return {
-          ...item,
-          title: trimmed,
-          kind: 'submenu',
-          pageId: undefined,
-          pageSlug: undefined,
-        };
-      }));
-    } else {
-      setItems((previous) => {
-        const path = findPathById(previous, editingEntryId);
-        if (!path) {
-          return previous;
-        }
-        return removeItemByPath(previous, path).next;
-      });
-      setSelectedId(null);
-    }
+      return {
+        ...item,
+        title: nextTitle,
+        kind: 'submenu',
+        pageId: undefined,
+        pageSlug: undefined,
+      };
+    }));
 
     setEditingEntryId(null);
-    setEditingText('');
-    setSelectedPageId(null);
   };
 
-  const finalizeEntryWithPage = (post: PostData): void => {
+  const setDraftAsPage = (post: PostData): void => {
     if (!editingEntryId) {
       return;
     }
@@ -352,8 +322,6 @@ export const MenuEditorView: React.FC = () => {
     }));
 
     setEditingEntryId(null);
-    setEditingText('');
-    setSelectedPageId(null);
   };
 
   const startCreateEntry = async (): Promise<void> => {
@@ -392,8 +360,6 @@ export const MenuEditorView: React.FC = () => {
 
     setSelectedId(newEntry.id);
     setEditingEntryId(newEntry.id);
-    setEditingText('');
-    setSelectedPageId(null);
   };
 
   const save = async (): Promise<void> => {
@@ -486,8 +452,6 @@ export const MenuEditorView: React.FC = () => {
 
     if (editingEntryId === selectedId) {
       setEditingEntryId(null);
-      setEditingText('');
-      setSelectedPageId(null);
     }
     setSelectedId(null);
   };
@@ -622,78 +586,23 @@ export const MenuEditorView: React.FC = () => {
                       <span className="menu-editor-row-kind">
                         {node.data.kind === 'page' ? tr('menuEditor.type.page') : tr('menuEditor.type.submenu')}
                       </span>
-                      <span className="menu-editor-row-title">{node.data.title}</span>
+                      <span className={`menu-editor-row-title ${editingEntryId === node.data.id ? 'is-editing' : ''}`}>
+                        {editingEntryId === node.data.id ? (
+                          <PageInput
+                            pages={pagePosts}
+                            onSelectPage={setDraftAsPage}
+                            onCreateSubmenu={setDraftAsSubmenu}
+                            createSubmenuLabel={tr('menuEditor.addSubmenu')}
+                            placeholder={tr('menuEditor.newEntryPlaceholder')}
+                            disabled={isLoadingPages}
+                            autoFocus
+                          />
+                        ) : node.data.title}
+                      </span>
                     </>
                   </div>
                 )}
               </Tree>
-            )}
-
-            {editingEntryId && (
-              <div className="menu-editor-inline-search">
-                <div className="menu-editor-entry-editor">
-                  <input
-                    ref={entryInputRef}
-                    type="text"
-                    className="menu-editor-inline-input"
-                    value={editingText}
-                    onChange={(event) => {
-                      setEditingText(event.target.value);
-                      setSelectedPageId(null);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        finalizeEntry();
-                      }
-
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        setItems((previous) => {
-                          const path = findPathById(previous, editingEntryId);
-                          if (!path) {
-                            return previous;
-                          }
-                          return removeItemByPath(previous, path).next;
-                        });
-                        setEditingEntryId(null);
-                        setEditingText('');
-                        setSelectedPageId(null);
-                      }
-                    }}
-                    placeholder={tr('menuEditor.newEntryPlaceholder')}
-                  />
-                </div>
-                <div className="menu-editor-inline-search-head">
-                  <strong>{tr('menuEditor.pagePicker.title')}</strong>
-                  <span>{tr('menuEditor.createHint')}</span>
-                </div>
-                {isLoadingPages ? (
-                  <div className="menu-editor-picker-state">{tr('menuEditor.pagePicker.loading')}</div>
-                ) : filteredPagePosts.length === 0 ? (
-                  <div className="menu-editor-picker-state">{tr('menuEditor.pagePicker.empty')}</div>
-                ) : (
-                  <div className="menu-editor-picker-list">
-                    {filteredPagePosts.map((post) => (
-                      <button
-                        key={post.id}
-                        type="button"
-                        className={`menu-editor-picker-item ${selectedPageId === post.id ? 'is-active' : ''}`}
-                        onClick={() => {
-                          setSelectedPageId(post.id);
-                          setEditingText(post.title);
-                        }}
-                        onDoubleClick={() => {
-                          finalizeEntryWithPage(post);
-                        }}
-                      >
-                        <span>{post.title}</span>
-                        <small>/{post.slug}</small>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             )}
           </div>
         </div>

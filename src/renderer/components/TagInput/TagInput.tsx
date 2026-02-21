@@ -261,6 +261,10 @@ export const TagInput: React.FC<TagInputProps> = ({
             setInputValue(e.target.value);
             setShowSuggestions(true);
           }}
+          onInput={(e) => {
+            setInputValue((e.target as HTMLInputElement).value);
+            setShowSuggestions(true);
+          }}
           onFocus={() => setShowSuggestions(true)}
           onKeyDown={handleKeyDown}
           placeholder={value.length === 0 ? placeholder : ''}

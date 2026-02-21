@@ -120,9 +120,16 @@
 }
 
 .menu-editor-row-title {
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.menu-editor-row-title.is-editing {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .menu-editor-inline-input {
@@ -157,6 +164,12 @@
   gap: 0.75rem;
 }
 
+.menu-editor-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .menu-editor-inline-search-head strong {
   font-size: 0.8rem;
 }
@@ -164,6 +177,19 @@
 .menu-editor-inline-search-head span {
   color: var(--vscode-descriptionForeground);
   font-size: 0.75rem;
+}
+
+.menu-editor-inline-action {
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+
+.menu-editor-inline-action:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
 }
 
 .menu-editor-picker-backdrop {

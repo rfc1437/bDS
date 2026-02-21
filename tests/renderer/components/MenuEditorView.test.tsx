@@ -8,9 +8,6 @@ describe('MenuEditorView entry editor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    (window as any).addEventListener = vi.fn();
-    (window as any).removeEventListener = vi.fn();
-
     (window as any).electronAPI = {
       ...(window as any).electronAPI,
       menu: {
@@ -46,26 +43,82 @@ describe('MenuEditorView entry editor', () => {
     };
   });
 
-  it('uses a standalone input editor and keeps focus while typing multiple characters', async () => {
+  it('uses the same selector control pattern as tag input for page selection', async () => {
     const { container } = render(<MenuEditorView />);
 
     const addButton = await screen.findByRole('button', { name: /add entry/i });
     fireEvent.click(addButton);
 
     const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
-    expect(input.closest('.menu-editor-entry-editor')).not.toBeNull();
+    expect(input.closest('.tag-input-wrapper')).not.toBeNull();
+    expect(input.closest('.menu-editor-row')).not.toBeNull();
+    expect(container.querySelector('.menu-editor-inline-search')).toBeNull();
+    expect(container.querySelector('.menu-editor-picker-list')).toBeNull();
+    expect(container.querySelector('.menu-editor-picker-item')).toBeNull();
 
-    fireEvent.change(input, { target: { value: 'a' } });
-    fireEvent.change(input, { target: { value: 'ab' } });
-    fireEvent.change(input, { target: { value: 'abc' } });
-
-    expect((input as HTMLInputElement).value).toBe('abc');
-    expect(document.activeElement).toBe(input);
-
-    expect(container.querySelector('.menu-editor-row .menu-editor-inline-input')).toBeNull();
+    fireEvent.input(input, { target: { value: 'ab' } });
+    const suggestion = await screen.findByRole('button', { name: /^about$/i });
+    expect(suggestion.className).toContain('tag-suggestion');
   });
 
-  it('renders all matching page results without UI capping', async () => {
+  it('focuses the new in-row page input immediately after creating an entry', async () => {
+    render(<MenuEditorView />);
+
+    const addButton = await screen.findByRole('button', { name: /add entry/i });
+    fireEvent.click(addButton);
+
+    const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('sets the current row as submenu from typed input instead of creating another entry', async () => {
+    render(<MenuEditorView />);
+
+    const addButton = await screen.findByRole('button', { name: /add entry/i });
+    fireEvent.click(addButton);
+
+    const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
+    fireEvent.input(input, { target: { value: 'Products' } });
+
+    const createSubmenuOption = await screen.findByRole('button', { name: /add submenu/i });
+    fireEvent.click(createSubmenuOption);
+
+    expect(screen.queryByPlaceholderText(/type a page title or submenu label/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Products')).toBeInTheDocument();
+  });
+
+  it('sets the current row to selected page from the suggestion list', async () => {
+    render(<MenuEditorView />);
+
+    const addButton = await screen.findByRole('button', { name: /add entry/i });
+    fireEvent.click(addButton);
+
+    const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
+    fireEvent.input(input, { target: { value: 'about' } });
+
+    const pageSuggestion = await screen.findByRole('button', { name: /^about$/i });
+    fireEvent.click(pageSuggestion);
+
+    expect(screen.queryByPlaceholderText(/type a page title or submenu label/i)).not.toBeInTheDocument();
+    expect(screen.getByText('About')).toBeInTheDocument();
+  });
+
+  it('keeps focus while typing multiple characters', async () => {
+    const { container } = render(<MenuEditorView />);
+
+    const addButton = await screen.findByRole('button', { name: /add entry/i });
+    fireEvent.click(addButton);
+
+    const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
+    fireEvent.input(input, { target: { value: 'a' } });
+    fireEvent.input(input, { target: { value: 'ab' } });
+    fireEvent.input(input, { target: { value: 'abc' } });
+
+    expect((input as HTMLInputElement).value).toBe('abc');
+    expect(container.querySelector('.tag-input-field')).toBe(input);
+  });
+
+  it('caps matching page suggestions to the same limit as tag input', async () => {
     const pagePosts = Array.from({ length: 12 }).map((_, index) => ({
       id: `page-${index + 1}`,
       projectId: 'project-1',
@@ -87,10 +140,10 @@ describe('MenuEditorView entry editor', () => {
     fireEvent.click(addButton);
 
     const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
-    fireEvent.change(input, { target: { value: 'page' } });
+    fireEvent.input(input, { target: { value: 'page' } });
 
     const options = await screen.findAllByRole('button', { name: /page\s+\d+/i });
-    expect(options).toHaveLength(12);
+    expect(options).toHaveLength(8);
   });
 
   it('shows standard outliner control buttons in the toolbar', async () => {
@@ -115,14 +168,17 @@ describe('MenuEditorView entry editor', () => {
     expect(row).toHaveAttribute('data-drag-handle', 'true');
   });
 
-  it('finalizes entry as page on a double-click gesture', async () => {
+  it('finalizes entry as page on a single-click suggestion selection', async () => {
     render(<MenuEditorView />);
 
     const addButton = await screen.findByRole('button', { name: /add entry/i });
     fireEvent.click(addButton);
 
+    const input = await screen.findByPlaceholderText(/type a page title or submenu label/i);
+    fireEvent.input(input, { target: { value: 'about' } });
+
     const pageOption = await screen.findByRole('button', { name: /about/i });
-    fireEvent.doubleClick(pageOption);
+    fireEvent.click(pageOption);
 
     expect(screen.queryByPlaceholderText(/type a page title or submenu label/i)).not.toBeInTheDocument();
     expect(screen.getByText('About')).toBeInTheDocument();
