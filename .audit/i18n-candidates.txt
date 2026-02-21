@@ -1,9 +1,0 @@
-## JSX text nodes (tsx)
-
-## UI props with literal text
-
-## Dialogs/prompts/alerts/confirms
-
-## Toasts and notifications with literals
-
-## Main-process menu/dialog labels

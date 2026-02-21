@@ -13,7 +13,7 @@ type WindowControlsOverlayLike = {
 };
 
 export const WindowTitleBar: React.FC = () => {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const { sidebarVisible, panelVisible, toggleSidebar, togglePanel } = useAppStore();
   const [windowTitle, setWindowTitle] = useState<string>(document.title || 'Blogging Desktop Server');
   const [openMenu, setOpenMenu] = useState<{ label: string; left: number } | null>(null);
@@ -430,9 +430,9 @@ export const WindowTitleBar: React.FC = () => {
       <div className="window-titlebar-actions">
         <button
           className="window-titlebar-action-button"
-          aria-label="Toggle Sidebar"
+          aria-label={t('windowTitleBar.toggleSidebar')}
           onClick={toggleSidebar}
-          title={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar (Ctrl+B)`}
+          title={sidebarVisible ? t('windowTitleBar.hideSidebar') : t('windowTitleBar.showSidebar')}
         >
           <span
             className={`window-titlebar-sidebar-icon ${sidebarVisible ? 'is-active' : 'is-inactive'}`}
@@ -444,9 +444,9 @@ export const WindowTitleBar: React.FC = () => {
         </button>
         <button
           className="window-titlebar-action-button"
-          aria-label="Toggle Panel"
+          aria-label={t('windowTitleBar.togglePanel')}
           onClick={togglePanel}
-          title={`${panelVisible ? 'Hide' : 'Show'} Panel (Ctrl+J)`}
+          title={panelVisible ? t('windowTitleBar.hidePanel') : t('windowTitleBar.showPanel')}
         >
           <span
             className={`window-titlebar-panel-icon ${panelVisible ? 'is-active' : 'is-inactive'}`}

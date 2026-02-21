@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../i18n';
 import './PostSearchModal.css';
 
 interface SearchResult {
@@ -19,6 +20,7 @@ export const PostSearchModal: React.FC<PostSearchModalProps> = ({
   onClose,
   initialQuery = ''
 }) => {
+  const { t } = useI18n();
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -107,7 +109,7 @@ export const PostSearchModal: React.FC<PostSearchModalProps> = ({
             ref={inputRef}
             type="text"
             className="post-search-input"
-            placeholder="Search posts by title or content..."
+            placeholder={t('postSearch.placeholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoComplete="off"
@@ -117,19 +119,19 @@ export const PostSearchModal: React.FC<PostSearchModalProps> = ({
         <div className="post-search-results">
           {isSearching && (
             <div className="post-search-loading">
-              Searching...
+              {t('postSearch.searching')}
             </div>
           )}
 
           {!isSearching && query.length < 2 && (
             <div className="post-search-empty">
-              Type at least 2 characters to search
+              {t('postSearch.typeMore')}
             </div>
           )}
 
           {!isSearching && query.length >= 2 && results.length === 0 && (
             <div className="post-search-empty">
-              No posts found for "{query}"
+              {t('postSearch.noResults', { query })}
             </div>
           )}
 
@@ -155,7 +157,7 @@ export const PostSearchModal: React.FC<PostSearchModalProps> = ({
 
         <div className="post-search-footer">
           <span className="post-search-hint">
-            Use ↑↓ to navigate, Enter to select, Esc to close
+            {t('postSearch.hint')}
           </span>
         </div>
       </div>

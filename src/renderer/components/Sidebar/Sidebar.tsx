@@ -1355,6 +1355,7 @@ const SettingsNav: React.FC = () => {
 
 // Chat conversations list
 const ChatList: React.FC = () => {
+  const { t, language } = useI18n();
   const { openTab, closeTab } = useAppStore();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1412,7 +1413,7 @@ const ChatList: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to create conversation:', error);
-      showToast.error('Failed to create new chat');
+      showToast.error(t('sidebar.chat.createFailed'));
     }
   };
 
@@ -1428,7 +1429,7 @@ const ChatList: React.FC = () => {
       closeTab(conversationId);
     } catch (error) {
       console.error('Failed to delete conversation:', error);
-      showToast.error('Failed to delete chat');
+      showToast.error(t('sidebar.chat.deleteFailed'));
     }
   };
 
@@ -1436,24 +1437,25 @@ const ChatList: React.FC = () => {
     const date = new Date(dateString);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
     
     if (diffDays === 0) {
-      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return date.toLocaleTimeString(uiDateLocale, { hour: 'numeric', minute: '2-digit' });
     } else if (diffDays === 1) {
-      return 'Yesterday';
+      return t('sidebar.chat.yesterday');
     } else if (diffDays < 7) {
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
+      return date.toLocaleDateString(uiDateLocale, { weekday: 'short' });
     }
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(uiDateLocale, { month: 'short', day: 'numeric' });
   };
 
   if (isLoading) {
     return (
       <div className="chat-list">
         <div className="chat-list-header">
-          <span>AI ASSISTANT</span>
+          <span>{t('sidebar.chat.header')}</span>
         </div>
-        <div className="chat-loading">Loading...</div>
+        <div className="chat-loading">{t('sidebar.loading')}</div>
       </div>
     );
   }
@@ -1461,22 +1463,22 @@ const ChatList: React.FC = () => {
   return (
     <div className="chat-list">
       <div className="chat-list-header">
-        <span>AI ASSISTANT</span>
-        <button className="chat-new-button" onClick={handleNewChat} title="New Chat">
+        <span>{t('sidebar.chat.header')}</span>
+        <button className="chat-new-button" onClick={handleNewChat} title={t('sidebar.chat.newChat')}>
           +
         </button>
       </div>
       {!isReady && (
         <div className="chat-auth-prompt">
-          <p>API key needed. Open a chat to configure.</p>
+          <p>{t('sidebar.chat.apiKeyNeeded')}</p>
         </div>
       )}
       <div className="chat-list-items">
         {conversations.length === 0 ? (
           <div className="chat-empty">
-            <p>No conversations yet</p>
+            <p>{t('sidebar.chat.noConversations')}</p>
             <button className="chat-start-button" onClick={handleNewChat}>
-              Start a new chat
+              {t('sidebar.chat.startNew')}
             </button>
           </div>
         ) : (
@@ -1496,7 +1498,7 @@ const ChatList: React.FC = () => {
                   e.stopPropagation();
                   handleDeleteChat(conv.id);
                 }}
-                title="Delete conversation"
+                title={t('sidebar.chat.deleteConversation')}
               >
                 ×
               </button>
@@ -1509,6 +1511,7 @@ const ChatList: React.FC = () => {
 };
 
 const ImportList: React.FC = () => {
+  const { t, language } = useI18n();
   const { openTab, closeTab, activeProject } = useAppStore();
   const [definitions, setDefinitions] = useState<ImportDefinitionData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1560,7 +1563,7 @@ const ImportList: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to create import definition:', error);
-      showToast.error('Failed to create import definition');
+      showToast.error(t('sidebar.import.createFailed'));
     }
   };
 
@@ -1576,7 +1579,7 @@ const ImportList: React.FC = () => {
       closeTab(definitionId);
     } catch (error) {
       console.error('Failed to delete import definition:', error);
-      showToast.error('Failed to delete import definition');
+      showToast.error(t('sidebar.import.deleteFailed'));
     }
   };
 
@@ -1584,23 +1587,24 @@ const ImportList: React.FC = () => {
     const date = new Date(dateString);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
     if (diffDays === 0) {
-      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return date.toLocaleTimeString(uiDateLocale, { hour: 'numeric', minute: '2-digit' });
     } else if (diffDays === 1) {
-      return 'Yesterday';
+      return t('sidebar.chat.yesterday');
     } else if (diffDays < 7) {
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
+      return date.toLocaleDateString(uiDateLocale, { weekday: 'short' });
     }
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(uiDateLocale, { month: 'short', day: 'numeric' });
   };
 
   if (isLoading) {
     return (
       <div className="chat-list">
         <div className="chat-list-header">
-          <span>IMPORTS</span>
+          <span>{t('sidebar.import.header')}</span>
         </div>
-        <div className="chat-loading">Loading...</div>
+        <div className="chat-loading">{t('sidebar.loading')}</div>
       </div>
     );
   }
@@ -1608,17 +1612,17 @@ const ImportList: React.FC = () => {
   return (
     <div className="chat-list">
       <div className="chat-list-header">
-        <span>IMPORTS</span>
-        <button className="chat-new-button" onClick={handleNewDefinition} title="New Import Definition">
+        <span>{t('sidebar.import.header')}</span>
+        <button className="chat-new-button" onClick={handleNewDefinition} title={t('sidebar.import.newDefinition')}>
           +
         </button>
       </div>
       <div className="chat-list-items">
         {definitions.length === 0 ? (
           <div className="chat-empty">
-            <p>No import definitions yet</p>
+            <p>{t('sidebar.import.none')}</p>
             <button className="chat-start-button" onClick={handleNewDefinition}>
-              Create an import definition
+              {t('sidebar.import.createDefinition')}
             </button>
           </div>
         ) : (
@@ -1635,7 +1639,7 @@ const ImportList: React.FC = () => {
               <button
                 className="chat-item-delete"
                 onClick={(e) => handleDeleteDefinition(e, def.id)}
-                title="Delete import definition"
+                title={t('sidebar.import.deleteDefinition')}
               >
                 ×
               </button>

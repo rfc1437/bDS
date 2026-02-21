@@ -68,22 +68,22 @@ export const StatusBar: React.FC = () => {
 
         {/* Stats */}
         <div className="status-bar-item">
-          <span>{totalPosts} posts</span>
+          <span>{t('statusBar.posts', { count: totalPosts })}</span>
         </div>
         <div className="status-bar-item">
-          <span>{media.length} media</span>
+          <span>{t('statusBar.media', { count: media.length })}</span>
         </div>
 
         <div className="status-bar-item theme-badge">
-          <span>Theme: {activeTheme}</span>
+          <span>{t('statusBar.theme', { theme: activeTheme })}</span>
         </div>
 
         <div className="status-bar-item language-badge">
-          <span>UI</span>
+          <span>{t('statusBar.ui')}</span>
           <select
             className="status-bar-language-select"
             data-testid="statusbar-language-select"
-            aria-label="UI language"
+            aria-label={t('statusBar.uiLanguage')}
             value={language}
             onChange={(event) => setLanguage(event.target.value as UiLanguage)}
           >

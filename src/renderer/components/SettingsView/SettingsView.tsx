@@ -484,13 +484,13 @@ export const SettingsView: React.FC = () => {
     <SettingSection
       id="settings-section-editor"
       title={t('settings.editor.title')}
-      description="Configure the blog post editor behavior and appearance."
+      description={t('settings.editor.description')}
       hidden={!sectionHasMatches(editorKeywords)}
     >
       <SettingRow
         id="editor-mode"
-        label="Default Editor Mode"
-        description="Choose the default mode when opening posts. You can switch modes at any time using the editor toolbar."
+        label={t('settings.editor.defaultModeLabel')}
+        description={t('settings.editor.defaultModeDescription')}
       >
         <select
           id="editor-mode"
@@ -505,12 +505,12 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="diff-view-style"
-        label="Diff View Style"
-        description="Choose how Git diffs are shown by default."
+        label={t('settings.editor.diffViewStyleLabel')}
+        description={t('settings.editor.diffViewStyleDescription')}
       >
         <select
           id="diff-view-style"
-          aria-label="Diff View Style"
+          aria-label={t('settings.editor.diffViewStyleLabel')}
           value={gitDiffPreferences.viewStyle}
           onChange={(e) =>
             setGitDiffPreferences({
@@ -526,12 +526,12 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="diff-wrap-long-lines"
-        label="Wrap Long Lines in Diff"
-        description="Enable word wrapping for long lines in Git diffs."
+        label={t('settings.editor.wrapLongLinesLabel')}
+        description={t('settings.editor.wrapLongLinesDescription')}
       >
         <input
           id="diff-wrap-long-lines"
-          aria-label="Wrap long lines in diff"
+          aria-label={t('settings.editor.wrapLongLinesAria')}
           type="checkbox"
           checked={gitDiffPreferences.wordWrap}
           onChange={(e) =>
@@ -545,12 +545,12 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="diff-hide-unchanged-regions"
-        label="Hide Unchanged Regions"
-        description="Collapse unchanged regions in Git diffs."
+        label={t('settings.editor.hideUnchangedRegionsLabel')}
+        description={t('settings.editor.hideUnchangedRegionsDescription')}
       >
         <input
           id="diff-hide-unchanged-regions"
-          aria-label="Hide unchanged regions"
+          aria-label={t('settings.editor.hideUnchangedRegionsAria')}
           type="checkbox"
           checked={gitDiffPreferences.hideUnchangedRegions}
           onChange={(e) =>
@@ -717,7 +717,7 @@ export const SettingsView: React.FC = () => {
         <div className="category-add-form">
           <input
             type="text"
-            placeholder="New category name..."
+            placeholder={t('settings.content.newCategoryPlaceholder')}
             value={newCategoryInput}
             onChange={(e) => setNewCategoryInput(e.target.value)}
             onKeyDown={(e) => {
@@ -728,13 +728,13 @@ export const SettingsView: React.FC = () => {
             }}
           />
           <button className="primary" onClick={handleAddCategory}>
-            Add Category
+            {t('settings.content.addCategory')}
           </button>
         </div>
 
         <div className="setting-actions">
           <button className="secondary" onClick={handleResetCategories}>
-            Reset to Defaults
+            {t('settings.content.resetDefaults')}
           </button>
         </div>
     </SettingSection>
@@ -813,8 +813,8 @@ export const SettingsView: React.FC = () => {
     >
       <SettingRow
         id="ai-api-key"
-        label="OpenCode API Key"
-        description="Your API key for the OpenCode Zen gateway. Required to use AI features."
+        label={t('settings.ai.apiKeyLabel')}
+        description={t('settings.ai.apiKeyDescription')}
       >
         <div className="setting-input-group">
           {aiHasApiKey ? (
@@ -824,9 +824,9 @@ export const SettingsView: React.FC = () => {
                 type="text"
                 value={aiApiKeyMasked}
                 disabled
-                placeholder="API key configured"
+                placeholder={t('settings.ai.apiKeyConfigured')}
               />
-              <span className="setting-status-badge success">✓ Configured</span>
+              <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
             </>
           ) : (
             <>
@@ -835,10 +835,10 @@ export const SettingsView: React.FC = () => {
                 type="password"
                 value={newApiKey}
                 onChange={(e) => setNewApiKey(e.target.value)}
-                placeholder="Enter your API key..."
+                placeholder={t('chat.apiKeyPlaceholder')}
               />
               <button className="primary" onClick={handleSaveApiKey} disabled={!newApiKey.trim()}>
-                Save Key
+                {t('chat.apiKeySave')}
               </button>
             </>
           )}
@@ -846,7 +846,7 @@ export const SettingsView: React.FC = () => {
         {aiHasApiKey && (
           <div className="setting-inline-action">
             <button className="text-button" onClick={() => { setAiHasApiKey(false); setAiApiKeyMasked(''); }}>
-              Change API Key
+              {t('settings.ai.changeApiKey')}
             </button>
           </div>
         )}
@@ -854,8 +854,8 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="ai-model"
-        label="Default Model"
-        description="The AI model to use for new chat conversations."
+        label={t('settings.ai.defaultModelLabel')}
+        description={t('settings.ai.defaultModelDescription')}
       >
         <select
           id="ai-model"
@@ -872,8 +872,8 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="ai-system-prompt"
-        label="System Prompt"
-        description="Instructions given to the AI at the start of each conversation. This defines how the assistant behaves and what tools it knows about."
+        label={t('settings.ai.systemPromptLabel')}
+        description={t('settings.ai.systemPromptDescription')}
       >
         <textarea
           id="ai-system-prompt"
@@ -882,7 +882,7 @@ export const SettingsView: React.FC = () => {
             setAiSystemPrompt(e.target.value);
             setAiSystemPromptModified(true);
           }}
-          placeholder="Enter system instructions for the AI assistant..."
+          placeholder={t('settings.ai.systemPromptPlaceholder')}
           rows={12}
           className="system-prompt-textarea"
         />
@@ -892,10 +892,10 @@ export const SettingsView: React.FC = () => {
             onClick={handleSaveSystemPrompt}
             disabled={!aiSystemPromptModified}
           >
-            Save Prompt
+            {t('settings.ai.savePrompt')}
           </button>
           <button className="secondary" onClick={handleResetSystemPrompt}>
-            Reset to Default
+            {t('settings.ai.resetPrompt')}
           </button>
         </div>
       </SettingRow>
@@ -907,18 +907,18 @@ export const SettingsView: React.FC = () => {
       <SettingSection
         id="settings-section-publishing"
         title={t('settings.publishing.ftpTitle')}
-        description="Configure FTP credentials for publishing your blog to a web server."
+        description={t('credentials.ftp.description')}
         hidden={!sectionHasMatches(publishingKeywords)}
       >
         <SettingRow
           id="ftp-host"
-          label="Host"
-          description="The FTP server hostname or IP address."
+          label={t('credentials.field.host')}
+          description={t('settings.publishing.ftpHostDescription')}
         >
           <input
             id="ftp-host"
             type="text"
-            placeholder="ftp.example.com"
+            placeholder={t('credentials.ftp.placeholder.host')}
             value={credentials.ftpHost}
             onChange={(e) => setCredentials({ ...credentials, ftpHost: e.target.value })}
           />
@@ -926,13 +926,13 @@ export const SettingsView: React.FC = () => {
 
         <SettingRow
           id="ftp-user"
-          label="Username"
-          description="Your FTP account username."
+          label={t('credentials.field.username')}
+          description={t('settings.publishing.ftpUsernameDescription')}
         >
           <input
             id="ftp-user"
             type="text"
-            placeholder="ftp-user"
+            placeholder={t('credentials.ftp.placeholder.username')}
             value={credentials.ftpUser}
             onChange={(e) => setCredentials({ ...credentials, ftpUser: e.target.value })}
           />
@@ -940,21 +940,21 @@ export const SettingsView: React.FC = () => {
 
         <SettingRow
           id="ftp-password"
-          label="Password"
-          description="Your FTP account password."
+          label={t('credentials.field.password')}
+          description={t('settings.publishing.ftpPasswordDescription')}
         >
           <div className="setting-input-group">
             <input
               id="ftp-password"
               type={showSecrets ? 'text' : 'password'}
-              placeholder="Password"
+              placeholder={t('credentials.ftp.placeholder.password')}
               value={credentials.ftpPassword}
               onChange={(e) => setCredentials({ ...credentials, ftpPassword: e.target.value })}
             />
             <button
               className="setting-toggle-visibility"
               onClick={() => setShowSecrets(!showSecrets)}
-              title={showSecrets ? 'Hide password' : 'Show password'}
+              title={showSecrets ? t('settings.publishing.hidePassword') : t('settings.publishing.showPassword')}
             >
               {showSecrets ? '🔒' : '👁'}
             </button>
@@ -969,18 +969,18 @@ export const SettingsView: React.FC = () => {
 
       <SettingSection
         title={t('settings.publishing.sshTitle')}
-        description="Configure SSH credentials for secure deployment to your server."
+        description={t('credentials.ssh.description')}
         hidden={!sectionHasMatches(publishingKeywords)}
       >
         <SettingRow
           id="ssh-host"
-          label="Host"
-          description="The SSH server hostname or IP address."
+          label={t('credentials.field.host')}
+          description={t('settings.publishing.sshHostDescription')}
         >
           <input
             id="ssh-host"
             type="text"
-            placeholder="server.example.com"
+            placeholder={t('credentials.ssh.placeholder.host')}
             value={credentials.sshHost}
             onChange={(e) => setCredentials({ ...credentials, sshHost: e.target.value })}
           />
@@ -988,13 +988,13 @@ export const SettingsView: React.FC = () => {
 
         <SettingRow
           id="ssh-user"
-          label="Username"
-          description="Your SSH account username."
+          label={t('credentials.field.username')}
+          description={t('settings.publishing.sshUsernameDescription')}
         >
           <input
             id="ssh-user"
             type="text"
-            placeholder="ssh-user"
+            placeholder={t('credentials.ssh.placeholder.username')}
             value={credentials.sshUser}
             onChange={(e) => setCredentials({ ...credentials, sshUser: e.target.value })}
           />
@@ -1002,13 +1002,13 @@ export const SettingsView: React.FC = () => {
 
         <SettingRow
           id="ssh-keypath"
-          label="SSH Key Path"
-          description="Path to your SSH private key file."
+          label={t('credentials.field.sshKeyPath')}
+          description={t('settings.publishing.sshKeyPathDescription')}
         >
           <input
             id="ssh-keypath"
             type="text"
-            placeholder="~/.ssh/id_rsa"
+            placeholder={t('credentials.ssh.placeholder.keyPath')}
             value={credentials.sshKeyPath}
             onChange={(e) => setCredentials({ ...credentials, sshKeyPath: e.target.value })}
           />
@@ -1027,13 +1027,13 @@ export const SettingsView: React.FC = () => {
       <SettingSection
         id="settings-section-data"
         title={t('settings.data.title')}
-        description="Rebuild the local database index from source files. Useful if post or media files were edited externally."
+        description={t('settings.data.description')}
         hidden={!sectionHasMatches(dataKeywords)}
       >
         <SettingRow
           id="rebuild-posts"
-          label="Rebuild Posts Database"
-          description="Re-scan all post markdown files and rebuild the database index."
+          label={t('settings.data.rebuildPostsLabel')}
+          description={t('settings.data.rebuildPostsDescription')}
         >
           <button
             className="secondary"
@@ -1053,7 +1053,7 @@ export const SettingsView: React.FC = () => {
               }
             }}
           >
-            Rebuild Posts
+            {t('settings.data.rebuildPostsAction')}
           </button>
         </SettingRow>
 

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChatModel } from '../../types/electron';
+import { useI18n } from '../../i18n';
 import './ImportAnalysisView.css';
 
 /** How to resolve a slug conflict during import */
@@ -155,7 +156,8 @@ const formatEta = (etaMs: number): string => {
 };
 
 export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definitionId }) => {
-  const [name, setName] = useState('Untitled Import');
+  const { t } = useI18n();
+  const [name, setName] = useState(t('importAnalysis.untitledImport'));
   const [uploadsFolder, setUploadsFolder] = useState<string | null>(null);
   const [wxrFilePath, setWxrFilePath] = useState<string | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
@@ -333,7 +335,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
   }, [definitionId]);
 
   const handleNameBlur = useCallback(async () => {
-    const trimmed = name.trim() || 'Untitled Import';
+    const trimmed = name.trim() || t('importAnalysis.untitledImport');
     setName(trimmed);
     await window.electronAPI?.importDefinitions.update(definitionId, { name: trimmed });
   }, [definitionId, name]);
@@ -378,7 +380,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
     setExecutionState({
       isExecuting: true,
       taskId: null,
-      phase: 'Starting...',
+      phase: t('importAnalysis.executionStarting'),
       current: 0,
       total: 0,
       detail: '',
@@ -405,7 +407,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
       setExecutionState(prev => ({
         ...prev,
         isExecuting: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : t('importAnalysis.unknownError'),
       }));
     }
   }, [report, uploadsFolder]);
@@ -478,7 +480,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
       <div className="import-analysis">
         <div className="import-loading">
           <div className="import-spinner" />
-          Loading import definition...
+          {t('importAnalysis.loadingDefinition')}
         </div>
       </div>
     );
@@ -494,30 +496,30 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
           onChange={(e) => setName(e.target.value)}
           onBlur={handleNameBlur}
           onKeyDown={(e) => { if (e.key === 'Enter') nameInputRef.current?.blur(); }}
-          placeholder="Import name..."
+          placeholder={t('importAnalysis.namePlaceholder')}
         />
-        <p>Select a WordPress export file (WXR) and an uploads folder to analyze what would be imported.</p>
+        <p>{t('importAnalysis.headerDescription')}</p>
       </div>
 
       <div className="import-file-selectors">
         <div className="import-file-row">
-          <label>Uploads Folder</label>
+          <label>{t('importAnalysis.uploadsFolder')}</label>
           <div className={`import-file-path ${!uploadsFolder ? 'placeholder' : ''}`}>
-            {uploadsFolder || 'No folder selected'}
+            {uploadsFolder || t('importAnalysis.noFolderSelected')}
           </div>
-          <button onClick={handleSelectUploadsFolder}>Browse...</button>
+          <button onClick={handleSelectUploadsFolder}>{t('settings.project.browse')}...</button>
         </div>
         <div className="import-file-row">
-          <label>WXR File</label>
+          <label>{t('importAnalysis.wxrFile')}</label>
           <div className={`import-file-path ${!wxrFilePath ? 'placeholder' : ''}`}>
-            {wxrFilePath || report?.sourceFile || 'Select a file to analyze'}
+            {wxrFilePath || report?.sourceFile || t('importAnalysis.selectFileToAnalyze')}
           </div>
           <button
             className="import-analyze-btn"
             onClick={handleSelectAndAnalyze}
             disabled={isLoading}
           >
-            {isLoading ? 'Analyzing...' : 'Select & Analyze'}
+            {isLoading ? t('importAnalysis.analyzing') : t('importAnalysis.selectAndAnalyze')}
           </button>
         </div>
       </div>
@@ -526,7 +528,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
         <div className="import-loading">
           <div className="import-spinner" />
           <div className="import-progress">
-            <div className="import-progress-step">{progressStep || 'Analyzing WXR file...'}</div>
+            <div className="import-progress-step">{progressStep || t('importAnalysis.analyzingWxr')}</div>
             {progressDetail && <div className="import-progress-detail">{progressDetail}</div>}
           </div>
         </div>
@@ -537,7 +539,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
           <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
           </svg>
-          <p>Select a WordPress export file to begin analysis.</p>
+          <p>{t('importAnalysis.emptyState')}</p>
         </div>
       )}
 
@@ -551,7 +553,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
           {executionState.isExecuting && (
             <div className="import-execution-progress">
               <div className="import-execution-header">
-                <h3>Importing...</h3>
+                <h3>{t('importAnalysis.importing')}</h3>
                 {executionState.eta !== null && executionState.eta > 0 && (
                   <span className="import-eta">{formatEta(executionState.eta)}</span>
                 )}
@@ -576,7 +578,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
               </svg>
-              <span>Import completed successfully!</span>
+              <span>{t('importAnalysis.importComplete')}</span>
             </div>
           )}
 
@@ -586,7 +588,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
               </svg>
-              <span>Import failed: {executionState.error}</span>
+              <span>{t('importAnalysis.importFailed', { error: executionState.error })}</span>
             </div>
           )}
 
@@ -598,18 +600,20 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
               return (
                 <div className="import-execute-section">
                   <div className="import-execute-summary">
-                    Ready to import:
-                    {counts.tags > 0 && <span className="import-count-tag">{counts.tags} tags/categories</span>}
-                    {counts.posts > 0 && <span className="import-count-tag">{counts.posts} posts</span>}
-                    {counts.media > 0 && <span className="import-count-tag">{counts.media} media</span>}
-                    {counts.pages > 0 && <span className="import-count-tag">{counts.pages} pages</span>}
+                    {t('importAnalysis.readyToImport')}
+                    {counts.tags > 0 && <span className="import-count-tag">{counts.tags} {t('importAnalysis.tagsCategories')}</span>}
+                    {counts.posts > 0 && <span className="import-count-tag">{counts.posts} {t('importAnalysis.posts')}</span>}
+                    {counts.media > 0 && <span className="import-count-tag">{counts.media} {t('importAnalysis.media')}</span>}
+                    {counts.pages > 0 && <span className="import-count-tag">{counts.pages} {t('importAnalysis.pages')}</span>}
                   </div>
                   <button
                     className="import-execute-btn"
                     onClick={handleExecuteImport}
                     disabled={totalImportable === 0}
                   >
-                    {totalImportable === 0 ? 'Nothing to Import' : `Import ${totalImportable} Items`}
+                    {totalImportable === 0
+                      ? t('importAnalysis.nothingToImport')
+                      : t('importAnalysis.importItems', { count: totalImportable })}
                   </button>
                 </div>
               );
@@ -618,7 +622,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
 
           {report.posts.conflicts > 0 && (
             <ConflictsSection
-              title="Post Slug Conflicts"
+              title={t('importAnalysis.postSlugConflicts')}
               items={report.posts.items.filter(i => i.status === 'conflict')}
               expanded={expandedSections['post-conflicts'] ?? true}
               onToggle={() => toggleSection('post-conflicts')}
@@ -628,7 +632,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
 
           {report.pages.conflicts > 0 && (
             <ConflictsSection
-              title="Page Slug Conflicts"
+              title={t('importAnalysis.pageSlugConflicts')}
               items={report.pages.items.filter(i => i.status === 'conflict')}
               expanded={expandedSections['page-conflicts'] ?? true}
               onToggle={() => toggleSection('page-conflicts')}
@@ -641,7 +645,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
             const postsOnly = report.posts.items.filter(i => i.wxrPost.postType === 'post');
             return postsOnly.length > 0 && (
               <PostDetailSection
-                title={`Posts (${postsOnly.length})`}
+                title={t('importAnalysis.postsWithCount', { count: postsOnly.length })}
                 items={postsOnly}
                 expanded={expandedSections['posts'] ?? false}
                 onToggle={() => toggleSection('posts')}
@@ -654,7 +658,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
             const otherPosts = report.posts.items.filter(i => i.wxrPost.postType !== 'post');
             return otherPosts.length > 0 && (
               <PostDetailSection
-                title={`Other (${otherPosts.length})`}
+                title={t('importAnalysis.otherWithCount', { count: otherPosts.length })}
                 items={otherPosts}
                 expanded={expandedSections['other'] ?? false}
                 onToggle={() => toggleSection('other')}
@@ -665,7 +669,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
 
           {report.pages.total > 0 && (
             <PostDetailSection
-              title={`Pages (${report.pages.total})`}
+              title={t('importAnalysis.pagesWithCount', { count: report.pages.total })}
               items={report.pages.items}
               expanded={expandedSections['pages'] ?? false}
               onToggle={() => toggleSection('pages')}
@@ -673,7 +677,7 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
           )}
 
           <MediaDetailSection
-            title={`Media (${report.media.total})`}
+            title={t('importAnalysis.mediaWithCount', { count: report.media.total })}
             items={report.media.items}
             expanded={expandedSections['media'] ?? false}
             onToggle={() => toggleSection('media')}
@@ -703,28 +707,31 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
   );
 };
 
-const SiteInfoCard: React.FC<{ site: AnalysisReport['site']; sourceFile: string }> = ({ site, sourceFile }) => (
-  <div className="import-site-info">
+const SiteInfoCard: React.FC<{ site: AnalysisReport['site']; sourceFile: string }> = ({ site, sourceFile }) => {
+  const { t } = useI18n();
+
+  return <div className="import-site-info">
     <div className="import-site-info-item">
-      <span className="info-label">Site</span>
-      <span className="info-value">{site.title || 'Untitled'}</span>
+      <span className="info-label">{t('importAnalysis.site')}</span>
+      <span className="info-value">{site.title || t('importAnalysis.untitled')}</span>
     </div>
     <div className="import-site-info-item">
-      <span className="info-label">URL</span>
-      <span className="info-value">{site.link || 'N/A'}</span>
+      <span className="info-label">{t('importAnalysis.url')}</span>
+      <span className="info-value">{site.link || t('importAnalysis.notAvailable')}</span>
     </div>
     <div className="import-site-info-item">
-      <span className="info-label">Language</span>
-      <span className="info-value">{site.language || 'N/A'}</span>
+      <span className="info-label">{t('importAnalysis.language')}</span>
+      <span className="info-value">{site.language || t('importAnalysis.notAvailable')}</span>
     </div>
     <div className="import-site-info-item">
-      <span className="info-label">File</span>
+      <span className="info-label">{t('importAnalysis.file')}</span>
       <span className="info-value">{sourceFile.split(/[/\\]/).pop()}</span>
     </div>
   </div>
-);
+  };
 
 const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => {
+  const { t } = useI18n();
   // Split posts by type
   const postsOnly = report.posts.items.filter(i => i.wxrPost.postType === 'post');
   const otherPosts = report.posts.items.filter(i => i.wxrPost.postType !== 'post');
@@ -751,80 +758,80 @@ const StatCards: React.FC<{ report: AnalysisReport }> = ({ report }) => {
   return (
     <div className="import-stat-cards">
       <div className="import-stat-card">
-        <h3>Posts</h3>
+        <h3>{t('importAnalysis.posts')}</h3>
         <div className="import-stat-number">{postsStats.total}</div>
         <div className="import-stat-breakdown">
-          {postsStats.new > 0 && <span className="import-stat-tag stat-new">{postsStats.new} new</span>}
-          {postsStats.updates > 0 && <span className="import-stat-tag stat-update">{postsStats.updates} update</span>}
-          {postsStats.conflicts > 0 && <span className="import-stat-tag stat-conflict">{postsStats.conflicts} conflict</span>}
-          {postsStats.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{postsStats.contentDuplicates} duplicate</span>}
+          {postsStats.new > 0 && <span className="import-stat-tag stat-new">{postsStats.new} {t('importAnalysis.new')}</span>}
+          {postsStats.updates > 0 && <span className="import-stat-tag stat-update">{postsStats.updates} {t('importAnalysis.update')}</span>}
+          {postsStats.conflicts > 0 && <span className="import-stat-tag stat-conflict">{postsStats.conflicts} {t('importAnalysis.conflict')}</span>}
+          {postsStats.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{postsStats.contentDuplicates} {t('importAnalysis.duplicate')}</span>}
         </div>
       </div>
 
       {otherStats.total > 0 && (
         <div className="import-stat-card">
-          <h3 title={otherTypes}>Other</h3>
+          <h3 title={otherTypes}>{t('importAnalysis.other')}</h3>
           <div className="import-stat-number">{otherStats.total}</div>
           <div className="import-stat-breakdown">
-            {otherStats.new > 0 && <span className="import-stat-tag stat-new">{otherStats.new} new</span>}
-            {otherStats.updates > 0 && <span className="import-stat-tag stat-update">{otherStats.updates} update</span>}
-            {otherStats.conflicts > 0 && <span className="import-stat-tag stat-conflict">{otherStats.conflicts} conflict</span>}
-            {otherStats.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{otherStats.contentDuplicates} duplicate</span>}
+            {otherStats.new > 0 && <span className="import-stat-tag stat-new">{otherStats.new} {t('importAnalysis.new')}</span>}
+            {otherStats.updates > 0 && <span className="import-stat-tag stat-update">{otherStats.updates} {t('importAnalysis.update')}</span>}
+            {otherStats.conflicts > 0 && <span className="import-stat-tag stat-conflict">{otherStats.conflicts} {t('importAnalysis.conflict')}</span>}
+            {otherStats.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{otherStats.contentDuplicates} {t('importAnalysis.duplicate')}</span>}
           </div>
         </div>
       )}
 
       <div className="import-stat-card">
-        <h3>Pages</h3>
+        <h3>{t('importAnalysis.pages')}</h3>
         <div className="import-stat-number">{report.pages.total}</div>
         <div className="import-stat-breakdown">
-          {report.pages.new > 0 && <span className="import-stat-tag stat-new">{report.pages.new} new</span>}
-          {report.pages.updates > 0 && <span className="import-stat-tag stat-update">{report.pages.updates} update</span>}
-          {report.pages.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.pages.conflicts} conflict</span>}
-          {report.pages.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.pages.contentDuplicates} duplicate</span>}
+          {report.pages.new > 0 && <span className="import-stat-tag stat-new">{report.pages.new} {t('importAnalysis.new')}</span>}
+          {report.pages.updates > 0 && <span className="import-stat-tag stat-update">{report.pages.updates} {t('importAnalysis.update')}</span>}
+          {report.pages.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.pages.conflicts} {t('importAnalysis.conflict')}</span>}
+          {report.pages.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.pages.contentDuplicates} {t('importAnalysis.duplicate')}</span>}
         </div>
       </div>
 
       <div className="import-stat-card">
-        <h3>Media</h3>
+        <h3>{t('importAnalysis.media')}</h3>
         <div className="import-stat-number">{report.media.total}</div>
         <div className="import-stat-breakdown">
-          {report.media.new > 0 && <span className="import-stat-tag stat-new">{report.media.new} new</span>}
-          {report.media.updates > 0 && <span className="import-stat-tag stat-update">{report.media.updates} update</span>}
-          {report.media.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.media.conflicts} conflict</span>}
-          {report.media.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.media.contentDuplicates} duplicate</span>}
-          {report.media.missing > 0 && <span className="import-stat-tag stat-missing">{report.media.missing} missing</span>}
+          {report.media.new > 0 && <span className="import-stat-tag stat-new">{report.media.new} {t('importAnalysis.new')}</span>}
+          {report.media.updates > 0 && <span className="import-stat-tag stat-update">{report.media.updates} {t('importAnalysis.update')}</span>}
+          {report.media.conflicts > 0 && <span className="import-stat-tag stat-conflict">{report.media.conflicts} {t('importAnalysis.conflict')}</span>}
+          {report.media.contentDuplicates > 0 && <span className="import-stat-tag stat-duplicate">{report.media.contentDuplicates} {t('importAnalysis.duplicate')}</span>}
+          {report.media.missing > 0 && <span className="import-stat-tag stat-missing">{report.media.missing} {t('importAnalysis.missing')}</span>}
         </div>
       </div>
 
       <div className="import-stat-card">
-        <h3>Categories</h3>
+        <h3>{t('importAnalysis.categories')}</h3>
         <div className="import-stat-number">{report.categories.length}</div>
         <div className="import-stat-breakdown">
           {report.categories.filter(c => c.existsInProject).length > 0 && (
-            <span className="import-stat-tag stat-update">{report.categories.filter(c => c.existsInProject).length} existing</span>
+            <span className="import-stat-tag stat-update">{report.categories.filter(c => c.existsInProject).length} {t('importAnalysis.existing')}</span>
           )}
           {report.categories.filter(c => !c.existsInProject && c.mappedTo).length > 0 && (
-            <span className="import-stat-tag stat-mapped">{report.categories.filter(c => !c.existsInProject && c.mappedTo).length} mapped</span>
+            <span className="import-stat-tag stat-mapped">{report.categories.filter(c => !c.existsInProject && c.mappedTo).length} {t('importAnalysis.mapped')}</span>
           )}
           {report.categories.filter(c => !c.existsInProject && !c.mappedTo).length > 0 && (
-            <span className="import-stat-tag stat-new">{report.categories.filter(c => !c.existsInProject && !c.mappedTo).length} new</span>
+            <span className="import-stat-tag stat-new">{report.categories.filter(c => !c.existsInProject && !c.mappedTo).length} {t('importAnalysis.new')}</span>
           )}
         </div>
       </div>
 
       <div className="import-stat-card">
-        <h3>Tags</h3>
+        <h3>{t('importAnalysis.tags')}</h3>
         <div className="import-stat-number">{report.tags.length}</div>
         <div className="import-stat-breakdown">
           {report.tags.filter(t => t.existsInProject).length > 0 && (
-            <span className="import-stat-tag stat-update">{report.tags.filter(t => t.existsInProject).length} existing</span>
+            <span className="import-stat-tag stat-update">{report.tags.filter(t => t.existsInProject).length} {t('importAnalysis.existing')}</span>
           )}
           {report.tags.filter(t => !t.existsInProject && t.mappedTo).length > 0 && (
-            <span className="import-stat-tag stat-mapped">{report.tags.filter(t => !t.existsInProject && t.mappedTo).length} mapped</span>
+            <span className="import-stat-tag stat-mapped">{report.tags.filter(t => !t.existsInProject && t.mappedTo).length} {t('importAnalysis.mapped')}</span>
           )}
           {report.tags.filter(t => !t.existsInProject && !t.mappedTo).length > 0 && (
-            <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject && !t.mappedTo).length} new</span>
+            <span className="import-stat-tag stat-new">{report.tags.filter(t => !t.existsInProject && !t.mappedTo).length} {t('importAnalysis.new')}</span>
           )}
         </div>
       </div>
@@ -838,6 +845,7 @@ interface DateDistribution {
 }
 
 const DateDistributionCard: React.FC<{ distribution: DateDistribution }> = ({ distribution }) => {
+  const { t } = useI18n();
   const postYears = Object.keys(distribution.posts).map(Number).sort();
   const mediaYears = Object.keys(distribution.media).map(Number).sort();
   const allYears = [...new Set([...postYears, ...mediaYears])].sort();
@@ -853,12 +861,12 @@ const DateDistributionCard: React.FC<{ distribution: DateDistribution }> = ({ di
 
   return (
     <div className="import-date-distribution">
-      <h3>Date Distribution</h3>
+      <h3>{t('importAnalysis.dateDistribution')}</h3>
       <div className="distribution-grid">
         <div className="distribution-column">
           <div className="distribution-header">
-            <span className="distribution-label">Posts/Pages</span>
-            <span className="distribution-total">{totalPosts} total</span>
+            <span className="distribution-label">{t('importAnalysis.postsPages')}</span>
+            <span className="distribution-total">{totalPosts} {t('importAnalysis.total')}</span>
           </div>
           <div className="distribution-bars">
             {allYears.map(year => {
@@ -881,8 +889,8 @@ const DateDistributionCard: React.FC<{ distribution: DateDistribution }> = ({ di
         </div>
         <div className="distribution-column">
           <div className="distribution-header">
-            <span className="distribution-label">Media</span>
-            <span className="distribution-total">{totalMedia} total</span>
+            <span className="distribution-label">{t('importAnalysis.media')}</span>
+            <span className="distribution-total">{totalMedia} {t('importAnalysis.total')}</span>
           </div>
           <div className="distribution-bars">
             {allYears.map(year => {
@@ -909,22 +917,22 @@ const DateDistributionCard: React.FC<{ distribution: DateDistribution }> = ({ di
 };
 
 // Helper function to format post metadata for tooltip (new post from WXR)
-function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost']): string {
+function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost'], t: (key: string, params?: Record<string, unknown>) => string): string {
   const lines: string[] = [];
-  lines.push(`WordPress ID: ${wxrPost.wpId}`);
-  lines.push(`Type: ${wxrPost.postType}`);
-  lines.push(`Author: ${wxrPost.creator || 'Unknown'}`);
+  lines.push(`${t('importAnalysis.wordpressId')}: ${wxrPost.wpId}`);
+  lines.push(`${t('importAnalysis.type')}: ${wxrPost.postType}`);
+  lines.push(`${t('importAnalysis.author')}: ${wxrPost.creator || t('importAnalysis.unknown')}`);
   if (wxrPost.pubDate) {
-    lines.push(`Published: ${new Date(wxrPost.pubDate).toLocaleDateString()}`);
+    lines.push(`${t('importAnalysis.published')}: ${new Date(wxrPost.pubDate).toLocaleDateString()}`);
   }
   if (wxrPost.excerpt) {
     const shortExcerpt = wxrPost.excerpt.length > 100 
       ? wxrPost.excerpt.substring(0, 100) + '...'
       : wxrPost.excerpt;
-    lines.push(`Excerpt: ${shortExcerpt}`);
+    lines.push(`${t('importAnalysis.excerpt')}: ${shortExcerpt}`);
   }
   if (wxrPost.tags.length > 0) {
-    lines.push(`Tags: ${wxrPost.tags.join(', ')}`);
+    lines.push(`${t('importAnalysis.tags')}: ${wxrPost.tags.join(', ')}`);
   }
   return lines.join('\n');
 }
@@ -937,6 +945,7 @@ function PostHoverCard({ children, className, metadata, contentPreview, onHover 
   contentPreview?: string | null;
   onHover?: () => void;
 }) {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -975,17 +984,17 @@ function PostHoverCard({ children, className, metadata, contentPreview, onHover 
         <div className="post-hover-card" style={{ position: 'fixed', top: pos.top, left: pos.left }}>
           <div className="post-hover-title">{metadata.title}</div>
           <div className="post-hover-meta">
-            {metadata.author && <span>Author: {metadata.author}</span>}
-            {metadata.pubDate && <span>Published: {new Date(metadata.pubDate).toLocaleDateString()}</span>}
-            {metadata.categories && metadata.categories.length > 0 && <span>Categories: {metadata.categories.join(', ')}</span>}
-            {metadata.tags && metadata.tags.length > 0 && <span>Tags: {metadata.tags.join(', ')}</span>}
-            {metadata.excerpt && <span>Excerpt: {metadata.excerpt.length > 100 ? metadata.excerpt.substring(0, 100) + '...' : metadata.excerpt}</span>}
+            {metadata.author && <span>{t('importAnalysis.author')}: {metadata.author}</span>}
+            {metadata.pubDate && <span>{t('importAnalysis.published')}: {new Date(metadata.pubDate).toLocaleDateString()}</span>}
+            {metadata.categories && metadata.categories.length > 0 && <span>{t('importAnalysis.categories')}: {metadata.categories.join(', ')}</span>}
+            {metadata.tags && metadata.tags.length > 0 && <span>{t('importAnalysis.tags')}: {metadata.tags.join(', ')}</span>}
+            {metadata.excerpt && <span>{t('importAnalysis.excerpt')}: {metadata.excerpt.length > 100 ? metadata.excerpt.substring(0, 100) + '...' : metadata.excerpt}</span>}
           </div>
           {contentPreview !== undefined && (
             <div className="post-hover-content">
-              <div className="post-hover-content-label">Content</div>
+              <div className="post-hover-content-label">{t('importAnalysis.content')}</div>
               <div className="post-hover-content-text">
-                {contentPreview ? (contentPreview.substring(0, 200) + (contentPreview.length > 200 ? '...' : '')) : 'Loading...'}
+                {contentPreview ? (contentPreview.substring(0, 200) + (contentPreview.length > 200 ? '...' : '')) : t('importAnalysis.loading')}
               </div>
             </div>
           )}
@@ -1001,6 +1010,7 @@ function ExistingPostHoverCard({ children, className, postId }: {
   className?: string;
   postId: string;
 }) {
+  const { t } = useI18n();
   const [postData, setPostData] = useState<{
     title: string; content: string; author?: string; pubDate?: string;
     tags: string[]; categories: string[]; excerpt?: string;
@@ -1029,7 +1039,7 @@ function ExistingPostHoverCard({ children, className, postId }: {
   return (
     <PostHoverCard
       className={className}
-      metadata={postData || { title: 'Loading...' }}
+      metadata={postData || { title: t('importAnalysis.loading') }}
       contentPreview={loaded ? (postData?.content || null) : undefined}
       onHover={handleHover}
     >
@@ -1039,22 +1049,22 @@ function ExistingPostHoverCard({ children, className, postId }: {
 }
 
 // Helper function to format media metadata for tooltip
-function formatMediaTooltip(wxrMedia: AnalyzedMediaItem['wxrMedia']): string {
+function formatMediaTooltip(wxrMedia: AnalyzedMediaItem['wxrMedia'], t: (key: string, params?: Record<string, unknown>) => string): string {
   const lines: string[] = [];
-  lines.push(`WordPress ID: ${wxrMedia.wpId}`);
-  lines.push(`MIME Type: ${wxrMedia.mimeType || 'Unknown'}`);
+  lines.push(`${t('importAnalysis.wordpressId')}: ${wxrMedia.wpId}`);
+  lines.push(`${t('importAnalysis.mimeType')}: ${wxrMedia.mimeType || t('importAnalysis.unknown')}`);
   if (wxrMedia.pubDate) {
-    lines.push(`Uploaded: ${new Date(wxrMedia.pubDate).toLocaleDateString()}`);
+    lines.push(`${t('importAnalysis.uploaded')}: ${new Date(wxrMedia.pubDate).toLocaleDateString()}`);
   }
   if (wxrMedia.parentId) {
-    lines.push(`Parent Post ID: ${wxrMedia.parentId}`);
+    lines.push(`${t('importAnalysis.parentPostId')}: ${wxrMedia.parentId}`);
   }
-  lines.push(`URL: ${wxrMedia.url}`);
+  lines.push(`${t('importAnalysis.url')}: ${wxrMedia.url}`);
   if (wxrMedia.description) {
     const shortDesc = wxrMedia.description.length > 100
       ? wxrMedia.description.substring(0, 100) + '...'
       : wxrMedia.description;
-    lines.push(`Description: ${shortDesc}`);
+    lines.push(`${t('importAnalysis.description')}: ${shortDesc}`);
   }
   return lines.join('\n');
 }
@@ -1065,70 +1075,74 @@ const ConflictsSection: React.FC<{
   expanded: boolean;
   onToggle: () => void;
   onResolutionChange: (slug: string, resolution: ImportConflictResolution) => void;
-}> = ({ title, items, expanded, onToggle, onResolutionChange }) => (
-  <div className="import-detail-section conflicts-section">
-    <h3 onClick={onToggle}>
-      <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
-      {title} ({items.length})
-    </h3>
-    {expanded && (
-      <table className="import-detail-table conflicts-table">
-        <thead>
-          <tr>
-            <th>Slug</th>
-            <th>New Entry (WXR)</th>
-            <th>Existing Entry</th>
-            <th>Resolution</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx} className="conflict-row">
-              <td className="slug-cell">{item.wxrPost.slug}</td>
-              <td className="new-entry-cell">
-                <PostHoverCard
-                  className="entry-title tooltip-target"
-                  metadata={{ title: item.wxrPost.title, author: item.wxrPost.creator, pubDate: item.wxrPost.pubDate, categories: item.wxrPost.categories, tags: item.wxrPost.tags }}
-                  contentPreview={item.markdownPreview}
-                >
-                  {item.wxrPost.title}
-                </PostHoverCard>
-                {item.wxrPost.categories.length > 0 && (
-                  <span className="entry-categories">
-                    {item.wxrPost.categories.join(', ')}
-                  </span>
-                )}
-              </td>
-              <td className="existing-entry-cell">
-                {item.existingPost ? (
-                  <ExistingPostHoverCard
-                    className="entry-title tooltip-target"
-                    postId={item.existingPost.id}
-                  >
-                    {item.existingPost.title}
-                  </ExistingPostHoverCard>
-                ) : (
-                  <span className="entry-title">--</span>
-                )}
-              </td>
-              <td className="resolution-cell">
-                <select
-                  className="resolution-select"
-                  value={item.conflictResolution || 'ignore'}
-                  onChange={(e) => onResolutionChange(item.wxrPost.slug, e.target.value as ImportConflictResolution)}
-                >
-                  <option value="ignore">Ignore</option>
-                  <option value="overwrite">Overwrite</option>
-                  <option value="import">Import (new slug)</option>
-                </select>
-              </td>
+}> = ({ title, items, expanded, onToggle, onResolutionChange }) => {
+  const { t } = useI18n();
+
+  return (
+    <div className="import-detail-section conflicts-section">
+      <h3 onClick={onToggle}>
+        <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
+        {title} ({items.length})
+      </h3>
+      {expanded && (
+        <table className="import-detail-table conflicts-table">
+          <thead>
+            <tr>
+              <th>{t('importAnalysis.slug')}</th>
+              <th>{t('importAnalysis.newEntryWxr')}</th>
+              <th>{t('importAnalysis.existingEntry')}</th>
+              <th>{t('importAnalysis.resolution')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-);
+          </thead>
+          <tbody>
+            {items.map((item, idx) => (
+              <tr key={idx} className="conflict-row">
+                <td className="slug-cell">{item.wxrPost.slug}</td>
+                <td className="new-entry-cell">
+                  <PostHoverCard
+                    className="entry-title tooltip-target"
+                    metadata={{ title: item.wxrPost.title, author: item.wxrPost.creator, pubDate: item.wxrPost.pubDate, categories: item.wxrPost.categories, tags: item.wxrPost.tags }}
+                    contentPreview={item.markdownPreview}
+                  >
+                    {item.wxrPost.title}
+                  </PostHoverCard>
+                  {item.wxrPost.categories.length > 0 && (
+                    <span className="entry-categories">
+                      {item.wxrPost.categories.join(', ')}
+                    </span>
+                  )}
+                </td>
+                <td className="existing-entry-cell">
+                  {item.existingPost ? (
+                    <ExistingPostHoverCard
+                      className="entry-title tooltip-target"
+                      postId={item.existingPost.id}
+                    >
+                      {item.existingPost.title}
+                    </ExistingPostHoverCard>
+                  ) : (
+                    <span className="entry-title">{t('importAnalysis.none')}</span>
+                  )}
+                </td>
+                <td className="resolution-cell">
+                  <select
+                    className="resolution-select"
+                    value={item.conflictResolution || 'ignore'}
+                    onChange={(e) => onResolutionChange(item.wxrPost.slug, e.target.value as ImportConflictResolution)}
+                  >
+                    <option value="ignore">{t('importAnalysis.ignore')}</option>
+                    <option value="overwrite">{t('importAnalysis.overwrite')}</option>
+                    <option value="import">{t('importAnalysis.importNewSlug')}</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
 
 const PostDetailSection: React.FC<{
   title: string;
@@ -1136,84 +1150,92 @@ const PostDetailSection: React.FC<{
   expanded: boolean;
   onToggle: () => void;
   showType?: boolean;
-}> = ({ title, items, expanded, onToggle, showType }) => (
-  <div className="import-detail-section">
-    <h3 onClick={onToggle}>
-      <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
-      {title}
-    </h3>
-    {expanded && (
-      <table className="import-detail-table">
-        <thead>
-          <tr>
-            <th>Status</th>
-            {showType && <th>Type</th>}
-            <th>Title</th>
-            <th>Slug</th>
-            <th>Categories</th>
-            <th>WP Status</th>
-            <th>Existing Match</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx} className="post-row-with-tooltip" title={formatPostTooltip(item.wxrPost)}>
-              <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
-              {showType && <td className="post-type-cell">{item.wxrPost.postType}</td>}
-              <td>{item.wxrPost.title}</td>
-              <td className="slug-cell">{item.wxrPost.slug}</td>
-              <td className="categories-cell">
-                {item.wxrPost.categories.length > 0
-                  ? item.wxrPost.categories.join(', ')
-                  : '--'}
-              </td>
-              <td>{item.wxrPost.status}</td>
-              <td className="existing-match">{item.existingPost?.title || '--'}</td>
+}> = ({ title, items, expanded, onToggle, showType }) => {
+  const { t } = useI18n();
+
+  return (
+    <div className="import-detail-section">
+      <h3 onClick={onToggle}>
+        <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
+        {title}
+      </h3>
+      {expanded && (
+        <table className="import-detail-table">
+          <thead>
+            <tr>
+              <th>{t('importAnalysis.status')}</th>
+              {showType && <th>{t('importAnalysis.type')}</th>}
+              <th>{t('importAnalysis.title')}</th>
+              <th>{t('importAnalysis.slug')}</th>
+              <th>{t('importAnalysis.categories')}</th>
+              <th>{t('importAnalysis.wpStatus')}</th>
+              <th>{t('importAnalysis.existingMatch')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-);
+          </thead>
+          <tbody>
+            {items.map((item, idx) => (
+              <tr key={idx} className="post-row-with-tooltip" title={formatPostTooltip(item.wxrPost, t)}>
+                <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
+                {showType && <td className="post-type-cell">{item.wxrPost.postType}</td>}
+                <td>{item.wxrPost.title}</td>
+                <td className="slug-cell">{item.wxrPost.slug}</td>
+                <td className="categories-cell">
+                  {item.wxrPost.categories.length > 0
+                    ? item.wxrPost.categories.join(', ')
+                    : t('importAnalysis.none')}
+                </td>
+                <td>{item.wxrPost.status}</td>
+                <td className="existing-match">{item.existingPost?.title || t('importAnalysis.none')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
 
 const MediaDetailSection: React.FC<{
   title: string;
   items: AnalyzedMediaItem[];
   expanded: boolean;
   onToggle: () => void;
-}> = ({ title, items, expanded, onToggle }) => (
-  <div className="import-detail-section">
-    <h3 onClick={onToggle}>
-      <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
-      {title}
-    </h3>
-    {expanded && (
-      <table className="import-detail-table">
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Filename</th>
-            <th>Type</th>
-            <th>Path</th>
-            <th>Existing Match</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx} className="media-row-with-tooltip" title={formatMediaTooltip(item.wxrMedia)}>
-              <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
-              <td>{item.wxrMedia.filename}</td>
-              <td className="mime-type-cell">{item.wxrMedia.mimeType || '--'}</td>
-              <td className="slug-cell">{item.wxrMedia.relativePath}</td>
-              <td className="existing-match">{item.existingMedia?.originalName || '--'}</td>
+}> = ({ title, items, expanded, onToggle }) => {
+  const { t } = useI18n();
+
+  return (
+    <div className="import-detail-section">
+      <h3 onClick={onToggle}>
+        <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
+        {title}
+      </h3>
+      {expanded && (
+        <table className="import-detail-table">
+          <thead>
+            <tr>
+              <th>{t('importAnalysis.status')}</th>
+              <th>{t('importAnalysis.filename')}</th>
+              <th>{t('importAnalysis.type')}</th>
+              <th>{t('importAnalysis.path')}</th>
+              <th>{t('importAnalysis.existingMatch')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-);
+          </thead>
+          <tbody>
+            {items.map((item, idx) => (
+              <tr key={idx} className="media-row-with-tooltip" title={formatMediaTooltip(item.wxrMedia, t)}>
+                <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
+                <td>{item.wxrMedia.filename}</td>
+                <td className="mime-type-cell">{item.wxrMedia.mimeType || t('importAnalysis.none')}</td>
+                <td className="slug-cell">{item.wxrMedia.relativePath}</td>
+                <td className="existing-match">{item.existingMedia?.originalName || t('importAnalysis.none')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
 
 const TaxonomySection: React.FC<{
   categories: TaxonomyItem[];

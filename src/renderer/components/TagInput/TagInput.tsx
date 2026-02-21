@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { showToast } from '../Toast';
 import { getContrastColor } from '../../utils/color';
 import { subscribeToTagEvents } from '../../utils/tagEventSubscriptions';
+import { useI18n } from '../../i18n';
 import './TagInput.css';
 
 interface TagData {
@@ -30,6 +31,7 @@ export const TagInput: React.FC<TagInputProps> = ({
   disabled = false,
   mode = 'tag',
 }) => {
+  const { t } = useI18n();
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<TagData[]>([]);
   const [allTags, setAllTags] = useState<TagData[]>([]);
@@ -108,7 +110,7 @@ export const TagInput: React.FC<TagInputProps> = ({
     if (!normalized) return;
     
     if (value.includes(normalized)) {
-      showToast.info('Tag already added');
+      showToast.info(t('tagInput.alreadyAdded'));
       return;
     }
 
@@ -143,7 +145,9 @@ export const TagInput: React.FC<TagInputProps> = ({
         await window.electronAPI?.tags.create({ name: normalized });
       }
       addTag(normalized);
-      showToast.success(`${mode === 'category' ? 'Category' : 'Tag'} "${normalized}" created`);
+      showToast.success(
+        t(mode === 'category' ? 'tagInput.createdCategory' : 'tagInput.createdTag', { name: normalized })
+      );
     } catch (error) {
       const err = error as Error;
       showToast.error(err.message);
@@ -238,7 +242,7 @@ export const TagInput: React.FC<TagInputProps> = ({
                   className="tag-chip-remove"
                   onClick={() => removeTag(tagName)}
                   tabIndex={-1}
-                  aria-label={`Remove ${tagName}`}
+                  aria-label={t('tagInput.remove', { tag: tagName })}
                 >
                   ×
                 </button>
@@ -302,7 +306,11 @@ export const TagInput: React.FC<TagInputProps> = ({
               onClick={() => createAndAddTag(inputValue.trim())}
             >
               <span className="tag-suggestion-icon">+</span>
-              <span>Create {mode === 'category' ? 'category' : 'tag'} "{inputValue.trim()}"</span>
+              <span>
+                {t(mode === 'category' ? 'tagInput.createCategory' : 'tagInput.createTag', {
+                  name: inputValue.trim(),
+                })}
+              </span>
             </button>
           )}
         </div>

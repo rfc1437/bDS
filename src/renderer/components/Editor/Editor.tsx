@@ -358,8 +358,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       console.error('Failed to save post:', error);
       const err = error as Error;
       showErrorModal({
-        title: 'Save Failed',
-        message: err.message || 'Failed to save post',
+        title: tr('editor.error.saveTitle'),
+        message: err.message || tr('editor.error.saveMessage'),
         stack: err.stack,
       });
     } finally {
@@ -374,14 +374,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       if (updated) {
         updatePost(postId, updated as Partial<PostData>);
         setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
-        showToast.success('Post published');
+        showToast.success(tr('editor.toast.published'));
       }
     } catch (error) {
       console.error('Failed to publish post:', error);
       const err = error as Error;
       showErrorModal({
-        title: 'Publish Failed',
-        message: err.message || 'Failed to publish post',
+        title: tr('editor.error.publishTitle'),
+        message: err.message || tr('editor.error.publishMessage'),
         stack: err.stack,
       });
     }
@@ -391,8 +391,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     // If this post has a published version, revert to it
     // If never published, delete the post entirely
     const confirmMessage = hasPublishedVersion
-      ? 'Discard all changes since last publish? This cannot be undone.'
-      : 'Delete this draft? This cannot be undone.';
+      ? tr('editor.confirm.discardChanges')
+      : tr('editor.confirm.deleteDraft');
     
     if (!confirm(confirmMessage)) {
       return;
@@ -412,7 +412,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           setPost(reverted as PostData);
           updatePost(postId, reverted as Partial<PostData>);
           markClean(postId);
-          showToast.success('Reverted to last published version');
+          showToast.success(tr('editor.toast.reverted'));
         }
       } else {
         // Never published - delete the post entirely
@@ -421,14 +421,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         pendingChangesRef.current = null;
         useAppStore.getState().removePost(postId);
         useAppStore.getState().closeTab(postId);
-        showToast.success('Draft deleted');
+        showToast.success(tr('editor.toast.draftDeleted'));
       }
     } catch (error) {
       console.error('Failed to discard/delete:', error);
       const err = error as Error;
       showErrorModal({
-        title: hasPublishedVersion ? 'Discard Failed' : 'Delete Failed',
-        message: err.message || 'Operation failed',
+        title: hasPublishedVersion ? tr('editor.error.discardTitle') : tr('editor.error.deleteTitle'),
+        message: err.message || tr('editor.error.operationMessage'),
         stack: err.stack,
       });
     }
@@ -469,7 +469,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       // Show confirmation modal
       showConfirmDeleteModal({
         itemType: 'post',
-        itemTitle: title || 'Untitled',
+        itemTitle: title || tr('editor.untitled'),
         references,
         onConfirm: async () => {
           try {
@@ -479,13 +479,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             useAppStore.getState().removePost(postId);
             useAppStore.getState().closeTab(postId);
             useAppStore.getState().setSelectedPost(null);
-            showToast.success('Post deleted');
+            showToast.success(tr('editor.toast.postDeleted'));
           } catch (error) {
             console.error('Failed to delete post:', error);
             const err = error as Error;
             showErrorModal({
-              title: 'Delete Failed',
-              message: err.message || 'Failed to delete post',
+              title: tr('editor.error.deleteTitle'),
+              message: err.message || tr('editor.error.deletePostMessage'),
               stack: err.stack,
             });
           }
@@ -495,8 +495,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       console.error('Failed to fetch post references:', error);
       const err = error as Error;
       showErrorModal({
-        title: 'Error',
-        message: err.message || 'Failed to fetch post references',
+        title: tr('errorModal.error'),
+        message: err.message || tr('editor.error.fetchPostReferencesMessage'),
         stack: err.stack,
       });
     }
@@ -930,6 +930,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 };
 
 const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
+  const { t: tr } = useI18n();
   const { media, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
   const item = media.find(m => m.id === mediaId);
   
@@ -997,11 +998,11 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           caption: result.caption,
         });
       } else {
-        setAIError(result?.error || 'Failed to analyze image');
+        setAIError(result?.error || tr('editor.media.error.analyzeImage'));
       }
     } catch (error) {
       console.error('Failed to analyze image:', error);
-      setAIError((error as Error).message || 'Failed to analyze image');
+      setAIError((error as Error).message || tr('editor.media.error.analyzeImage'));
     } finally {
       setIsAnalyzing(false);
     }
@@ -1014,7 +1015,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     if (values.caption) setCaption(values.caption);
     setShowAISuggestionsModal(false);
     if (Object.keys(values).length > 0) {
-      showToast.success('AI suggestions applied');
+      showToast.success(tr('editor.media.toast.aiApplied'));
     }
   };
 
@@ -1038,7 +1039,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           for (const link of links) {
             const post = await window.electronAPI?.posts.get(link.postId);
             if (post) {
-              titles.set(link.postId, post.title || 'Untitled');
+              titles.set(link.postId, post.title || tr('editor.untitled'));
             }
           }
           setPostTitles(titles);
@@ -1057,7 +1058,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       try {
         const result = await window.electronAPI?.posts.getAll({ limit: 100, offset: 0 });
         if (result?.items) {
-          setPickerPosts(result.items.map(p => ({ id: p.id, title: p.title || 'Untitled' })));
+          setPickerPosts(result.items.map(p => ({ id: p.id, title: p.title || tr('editor.untitled') })));
         }
       } catch (error) {
         console.error('Failed to load posts for picker:', error);
@@ -1068,7 +1069,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 
   // Get post titles for display
   const getPostTitle = (postId: string): string => {
-    return postTitles.get(postId) || 'Loading...';
+    return postTitles.get(postId) || tr('sidebar.loading');
   };
 
   // Handle linking to a new post
@@ -1079,10 +1080,10 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       setPostTitles(prev => new Map(prev).set(postId, postTitle));
       setShowPostPicker(false);
       setPostSearchQuery('');
-      showToast.success('Linked to post');
+      showToast.success(tr('editor.media.toast.linkedToPost'));
     } catch (error) {
       console.error('Failed to link to post:', error);
-      showToast.error('Failed to link to post');
+      showToast.error(tr('editor.media.toast.linkFailed'));
     }
   };
 
@@ -1091,10 +1092,10 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     try {
       await window.electronAPI?.postMedia.unlink(postId, mediaId);
       setLinkedPosts(linkedPosts.filter(l => l.postId !== postId));
-      showToast.success('Unlinked from post');
+      showToast.success(tr('editor.media.toast.unlinkedFromPost'));
     } catch (error) {
       console.error('Failed to unlink from post:', error);
-      showToast.error('Failed to unlink from post');
+      showToast.error(tr('editor.media.toast.unlinkFailed'));
     }
   };
 
@@ -1121,7 +1122,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   }, [item?.id]);
 
   if (!item) {
-    return <div className="editor-empty">Media not found</div>;
+    return <div className="editor-empty">{tr('editor.media.notFound')}</div>;
   }
 
   const handleSave = async () => {
@@ -1135,14 +1136,14 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       });
       if (updated) {
         updateMedia(item.id, updated as Partial<typeof item>);
-        showToast.success('Media updated');
+        showToast.success(tr('editor.media.toast.updated'));
       }
     } catch (error) {
       console.error('Failed to update media:', error);
       const err = error as Error;
       showErrorModal({
-        title: 'Update Failed',
-        message: err.message || 'Failed to update media',
+        title: tr('editor.media.error.updateTitle'),
+        message: err.message || tr('editor.media.error.updateMessage'),
         stack: err.stack,
       });
     }
@@ -1153,15 +1154,15 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       const updated = await window.electronAPI?.media.replaceFileDialog(item.id);
       if (updated) {
         updateMedia(item.id, updated as Partial<typeof item>);
-        showToast.success('File replaced (thumbnails regenerated)');
+        showToast.success(tr('editor.media.toast.fileReplaced'));
       }
       // null means user cancelled or file unchanged - no action needed
     } catch (error) {
       console.error('Failed to replace media file:', error);
       const err = error as Error;
       showErrorModal({
-        title: 'Replace Failed',
-        message: err.message || 'Failed to replace media file',
+        title: tr('editor.media.error.replaceTitle'),
+        message: err.message || tr('editor.media.error.replaceMessage'),
         stack: err.stack,
       });
     }
@@ -1182,7 +1183,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           if (post) {
             references.push({
               id: post.id,
-              title: post.title || 'Untitled',
+              title: post.title || tr('editor.untitled'),
               type: 'post',
             });
           }
@@ -1198,13 +1199,13 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           try {
             await window.electronAPI?.media.delete(item.id);
             useAppStore.getState().removeMedia(item.id);
-            showToast.success('Media deleted');
+            showToast.success(tr('editor.media.toast.deleted'));
           } catch (error) {
             console.error('Failed to delete media:', error);
             const err = error as Error;
             showErrorModal({
-              title: 'Delete Failed',
-              message: err.message || 'Failed to delete media',
+              title: tr('editor.error.deleteTitle'),
+              message: err.message || tr('editor.media.error.deleteMessage'),
               stack: err.stack,
             });
           }
@@ -1214,8 +1215,8 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       console.error('Failed to fetch media references:', error);
       const err = error as Error;
       showErrorModal({
-        title: 'Error',
-        message: err.message || 'Failed to fetch media references',
+        title: tr('errorModal.error'),
+        message: err.message || tr('editor.media.error.fetchReferencesMessage'),
         stack: err.stack,
       });
     }
@@ -1237,9 +1238,9 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                 className="secondary quick-actions-btn"
                 onClick={() => setShowQuickActions(!showQuickActions)}
                 disabled={isAnalyzing}
-                title="Quick Actions"
+                title={tr('editor.media.quickActions.title')}
               >
-                {isAnalyzing ? '⏳ Analyzing...' : '⚡ Quick Actions'}
+                {isAnalyzing ? tr('editor.media.quickActions.analyzing') : tr('editor.media.quickActions.button')}
               </button>
               {showQuickActions && (
                 <div className="quick-actions-menu">
@@ -1250,17 +1251,17 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                   >
                     <span className="quick-action-icon">🤖</span>
                     <span className="quick-action-text">
-                      <strong>AI: Generate Title, Alt & Caption</strong>
-                      <small>Analyzes the image to suggest metadata</small>
+                      <strong>{tr('editor.media.quickActions.aiTitle')}</strong>
+                      <small>{tr('editor.media.quickActions.aiDescription')}</small>
                     </span>
                   </button>
                 </div>
               )}
             </div>
           )}
-          <button onClick={handleReplaceFile} className="secondary">Replace File</button>
-          <button onClick={handleSave}>Save</button>
-          <button onClick={handleDelete} className="secondary danger">Delete</button>
+          <button onClick={handleReplaceFile} className="secondary">{tr('editor.media.replaceFile')}</button>
+          <button onClick={handleSave}>{tr('common.save')}</button>
+          <button onClick={handleDelete} className="secondary danger">{tr('editor.delete')}</button>
         </div>
       </div>
 
@@ -1291,81 +1292,81 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 
         <div className="media-details">
           <div className="editor-field">
-            <label>File Name</label>
+            <label>{tr('editor.media.field.fileName')}</label>
             <input type="text" value={item.originalName} disabled className="disabled" />
           </div>
           <div className="editor-field">
-            <label>Type</label>
+            <label>{tr('editor.media.field.type')}</label>
             <input type="text" value={item.mimeType} disabled className="disabled" />
           </div>
           <div className="editor-field-row">
             <div className="editor-field">
-              <label>Size</label>
+              <label>{tr('editor.media.field.size')}</label>
               <input type="text" value={`${(item.size / 1024).toFixed(1)} KB`} disabled className="disabled" />
             </div>
             {item.width && item.height && (
               <div className="editor-field">
-                <label>Dimensions</label>
+                <label>{tr('editor.media.field.dimensions')}</label>
                 <input type="text" value={`${item.width} × ${item.height}`} disabled className="disabled" />
               </div>
             )}
           </div>
           <div className="editor-field">
-            <label>Title</label>
+            <label>{tr('editor.media.field.title')}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title for lists and search results"
+              placeholder={tr('editor.media.placeholder.title')}
             />
           </div>
           <div className="editor-field">
-            <label>Alt Text</label>
+            <label>{tr('editor.media.field.altText')}</label>
             <input
               type="text"
               value={alt}
               onChange={(e) => setAlt(e.target.value)}
-              placeholder="Describe the image for accessibility"
+              placeholder={tr('editor.media.placeholder.altText')}
             />
           </div>
           <div className="editor-field">
-            <label>Caption</label>
+            <label>{tr('editor.media.field.caption')}</label>
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              placeholder="Image caption"
+              placeholder={tr('editor.media.placeholder.caption')}
               rows={3}
             />
           </div>
           <div className="editor-field">
-            <label>Tags (comma-separated)</label>
+            <label>{tr('editor.media.field.tags')}</label>
             <input
               type="text"
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              placeholder="tag1, tag2, tag3"
+              placeholder={tr('editor.media.placeholder.tags')}
             />
           </div>
           <div className="editor-field">
-            <label>Author</label>
+            <label>{tr('editor.media.field.author')}</label>
             <input
               type="text"
               value={author}
               onChange={(e) => setAuthor(e.target.value)}
-              placeholder="Author name"
+              placeholder={tr('editor.media.placeholder.author')}
             />
           </div>
           
           {/* Linked Posts Section */}
           <div className="editor-field linked-posts-section">
             <label>
-              Linked Posts
+              {tr('editor.media.linkedPosts')}
               <button 
                 className="add-link-btn" 
                 onClick={() => setShowPostPicker(!showPostPicker)}
-                title="Link to a post"
+                title={tr('editor.media.linkToPostTitle')}
               >
-                + Link
+                {tr('editor.media.linkAction')}
               </button>
             </label>
             
@@ -1374,14 +1375,14 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                 <div className="post-picker-search">
                   <input
                     type="text"
-                    placeholder="Search posts..."
+                    placeholder={tr('editor.media.searchPosts')}
                     value={postSearchQuery}
                     onChange={(e) => setPostSearchQuery(e.target.value)}
                     autoFocus
                   />
                 </div>
                 {unlinkedPosts.length === 0 ? (
-                  <div className="no-posts">{postSearchQuery ? 'No matching posts' : 'No posts available to link'}</div>
+                  <div className="no-posts">{postSearchQuery ? tr('editor.media.noMatchingPosts') : tr('editor.media.noPostsToLink')}</div>
                 ) : (
                   <div className="post-picker-list">
                     {unlinkedPosts.slice(0, 10).map(post => (
@@ -1395,7 +1396,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                     ))}
                     {unlinkedPosts.length > 10 && (
                       <div className="post-picker-more">
-                        +{unlinkedPosts.length - 10} more posts
+                        {tr('editor.media.morePosts', { count: unlinkedPosts.length - 10 })}
                       </div>
                     )}
                   </div>
@@ -1404,7 +1405,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
             )}
             
             {linkedPosts.length === 0 ? (
-              <div className="no-linked-posts">Not linked to any posts</div>
+              <div className="no-linked-posts">{tr('editor.media.notLinked')}</div>
             ) : (
               <div className="linked-posts-list">
                 {linkedPosts.map(({ postId }) => (
@@ -1412,14 +1413,14 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                     <span 
                       className="linked-post-title"
                       onClick={() => handlePostClick(postId)}
-                      title="Open post"
+                      title={tr('editor.media.openPost')}
                     >
                       📄 {getPostTitle(postId)}
                     </span>
                     <button 
                       className="unlink-btn"
                       onClick={() => handleUnlinkFromPost(postId)}
-                      title="Unlink from post"
+                      title={tr('editor.media.unlinkFromPost')}
                     >
                       ×
                     </button>
