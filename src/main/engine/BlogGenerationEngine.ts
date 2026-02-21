@@ -970,46 +970,80 @@ export class BlogGenerationEngine {
 
     onProgress(10, 'Planning validation apply steps...');
 
-    const sections = new Set<BlogGenerationSection>();
+    const requestedCategories = new Set<string>();
+    const requestedTags = new Set<string>();
+    const requestedYears = new Set<number>();
+    const requestedYearMonths = new Set<string>();
+    const requestedYearMonthDays = new Set<string>();
+    const requestedPostRoutes: Array<{ year: number; month: number; day: number; slug: string }> = [];
+    const requestedPageSlugs = new Set<string>();
+    let requestRootRoutes = false;
+    let requiresFallbackSectionRender = false;
+
+    const decodePathSegment = (value: string): string => {
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    };
+
     for (const missingPath of missingPaths) {
       const normalizedPath = normalizeUrlPath(missingPath);
 
       if (normalizedPath === '/' || /^\/page\/\d+$/.test(normalizedPath)) {
-        sections.add('core');
+        requestRootRoutes = true;
         continue;
       }
 
-      if (/^\/category\//.test(normalizedPath)) {
-        sections.add('category');
+      const categoryMatch = normalizedPath.match(/^\/category\/([^/]+)(?:\/page\/\d+)?$/);
+      if (categoryMatch) {
+        requestedCategories.add(decodePathSegment(categoryMatch[1]));
         continue;
       }
 
-      if (/^\/tag\//.test(normalizedPath)) {
-        sections.add('tag');
+      const tagMatch = normalizedPath.match(/^\/tag\/([^/]+)(?:\/page\/\d+)?$/);
+      if (tagMatch) {
+        requestedTags.add(decodePathSegment(tagMatch[1]));
         continue;
       }
 
-      if (/^\/\d{4}\/\d{2}\/\d{2}\/[^/]+$/.test(normalizedPath)) {
-        sections.add('single');
+      const singleMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})\/([^/]+)$/);
+      if (singleMatch) {
+        requestedPostRoutes.push({
+          year: Number(singleMatch[1]),
+          month: Number(singleMatch[2]),
+          day: Number(singleMatch[3]),
+          slug: decodePathSegment(singleMatch[4]),
+        });
         continue;
       }
 
-      if (/^\/\d{4}(?:\/\d{2}(?:\/\d{2})?)?(?:\/page\/\d+)?$/.test(normalizedPath)) {
-        sections.add('date');
+      const yearMatch = normalizedPath.match(/^\/(\d{4})(?:\/page\/\d+)?$/);
+      if (yearMatch) {
+        requestedYears.add(Number(yearMatch[1]));
         continue;
       }
 
-      if (/^\/[^/]+$/.test(normalizedPath)) {
-        sections.add('core');
+      const monthMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})(?:\/page\/\d+)?$/);
+      if (monthMatch) {
+        requestedYearMonths.add(`${monthMatch[1]}/${monthMatch[2]}`);
         continue;
       }
 
-      sections.clear();
-      sections.add('core');
-      sections.add('single');
-      sections.add('category');
-      sections.add('tag');
-      sections.add('date');
+      const dayMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})(?:\/page\/\d+)?$/);
+      if (dayMatch) {
+        requestedYearMonthDays.add(`${dayMatch[1]}/${dayMatch[2]}/${dayMatch[3]}`);
+        continue;
+      }
+
+      const pageMatch = normalizedPath.match(/^\/([^/]+)$/);
+      if (pageMatch) {
+        requestedPageSlugs.add(decodePathSegment(pageMatch[1]));
+        continue;
+      }
+
+      requiresFallbackSectionRender = true;
       break;
     }
 
@@ -1058,34 +1092,321 @@ export class BlogGenerationEngine {
     }
 
     let renderedUrlCount = 0;
-    const sectionExecutionOrder: BlogGenerationSection[] = ['category', 'tag', 'date', 'core', 'single'];
-    const orderedSections = sectionExecutionOrder.filter((section) => sections.has(section));
 
-    if (orderedSections.length > 0) {
-      for (let index = 0; index < orderedSections.length; index += 1) {
-        const section = orderedSections[index];
-        const sectionLabel = section === 'category'
-          ? 'categories'
-          : section === 'tag'
-            ? 'tags'
-            : section === 'date'
-              ? 'calendar'
-              : section;
-
-        onProgress(50 + Math.floor((index / orderedSections.length) * 40), `Rendering missing ${sectionLabel} routes...`);
-
+    if (requiresFallbackSectionRender) {
+      onProgress(50, 'Rendering missing routes (fallback section mode)...');
+      const sectionExecutionOrder: BlogGenerationSection[] = ['category', 'tag', 'date', 'core', 'single'];
+      for (let index = 0; index < sectionExecutionOrder.length; index += 1) {
+        const section = sectionExecutionOrder[index];
         const generationResult = await this.generate({
           ...options,
           maxPostsPerPage: options.maxPostsPerPage,
           sections: [section],
         }, (progress, message) => {
-          const base = 50 + Math.floor((index / orderedSections.length) * 40);
-          const span = Math.max(1, Math.floor(40 / orderedSections.length));
+          const base = 50 + Math.floor((index / sectionExecutionOrder.length) * 40);
+          const span = Math.max(1, Math.floor(40 / sectionExecutionOrder.length));
           const mapped = base + Math.floor((progress / 100) * span);
-          onProgress(Math.min(90, mapped), message || `Rendering ${sectionLabel} routes...`);
+          onProgress(Math.min(90, mapped), message || `Rendering ${section} routes...`);
         });
 
         renderedUrlCount += generationResult.pagesGenerated;
+      }
+    } else {
+      const categorySettings = resolveCategorySettings(options.categorySettings);
+      const listExcludedCategories = Object.entries(categorySettings)
+        .filter(([, settings]) => settings.renderInLists === false)
+        .map(([category]) => category);
+
+      const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
+      const publishedCandidates = await this.postEngine.getPostsFiltered({ status: 'published' });
+      const draftCandidates = await this.postEngine.getPostsFiltered({ status: 'draft' });
+      const publishedListCandidates = await this.postEngine.getPostsFiltered({
+        status: 'published',
+        excludeCategories: listExcludedCategories,
+      });
+      const draftListCandidates = await this.postEngine.getPostsFiltered({
+        status: 'draft',
+        excludeCategories: listExcludedCategories,
+      });
+
+      const publishedSnapshots = await Promise.all(
+        publishedCandidates.map(async (post) => {
+          const snapshot = await this.postEngine.getPublishedVersion(post.id);
+          return snapshot || post;
+        }),
+      );
+      const draftPublishedSnapshots = await Promise.all(
+        draftCandidates.map(async (post) => this.postEngine.getPublishedVersion(post.id)),
+      );
+      const publishedListSnapshots = await Promise.all(
+        publishedListCandidates.map(async (post) => {
+          const snapshot = await this.postEngine.getPublishedVersion(post.id);
+          return snapshot || post;
+        }),
+      );
+      const draftListPublishedSnapshots = await Promise.all(
+        draftListCandidates.map(async (post) => this.postEngine.getPublishedVersion(post.id)),
+      );
+
+      const publishedPostById = new Map<string, PostData>();
+      for (const post of publishedSnapshots) {
+        publishedPostById.set(post.id, post);
+      }
+      for (const snapshot of draftPublishedSnapshots) {
+        if (snapshot) {
+          publishedPostById.set(snapshot.id, snapshot);
+        }
+      }
+      const publishedPosts = Array.from(publishedPostById.values())
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      const publishedListPostById = new Map<string, PostData>();
+      for (const post of publishedListSnapshots) {
+        publishedListPostById.set(post.id, post);
+      }
+      for (const snapshot of draftListPublishedSnapshots) {
+        if (snapshot) {
+          publishedListPostById.set(snapshot.id, snapshot);
+        }
+      }
+      const publishedListPosts = Array.from(publishedListPostById.values())
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      const allCategories = new Set<string>();
+      const allTags = new Set<string>();
+      const years = new Map<number, Date>();
+      const yearMonths = new Map<string, Date>();
+      const yearMonthDays = new Map<string, Date>();
+
+      for (const post of publishedListPosts) {
+        for (const category of post.categories || []) allCategories.add(category);
+        for (const tag of post.tags || []) allTags.add(tag);
+
+        const createdAt = resolvePostCreatedAt(post);
+        const updatedAt = post.updatedAt;
+        const year = createdAt.getFullYear();
+        const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+        const day = String(createdAt.getDate()).padStart(2, '0');
+        const ymKey = `${year}/${month}`;
+        const ymdKey = `${year}/${month}/${day}`;
+
+        if (!years.has(year) || updatedAt > years.get(year)!) {
+          years.set(year, updatedAt);
+        }
+        if (!yearMonths.has(ymKey) || updatedAt > yearMonths.get(ymKey)!) {
+          yearMonths.set(ymKey, updatedAt);
+        }
+        if (!yearMonthDays.has(ymdKey) || updatedAt > yearMonthDays.get(ymdKey)!) {
+          yearMonthDays.set(ymdKey, updatedAt);
+        }
+      }
+
+      const requestedPostIds = new Set<string>();
+      for (const requestedRoute of requestedPostRoutes) {
+        const routePost = publishedPosts.find((post) => {
+          if (post.slug !== requestedRoute.slug) {
+            return false;
+          }
+          const createdAt = resolvePostCreatedAt(post);
+          return createdAt.getFullYear() === requestedRoute.year
+            && (createdAt.getMonth() + 1) === requestedRoute.month
+            && createdAt.getDate() === requestedRoute.day;
+        });
+
+        if (routePost) {
+          requestedPostIds.add(routePost.id);
+          for (const category of routePost.categories || []) {
+            requestedCategories.add(category);
+          }
+          for (const tag of routePost.tags || []) {
+            requestedTags.add(tag);
+          }
+
+          const createdAt = resolvePostCreatedAt(routePost);
+          const year = createdAt.getFullYear();
+          const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+          const day = String(createdAt.getDate()).padStart(2, '0');
+          requestedYears.add(year);
+          requestedYearMonths.add(`${year}/${month}`);
+          requestedYearMonthDays.add(`${year}/${month}/${day}`);
+        } else {
+          requestedYears.add(requestedRoute.year);
+          requestedYearMonths.add(`${requestedRoute.year}/${String(requestedRoute.month).padStart(2, '0')}`);
+          requestedYearMonthDays.add(`${requestedRoute.year}/${String(requestedRoute.month).padStart(2, '0')}/${String(requestedRoute.day).padStart(2, '0')}`);
+        }
+      }
+
+      for (const year of Array.from(requestedYears.values())) {
+        for (const ym of yearMonths.keys()) {
+          if (ym.startsWith(`${year}/`)) {
+            requestedYearMonths.add(ym);
+          }
+        }
+      }
+
+      for (const ym of Array.from(requestedYearMonths.values())) {
+        for (const ymd of yearMonthDays.keys()) {
+          if (ymd.startsWith(`${ym}/`)) {
+            requestedYearMonthDays.add(ymd);
+          }
+        }
+
+        const [yearStr] = ym.split('/');
+        requestedYears.add(Number(yearStr));
+      }
+
+      for (const ymd of Array.from(requestedYearMonthDays.values())) {
+        const [yearStr, monthStr] = ymd.split('/');
+        requestedYears.add(Number(yearStr));
+        requestedYearMonths.add(`${yearStr}/${monthStr}`);
+      }
+
+      const htmlDir = path.join(options.dataDir, 'html');
+      await fs.mkdir(htmlDir, { recursive: true });
+
+      const pageTitle = options.pageTitle || options.projectName;
+      const language = options.language || 'en';
+      const pageContext = {
+        page_title: pageTitle,
+        language,
+        pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
+      };
+      const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
+      const rewriteContext = this.buildHtmlRewriteContext(publishedPosts);
+      const onPageGenerated = (_message: string) => {
+        // no-op for applyValidation
+      };
+
+      const requestedCategorySet = new Set(
+        Array.from(requestedCategories.values()).filter((category) => allCategories.has(category)),
+      );
+      const requestedTagSet = new Set(
+        Array.from(requestedTags.values()).filter((tag) => allTags.has(tag)),
+      );
+
+      const requestedSinglePosts = publishedPosts.filter((post) => requestedPostIds.has(post.id));
+      const requestedPagePosts = publishedPosts.filter((post) => {
+        if (!requestedPageSlugs.has(post.slug)) {
+          return false;
+        }
+        const categories = Array.isArray(post.categories) ? post.categories : [];
+        return categories.includes('page');
+      });
+
+      const requestedYearsMap = new Map<number, Date>();
+      for (const year of requestedYears) {
+        const lastmod = years.get(year);
+        if (lastmod) {
+          requestedYearsMap.set(year, lastmod);
+        }
+      }
+
+      const requestedYearMonthsMap = new Map<string, Date>();
+      for (const ym of requestedYearMonths) {
+        const lastmod = yearMonths.get(ym);
+        if (lastmod) {
+          requestedYearMonthsMap.set(ym, lastmod);
+        }
+      }
+
+      const requestedYearMonthDaysMap = new Map<string, Date>();
+      for (const ymd of requestedYearMonthDays) {
+        const lastmod = yearMonthDays.get(ymd);
+        if (lastmod) {
+          requestedYearMonthDaysMap.set(ymd, lastmod);
+        }
+      }
+
+      onProgress(
+        48,
+        `Targeted rerender plan: singles=${requestedSinglePosts.length}, categories=${requestedCategorySet.size}, tags=${requestedTagSet.size}, years=${requestedYearsMap.size}, months=${requestedYearMonthsMap.size}, days=${requestedYearMonthDaysMap.size}, root=${requestRootRoutes ? 1 : 0}, pages=${requestedPagePosts.length}`,
+      );
+
+      onProgress(50, 'Rendering targeted missing routes...');
+
+      if (requestRootRoutes) {
+        renderedUrlCount += await this.generateRootPages(
+          options.projectId,
+          publishedListPosts,
+          rewriteContext,
+          maxPostsPerPage,
+          htmlDir,
+          pageContext,
+          pageRenderer,
+          categorySettings,
+          onPageGenerated,
+        );
+      }
+
+      if (requestedPagePosts.length > 0) {
+        renderedUrlCount += await this.generatePageRoutes(
+          options.projectId,
+          requestedPagePosts,
+          rewriteContext,
+          htmlDir,
+          pageContext,
+          pageRenderer,
+          onPageGenerated,
+        );
+      }
+
+      if (requestedCategorySet.size > 0) {
+        renderedUrlCount += await this.generateCategoryPages(
+          options.projectId,
+          publishedListPosts,
+          requestedCategorySet,
+          rewriteContext,
+          maxPostsPerPage,
+          htmlDir,
+          pageContext,
+          pageRenderer,
+          categorySettings,
+          onPageGenerated,
+        );
+      }
+
+      if (requestedTagSet.size > 0) {
+        renderedUrlCount += await this.generateTagPages(
+          options.projectId,
+          publishedListPosts,
+          requestedTagSet,
+          rewriteContext,
+          maxPostsPerPage,
+          htmlDir,
+          pageContext,
+          pageRenderer,
+          categorySettings,
+          onPageGenerated,
+        );
+      }
+
+      if (requestedSinglePosts.length > 0) {
+        renderedUrlCount += await this.generateSinglePostPages(
+          options.projectId,
+          requestedSinglePosts,
+          rewriteContext,
+          htmlDir,
+          pageContext,
+          pageRenderer,
+          onPageGenerated,
+        );
+      }
+
+      if (requestedYearsMap.size > 0 || requestedYearMonthsMap.size > 0 || requestedYearMonthDaysMap.size > 0) {
+        renderedUrlCount += await this.generateDateArchivePages(
+          options.projectId,
+          publishedListPosts,
+          requestedYearsMap,
+          requestedYearMonthsMap,
+          requestedYearMonthDaysMap,
+          rewriteContext,
+          maxPostsPerPage,
+          htmlDir,
+          pageContext,
+          pageRenderer,
+          categorySettings,
+          onPageGenerated,
+        );
       }
     }
 

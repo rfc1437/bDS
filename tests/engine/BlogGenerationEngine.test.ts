@@ -607,9 +607,10 @@ describe('BlogGenerationEngine', () => {
     expect(sitemap).toContain('<loc>https://example.com/page/2/</loc>');
   });
 
-  it('applies validation by deleting first, then rendering category, tag, and date sections', async () => {
+  it('applies validation by generating only missing category and tag routes', async () => {
     const posts = [
       makePost({ id: '1', slug: 'ordered-post', categories: ['news'], tags: ['ordered-tag'], createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'other-post', categories: ['other-category'], tags: ['other-tag'], createdAt: new Date('2024-12-20T10:00:00Z') }),
     ];
     setupPosts(posts);
 
@@ -619,31 +620,7 @@ describe('BlogGenerationEngine', () => {
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
     const engine = new BlogGenerationEngine();
 
-    const callOrder: string[] = [];
-    const generateSpy = vi.spyOn(engine, 'generate').mockImplementation(async (opts) => {
-      const staleExistsAtRenderTime = await fileExists(path.join(tempDir, 'html', 'stale', 'index.html'));
-      expect(staleExistsAtRenderTime).toBe(false);
-      callOrder.push((opts.sections || []).join(','));
-      return {
-        path: path.join(tempDir, 'html', 'sitemap.xml'),
-        urlCount: 0,
-        postCount: 0,
-        feedPostCount: 0,
-        tagCount: 0,
-        categoryCount: 0,
-        archiveCount: 0,
-        pagesGenerated: 1,
-        feeds: {
-          rssPath: path.join(tempDir, 'html', 'rss.xml'),
-          atomPath: path.join(tempDir, 'html', 'atom.xml'),
-        },
-        changed: {
-          sitemap: false,
-          rss: false,
-          atom: false,
-        },
-      };
-    });
+    const generateSpy = vi.spyOn(engine, 'generate');
 
     const result = await engine.applyValidation({
       projectId: 'test',
@@ -653,16 +630,251 @@ describe('BlogGenerationEngine', () => {
     }, {
       sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
       sitemapChanged: false,
-      missingUrlPaths: ['/category/news', '/tag/ordered-tag', '/2025/01'],
+      missingUrlPaths: ['/category/news', '/tag/ordered-tag'],
       extraUrlPaths: ['/stale'],
-      expectedUrlCount: 3,
+      expectedUrlCount: 2,
       existingHtmlUrlCount: 1,
     }, vi.fn());
 
     expect(result.deletedUrlCount).toBe(1);
-    expect(callOrder).toEqual(['category', 'tag', 'date']);
+    expect(generateSpy).not.toHaveBeenCalled();
+    expect(await fileExists(path.join(tempDir, 'html', 'category', 'news', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'tag', 'ordered-tag', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'category', 'other-category', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', 'tag', 'other-tag', 'index.html'))).toBe(false);
 
     generateSpy.mockRestore();
+  });
+
+  it('applies validation for a missing month by generating that month and its day archives only', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'jan-post', createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'feb-post', createdAt: new Date('2025-02-20T10:00:00Z') }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025/01'],
+      extraUrlPaths: [],
+      expectedUrlCount: 1,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '02', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '02', '20', 'index.html'))).toBe(false);
+  });
+
+  it('applies validation for a missing year by generating that year and nested month/day archives only', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'year-2025', createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'year-2024', createdAt: new Date('2024-02-20T10:00:00Z') }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025'],
+      extraUrlPaths: [],
+      expectedUrlCount: 1,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    expect(await fileExists(path.join(tempDir, 'html', '2025', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2024', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', '2024', '02', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', '2024', '02', '20', 'index.html'))).toBe(false);
+  });
+
+  it('applies validation for a missing post by generating post and its date archives only', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'target-post', createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'other-year-post', createdAt: new Date('2024-02-20T10:00:00Z') }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025/01/15/target-post'],
+      extraUrlPaths: [],
+      expectedUrlCount: 1,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'target-post', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2024', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', '2024', '02', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', '2024', '02', '20', 'index.html'))).toBe(false);
+  });
+
+  it('merges date archive renders when multiple missing posts share the same date lineage', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'target-post-1', createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'target-post-2', createdAt: new Date('2025-01-15T11:00:00Z') }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const { PageRenderer } = await import('../../src/main/engine/PageRenderer');
+    const engine = new BlogGenerationEngine();
+
+    const renderPostListSpy = vi.spyOn(PageRenderer.prototype, 'renderPostList');
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025/01/15/target-post-1', '/2025/01/15/target-post-2'],
+      extraUrlPaths: [],
+      expectedUrlCount: 2,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    const dateCalls = renderPostListSpy.mock.calls
+      .map(([, , renderOptions]) => renderOptions)
+      .filter((renderOptions) => renderOptions?.routeKind === 'date');
+
+    const yearCalls = dateCalls.filter((call) => call.archiveContext?.kind === 'year' && call.archiveContext?.year === 2025);
+    const monthCalls = dateCalls.filter((call) => call.archiveContext?.kind === 'month' && call.archiveContext?.year === 2025 && call.archiveContext?.month === 1);
+    const dayCalls = dateCalls.filter((call) => call.archiveContext?.kind === 'day' && call.archiveContext?.year === 2025 && call.archiveContext?.month === 1 && call.archiveContext?.day === 15);
+
+    expect(yearCalls).toHaveLength(1);
+    expect(monthCalls).toHaveLength(1);
+    expect(dayCalls).toHaveLength(1);
+
+    renderPostListSpy.mockRestore();
+  });
+
+  it('applies validation for a missing post by rerendering its categories and tags', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'cat-tag-post',
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+        categories: ['news'],
+        tags: ['alpha'],
+      }),
+      makePost({
+        id: '2',
+        slug: 'other-post',
+        createdAt: new Date('2024-02-20T10:00:00Z'),
+        categories: ['other-category'],
+        tags: ['other-tag'],
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025/01/15/cat-tag-post'],
+      extraUrlPaths: [],
+      expectedUrlCount: 1,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    expect(await fileExists(path.join(tempDir, 'html', 'category', 'news', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'tag', 'alpha', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'category', 'other-category', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', 'tag', 'other-tag', 'index.html'))).toBe(false);
+  });
+
+  it('deduplicates category and tag rerenders when multiple missing posts share them', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'shared-1',
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+        categories: ['news'],
+        tags: ['alpha'],
+      }),
+      makePost({
+        id: '2',
+        slug: 'shared-2',
+        createdAt: new Date('2025-01-16T10:00:00Z'),
+        categories: ['news'],
+        tags: ['alpha'],
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const { PageRenderer } = await import('../../src/main/engine/PageRenderer');
+    const engine = new BlogGenerationEngine();
+
+    const renderPostListSpy = vi.spyOn(PageRenderer.prototype, 'renderPostList');
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025/01/15/shared-1', '/2025/01/16/shared-2'],
+      extraUrlPaths: [],
+      expectedUrlCount: 2,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    const categoryCalls = renderPostListSpy.mock.calls
+      .map(([, , renderOptions]) => renderOptions)
+      .filter((renderOptions) => renderOptions?.archiveContext?.kind === 'category' && renderOptions?.archiveContext?.name === 'news');
+    const tagCalls = renderPostListSpy.mock.calls
+      .map(([, , renderOptions]) => renderOptions)
+      .filter((renderOptions) => renderOptions?.archiveContext?.kind === 'tag' && renderOptions?.archiveContext?.name === 'alpha');
+
+    expect(categoryCalls).toHaveLength(1);
+    expect(tagCalls).toHaveLength(1);
+
+    renderPostListSpy.mockRestore();
   });
 
   it('generates HTML that references local assets not CDN', async () => {
