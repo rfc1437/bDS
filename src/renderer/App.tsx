@@ -5,6 +5,7 @@ import { loadTabsForProject, saveTabsForProject } from './utils';
 import { openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
 import { executeActivityClick } from './navigation/activityExecution';
+import { createAndFocusPost } from './navigation/postCreation';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
 import { useI18n } from './i18n';
 import './App.css';
@@ -186,14 +187,30 @@ const App: React.FC = () => {
     // Menu events
     unsubscribers.push(
       window.electronAPI?.on('menu:newPost', async () => {
-        const post = await window.electronAPI?.posts.create({
-          title: '',
-          content: '',
+        const state = useAppStore.getState();
+        await createAndFocusPost({
+          createPost: async (input) => (await window.electronAPI?.posts.create(input)) as { id: string } | null | undefined,
+          setSelectedPost: state.setSelectedPost,
+          ensurePostsSidebar: () => {
+            const next = useAppStore.getState();
+            executeActivityClick(
+              {
+                activeView: next.activeView,
+                sidebarVisible: next.sidebarVisible,
+                tabs: next.tabs,
+                activeTabId: next.activeTabId,
+              },
+              'posts',
+              {
+                setActiveView: next.setActiveView,
+                toggleSidebar: next.toggleSidebar,
+              },
+            );
+          },
+          onError: (error) => {
+            console.error('Failed to create post:', error);
+          },
         });
-        if (post) {
-          setSelectedPost((post as PostData).id);
-          setActiveView('posts');
-        }
       }) || (() => {})
     );
 

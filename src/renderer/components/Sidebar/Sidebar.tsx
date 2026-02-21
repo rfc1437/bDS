@@ -9,6 +9,7 @@ import { scrollToTagsSection, TagsCategory } from '../TagsView';
 import { activateSidebarSection } from '../../navigation/sectionActivation';
 import { getPersistedSidebarSection, setPersistedSidebarSection } from '../../navigation/sidebarUiPersistence';
 import { openChatTab, openEntityTab, openImportTab, openSingletonToolTab } from '../../navigation/tabPolicy';
+import { createAndFocusPost } from '../../navigation/postCreation';
 import type { SidebarView } from '../../navigation/sidebarViewRegistry';
 import { useI18n } from '../../i18n';
 import './Sidebar.css';
@@ -743,21 +744,14 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
   }, [posts, searchQuery, selectedYear, selectedMonth, selectedTags, selectedCategories, isPagesMode]);
 
   const handleCreatePost = async () => {
-    // Create a real post immediately in the database with default empty content
-    try {
-      const { setSelectedPost: selectPost } = useAppStore.getState();
-      const newPost = await window.electronAPI?.posts.create({
-        title: '',
-        content: '',
-        tags: [],
-        categories: [],
-      });
-      if (newPost) {
-        selectPost(newPost.id);
-      }
-    } catch (error) {
-      console.error('Failed to create post:', error);
-    }
+    const { setSelectedPost: selectPost } = useAppStore.getState();
+    await createAndFocusPost({
+      createPost: async (input) => (await window.electronAPI?.posts.create(input)) as { id: string } | null | undefined,
+      setSelectedPost: selectPost,
+      onError: (error) => {
+        console.error('Failed to create post:', error);
+      },
+    });
   };
 
   const handleLoadMore = async () => {
