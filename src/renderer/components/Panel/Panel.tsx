@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import type { TaskProgress } from '../../../main/shared/electronApi';
+import { openEntityTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import './Panel.css';
 
@@ -296,7 +297,7 @@ export const Panel: React.FC = () => {
   }
 
   const handlePostLinkClick = (postId: string) => {
-    openTab({ type: 'post', id: postId, isTransient: false });
+    openEntityTab(openTab, 'post', postId, 'pin');
     setSelectedPost(postId);
     setActiveView('posts');
   };

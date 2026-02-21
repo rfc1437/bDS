@@ -187,9 +187,10 @@ Pure tab-policy helpers that decide:
 ## Phase 3 — Centralize Editor/Tab Management (expanded)
 - [x] Implement shared tab policy layer for singleton tool tabs.
 - [x] Centralize singleton tab policies (`settings`, `tags`, `style`, `documentation`, `metadata-diff`, `site-validation`).
-- Centralize transient/pin lifecycle rules (including promotion behavior).
-- Remove duplicated tab-open logic from sidebars/nav components where possible.
+- [x] Centralize post/media transient-vs-pinned open intent rules via shared entity-tab policy helper.
+- [x] Remove duplicated tab-open logic from sidebars/nav/components for centralized policy-covered tab types.
 - [x] Ensure site-validation tab reopens with persisted last report and refreshes only on explicit validation trigger.
+- [x] Centralize multi-instance tab opening policies for `chat`, `import`, and `git-diff` (file/commit resources).
 
 ### Editor Tab Management Variations (current analysis)
 1. **Singleton, pinned tool tabs**
@@ -253,4 +254,8 @@ Pure tab-policy helpers that decide:
 - [x] Phase 3 slice complete: added singleton tab policy helper and migrated menu/sidebar singleton tool openings to it.
 - [x] Phase 3 slice complete: site validation report is persisted per project and reloaded by `SiteValidationView`.
 - [x] Phase 3 slice complete: site validation view refreshes via explicit `bds:site-validation-updated` event (no auto-validate on mount).
-- [ ] Next implementation slice: Phase 3 continuation (centralize non-singleton tab lifecycle/promotion rules).
+- [x] Phase 3 continuation slice complete: added shared entity tab intent helper (`preview`/`pin`) for `post`/`media`.
+- [x] Phase 3 continuation slice complete: migrated post/media open paths in Sidebar, Editor, LinkedMediaPanel, and Panel to shared entity-tab policy.
+- [x] Phase 3 completion slice: centralized `chat` and `import` tab-open specs and migrated sidebar call sites.
+- [x] Phase 3 completion slice: centralized `git-diff` file/commit ID/spec/open helpers and reused shared parsing in `TabBar`.
+- [ ] Next implementation slice: Phase 4 (editor routing registry).

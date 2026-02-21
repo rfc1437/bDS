@@ -8,7 +8,7 @@ import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/Setti
 import { scrollToTagsSection, TagsCategory } from '../TagsView';
 import { activateSidebarSection } from '../../navigation/sectionActivation';
 import { getPersistedSidebarSection, setPersistedSidebarSection } from '../../navigation/sidebarUiPersistence';
-import { openSingletonToolTab } from '../../navigation/tabPolicy';
+import { openChatTab, openEntityTab, openImportTab, openSingletonToolTab } from '../../navigation/tabPolicy';
 import type { SidebarView } from '../../navigation/sidebarViewRegistry';
 import { useI18n } from '../../i18n';
 import './Sidebar.css';
@@ -805,11 +805,11 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
 
   // Click handlers for tabs
   const handlePostClick = (postId: string) => {
-    openTab({ type: 'post', id: postId, isTransient: true });
+    openEntityTab(openTab, 'post', postId, 'preview');
   };
 
   const handlePostDoubleClick = (postId: string) => {
-    openTab({ type: 'post', id: postId, isTransient: false });
+    openEntityTab(openTab, 'post', postId, 'pin');
   };
 
   return (
@@ -1104,11 +1104,11 @@ const MediaList: React.FC = () => {
   };
 
   const handleMediaClick = (mediaId: string) => {
-    openTab({ type: 'media', id: mediaId, isTransient: true });
+    openEntityTab(openTab, 'media', mediaId, 'preview');
   };
 
   const handleMediaDoubleClick = (mediaId: string) => {
-    openTab({ type: 'media', id: mediaId, isTransient: false });
+    openEntityTab(openTab, 'media', mediaId, 'pin');
   };
 
   // Determine which media to display
@@ -1430,7 +1430,7 @@ const ChatList: React.FC = () => {
       const conversation = await window.electronAPI?.chat.createConversation();
       if (conversation) {
         setConversations(prev => [conversation, ...prev]);
-        openTab({ type: 'chat', id: conversation.id, isTransient: false });
+        openChatTab(openTab, conversation.id);
       }
     } catch (error) {
       console.error('Failed to create conversation:', error);
@@ -1439,7 +1439,7 @@ const ChatList: React.FC = () => {
   };
 
   const handleOpenChat = (conversationId: string) => {
-    openTab({ type: 'chat', id: conversationId, isTransient: false });
+    openChatTab(openTab, conversationId);
   };
 
   const handleDeleteChat = async (conversationId: string) => {
@@ -1580,7 +1580,7 @@ const ImportList: React.FC = () => {
       const def = await window.electronAPI?.importDefinitions.create();
       if (def) {
         setDefinitions(prev => [def, ...prev]);
-        openTab({ type: 'import', id: def.id, isTransient: false });
+        openImportTab(openTab, def.id);
       }
     } catch (error) {
       console.error('Failed to create import definition:', error);
@@ -1589,7 +1589,7 @@ const ImportList: React.FC = () => {
   };
 
   const handleOpenDefinition = (definitionId: string) => {
-    openTab({ type: 'import', id: definitionId, isTransient: false });
+    openImportTab(openTab, definitionId);
   };
 
   const handleDeleteDefinition = async (e: React.MouseEvent, definitionId: string) => {

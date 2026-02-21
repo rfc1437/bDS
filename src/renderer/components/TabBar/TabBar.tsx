@@ -1,21 +1,10 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore, Tab } from '../../store';
+import { parseGitDiffTabId } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import './TabBar.css';
 
 const MAX_CHAT_TITLE_LENGTH = 18;
-
-function getGitDiffResource(tabId: string): string {
-  return tabId.startsWith('git-diff:') ? tabId.slice('git-diff:'.length) : tabId;
-}
-
-function getCommitHashFromGitDiffTabId(tabId: string): string | null {
-  const resource = getGitDiffResource(tabId);
-  if (!resource.startsWith('commit:')) {
-    return null;
-  }
-  return resource.slice('commit:'.length);
-}
 
 const getTabTitle = (
   tab: Tab,
@@ -27,8 +16,7 @@ const getTabTitle = (
   tr: (key: string, vars?: Record<string, string | number>) => string,
 ): string => {
   if (tab.type === 'git-diff') {
-    const filePath = getGitDiffResource(tab.id);
-    const commitHash = getCommitHashFromGitDiffTabId(tab.id);
+    const { resource: filePath, commitHash } = parseGitDiffTabId(tab.id);
     if (commitHash) {
       const commitTitle = commitTitles.get(commitHash);
       if (commitTitle) {
@@ -380,7 +368,7 @@ export const TabBar: React.FC = () => {
   useEffect(() => {
     const commitHashes = tabs
       .filter((tab) => tab.type === 'git-diff')
-      .map((tab) => getCommitHashFromGitDiffTabId(tab.id))
+      .map((tab) => parseGitDiffTabId(tab.id).commitHash)
       .filter((hash): hash is string => Boolean(hash));
 
     if (commitHashes.length === 0 || !activeProject) {

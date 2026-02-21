@@ -21,6 +21,7 @@ import { SiteValidationView } from '../SiteValidationView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
+import { openEntityTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import './Editor.css';
 
@@ -1102,7 +1103,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 
   // Handle click on a post to navigate to it
   const handlePostClick = (postId: string) => {
-    openTab({ type: 'post', id: postId, isTransient: true });
+    openEntityTab(openTab, 'post', postId, 'preview');
   };
 
   // Get unlinked posts for picker, filtered by search
@@ -1680,12 +1681,12 @@ const Dashboard: React.FC = () => {
                   onClick={() => {
                     useAppStore.getState().setActiveView('posts');
                     useAppStore.getState().setSelectedPost(post.id);
-                    useAppStore.getState().openTab({ type: 'post', id: post.id, isTransient: true });
+                    openEntityTab(useAppStore.getState().openTab, 'post', post.id, 'preview');
                   }}
                   onDoubleClick={() => {
                     useAppStore.getState().setActiveView('posts');
                     useAppStore.getState().setSelectedPost(post.id);
-                    useAppStore.getState().openTab({ type: 'post', id: post.id, isTransient: false });
+                    openEntityTab(useAppStore.getState().openTab, 'post', post.id, 'pin');
                   }}
                 >
                   <span className="recent-post-title">{post.title || tr('editor.untitled')}</span>

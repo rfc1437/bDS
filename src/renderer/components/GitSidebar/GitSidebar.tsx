@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
+import { openGitDiffCommitTab, openGitDiffFileTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import type { GitInitProgress, GitHistoryEntry, GitRemoteStateDto } from '../../../main/shared/electronApi';
 import './GitSidebar.css';
@@ -125,9 +126,6 @@ export const GitSidebar: React.FC = () => {
     [tr],
   );
 
-  const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
-  const getCommitDiffTabId = (commitHash: string): string => `git-diff:commit:${commitHash}`;
-
   const getActionProgressMessage = (action: 'fetch' | 'pull' | 'push' | 'prune-lfs' | 'commit'): string => {
     if (action === 'push') {
       return tr('gitSidebar.progress.pushingRemote');
@@ -156,22 +154,14 @@ export const GitSidebar: React.FC = () => {
 
   const openDiffTab = useCallback(
     (filePath: string, isTransient: boolean) => {
-      openTab({
-        type: 'git-diff',
-        id: getDiffTabId(filePath),
-        isTransient,
-      });
+      openGitDiffFileTab(openTab, filePath, isTransient ? 'preview' : 'pin');
     },
     [openTab],
   );
 
   const openCommitDiffTab = useCallback(
     (commitHash: string, isTransient: boolean) => {
-      openTab({
-        type: 'git-diff',
-        id: getCommitDiffTabId(commitHash),
-        isTransient,
-      });
+      openGitDiffCommitTab(openTab, commitHash, isTransient ? 'preview' : 'pin');
     },
     [openTab],
   );

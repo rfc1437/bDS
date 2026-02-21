@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore, MediaData } from '../../store';
+import { openEntityTab } from '../../navigation/tabPolicy';
 import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
 import './LinkedMediaPanel.css';
@@ -197,7 +198,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
 
   // Handle click on media item to open media viewer
   const handleMediaClick = (mediaId: string) => {
-    useAppStore.getState().openTab({ type: 'media', id: mediaId, isTransient: true });
+    openEntityTab(useAppStore.getState().openTab, 'media', mediaId, 'preview');
   };
 
   // Get thumbnail URL for a media item

@@ -14,6 +14,10 @@ export interface CanonicalTabSpec {
   isTransient: boolean;
 }
 
+export type EntityTabType = 'post' | 'media';
+export type EntityTabOpenIntent = 'preview' | 'pin';
+export type GitDiffResourceOpenIntent = 'preview' | 'pin';
+
 const SINGLETON_TOOL_TAB_REGISTRY: Record<SingletonToolTabKey, CanonicalTabSpec> = {
   settings: { type: 'settings', id: 'settings', isTransient: false },
   tags: { type: 'tags', id: 'tags', isTransient: false },
@@ -32,4 +36,113 @@ export function openSingletonToolTab(
   key: SingletonToolTabKey,
 ): void {
   openTab(getSingletonToolTabSpec(key));
+}
+
+export function getEntityTabSpec(
+  type: EntityTabType,
+  id: string,
+  intent: EntityTabOpenIntent,
+): CanonicalTabSpec {
+  return {
+    type,
+    id,
+    isTransient: intent === 'preview',
+  };
+}
+
+export function openEntityTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  type: EntityTabType,
+  id: string,
+  intent: EntityTabOpenIntent,
+): void {
+  openTab(getEntityTabSpec(type, id, intent));
+}
+
+export function getChatTabSpec(conversationId: string): CanonicalTabSpec {
+  return {
+    type: 'chat',
+    id: conversationId,
+    isTransient: false,
+  };
+}
+
+export function openChatTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  conversationId: string,
+): void {
+  openTab(getChatTabSpec(conversationId));
+}
+
+export function getImportTabSpec(definitionId: string): CanonicalTabSpec {
+  return {
+    type: 'import',
+    id: definitionId,
+    isTransient: false,
+  };
+}
+
+export function openImportTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  definitionId: string,
+): void {
+  openTab(getImportTabSpec(definitionId));
+}
+
+export function getGitDiffFileTabId(filePath: string): string {
+  return `git-diff:${filePath}`;
+}
+
+export function getGitDiffCommitTabId(commitHash: string): string {
+  return `git-diff:commit:${commitHash}`;
+}
+
+export function getGitDiffFileTabSpec(
+  filePath: string,
+  intent: GitDiffResourceOpenIntent,
+): CanonicalTabSpec {
+  return {
+    type: 'git-diff',
+    id: getGitDiffFileTabId(filePath),
+    isTransient: intent === 'preview',
+  };
+}
+
+export function getGitDiffCommitTabSpec(
+  commitHash: string,
+  intent: GitDiffResourceOpenIntent,
+): CanonicalTabSpec {
+  return {
+    type: 'git-diff',
+    id: getGitDiffCommitTabId(commitHash),
+    isTransient: intent === 'preview',
+  };
+}
+
+export function openGitDiffFileTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  filePath: string,
+  intent: GitDiffResourceOpenIntent,
+): void {
+  openTab(getGitDiffFileTabSpec(filePath, intent));
+}
+
+export function openGitDiffCommitTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  commitHash: string,
+  intent: GitDiffResourceOpenIntent,
+): void {
+  openTab(getGitDiffCommitTabSpec(commitHash, intent));
+}
+
+export function parseGitDiffTabId(tabId: string): { resource: string; commitHash: string | null } {
+  const resource = tabId.startsWith('git-diff:') ? tabId.slice('git-diff:'.length) : tabId;
+  if (!resource.startsWith('commit:')) {
+    return { resource, commitHash: null };
+  }
+
+  return {
+    resource,
+    commitHash: resource.slice('commit:'.length),
+  };
 }
