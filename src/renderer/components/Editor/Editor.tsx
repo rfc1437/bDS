@@ -1453,8 +1453,6 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 interface DashboardStats {
   totalPosts: number;
   draftCount: number;
@@ -1479,12 +1477,19 @@ interface TagDataWithColor {
 }
 
 const Dashboard: React.FC = () => {
+  const { t: tr, language } = useI18n();
   const { posts, media } = useAppStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [tagColors, setTagColors] = useState<Map<string, string>>(new Map());
   const [categoryCounts, setCategoryCounts] = useState<CategoryCount[]>([]);
+
+  const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
+  const monthFormatter = useMemo(
+    () => new Intl.DateTimeFormat(uiDateLocale, { month: 'short' }),
+    [uiDateLocale]
+  );
 
   useEffect(() => {
     const loadStats = async () => {
@@ -1553,49 +1558,63 @@ const Dashboard: React.FC = () => {
   const displayPublishedCount = stats?.publishedCount ?? 0;
   const displayArchivedCount = stats?.archivedCount ?? 0;
 
+  const getPostCountLabel = useCallback((count: number) => {
+    return tr(count === 1 ? 'dashboard.postCount.one' : 'dashboard.postCount.other', { count });
+  }, [tr]);
+
+  const getPostStatusLabel = useCallback((status: string) => {
+    const statusKeyByValue: Record<string, string> = {
+      draft: 'dashboard.status.draft',
+      published: 'dashboard.status.published',
+      archived: 'dashboard.status.archived',
+    };
+    const key = statusKeyByValue[status];
+    return key ? tr(key) : status;
+  }, [tr]);
+
   return (
     <div className="editor-empty">
       <div className="dashboard-content">
-        <h1>Dashboard</h1>
-        <p className="text-muted">Overview of your blog database</p>
+        <h1>{tr('dashboard.title')}</h1>
+        <p className="text-muted">{tr('dashboard.subtitle')}</p>
 
         <div className="dashboard-stats">
           <div className="stat-card">
             <div className="stat-number">{displayTotalPosts}</div>
-            <div className="stat-label">Total Posts</div>
+            <div className="stat-label">{tr('dashboard.stats.totalPosts')}</div>
             <div className="stat-breakdown">
-              <span className="stat-tag stat-published">{displayPublishedCount} published</span>
-              <span className="stat-tag stat-draft">{displayDraftCount} drafts</span>
-              {displayArchivedCount > 0 && <span className="stat-tag stat-archived">{displayArchivedCount} archived</span>}
+              <span className="stat-tag stat-published">{tr('dashboard.stats.published', { count: displayPublishedCount })}</span>
+              <span className="stat-tag stat-draft">{tr('dashboard.stats.drafts', { count: displayDraftCount })}</span>
+              {displayArchivedCount > 0 && <span className="stat-tag stat-archived">{tr('dashboard.stats.archived', { count: displayArchivedCount })}</span>}
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-number">{media.length}</div>
-            <div className="stat-label">Media Files</div>
+            <div className="stat-label">{tr('dashboard.stats.mediaFiles')}</div>
             <div className="stat-breakdown">
-              <span className="stat-tag">{imageCount} images</span>
+              <span className="stat-tag">{tr('dashboard.stats.images', { count: imageCount })}</span>
               <span className="stat-tag">{formatBytes(totalMediaSize)}</span>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-number">{tagCounts.length}</div>
-            <div className="stat-label">Tags</div>
+            <div className="stat-label">{tr('dashboard.stats.tags')}</div>
             <div className="stat-breakdown">
-              <span className="stat-tag">{categoryCounts.length} categories</span>
+              <span className="stat-tag">{tr('dashboard.stats.categories', { count: categoryCounts.length })}</span>
             </div>
           </div>
         </div>
 
         {timelineEntries.length > 0 && (
           <div className="dashboard-section">
-            <h4>Posts Over Time</h4>
+            <h4>{tr('dashboard.section.postsOverTime')}</h4>
             <div className="timeline-chart">
               {timelineEntries.map((entry) => (
                 <div key={`${entry.year}-${entry.month}`} className="timeline-bar-container">
                   <div className="timeline-bar" style={{ height: `${(entry.count / maxCount) * 100}%` }}>
                     <span className="timeline-bar-count">{entry.count}</span>
                   </div>
-                  <div className="timeline-bar-label">{MONTH_NAMES[entry.month]}</div>
+                  <div className="timeline-bar-label">{monthFormatter.format(new Date(entry.year, entry.month, 1))}</div>
                 </div>
               ))}
             </div>
@@ -1604,7 +1623,7 @@ const Dashboard: React.FC = () => {
 
         {tagCloudItems.length > 0 && (
           <div className="dashboard-section">
-            <h4>Tags</h4>
+            <h4>{tr('dashboard.section.tags')}</h4>
             <div className="tag-cloud">
               {tagCloudItems.map(item => {
                 const hasColor = !!item.color;
@@ -1620,26 +1639,26 @@ const Dashboard: React.FC = () => {
                     key={item.tag}
                     className={`dashboard-tag ${hasColor ? 'has-color' : ''}`}
                     style={style}
-                    title={`${item.count} post${item.count !== 1 ? 's' : ''}`}
+                    title={getPostCountLabel(item.count)}
                   >
                     {item.tag}
                   </span>
                 );
               })}
-              {tagCounts.length > 40 && <span className="text-muted tag-cloud-more">+{tagCounts.length - 40} more</span>}
+              {tagCounts.length > 40 && <span className="text-muted tag-cloud-more">{tr('dashboard.tagCloud.more', { count: tagCounts.length - 40 })}</span>}
             </div>
           </div>
         )}
 
         {categoryCounts.length > 0 && (
           <div className="dashboard-section">
-            <h4>Categories</h4>
+            <h4>{tr('dashboard.section.categories')}</h4>
             <div className="tag-cloud">
               {categoryCounts.map(cat => (
                 <span
                   key={cat.category}
                   className="dashboard-tag dashboard-category"
-                  title={`${cat.count} post${cat.count !== 1 ? 's' : ''}`}
+                  title={getPostCountLabel(cat.count)}
                 >
                   {cat.category} <span className="tag-count">{cat.count}</span>
                 </span>
@@ -1650,7 +1669,7 @@ const Dashboard: React.FC = () => {
 
         {recentPosts.length > 0 && (
           <div className="dashboard-section">
-            <h4>Recently Updated</h4>
+            <h4>{tr('dashboard.section.recentlyUpdated')}</h4>
             <div className="recent-posts-list">
               {recentPosts.map(post => (
                 <div
@@ -1667,9 +1686,9 @@ const Dashboard: React.FC = () => {
                     useAppStore.getState().openTab({ type: 'post', id: post.id, isTransient: false });
                   }}
                 >
-                  <span className="recent-post-title">{post.title || 'Untitled'}</span>
-                  <span className={`recent-post-status status-${post.status}`}>{post.status}</span>
-                  <span className="recent-post-date">{new Date(post.updatedAt).toLocaleDateString()}</span>
+                  <span className="recent-post-title">{post.title || tr('editor.untitled')}</span>
+                  <span className={`recent-post-status status-${post.status}`}>{getPostStatusLabel(post.status)}</span>
+                  <span className="recent-post-date">{new Date(post.updatedAt).toLocaleDateString(uiDateLocale)}</span>
                 </div>
               ))}
             </div>
