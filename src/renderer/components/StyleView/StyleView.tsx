@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
+import { useI18n } from '../../i18n';
 import { PICO_THEME_NAMES, PICO_THEME_PREVIEW_TOKENS, getRendererPicoTheme, ensureRendererPicoThemeStylesheet, type PicoThemeName } from '../../utils/picoTheme';
 import './StyleView.css';
 
@@ -12,6 +13,7 @@ function toDisplayName(theme: PicoThemeName): string {
 }
 
 export const StyleView: React.FC = () => {
+  const { t } = useI18n();
   const { activeProject, picoTheme, setPicoTheme } = useAppStore();
   const [selectedTheme, setSelectedTheme] = useState<PicoThemeName>(getRendererPicoTheme(picoTheme));
   const [previewMode, setPreviewMode] = useState<PreviewMode>('auto');
@@ -51,10 +53,10 @@ export const StyleView: React.FC = () => {
       setIsApplying(true);
       await window.electronAPI?.meta.updateProjectMetadata({ picoTheme: selectedTheme });
       setPicoTheme(selectedTheme);
-      showToast.success(`Applied theme: ${toDisplayName(selectedTheme)}`);
+      showToast.success(t('styleView.toast.appliedTheme', { theme: toDisplayName(selectedTheme) }));
     } catch (error) {
       console.error('Failed to apply style theme:', error);
-      showToast.error('Failed to apply theme');
+      showToast.error(t('styleView.toast.applyThemeFailed'));
     } finally {
       setIsApplying(false);
     }
@@ -63,11 +65,11 @@ export const StyleView: React.FC = () => {
   return (
     <div className="style-view">
       <div className="style-view-header">
-        <h2>Style</h2>
-        <p>Select a Pico CSS theme and preview the top posts before applying.</p>
+        <h2>{t('styleView.title')}</h2>
+        <p>{t('styleView.subtitle')}</p>
       </div>
 
-      <div className="style-theme-picker" role="group" aria-label="Pico Theme Picker">
+      <div className="style-theme-picker" role="group" aria-label={t('styleView.themePickerAria')}>
         {PICO_THEME_NAMES.map((theme) => {
           const isSelected = selectedTheme === theme;
           const preview = PICO_THEME_PREVIEW_TOKENS[theme];
@@ -104,15 +106,15 @@ export const StyleView: React.FC = () => {
 
       <div className="style-apply-row">
         <label className="style-preview-mode-control">
-          <span>Preview mode</span>
+          <span>{t('styleView.previewMode')}</span>
           <select
-            aria-label="Preview mode"
+            aria-label={t('styleView.previewMode')}
             value={previewMode}
             onChange={(event) => setPreviewMode(event.target.value as PreviewMode)}
           >
-            <option value="auto">Auto</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="auto">{t('styleView.mode.auto')}</option>
+            <option value="light">{t('styleView.mode.light')}</option>
+            <option value="dark">{t('styleView.mode.dark')}</option>
           </select>
         </label>
         <button
@@ -120,13 +122,13 @@ export const StyleView: React.FC = () => {
           onClick={handleApplyTheme}
           disabled={isApplying || picoTheme === selectedTheme}
         >
-          Apply Theme
+          {t('styleView.applyTheme')}
         </button>
       </div>
 
       <div className="style-preview-container">
         <iframe
-          title="Theme preview"
+          title={t('styleView.themePreviewTitle')}
           className="style-preview-frame"
           src={previewUrl}
         />

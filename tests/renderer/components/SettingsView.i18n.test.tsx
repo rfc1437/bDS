@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { SettingsView } from '../../../src/renderer/components/SettingsView/SettingsView';
 import { useAppStore } from '../../../src/renderer/store';
 import { I18nProvider, UI_LANGUAGE_STORAGE_KEY } from '../../../src/renderer/i18n';
+import { SUPPORTED_RENDER_LANGUAGES } from '../../../src/main/shared/i18n';
 
 describe('SettingsView i18n', () => {
   beforeEach(() => {
@@ -58,5 +59,18 @@ describe('SettingsView i18n', () => {
     expect(await screen.findByText('Projekt')).toBeInTheDocument();
     expect(screen.getByText('Projektname')).toBeInTheDocument();
     expect(screen.getByText('Projekteinstellungen speichern')).toBeInTheDocument();
+  });
+
+  it('shows only supported render languages in project language selector', async () => {
+    render(
+      <I18nProvider>
+        <SettingsView />
+      </I18nProvider>
+    );
+
+    const select = await screen.findByLabelText('Hauptsprache');
+    const options = Array.from((select as HTMLSelectElement).options).map((option) => option.value);
+
+    expect(options).toEqual(SUPPORTED_RENDER_LANGUAGES);
   });
 });

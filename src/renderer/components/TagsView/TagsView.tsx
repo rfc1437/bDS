@@ -3,6 +3,7 @@ import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { getContrastColor } from '../../utils/color';
 import { subscribeToTagEvents } from '../../utils/tagEventSubscriptions';
+import { useI18n } from '../../i18n';
 import './TagsView.css';
 
 // Types
@@ -46,7 +47,8 @@ const TagCloudItem: React.FC<{
   isSelected: boolean;
   onSelect: (name: string) => void;
   maxCount: number;
-}> = ({ tag, isSelected, onSelect, maxCount }) => {
+  title: string;
+}> = ({ tag, isSelected, onSelect, maxCount, title }) => {
   // Calculate font size based on count (range: 0.8rem to 2rem)
   const minSize = 0.85;
   const maxSize = 1.8;
@@ -69,7 +71,7 @@ const TagCloudItem: React.FC<{
       className={`tag-cloud-item ${isSelected ? 'selected' : ''} ${hasColor ? 'has-color' : ''}`}
       style={style}
       onClick={() => onSelect(tag.name)}
-      title={`${tag.count} post${tag.count !== 1 ? 's' : ''}`}
+      title={title}
     >
       {tag.name}
       <span className="tag-count">{tag.count}</span>
@@ -128,6 +130,7 @@ const SectionHeader: React.FC<{
 );
 
 export const TagsView: React.FC = () => {
+  const { t } = useI18n();
   const { showErrorModal } = useAppStore();
   
   // State
@@ -198,7 +201,7 @@ export const TagsView: React.FC = () => {
   // Create tag
   const handleCreateTag = async () => {
     if (!newTagName.trim()) {
-      showToast.error('Tag name is required');
+      showToast.error(t('tagsView.toast.tagNameRequired'));
       return;
     }
 
@@ -209,7 +212,7 @@ export const TagsView: React.FC = () => {
       });
       setNewTagName('');
       setNewTagColor('');
-      showToast.success('Tag created');
+      showToast.success(t('tagsView.toast.tagCreated'));
       loadTags();
     } catch (error) {
       const err = error as Error;
@@ -224,14 +227,14 @@ export const TagsView: React.FC = () => {
     try {
       const result = await window.electronAPI?.tags.delete(deleteConfirm.tagId);
       if (result?.success) {
-        showToast.success(`Tag deleted. ${result.postsUpdated} post(s) updated.`);
+        showToast.success(t('tagsView.toast.tagDeleted', { postsUpdated: result.postsUpdated }));
         setSelectedTags(prev => prev.filter(n => n !== deleteConfirm.tagName));
         loadTags();
       }
     } catch (error) {
       const err = error as Error;
       showErrorModal({
-        title: 'Delete Failed',
+        title: t('tagsView.error.deleteFailedTitle'),
         message: err.message,
       });
     } finally {
@@ -262,7 +265,7 @@ export const TagsView: React.FC = () => {
         await window.electronAPI?.tags.rename(editingTagId, editTagName.trim());
       }
 
-      showToast.success('Tag updated');
+      showToast.success(t('tagsView.toast.tagUpdated'));
       setEditingTagId(null);
       loadTags();
     } catch (error) {
@@ -279,7 +282,7 @@ export const TagsView: React.FC = () => {
       // Find target tag
       const targetTag = allTags.find(t => t.name === mergeConfirm.targetName);
       if (!targetTag) {
-        showToast.error('Target tag not found');
+        showToast.error(t('tagsView.toast.targetTagNotFound'));
         return;
       }
 
@@ -289,7 +292,7 @@ export const TagsView: React.FC = () => {
       );
 
       if (sourceTags.length === 0) {
-        showToast.error('No source tags to merge');
+        showToast.error(t('tagsView.toast.noSourceTagsToMerge'));
         return;
       }
 
@@ -300,7 +303,11 @@ export const TagsView: React.FC = () => {
 
       if (result?.success) {
         showToast.success(
-          `Merged ${result.tagsDeleted} tag(s) into "${result.targetTag}". ${result.postsUpdated} post(s) updated.`
+          t('tagsView.toast.tagsMerged', {
+            tagsDeleted: result.tagsDeleted,
+            targetTag: result.targetTag,
+            postsUpdated: result.postsUpdated,
+          })
         );
         setSelectedTags([]);
         setMergeTargetName('');
@@ -309,7 +316,7 @@ export const TagsView: React.FC = () => {
     } catch (error) {
       const err = error as Error;
       showErrorModal({
-        title: 'Merge Failed',
+        title: t('tagsView.error.mergeFailedTitle'),
         message: err.message,
       });
     } finally {
@@ -323,9 +330,9 @@ export const TagsView: React.FC = () => {
       const result = await window.electronAPI?.tags.syncFromPosts();
       if (result) {
         if (result.added.length > 0) {
-          showToast.success(`Discovered ${result.added.length} new tag(s)`);
+          showToast.success(t('tagsView.toast.discoveredTags', { count: result.added.length }));
         } else {
-          showToast.info('All tags are already synced');
+          showToast.info(t('tagsView.toast.alreadySynced'));
         }
         loadTags();
       }
@@ -349,23 +356,23 @@ export const TagsView: React.FC = () => {
   return (
     <div className="tags-view">
       <div className="tags-view-header">
-        <h2>Tag Management</h2>
-        <p className="text-muted">Manage your blog's tags, assign colors, and perform bulk operations.</p>
+        <h2>{t('tagsView.title')}</h2>
+        <p className="text-muted">{t('tagsView.subtitle')}</p>
       </div>
 
       <div className="tags-view-content">
         {/* Tag Cloud Section */}
         <SectionHeader
           id="tags-section-cloud"
-          title="Tag Cloud"
-          description="Click tags to select them for bulk operations. Hover to see post counts."
+          title={t('tagsView.cloud.title')}
+          description={t('tagsView.cloud.description')}
         >
           {isLoading ? (
-            <div className="tags-loading">Loading tags...</div>
+            <div className="tags-loading">{t('tagsView.loadingTags')}</div>
           ) : tagsWithCounts.length === 0 ? (
             <div className="tags-empty">
-              <p>No tags found</p>
-              <button onClick={handleSyncFromPosts}>Discover tags from posts</button>
+              <p>{t('tagsView.noTagsFound')}</p>
+              <button onClick={handleSyncFromPosts}>{t('tagsView.discoverFromPosts')}</button>
             </div>
           ) : (
             <>
@@ -377,13 +384,17 @@ export const TagsView: React.FC = () => {
                     isSelected={selectedTags.includes(tag.name)}
                     onSelect={handleTagSelect}
                     maxCount={maxCount}
+                    title={t('tagsView.tagCountTitle', {
+                      count: tag.count,
+                      item: tag.count === 1 ? t('tagsView.postsSingular') : t('tagsView.postsPlural'),
+                    })}
                   />
                 ))}
               </div>
               {selectedTags.length > 0 && (
                 <div className="tag-selection-info">
-                  <span>{selectedTags.length} tag(s) selected</span>
-                  <button onClick={handleClearSelection}>Clear selection</button>
+                  <span>{t('tagsView.selectedCount', { count: selectedTags.length })}</span>
+                  <button onClick={handleClearSelection}>{t('tagsView.clearSelection')}</button>
                 </div>
               )}
             </>
@@ -393,16 +404,16 @@ export const TagsView: React.FC = () => {
         {/* Tag Management Section */}
         <SectionHeader
           id="tags-section-manage"
-          title="Create & Edit Tags"
-          description="Create new tags or edit existing ones. Assign colors to make tags visually distinct."
+          title={t('tagsView.manage.title')}
+          description={t('tagsView.manage.description')}
         >
           {/* Create new tag */}
           <div className="tag-create-form">
-            <h4>Create New Tag</h4>
+            <h4>{t('tagsView.create.title')}</h4>
             <div className="tag-form-row">
               <input
                 type="text"
-                placeholder="Tag name"
+                placeholder={t('tagsView.tagNamePlaceholder')}
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateTag()}
@@ -412,19 +423,19 @@ export const TagsView: React.FC = () => {
                   type="color"
                   value={newTagColor || '#808080'}
                   onChange={(e) => setNewTagColor(e.target.value)}
-                  title="Choose color"
+                  title={t('tagsView.chooseColor')}
                 />
                 {newTagColor && (
                   <button 
                     className="clear-color" 
                     onClick={() => setNewTagColor('')}
-                    title="Remove color"
+                    title={t('tagsView.removeColor')}
                   >
                     ✕
                   </button>
                 )}
               </div>
-              <button onClick={handleCreateTag} className="primary">Create</button>
+              <button onClick={handleCreateTag} className="primary">{t('tagsView.create.action')}</button>
             </div>
             <div className="color-presets">
               {COLOR_PRESETS.map(color => (
@@ -442,14 +453,14 @@ export const TagsView: React.FC = () => {
           {/* Selected tag editor */}
           {selectedTagObjects.length === 1 && (
             <div className="tag-edit-form">
-              <h4>Edit Tag: {selectedTagObjects[0].name}</h4>
+              <h4>{t('tagsView.edit.title', { name: selectedTagObjects[0].name })}</h4>
               {editingTagId === selectedTagObjects[0].id ? (
                 <div className="tag-form-row">
                   <input
                     type="text"
                     value={editTagName}
                     onChange={(e) => setEditTagName(e.target.value)}
-                    placeholder="Tag name"
+                    placeholder={t('tagsView.tagNamePlaceholder')}
                   />
                   <div className="color-picker-group">
                     <input
@@ -461,14 +472,14 @@ export const TagsView: React.FC = () => {
                       <button 
                         className="clear-color" 
                         onClick={() => setEditTagColor('')}
-                        title="Remove color"
+                        title={t('tagsView.removeColor')}
                       >
                         ✕
                       </button>
                     )}
                   </div>
-                  <button onClick={handleSaveEdit} className="primary">Save</button>
-                  <button onClick={() => setEditingTagId(null)}>Cancel</button>
+                  <button onClick={handleSaveEdit} className="primary">{t('common.save')}</button>
+                  <button onClick={() => setEditingTagId(null)}>{t('common.cancel')}</button>
                 </div>
               ) : (
                 <div className="tag-form-row">
@@ -480,7 +491,7 @@ export const TagsView: React.FC = () => {
                     {selectedTagObjects[0].name}
                   </span>
                   <button onClick={() => handleStartEdit(selectedTagObjects[0])}>
-                    Edit
+                    {t('tagsView.edit.action')}
                   </button>
                   <button 
                     className="danger"
@@ -489,7 +500,7 @@ export const TagsView: React.FC = () => {
                       tagName: selectedTagObjects[0].name 
                     })}
                   >
-                    Delete
+                    {t('tagsView.deleteAction')}
                   </button>
                 </div>
               )}
@@ -500,20 +511,20 @@ export const TagsView: React.FC = () => {
         {/* Merge Tags Section */}
         <SectionHeader
           id="tags-section-merge"
-          title="Merge Tags"
-          description="Select multiple tags above, then merge them into a single tag. All posts will be updated."
+          title={t('tagsView.merge.title')}
+          description={t('tagsView.merge.description')}
         >
           {selectedTags.length < 2 ? (
-            <p className="text-muted">Select 2 or more tags from the cloud above to merge them.</p>
+            <p className="text-muted">{t('tagsView.merge.selectAtLeastTwo')}</p>
           ) : (
             <div className="merge-form">
-              <p>Merge <strong>{selectedTags.length}</strong> tags into:</p>
+              <p>{t('tagsView.merge.countInto', { count: selectedTags.length })}</p>
               <div className="tag-form-row">
                 <select
                   value={mergeTargetName}
                   onChange={(e) => setMergeTargetName(e.target.value)}
                 >
-                  <option value="">Select target tag...</option>
+                  <option value="">{t('tagsView.merge.selectTarget')}</option>
                   {selectedTags.map(name => (
                     <option key={name} value={name}>{name}</option>
                   ))}
@@ -530,11 +541,13 @@ export const TagsView: React.FC = () => {
                     }
                   }}
                 >
-                  Merge Tags
+                  {t('tagsView.merge.action')}
                 </button>
               </div>
               <p className="text-muted text-small">
-                Tags to be deleted: {selectedTags.filter(n => n !== mergeTargetName).join(', ') || '(none)'}
+                {t('tagsView.merge.tagsToDelete', {
+                  tags: selectedTags.filter(n => n !== mergeTargetName).join(', ') || t('tagsView.none'),
+                })}
               </p>
             </div>
           )}
@@ -543,11 +556,11 @@ export const TagsView: React.FC = () => {
         {/* Sync Section */}
         <SectionHeader
           id="tags-section-sync"
-          title="Sync Tags"
-          description="Discover tags that exist in posts but not in the tag database."
+          title={t('tagsView.sync.title')}
+          description={t('tagsView.sync.description')}
         >
           <button onClick={handleSyncFromPosts}>
-            Sync Tags from Posts
+            {t('tagsView.sync.action')}
           </button>
         </SectionHeader>
       </div>
@@ -555,9 +568,10 @@ export const TagsView: React.FC = () => {
       {/* Confirm Dialogs */}
       <ConfirmDialog
         isOpen={!!deleteConfirm}
-        title="Delete Tag"
-        message={`Are you sure you want to delete the tag "${deleteConfirm?.tagName}"? This will remove it from all posts. This action runs as a background task.`}
-        confirmText="Delete Tag"
+        title={t('tagsView.confirmDelete.title')}
+        message={t('tagsView.confirmDelete.message', { tagName: deleteConfirm?.tagName || '' })}
+        confirmText={t('tagsView.confirmDelete.action')}
+        cancelText={t('common.cancel')}
         isDestructive
         onConfirm={handleDeleteTag}
         onCancel={() => setDeleteConfirm(null)}
@@ -565,9 +579,13 @@ export const TagsView: React.FC = () => {
 
       <ConfirmDialog
         isOpen={!!mergeConfirm}
-        title="Merge Tags"
-        message={`Are you sure you want to merge ${mergeConfirm?.sourceNames.length} tag(s) into "${mergeConfirm?.targetName}"? The source tags will be deleted and all posts will be updated. This runs as a background task.`}
-        confirmText="Merge Tags"
+        title={t('tagsView.confirmMerge.title')}
+        message={t('tagsView.confirmMerge.message', {
+          count: mergeConfirm?.sourceNames.length || 0,
+          target: mergeConfirm?.targetName || '',
+        })}
+        confirmText={t('tagsView.confirmMerge.action')}
+        cancelText={t('common.cancel')}
         onConfirm={handleMergeTags}
         onCancel={() => setMergeConfirm(null)}
       />

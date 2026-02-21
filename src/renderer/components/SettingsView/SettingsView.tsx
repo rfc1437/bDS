@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
+import {
+  resolveSupportedRenderLanguage,
+  SUPPORTED_RENDER_LANGUAGES,
+  type SupportedLanguage,
+} from '../../../main/shared/i18n';
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
@@ -32,6 +37,14 @@ interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
 }
+
+const RENDER_LANGUAGE_LABEL_KEY: Record<SupportedLanguage, string> = {
+  en: 'settings.language.english',
+  de: 'settings.language.german',
+  fr: 'settings.language.french',
+  it: 'settings.language.italian',
+  es: 'settings.language.spanish',
+};
 
 const defaultCredentials: Credentials = {
   ftpHost: '',
@@ -123,7 +136,7 @@ export const SettingsView: React.FC = () => {
   const [projectDataPath, setProjectDataPath] = useState('');
   const [projectPublicUrl, setProjectPublicUrl] = useState('');
   const [defaultProjectPath, setDefaultProjectPath] = useState('');
-  const [projectMainLanguage, setProjectMainLanguage] = useState('en');
+  const [projectMainLanguage, setProjectMainLanguage] = useState<SupportedLanguage>('en');
   const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
   const [projectMaxPostsPerPage, setProjectMaxPostsPerPage] = useState(50);
 
@@ -169,7 +182,7 @@ export const SettingsView: React.FC = () => {
           setProjectPublicUrl('');
         }
         if (metadata?.mainLanguage) {
-          setProjectMainLanguage(metadata.mainLanguage);
+          setProjectMainLanguage(resolveSupportedRenderLanguage(metadata.mainLanguage));
         }
         if (metadata?.defaultAuthor) {
           setProjectDefaultAuthor(metadata.defaultAuthor);
@@ -302,7 +315,7 @@ export const SettingsView: React.FC = () => {
           description: projectDescription.trim(),
           dataPath: projectDataPath.trim() || undefined,
           publicUrl: projectPublicUrl.trim() || undefined,
-          mainLanguage: projectMainLanguage,
+          mainLanguage: resolveSupportedRenderLanguage(projectMainLanguage),
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
           categorySettings,
@@ -415,28 +428,11 @@ export const SettingsView: React.FC = () => {
         <select
           id="project-language"
           value={projectMainLanguage}
-          onChange={(e) => setProjectMainLanguage(e.target.value)}
+          onChange={(e) => setProjectMainLanguage(resolveSupportedRenderLanguage(e.target.value))}
         >
-          <option value="en">{t('settings.language.english')}</option>
-          <option value="de">{t('settings.language.german')}</option>
-          <option value="es">{t('settings.language.spanish')}</option>
-          <option value="fr">{t('settings.language.french')}</option>
-          <option value="it">{t('settings.language.italian')}</option>
-          <option value="pt">{t('settings.language.portuguese')}</option>
-          <option value="nl">{t('settings.language.dutch')}</option>
-          <option value="pl">{t('settings.language.polish')}</option>
-          <option value="ru">{t('settings.language.russian')}</option>
-          <option value="ja">{t('settings.language.japanese')}</option>
-          <option value="zh">{t('settings.language.chinese')}</option>
-          <option value="ko">{t('settings.language.korean')}</option>
-          <option value="ar">{t('settings.language.arabic')}</option>
-          <option value="hi">{t('settings.language.hindi')}</option>
-          <option value="tr">{t('settings.language.turkish')}</option>
-          <option value="sv">{t('settings.language.swedish')}</option>
-          <option value="da">{t('settings.language.danish')}</option>
-          <option value="no">{t('settings.language.norwegian')}</option>
-          <option value="fi">{t('settings.language.finnish')}</option>
-          <option value="cs">{t('settings.language.czech')}</option>
+          {SUPPORTED_RENDER_LANGUAGES.map((language) => (
+            <option key={language} value={language}>{t(RENDER_LANGUAGE_LABEL_KEY[language])}</option>
+          ))}
         </select>
       </SettingRow>
 

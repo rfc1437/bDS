@@ -14,10 +14,10 @@ export const SUPPORTED_UI_LANGUAGES: UiLanguage[] = ['en', 'de', 'fr', 'it', 'es
 type TranslationTable = Record<string, string>;
 
 const en = enJson as TranslationTable;
-const de = { ...en, ...(deJson as TranslationTable) };
-const fr = { ...en, ...(frJson as TranslationTable) };
-const it = { ...en, ...(itJson as TranslationTable) };
-const es = { ...en, ...(esJson as TranslationTable) };
+const de = deJson as TranslationTable;
+const fr = frJson as TranslationTable;
+const it = itJson as TranslationTable;
+const es = esJson as TranslationTable;
 
 const uiCatalog: Record<UiLanguage, TranslationTable> = { en, de, fr, it, es };
 
@@ -55,7 +55,7 @@ export function translateUi(
   key: string,
   params?: Record<string, string | number>
 ): string {
-  const localized = uiCatalog[language]?.[key] ?? uiCatalog.en[key] ?? key;
+  const localized = uiCatalog[language]?.[key] ?? key;
   return interpolate(localized, params);
 }
 

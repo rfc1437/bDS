@@ -85,6 +85,23 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
+## ⚠️ MANDATORY: Proper I18N for UI and Rendering Text
+
+**All user-facing text MUST follow proper i18n patterns.**
+
+- Do not hardcode UI strings directly in React components, menu templates, dialogs, or toasts
+- Store UI copy in language resources and resolve text through i18n helpers/hooks
+- UI language MUST come from the operating system locale
+- Rendering/preview/generated-content language MUST come from project preferences (`mainLanguage`), not UI locale
+- Keep i18n usage consistent in both renderer UI and render/preview output
+- For supported locales, translations MUST come from that locale file only; do not copy English terms into supported locale files as fallback
+- English fallback is allowed only when the requested locale is unsupported by available locale files
+- The project `mainLanguage` selector must expose exactly all supported render languages and no unsupported extras
+
+> **No hardcoded user-facing text. No exceptions.**
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns

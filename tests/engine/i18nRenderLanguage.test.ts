@@ -15,6 +15,7 @@ describe('render i18n', () => {
   it('normalizes render language values', () => {
     expect(resolveSupportedRenderLanguage('it')).toBe('it');
     expect(resolveSupportedRenderLanguage('es-AR')).toBe('es');
+    expect(resolveSupportedRenderLanguage('pt-BR')).toBe('en');
     expect(resolveSupportedRenderLanguage('')).toBe('en');
   });
 

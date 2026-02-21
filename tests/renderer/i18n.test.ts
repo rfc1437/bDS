@@ -33,11 +33,17 @@ describe('renderer i18n', () => {
     expect(resolveSupportedUiLanguage('')).toBe('en');
   });
 
-  it('returns translated text with english fallback', () => {
+  it('returns translated text for supported languages without per-key english fallback', () => {
     expect(translateUi('de', 'common.save')).toBe('Speichern');
     expect(translateUi('fr', 'common.cancel')).toBe('Annuler');
     expect(translateUi('de', 'settings.language.english')).toBe('Englisch');
     expect(translateUi('it', 'missing.key')).toBe('missing.key');
+  });
+
+  it('falls back to english only when requested language is unsupported', () => {
+    const resolved = resolveSupportedUiLanguage('pt-BR');
+    expect(resolved).toBe('en');
+    expect(translateUi(resolved, 'common.save')).toBe('Save');
   });
 
   it('uses system locale for ui language when no persisted choice exists', async () => {

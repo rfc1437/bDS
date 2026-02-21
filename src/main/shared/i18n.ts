@@ -5,14 +5,15 @@ import itJson from './i18n/locales/it.json';
 import esJson from './i18n/locales/es.json';
 
 export type SupportedLanguage = 'en' | 'de' | 'fr' | 'it' | 'es';
+export const SUPPORTED_RENDER_LANGUAGES: SupportedLanguage[] = ['en', 'de', 'fr', 'it', 'es'];
 
 type TranslationMap = Record<string, string>;
 
 const en = enJson as TranslationMap;
-const de = { ...en, ...(deJson as TranslationMap) };
-const fr = { ...en, ...(frJson as TranslationMap) };
-const it = { ...en, ...(itJson as TranslationMap) };
-const es = { ...en, ...(esJson as TranslationMap) };
+const de = deJson as TranslationMap;
+const fr = frJson as TranslationMap;
+const it = itJson as TranslationMap;
+const es = esJson as TranslationMap;
 
 const catalog: Record<SupportedLanguage, TranslationMap> = { en, de, fr, it, es };
 
@@ -47,9 +48,9 @@ export function resolveUiLanguageFromSystemLocale(systemLocale: string | undefin
 }
 
 export function translateRender(language: SupportedLanguage, key: string): string {
-  return catalog[language]?.[key] ?? catalog.en[key] ?? key;
+  return catalog[language]?.[key] ?? key;
 }
 
 export function translateMenu(language: SupportedLanguage, key: string): string {
-  return catalog[language]?.[key] ?? catalog.en[key] ?? key;
+  return catalog[language]?.[key] ?? key;
 }

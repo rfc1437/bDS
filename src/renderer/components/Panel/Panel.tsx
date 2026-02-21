@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import type { TaskProgress } from '../../../main/shared/electronApi';
+import { useI18n } from '../../i18n';
 import './Panel.css';
 
 function getPostRelativePath(createdAt: string, slug: string): string | null {
@@ -101,6 +102,7 @@ function buildTaskEntries(tasks: TaskProgress[]): TaskEntry[] {
 }
 
 export const Panel: React.FC = () => {
+  const { t, language } = useI18n();
   const {
     panelVisible,
     panelActiveTab,
@@ -191,7 +193,7 @@ export const Panel: React.FC = () => {
 
         setPostLinksEntries([...fromEntries, ...toEntries]);
       } catch (error) {
-        setPostLinksError(error instanceof Error ? error.message : 'Failed to load post links.');
+        setPostLinksError(error instanceof Error ? error.message : t('panel.error.loadPostLinks'));
         setPostLinksEntries([]);
       } finally {
         setPostLinksLoading(false);
@@ -277,7 +279,7 @@ export const Panel: React.FC = () => {
         if (requestIdRef.current !== currentRequestId) {
           return;
         }
-        setGitLogError(error instanceof Error ? error.message : 'Failed to load git log.');
+        setGitLogError(error instanceof Error ? error.message : t('panel.error.loadGitLog'));
         setGitLogEntries([]);
       } finally {
         if (requestIdRef.current === currentRequestId) {
@@ -339,7 +341,7 @@ export const Panel: React.FC = () => {
           className="task-cancel"
           onClick={() => window.electronAPI?.tasks.cancel(task.taskId)}
         >
-          Cancel
+          {t('common.cancel')}
         </button>
       )}
     </div>
@@ -348,7 +350,7 @@ export const Panel: React.FC = () => {
   return (
     <div className="panel">
       <div className="panel-header">
-        <div className="panel-tabs" role="tablist" aria-label="Panel tabs">
+        <div className="panel-tabs" role="tablist" aria-label={t('panel.tabsAria')}>
           <button
             type="button"
             role="tab"
@@ -356,7 +358,7 @@ export const Panel: React.FC = () => {
             aria-selected={effectiveActivePanelTab === 'tasks'}
             onClick={() => setPanelActiveTab('tasks')}
           >
-            Tasks
+            {t('common.tasks')}
           </button>
           <button
             type="button"
@@ -365,7 +367,7 @@ export const Panel: React.FC = () => {
             aria-selected={effectiveActivePanelTab === 'output'}
             onClick={() => setPanelActiveTab('output')}
           >
-            Output
+            {t('panel.output')}
           </button>
           {canActivatePostLinks && (
             <button
@@ -375,7 +377,7 @@ export const Panel: React.FC = () => {
               aria-selected={effectiveActivePanelTab === 'post-links'}
               onClick={() => setPanelActiveTab('post-links')}
             >
-              Post Links
+              {t('panel.postLinks')}
             </button>
           )}
           <button
@@ -390,13 +392,13 @@ export const Panel: React.FC = () => {
               }
             }}
           >
-            Git Log
+            {t('panel.gitLog')}
           </button>
         </div>
         <button 
           className="panel-close"
           onClick={() => useAppStore.getState().togglePanel()}
-          title="Close Panel"
+          title={t('panel.closeTitle')}
         >
           ×
         </button>
@@ -404,7 +406,7 @@ export const Panel: React.FC = () => {
       <div className="panel-content">
         {effectiveActivePanelTab === 'tasks' && (
           recentTasks.length === 0 ? (
-            <div className="panel-empty">No recent tasks</div>
+            <div className="panel-empty">{t('panel.noRecentTasks')}</div>
           ) : (
             <div className="task-list">
               {recentTaskEntries.map((entry) => {
@@ -434,18 +436,18 @@ export const Panel: React.FC = () => {
         )}
 
         {effectiveActivePanelTab === 'output' && (
-          <div className="panel-empty">No output</div>
+          <div className="panel-empty">{t('panel.noOutput')}</div>
         )}
 
         {effectiveActivePanelTab === 'post-links' && (
           !canActivatePostLinks ? (
-            <div className="panel-empty">Open a post editor to view post links</div>
+            <div className="panel-empty">{t('panel.openPostEditor')}</div>
           ) : postLinksLoading ? (
-            <div className="panel-empty">Loading post links...</div>
+            <div className="panel-empty">{t('panel.loadingPostLinks')}</div>
           ) : postLinksError ? (
             <div className="panel-empty">{postLinksError}</div>
           ) : postLinksEntries.length === 0 ? (
-            <div className="panel-empty">No post links for this post</div>
+            <div className="panel-empty">{t('panel.noPostLinks')}</div>
           ) : (
             <div className="post-links-list">
               {postLinksEntries.map((entry) => (
@@ -454,9 +456,9 @@ export const Panel: React.FC = () => {
                   type="button"
                   className="post-links-item"
                   onClick={() => handlePostLinkClick(entry.id)}
-                  title={`Open ${entry.title || entry.slug}`}
+                  title={t('postLinks.openTitle', { title: entry.title || entry.slug })}
                 >
-                  <span className="post-links-direction">{entry.direction} {entry.slug}</span>
+                  <span className="post-links-direction">{t(`panel.direction.${entry.direction}`)} {entry.slug}</span>
                 </button>
               ))}
             </div>
@@ -465,13 +467,13 @@ export const Panel: React.FC = () => {
 
         {effectiveActivePanelTab === 'git-log' && (
           !canActivateGitLog ? (
-            <div className="panel-empty">Open a post or media editor to view git log</div>
+            <div className="panel-empty">{t('panel.openPostOrMediaEditor')}</div>
           ) : gitLogLoading ? (
-            <div className="panel-empty">Loading git log...</div>
+            <div className="panel-empty">{t('panel.loadingGitLog')}</div>
           ) : gitLogError ? (
             <div className="panel-empty">{gitLogError}</div>
           ) : gitLogEntries.length === 0 ? (
-            <div className="panel-empty">No commits found for this item</div>
+            <div className="panel-empty">{t('panel.noCommits')}</div>
           ) : (
             <div className="git-log-list">
               <div className="git-log-target">{gitLogTargetLabel}</div>
@@ -481,7 +483,7 @@ export const Panel: React.FC = () => {
                   <div className="git-log-meta">
                     <span className="git-log-hash">{entry.shortHash}</span>
                     <span>{entry.author}</span>
-                    <span>{new Date(entry.date).toLocaleString()}</span>
+                    <span>{new Date(entry.date).toLocaleString(language)}</span>
                   </div>
                 </div>
               ))}

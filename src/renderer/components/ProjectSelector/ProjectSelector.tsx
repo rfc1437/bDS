@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore, ProjectData, PostData, MediaData } from '../../store';
 import { loadTabsForProject, saveTabsForProject } from '../../utils';
 import { showToast } from '../Toast';
+import { useI18n } from '../../i18n';
 import './ProjectSelector.css';
 
 export const ProjectSelector: React.FC = () => {
+  const { t } = useI18n();
   const { projects, activeProject, setProjects, setActiveProject, setPosts, setMedia, setSelectedPost, setSelectedMedia, removeProject, getTabState, restoreTabState, clearTabs } = useAppStore();
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -83,11 +85,11 @@ export const ProjectSelector: React.FC = () => {
           restoreTabState(savedTabState);
         }
         
-        showToast.success(`Switched to ${project.name}`);
+        showToast.success(t('projectSelector.toast.switched', { name: project.name }));
       }
     } catch (error) {
       console.error('Failed to switch project:', error);
-      showToast.error('Failed to switch project');
+      showToast.error(t('projectSelector.toast.switchFailed'));
     }
     setIsOpen(false);
   };
@@ -104,7 +106,7 @@ export const ProjectSelector: React.FC = () => {
       });
       if (newProject) {
         setProjects([...projects, newProject as ProjectData]);
-        showToast.success(`Created project "${newProjectName}"`);
+        showToast.success(t('projectSelector.toast.created', { name: newProjectName }));
         setNewProjectName('');
         setNewProjectDescription('');
         setNewProjectDataPath(null);
@@ -115,13 +117,13 @@ export const ProjectSelector: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to create project:', error);
-      showToast.error('Failed to create project');
+      showToast.error(t('projectSelector.toast.createFailed'));
     }
   };
 
   const handleSelectFolder = async () => {
     try {
-      const selectedPath = await window.electronAPI?.app.selectFolder('Select Project Location');
+      const selectedPath = await window.electronAPI?.app.selectFolder(t('projectSelector.selectProjectLocation'));
       if (selectedPath) {
         setNewProjectDataPath(selectedPath);
         
@@ -135,12 +137,12 @@ export const ProjectSelector: React.FC = () => {
           if (existingMetadata.description) {
             setNewProjectDescription(existingMetadata.description);
           }
-          showToast.info('Found existing project settings');
+          showToast.info(t('projectSelector.toast.existingSettingsFound'));
         }
       }
     } catch (error) {
       console.error('Failed to select folder:', error);
-      showToast.error('Failed to select folder');
+      showToast.error(t('projectSelector.toast.selectFolderFailed'));
     }
   };
 
@@ -171,16 +173,16 @@ export const ProjectSelector: React.FC = () => {
       const success = await window.electronAPI?.projects.deleteWithData(projectToDelete.id);
       if (success) {
         removeProject(projectToDelete.id);
-        showToast.success(`Deleted project "${projectToDelete.name}" and all its data`);
+        showToast.success(t('projectSelector.toast.deletedWithData', { name: projectToDelete.name }));
         setShowDeleteModal(false);
         setProjectToDelete(null);
         setDeleteConfirmText('');
       } else {
-        showToast.error('Failed to delete project');
+        showToast.error(t('projectSelector.toast.deleteFailed'));
       }
     } catch (error) {
       console.error('Failed to delete project:', error);
-      showToast.error('Failed to delete project');
+      showToast.error(t('projectSelector.toast.deleteFailed'));
     }
   };
 
@@ -194,12 +196,12 @@ export const ProjectSelector: React.FC = () => {
       <button
         className="project-selector-trigger"
         onClick={() => setIsOpen(!isOpen)}
-        title="Switch project"
+        title={t('projectSelector.switchProject')}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="project-icon">
           <path d="M14.5 3H7.71l-.85-.85A.5.5 0 0 0 6.5 2h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5zm-13 1h5.29l.85.85c.1.1.23.15.36.15h6.5v9h-13V4z"/>
         </svg>
-        <span className="project-name">{activeProject?.name || 'Select Project'}</span>
+        <span className="project-name">{activeProject?.name || t('projectSelector.selectProject')}</span>
         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="dropdown-arrow">
           <path d="M4.5 5.5L8 9l3.5-3.5h-7z"/>
         </svg>
@@ -208,7 +210,7 @@ export const ProjectSelector: React.FC = () => {
       {isOpen && (
         <div className="project-dropdown">
           <div className="project-dropdown-header">
-            <span>PROJECTS</span>
+            <span>{t('projectSelector.projectsHeader')}</span>
           </div>
           <div className="project-list">
             {projects.map(project => (
@@ -231,7 +233,7 @@ export const ProjectSelector: React.FC = () => {
                   <button
                     className="project-item-delete"
                     onClick={(e) => openDeleteModal(e, project)}
-                    title={`Delete ${project.name}`}
+                    title={t('projectSelector.deleteProjectTitle', { name: project.name })}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z"/>
@@ -242,7 +244,7 @@ export const ProjectSelector: React.FC = () => {
               </div>
             ))}
             {projects.length === 0 && (
-              <div className="project-empty">No projects yet</div>
+              <div className="project-empty">{t('projectSelector.noProjectsYet')}</div>
             )}
           </div>
           <div className="project-dropdown-footer">
@@ -250,7 +252,7 @@ export const ProjectSelector: React.FC = () => {
               <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/>
               </svg>
-              New Project
+              {t('projectSelector.newProject')}
             </button>
           </div>
         </div>
@@ -260,7 +262,7 @@ export const ProjectSelector: React.FC = () => {
         <div className="modal-overlay" onClick={handleCloseCreateModal}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Create New Project</h3>
+              <h3>{t('projectSelector.createNewProject')}</h3>
               <button className="modal-close" onClick={handleCloseCreateModal}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
@@ -270,33 +272,33 @@ export const ProjectSelector: React.FC = () => {
             <form onSubmit={handleCreateProject}>
               <div className="modal-body">
                 <div className="form-field">
-                  <label htmlFor="project-name">Project Name</label>
+                  <label htmlFor="project-name">{t('projectSelector.projectName')}</label>
                   <input
                     id="project-name"
                     type="text"
                     value={newProjectName}
                     onChange={e => setNewProjectName(e.target.value)}
-                    placeholder="My Blog"
+                    placeholder={t('projectSelector.projectNamePlaceholder')}
                     autoFocus
                   />
                 </div>
                 <div className="form-field">
-                  <label htmlFor="project-description">Description (optional)</label>
+                  <label htmlFor="project-description">{t('projectSelector.descriptionOptional')}</label>
                   <textarea
                     id="project-description"
                     value={newProjectDescription}
                     onChange={e => setNewProjectDescription(e.target.value)}
-                    placeholder="A brief description of this project..."
+                    placeholder={t('projectSelector.descriptionPlaceholder')}
                     rows={3}
                   />
                 </div>
                 <div className="form-field">
-                  <label>Project Location</label>
+                  <label>{t('projectSelector.projectLocation')}</label>
                   <div className="folder-picker">
                     {newProjectDataPath ? (
                       <div className="folder-path-display">
                         <span className="folder-path" title={newProjectDataPath}>{newProjectDataPath}</span>
-                        <button type="button" className="btn-icon" onClick={handleClearFolder} title="Use default location">
+                        <button type="button" className="btn-icon" onClick={handleClearFolder} title={t('projectSelector.useDefaultLocation')}>
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
                           </svg>
@@ -304,27 +306,27 @@ export const ProjectSelector: React.FC = () => {
                       </div>
                     ) : (
                       <div className="folder-default-info">
-                        <span className="default-label">Default (internal storage)</span>
+                        <span className="default-label">{t('projectSelector.defaultInternalStorage')}</span>
                       </div>
                     )}
                     <button type="button" className="btn-secondary btn-small" onClick={handleSelectFolder}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M14.5 3H7.71l-.85-.85A.5.5 0 0 0 6.5 2h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5zm-13 1h5.29l.85.85c.1.1.23.15.36.15h6.5v9h-13V4z"/>
                       </svg>
-                      Choose Folder...
+                      {t('projectSelector.chooseFolder')}
                     </button>
                   </div>
                   <p className="form-hint">
-                    Choose a custom folder for cloud storage backup, or use the default internal storage.
+                    {t('projectSelector.projectLocationHint')}
                   </p>
                 </div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={handleCloseCreateModal}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary" disabled={!newProjectName.trim()}>
-                  Create Project
+                  {t('projectSelector.createProject')}
                 </button>
               </div>
             </form>
@@ -336,7 +338,7 @@ export const ProjectSelector: React.FC = () => {
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-content modal-danger" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Delete Project</h3>
+              <h3>{t('projectSelector.deleteProject')}</h3>
               <button className="modal-close" onClick={() => setShowDeleteModal(false)}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
@@ -346,15 +348,15 @@ export const ProjectSelector: React.FC = () => {
             <form onSubmit={handleDeleteProject}>
               <div className="modal-body">
                 <p className="delete-warning">
-                  This will permanently delete the project <strong>"{projectToDelete.name}"</strong> and all its data including:
+                  {t('projectSelector.deleteWarning', { name: projectToDelete.name })}
                 </p>
                 <ul className="delete-list">
-                  <li>All blog posts</li>
-                  <li>All media files</li>
-                  <li>All project settings</li>
+                  <li>{t('projectSelector.deleteItemPosts')}</li>
+                  <li>{t('projectSelector.deleteItemMedia')}</li>
+                  <li>{t('projectSelector.deleteItemSettings')}</li>
                 </ul>
                 <p className="delete-confirm-text">
-                  Type <strong>{projectToDelete.name}</strong> to confirm deletion:
+                  {t('projectSelector.typeToConfirm', { name: projectToDelete.name })}
                 </p>
                 <div className="form-field">
                   <input
@@ -368,14 +370,14 @@ export const ProjectSelector: React.FC = () => {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowDeleteModal(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button 
                   type="submit" 
                   className="btn-danger" 
                   disabled={deleteConfirmText !== projectToDelete.name}
                 >
-                  Delete Project
+                  {t('projectSelector.deleteProject')}
                 </button>
               </div>
             </form>

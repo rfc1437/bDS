@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore, MediaData } from '../../store';
 import { showToast } from '../Toast';
+import { useI18n } from '../../i18n';
 import './LinkedMediaPanel.css';
 
 /** Get display name for media: title (truncated to 60 chars) or fallback to filename */
@@ -35,6 +36,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
   collapsed = false,
   onToggleCollapse,
 }) => {
+  const { t } = useI18n();
   const [linkedMedia, setLinkedMedia] = useState<MediaData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -118,13 +120,13 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
         await window.electronAPI?.postMedia.link(postId, media.id);
       }
 
-      showToast.success(`Imported and linked ${imported.length} file(s)`);
+      showToast.success(t('linkedMediaPanel.toast.importedLinked', { count: imported.length }));
 
       // Refresh the linked media list
       loadLinkedMedia();
     } catch (error) {
       console.error('Failed to import media:', error);
-      showToast.error('Failed to import media');
+      showToast.error(t('linkedMediaPanel.toast.importFailed'));
     }
   };
 
@@ -132,11 +134,11 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
   const handleUnlink = async (mediaId: string) => {
     try {
       await window.electronAPI?.postMedia.unlink(postId, mediaId);
-      showToast.success('Media unlinked from post');
+      showToast.success(t('linkedMediaPanel.toast.unlinked'));
       loadLinkedMedia();
     } catch (error) {
       console.error('Failed to unlink media:', error);
-      showToast.error('Failed to unlink media');
+      showToast.error(t('linkedMediaPanel.toast.unlinkFailed'));
     }
   };
 
@@ -144,13 +146,13 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
   const handleLinkExisting = async (mediaId: string) => {
     try {
       await window.electronAPI?.postMedia.link(postId, mediaId);
-      showToast.success('Media linked to post');
+      showToast.success(t('linkedMediaPanel.toast.linked'));
       setShowMediaPicker(false);
       setMediaSearchQuery('');
       loadLinkedMedia();
     } catch (error) {
       console.error('Failed to link media:', error);
-      showToast.error('Failed to link media');
+      showToast.error(t('linkedMediaPanel.toast.linkFailed'));
     }
   };
 
@@ -223,7 +225,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
       <div className="linked-media-panel collapsed" onClick={onToggleCollapse}>
         <div className="panel-header">
           <span className="panel-title">
-            📷 Media ({linkedMedia.length})
+            {t('linkedMediaPanel.collapsedTitle', { count: linkedMedia.length })}
           </span>
           <span className="expand-icon">▶</span>
         </div>
@@ -234,19 +236,19 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
   return (
     <div className="linked-media-panel">
       <div className="panel-header" onClick={onToggleCollapse}>
-        <span className="panel-title">📷 Linked Media</span>
+        <span className="panel-title">{t('linkedMediaPanel.title')}</span>
         <div className="panel-actions">
           <button
             className="panel-action"
             onClick={(e) => { e.stopPropagation(); handleImportMedia(); }}
-            title="Import and link media"
+            title={t('linkedMediaPanel.importAndLink')}
           >
             +
           </button>
           <button
             className="panel-action"
             onClick={(e) => { e.stopPropagation(); setShowMediaPicker(!showMediaPicker); }}
-            title="Link existing media"
+            title={t('linkedMediaPanel.linkExisting')}
           >
             🔗
           </button>
@@ -257,13 +259,13 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
       {showMediaPicker && (
         <div className="media-picker">
           <div className="media-picker-header">
-            <span>Select media to link</span>
+            <span>{t('linkedMediaPanel.selectMediaToLink')}</span>
             <button onClick={() => { setShowMediaPicker(false); setMediaSearchQuery(''); }}>×</button>
           </div>
           <div className="media-picker-search">
             <input
               type="text"
-              placeholder="Search media..."
+              placeholder={t('linkedMediaPanel.searchPlaceholder')}
               value={mediaSearchQuery}
               onChange={(e) => setMediaSearchQuery(e.target.value)}
               autoFocus
@@ -271,7 +273,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
           </div>
           <div className="media-picker-grid">
             {unlinkedMedia.length === 0 ? (
-              <div className="no-media">No unlinked media available</div>
+              <div className="no-media">{t('linkedMediaPanel.noUnlinkedMedia')}</div>
             ) : (
               unlinkedMedia.map(media => (
                 <div
@@ -295,11 +297,11 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
 
       <div className="panel-content">
         {isLoading ? (
-          <div className="loading">Loading...</div>
+          <div className="loading">{t('gitSidebar.loading')}</div>
         ) : linkedMedia.length === 0 ? (
           <div className="empty-state">
-            <p>No media linked to this post</p>
-            <button onClick={handleImportMedia}>Import Media</button>
+            <p>{t('linkedMediaPanel.noMediaLinked')}</p>
+            <button onClick={handleImportMedia}>{t('linkedMediaPanel.importMedia')}</button>
           </div>
         ) : (
           <div className="media-list">
@@ -330,7 +332,7 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
                 <button
                   className="unlink-btn"
                   onClick={(e) => { e.stopPropagation(); handleUnlink(media.id); }}
-                  title="Unlink from post"
+                  title={t('linkedMediaPanel.unlinkFromPost')}
                 >
                   ×
                 </button>
