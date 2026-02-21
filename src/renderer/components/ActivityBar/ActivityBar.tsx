@@ -1,6 +1,13 @@
 import React from 'react';
 import { useAppStore } from '../../store';
 import { useI18n } from '../../i18n';
+import {
+  getActivityClickActions,
+  getActivityConfig,
+  isActivityActive,
+  type ActivityId,
+  type ActivitySnapshot,
+} from '../../navigation/activityBehavior';
 import './ActivityBar.css';
 
 // Simple SVG icons
@@ -58,121 +65,70 @@ const GitIcon = () => (
 
 export const ActivityBar: React.FC = () => {
   const { t } = useI18n();
-  const { activeView, setActiveView, sidebarVisible, toggleSidebar, openTab, tabs, activeTabId } = useAppStore();
-  
-  // Check if settings tab is currently active
-  const isSettingsTabActive = tabs.some(t => t.type === 'settings' && t.id === activeTabId);
-  
-  // Check if settings view is active (either tab or sidebar)
-  const isSettingsActive = (activeView === 'settings' && sidebarVisible) || isSettingsTabActive;
-  
-  // Check if tags sidebar is active
-  const isTagsActive = activeView === 'tags' && sidebarVisible;
-
-  // Check if chat sidebar is active (activeView === 'chat' and sidebar is visible)
-  const isChatActive = activeView === 'chat' && sidebarVisible;
-
-  // Check if import sidebar is active
-  const isImportActive = activeView === 'import' && sidebarVisible;
-  const isGitActive = activeView === 'git' && sidebarVisible;
-
-  // Handle view click - toggle sidebar if clicking on active view, otherwise switch view
-  const handleViewClick = (view: 'posts' | 'pages' | 'media' | 'chat' | 'git') => {
-    if (activeView === view && sidebarVisible) {
-      // Clicking on active view toggles sidebar off
-      toggleSidebar();
-    } else if (activeView === view && !sidebarVisible) {
-      // Clicking on active view when hidden shows it
-      toggleSidebar();
-    } else {
-      // Switching to a different view - ensure sidebar is visible
-      if (!sidebarVisible) {
-        toggleSidebar();
-      }
-      setActiveView(view);
-    }
+  const { activeView, setActiveView, sidebarVisible, toggleSidebar, tabs, activeTabId } = useAppStore();
+  const snapshot: ActivitySnapshot = {
+    activeView,
+    sidebarVisible,
+    tabs,
+    activeTabId,
   };
 
-  const handleSettingsClick = () => {
-    // Toggle sidebar if settings is already active, otherwise switch to settings
-    if (activeView === 'settings' && sidebarVisible) {
-      toggleSidebar();
-    } else {
-      // Open settings tab and show settings sidebar
-      openTab({ type: 'settings', id: 'settings', isTransient: false });
-      setActiveView('settings');
-      if (!sidebarVisible) {
+  const executeActivityClick = (activityId: ActivityId) => {
+    const actions = getActivityClickActions(snapshot, activityId);
+
+    for (const action of actions) {
+      if (action.type === 'toggleSidebar') {
         toggleSidebar();
+      } else if (action.type === 'setActiveView') {
+        setActiveView(action.view);
       }
     }
   };
 
-  const handleTagsClick = () => {
-    // Toggle sidebar if tags is already active, otherwise switch to tags
-    if (activeView === 'tags' && sidebarVisible) {
-      toggleSidebar();
-    } else {
-      openTab({ type: 'tags', id: 'tags', isTransient: false });
-      setActiveView('tags');
-      if (!sidebarVisible) {
-        toggleSidebar();
-      }
-    }
-  };
-
-  const handleImportClick = () => {
-    if (activeView === 'import' && sidebarVisible) {
-      toggleSidebar();
-    } else {
-      setActiveView('import');
-      if (!sidebarVisible) {
-        toggleSidebar();
-      }
-    }
-  };
+  const getTitle = (activityId: ActivityId) => `${t(getActivityConfig(activityId).labelKey)} ${t('activity.toggleHint')}`;
 
   return (
     <div className="activity-bar">
       <div className="activity-bar-top">
         <button
-          className={`activity-bar-item ${activeView === 'posts' && sidebarVisible ? 'active' : ''}`}
-          onClick={() => handleViewClick('posts')}
-          title={`${t('activity.posts')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'posts') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('posts')}
+          title={getTitle('posts')}
         >
           <PostsIcon />
         </button>
         <button
-          className={`activity-bar-item ${activeView === 'pages' && sidebarVisible ? 'active' : ''}`}
-          onClick={() => handleViewClick('pages')}
-          title={`${t('activity.pages')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'pages') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('pages')}
+          title={getTitle('pages')}
         >
           <PagesIcon />
         </button>
         <button
-          className={`activity-bar-item ${activeView === 'media' && sidebarVisible ? 'active' : ''}`}
-          onClick={() => handleViewClick('media')}
-          title={`${t('activity.media')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'media') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('media')}
+          title={getTitle('media')}
         >
           <MediaIcon />
         </button>
         <button
-          className={`activity-bar-item ${isTagsActive ? 'active' : ''}`}
-          onClick={handleTagsClick}
-          title={`${t('activity.tags')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'tags') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('tags')}
+          title={getTitle('tags')}
         >
           <TagsIcon />
         </button>
         <button
-          className={`activity-bar-item ${isChatActive ? 'active' : ''}`}
-          onClick={() => handleViewClick('chat')}
-          title={`${t('activity.aiAssistant')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'chat') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('chat')}
+          title={getTitle('chat')}
         >
           <ChatIcon />
         </button>
         <button
-          className={`activity-bar-item ${isImportActive ? 'active' : ''}`}
-          onClick={handleImportClick}
-          title={`${t('activity.import')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'import') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('import')}
+          title={getTitle('import')}
         >
           <ImportIcon />
         </button>
@@ -180,16 +136,16 @@ export const ActivityBar: React.FC = () => {
       
       <div className="activity-bar-bottom">
         <button
-          className={`activity-bar-item ${isGitActive ? 'active' : ''}`}
-          onClick={() => handleViewClick('git')}
-          title={`${t('activity.sourceControl')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'git') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('git')}
+          title={getTitle('git')}
         >
           <GitIcon />
         </button>
         <button
-          className={`activity-bar-item ${isSettingsActive ? 'active' : ''}`}
-          onClick={handleSettingsClick}
-          title={`${t('common.settings')} ${t('activity.toggleHint')}`}
+          className={`activity-bar-item ${isActivityActive(snapshot, 'settings') ? 'active' : ''}`}
+          onClick={() => executeActivityClick('settings')}
+          title={getTitle('settings')}
         >
           <SettingsIcon />
         </button>

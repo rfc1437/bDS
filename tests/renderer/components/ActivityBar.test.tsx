@@ -15,7 +15,7 @@ describe('ActivityBar tags behavior', () => {
     });
   });
 
-  it('opens tags tab and switches sidebar to tags view when clicking Tags', () => {
+  it('switches sidebar to tags view when clicking Tags', () => {
     render(
       <I18nProvider>
         <ActivityBar />
@@ -27,8 +27,8 @@ describe('ActivityBar tags behavior', () => {
     const state = useAppStore.getState();
     expect(state.activeView).toBe('tags');
     expect(state.sidebarVisible).toBe(true);
-    expect(state.activeTabId).toBe('tags');
-    expect(state.tabs).toContainEqual({ type: 'tags', id: 'tags', isTransient: false });
+    expect(state.activeTabId).toBeNull();
+    expect(state.tabs).toEqual([]);
   });
 
   it('toggles tags sidebar off when tags view is already active', () => {
