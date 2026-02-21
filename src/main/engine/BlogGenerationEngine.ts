@@ -968,6 +968,8 @@ export class BlogGenerationEngine {
     const missingPaths = Array.isArray(report.missingUrlPaths) ? report.missingUrlPaths : [];
     const extraPaths = Array.isArray(report.extraUrlPaths) ? report.extraUrlPaths : [];
 
+    onProgress(10, 'Planning validation apply steps...');
+
     const sections = new Set<BlogGenerationSection>();
     for (const missingPath of missingPaths) {
       const normalizedPath = normalizeUrlPath(missingPath);
@@ -1011,21 +1013,7 @@ export class BlogGenerationEngine {
       break;
     }
 
-    let renderedUrlCount = 0;
-
-    if (sections.size > 0) {
-      onProgress(20, 'Rendering missing URLs...');
-      const generationResult = await this.generate({
-        ...options,
-        maxPostsPerPage: options.maxPostsPerPage,
-        sections: Array.from(sections),
-      }, (progress, message) => {
-        onProgress(Math.min(70, 20 + Math.floor(progress * 0.5)), message);
-      });
-      renderedUrlCount = generationResult.pagesGenerated;
-    }
-
-    onProgress(75, 'Deleting extra URLs...');
+    onProgress(20, 'Deleting extra URLs...');
 
     const htmlDir = path.join(options.dataDir, 'html');
     let deletedUrlCount = 0;
@@ -1052,7 +1040,8 @@ export class BlogGenerationEngine {
       }
     };
 
-    for (const urlPath of extraPaths) {
+    for (let index = 0; index < extraPaths.length; index += 1) {
+      const urlPath = extraPaths[index];
       const filePath = urlPathToHtmlIndexPath(htmlDir, urlPath);
       try {
         await fs.unlink(filePath);
@@ -1061,9 +1050,46 @@ export class BlogGenerationEngine {
       } catch {
         // ignore missing files and continue
       }
+
+      if (extraPaths.length > 0) {
+        const deleteProgress = 20 + Math.floor(((index + 1) / extraPaths.length) * 25);
+        onProgress(Math.min(45, deleteProgress), `Deleted ${index + 1}/${extraPaths.length} extra URLs`);
+      }
     }
 
-    onProgress(100, `Apply complete (${renderedUrlCount} rendered, ${deletedUrlCount} deleted)`);
+    let renderedUrlCount = 0;
+    const sectionExecutionOrder: BlogGenerationSection[] = ['category', 'tag', 'date', 'core', 'single'];
+    const orderedSections = sectionExecutionOrder.filter((section) => sections.has(section));
+
+    if (orderedSections.length > 0) {
+      for (let index = 0; index < orderedSections.length; index += 1) {
+        const section = orderedSections[index];
+        const sectionLabel = section === 'category'
+          ? 'categories'
+          : section === 'tag'
+            ? 'tags'
+            : section === 'date'
+              ? 'calendar'
+              : section;
+
+        onProgress(50 + Math.floor((index / orderedSections.length) * 40), `Rendering missing ${sectionLabel} routes...`);
+
+        const generationResult = await this.generate({
+          ...options,
+          maxPostsPerPage: options.maxPostsPerPage,
+          sections: [section],
+        }, (progress, message) => {
+          const base = 50 + Math.floor((index / orderedSections.length) * 40);
+          const span = Math.max(1, Math.floor(40 / orderedSections.length));
+          const mapped = base + Math.floor((progress / 100) * span);
+          onProgress(Math.min(90, mapped), message || `Rendering ${sectionLabel} routes...`);
+        });
+
+        renderedUrlCount += generationResult.pagesGenerated;
+      }
+    }
+
+    onProgress(100, `Apply complete (${deletedUrlCount} deleted, ${renderedUrlCount} rendered)`);
 
     return {
       renderedUrlCount,

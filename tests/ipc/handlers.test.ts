@@ -2303,6 +2303,77 @@ describe('IPC Handlers', () => {
           'utf-8',
         );
       });
+
+      it('should run validation via taskManager.runTask', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        mockPostEngine.getPostsFiltered.mockResolvedValue([]);
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { mkdir, writeFile, readdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+        vi.mocked(readdir).mockResolvedValue([] as never);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          return task.execute(vi.fn());
+        });
+
+        await invokeHandler('blog:validateSite');
+
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Validate Site',
+            execute: expect.any(Function),
+          }),
+        );
+      });
+    });
+
+    describe('blog:applyValidation', () => {
+      it('should run apply via taskManager.runTask', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        mockPostEngine.getPostsFiltered.mockResolvedValue([]);
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { mkdir, writeFile, readdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+        vi.mocked(readdir).mockResolvedValue([] as never);
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          return task.execute(vi.fn());
+        });
+
+        await invokeHandler('blog:applyValidation', {
+          sitemapPath: '/mock/data/dir/html/sitemap.xml',
+          sitemapChanged: false,
+          missingUrlPaths: ['/category/news'],
+          extraUrlPaths: ['/stale'],
+          expectedUrlCount: 1,
+          existingHtmlUrlCount: 1,
+        });
+
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Apply Site Validation',
+            execute: expect.any(Function),
+          }),
+        );
+      });
     });
   });
 

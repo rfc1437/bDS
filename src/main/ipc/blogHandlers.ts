@@ -146,13 +146,31 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
     const blogGenerationEngine = getBlogGenerationEngine();
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
-    return blogGenerationEngine.validateSite(baseOptions, () => {});
+    const taskTimestamp = Date.now();
+    return taskManager.runTask({
+      id: `site-validate-${taskTimestamp}`,
+      name: 'Validate Site',
+      execute: async (onProgress) => {
+        return blogGenerationEngine.validateSite(baseOptions, (progress, message) => {
+          onProgress(progress, message || 'Validating site...');
+        });
+      },
+    });
   });
 
   safeHandle('blog:applyValidation', async (_event, report: SiteValidationReport) => {
     const blogGenerationEngine = getBlogGenerationEngine();
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
-    return blogGenerationEngine.applyValidation(baseOptions, report, () => {});
+    const taskTimestamp = Date.now();
+    return taskManager.runTask({
+      id: `site-validate-apply-${taskTimestamp}`,
+      name: 'Apply Site Validation',
+      execute: async (onProgress) => {
+        return blogGenerationEngine.applyValidation(baseOptions, report, (progress, message) => {
+          onProgress(progress, message || 'Applying site validation...');
+        });
+      },
+    });
   });
 }

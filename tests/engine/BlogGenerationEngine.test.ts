@@ -607,6 +607,64 @@ describe('BlogGenerationEngine', () => {
     expect(sitemap).toContain('<loc>https://example.com/page/2/</loc>');
   });
 
+  it('applies validation by deleting first, then rendering category, tag, and date sections', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'ordered-post', categories: ['news'], tags: ['ordered-tag'], createdAt: new Date('2025-01-15T10:00:00Z') }),
+    ];
+    setupPosts(posts);
+
+    await mkdir(path.join(tempDir, 'html', 'stale'), { recursive: true });
+    await writeFile(path.join(tempDir, 'html', 'stale', 'index.html'), '<html>stale</html>', 'utf-8');
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    const callOrder: string[] = [];
+    const generateSpy = vi.spyOn(engine, 'generate').mockImplementation(async (opts) => {
+      const staleExistsAtRenderTime = await fileExists(path.join(tempDir, 'html', 'stale', 'index.html'));
+      expect(staleExistsAtRenderTime).toBe(false);
+      callOrder.push((opts.sections || []).join(','));
+      return {
+        path: path.join(tempDir, 'html', 'sitemap.xml'),
+        urlCount: 0,
+        postCount: 0,
+        feedPostCount: 0,
+        tagCount: 0,
+        categoryCount: 0,
+        archiveCount: 0,
+        pagesGenerated: 1,
+        feeds: {
+          rssPath: path.join(tempDir, 'html', 'rss.xml'),
+          atomPath: path.join(tempDir, 'html', 'atom.xml'),
+        },
+        changed: {
+          sitemap: false,
+          rss: false,
+          atom: false,
+        },
+      };
+    });
+
+    const result = await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/category/news', '/tag/ordered-tag', '/2025/01'],
+      extraUrlPaths: ['/stale'],
+      expectedUrlCount: 3,
+      existingHtmlUrlCount: 1,
+    }, vi.fn());
+
+    expect(result.deletedUrlCount).toBe(1);
+    expect(callOrder).toEqual(['category', 'tag', 'date']);
+
+    generateSpy.mockRestore();
+  });
+
   it('generates HTML that references local assets not CDN', async () => {
     const posts = [makePost({ id: '1', slug: 'test' })];
     await generate(posts);
