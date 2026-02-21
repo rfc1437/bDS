@@ -6,6 +6,7 @@ import { getPostEngine, PostData, PostFilter, PaginationOptions } from '../engin
 import { getMediaEngine, MediaData } from '../engine/MediaEngine';
 import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
+import { getMenuEngine, type MenuDocument } from '../engine/MenuEngine';
 import { getTagEngine } from '../engine/TagEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
 import { getGitEngine } from '../engine/GitEngine';
@@ -248,10 +249,12 @@ export function registerIpcHandlers(): void {
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
+      const menuEngine = getMenuEngine();
       const tagEngine = getTagEngine();
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
+      menuEngine.setProjectContext(project.id, dataDir);
       tagEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
@@ -284,10 +287,12 @@ export function registerIpcHandlers(): void {
       const postEngine = getPostEngine();
       const mediaEngine = getMediaEngine();
       const metaEngine = getMetaEngine();
+      const menuEngine = getMenuEngine();
       const tagEngine = getTagEngine();
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
+      menuEngine.setProjectContext(project.id, dataDir);
       tagEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
@@ -812,6 +817,34 @@ export function registerIpcHandlers(): void {
   });
 
   // ============ Meta Handlers ============
+
+  safeHandle('menu:get', async () => {
+    const projectEngine = getProjectEngine();
+    const menuEngine = getMenuEngine();
+    const project = await projectEngine.getActiveProject();
+
+    if (!project) {
+      throw new Error('No active project');
+    }
+
+    const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+    menuEngine.setProjectContext(project.id, dataDir);
+    return menuEngine.getMenu();
+  });
+
+  safeHandle('menu:save', async (_, menu: MenuDocument) => {
+    const projectEngine = getProjectEngine();
+    const menuEngine = getMenuEngine();
+    const project = await projectEngine.getActiveProject();
+
+    if (!project) {
+      throw new Error('No active project');
+    }
+
+    const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+    menuEngine.setProjectContext(project.id, dataDir);
+    return menuEngine.saveMenu(menu);
+  });
 
   safeHandle('meta:getTags', async () => {
     const engine = getMetaEngine();

@@ -36,6 +36,7 @@
   "menu.item.rebuildDatabase": "Reconstruire Database from Files",
   "menu.item.reindexText": "Reindex Recherche Text",
   "menu.item.metadataDiff": "Outil de diff des métadonnées",
+  "menu.item.editMenu": "Modifier le menu du blog",
   "menu.item.generateSitemap": "Rendre le site",
   "menu.item.validateSite": "Valider le site",
   "menu.item.about": "À propos de Blogging Desktop Server",

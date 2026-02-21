@@ -20,6 +20,7 @@ describe('tabPolicy', () => {
     expect(getSingletonToolTabSpec('settings')).toEqual({ type: 'settings', id: 'settings', isTransient: false });
     expect(getSingletonToolTabSpec('tags')).toEqual({ type: 'tags', id: 'tags', isTransient: false });
     expect(getSingletonToolTabSpec('style')).toEqual({ type: 'style', id: 'style', isTransient: false });
+    expect(getSingletonToolTabSpec('menu-editor')).toEqual({ type: 'menu-editor', id: 'menu-editor', isTransient: false });
     expect(getSingletonToolTabSpec('documentation')).toEqual({ type: 'documentation', id: 'documentation', isTransient: false });
     expect(getSingletonToolTabSpec('metadata-diff')).toEqual({ type: 'metadata-diff', id: 'metadata-diff', isTransient: false });
     expect(getSingletonToolTabSpec('site-validation')).toEqual({ type: 'site-validation', id: 'site-validation', isTransient: false });
@@ -33,8 +34,9 @@ describe('tabPolicy', () => {
     let captured: { type: string; id: string; isTransient: boolean } | null = null;
 
     openSingletonToolTab(openTab, 'site-validation');
+    openSingletonToolTab(openTab, 'menu-editor');
 
-    expect(captured).toEqual({ type: 'site-validation', id: 'site-validation', isTransient: false });
+    expect(captured).toEqual({ type: 'menu-editor', id: 'menu-editor', isTransient: false });
   });
 
   it('provides canonical entity tab spec for preview and pin intents', () => {

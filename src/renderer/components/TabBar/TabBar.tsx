@@ -64,6 +64,10 @@ const getTabTitle = (
     return importDefTitles.get(tab.id) || tr('activity.import');
   }
 
+  if (tab.type === 'menu-editor') {
+    return tr('menuEditor.tabTitle');
+  }
+
   if (tab.type === 'metadata-diff') {
     return tr('app.metadataDiff');
   }
@@ -127,6 +131,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+        </svg>
+      );
+    case 'menu-editor':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 3h12v1H2V3zm0 3h12v1H2V6zm0 3h8v1H2V9zm0 3h8v1H2v-1zm10-2 2 2-2 2v-1H9v-2h3V10z"/>
         </svg>
       );
     case 'metadata-diff':

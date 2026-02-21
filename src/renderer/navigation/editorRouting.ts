@@ -10,6 +10,7 @@ export type EditorRoute =
   | 'tags'
   | 'chat'
   | 'import'
+  | 'menu-editor'
   | 'metadata-diff'
   | 'git-diff'
   | 'documentation'
@@ -23,6 +24,7 @@ export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'da
   tags: 'tags',
   chat: 'chat',
   import: 'import',
+  'menu-editor': 'menu-editor',
   'metadata-diff': 'metadata-diff',
   'git-diff': 'git-diff',
   documentation: 'documentation',

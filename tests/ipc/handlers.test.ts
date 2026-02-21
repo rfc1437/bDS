@@ -136,6 +136,12 @@ const mockTagEngine = {
   searchTags: vi.fn(),
 };
 
+const mockMenuEngine = {
+  setProjectContext: vi.fn(),
+  getMenu: vi.fn(),
+  saveMenu: vi.fn(),
+};
+
 const mockPostMediaEngine = {
   on: vi.fn(),
   setProjectContext: vi.fn(),
@@ -243,6 +249,10 @@ vi.mock('../../src/main/engine/MetaEngine', () => ({
 
 vi.mock('../../src/main/engine/TagEngine', () => ({
   getTagEngine: vi.fn(() => mockTagEngine),
+}));
+
+vi.mock('../../src/main/engine/MenuEngine', () => ({
+  getMenuEngine: vi.fn(() => mockMenuEngine),
 }));
 
 vi.mock('../../src/main/engine/PostMediaEngine', () => ({
@@ -1248,6 +1258,51 @@ describe('IPC Handlers', () => {
 
         expect(mockMetaEngine.setProjectMetadata).toHaveBeenCalledWith(newMetadata);
         expect(result).toEqual(newMetadata);
+      });
+    });
+  });
+
+  // ============ Menu Handlers ============
+  describe('Menu Handlers', () => {
+    describe('menu:get', () => {
+      it('loads menu for active project context', async () => {
+        const activeProject = createMockProject({ id: 'project-42', dataPath: '/custom/data' });
+        const menuDocument = {
+          items: [
+            { id: 'home', title: 'Home', kind: 'page', pageSlug: 'home', children: [] },
+          ],
+        };
+
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/project-data');
+        mockMenuEngine.getMenu.mockResolvedValue(menuDocument);
+
+        const result = await invokeHandler('menu:get');
+
+        expect(mockMenuEngine.setProjectContext).toHaveBeenCalledWith('project-42', '/resolved/project-data');
+        expect(mockMenuEngine.getMenu).toHaveBeenCalled();
+        expect(result).toEqual(menuDocument);
+      });
+    });
+
+    describe('menu:save', () => {
+      it('saves menu for active project context', async () => {
+        const activeProject = createMockProject({ id: 'project-24', dataPath: '/custom/data' });
+        const menuDocument = {
+          items: [
+            { id: 'docs', title: 'Docs', kind: 'submenu', children: [] },
+          ],
+        };
+
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/project-data');
+        mockMenuEngine.saveMenu.mockResolvedValue(menuDocument);
+
+        const result = await invokeHandler('menu:save', menuDocument);
+
+        expect(mockMenuEngine.setProjectContext).toHaveBeenCalledWith('project-24', '/resolved/project-data');
+        expect(mockMenuEngine.saveMenu).toHaveBeenCalledWith(menuDocument);
+        expect(result).toEqual(menuDocument);
       });
     });
   });

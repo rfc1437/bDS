@@ -276,6 +276,12 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:editMenu', () => {
+        openSingletonToolTab(openTab, 'menu-editor');
+      }) || (() => {})
+    );
+
     // Rebuild events - clear store on start, reload on complete
     unsubscribers.push(
       window.electronAPI?.on('posts:rebuildStarted', () => {

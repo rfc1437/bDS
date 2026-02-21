@@ -258,6 +258,11 @@ export const electronAPI: ElectronAPI = {
     applyValidation: (report: SiteValidationReport) => ipcRenderer.invoke('blog:applyValidation', report),
   },
 
+  menu: {
+    get: () => ipcRenderer.invoke('menu:get'),
+    save: (menu: import('./shared/electronApi').MenuDocument) => ipcRenderer.invoke('menu:save', menu),
+  },
+
   // AI Chat (OpenCode Zen API integration)
   chat: {
     // API Key Management

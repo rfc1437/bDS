@@ -422,6 +422,21 @@ export interface SiteValidationApplyResult {
   removedEmptyDirCount: number;
 }
 
+export type MenuItemKind = 'page' | 'submenu';
+
+export interface MenuItemData {
+  id: string;
+  title: string;
+  kind: MenuItemKind;
+  pageId?: string;
+  pageSlug?: string;
+  children: MenuItemData[];
+}
+
+export interface MenuDocument {
+  items: MenuItemData[];
+}
+
 export interface ElectronAPI {
   git: {
     checkAvailability: () => Promise<GitAvailability>;
@@ -628,6 +643,10 @@ export interface ElectronAPI {
     }>;
     validateSite: () => Promise<SiteValidationReport>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
+  };
+  menu: {
+    get: () => Promise<MenuDocument>;
+    save: (menu: MenuDocument) => Promise<MenuDocument>;
   };
   chat: {
     // API Key Management

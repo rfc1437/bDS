@@ -14,6 +14,7 @@ import { TagsView } from '../TagsView';
 import { TagInput } from '../TagInput';
 import { ChatPanel } from '../ChatPanel';
 import { ImportAnalysisView } from '../ImportAnalysisView';
+import { MenuEditorView } from '../MenuEditorView/MenuEditorView';
 import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { DocumentationView } from '../DocumentationView/DocumentationView';
@@ -1784,6 +1785,7 @@ export const Editor: React.FC = () => {
     chat: () => (editorRoute.tabId ? <ChatPanel key={editorRoute.tabId} conversationId={editorRoute.tabId} /> : <Dashboard />),
     import: () =>
       editorRoute.tabId ? <ImportAnalysisView key={editorRoute.tabId} definitionId={editorRoute.tabId} /> : <Dashboard />,
+    'menu-editor': () => <MenuEditorView />,
     'metadata-diff': () => <MetadataDiffPanel />,
     'git-diff': () =>
       editorRoute.tabId && editorRoute.gitDiffResource

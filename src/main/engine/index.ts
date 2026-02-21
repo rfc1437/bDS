@@ -93,3 +93,10 @@ export {
   type BlogGenerationOptions,
   type BlogGenerationResult,
 } from './BlogGenerationEngine';
+export {
+  MenuEngine,
+  getMenuEngine,
+  type MenuItemData,
+  type MenuDocument,
+  type MenuItemKind,
+} from './MenuEngine';

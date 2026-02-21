@@ -63,4 +63,15 @@ describe('Help menu documentation entry', () => {
   it('maps Edit Preferences to a renderer menu event', () => {
     expect(APP_MENU_ACTION_EVENT_MAP.editPreferences).toBe('menu:editPreferences');
   });
+
+  it('includes Edit Menu action in Blog menu', () => {
+    const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
+
+    expect(blogGroup).toBeDefined();
+    expect(blogGroup?.items.some((item) => item.action === 'editMenu')).toBe(true);
+  });
+
+  it('maps Edit Menu to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.editMenu).toBe('menu:editMenu');
+  });
 });

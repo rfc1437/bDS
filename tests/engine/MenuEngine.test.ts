@@ -1,0 +1,110 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockFiles = new Map<string, string>();
+const mockDirs = new Set<string>();
+
+const normalizePath = (value: string): string => value.replace(/\\/g, '/');
+
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(async (filePath: string) => {
+    const normalizedPath = normalizePath(filePath);
+    if (mockFiles.has(normalizedPath)) {
+      return mockFiles.get(normalizedPath);
+    }
+
+    const err = new Error(`ENOENT: no such file or directory, open '${filePath}'`) as NodeJS.ErrnoException;
+    err.code = 'ENOENT';
+    throw err;
+  }),
+  writeFile: vi.fn(async (filePath: string, content: string) => {
+    mockFiles.set(normalizePath(filePath), content);
+  }),
+  mkdir: vi.fn(async (dirPath: string) => {
+    mockDirs.add(normalizePath(dirPath));
+  }),
+}));
+
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/mock/userData'),
+  },
+}));
+
+import { MenuEngine } from '../../src/main/engine/MenuEngine';
+
+describe('MenuEngine', () => {
+  let menuEngine: MenuEngine;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFiles.clear();
+    mockDirs.clear();
+    menuEngine = new MenuEngine();
+    menuEngine.setProjectContext('project-1');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns an empty menu when no OPML file exists', async () => {
+    const result = await menuEngine.getMenu();
+
+    expect(result.items).toEqual([]);
+  });
+
+  it('parses nested OPML outlines into menu items', async () => {
+    const menuPath = normalizePath(`${menuEngine.getMetaDir()}/menu.opml`);
+    mockFiles.set(
+      menuPath,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head><title>Blog Menu</title></head>\n  <body>\n    <outline id="home" text="Home" type="page" pageSlug="home"/>\n    <outline id="docs" text="Docs" type="submenu">\n      <outline id="about" text="About" type="page" pageSlug="about"/>\n    </outline>\n  </body>\n</opml>`,
+    );
+
+    const result = await menuEngine.getMenu();
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]).toMatchObject({
+      id: 'home',
+      title: 'Home',
+      kind: 'page',
+      pageSlug: 'home',
+    });
+    expect(result.items[1]).toMatchObject({
+      id: 'docs',
+      title: 'Docs',
+      kind: 'submenu',
+    });
+    expect(result.items[1].children[0]).toMatchObject({
+      id: 'about',
+      title: 'About',
+      kind: 'page',
+      pageSlug: 'about',
+    });
+  });
+
+  it('writes menu state as OPML and can read it back', async () => {
+    const saved = await menuEngine.saveMenu({
+      items: [
+        {
+          id: 'top',
+          title: 'Top',
+          kind: 'submenu',
+          children: [
+            {
+              id: 'page-1',
+              title: 'First Page',
+              kind: 'page',
+              pageSlug: 'first-page',
+              children: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(saved.items[0].title).toBe('Top');
+
+    const roundTrip = await menuEngine.getMenu();
+    expect(roundTrip).toEqual(saved);
+  });
+});

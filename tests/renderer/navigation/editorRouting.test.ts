@@ -15,6 +15,7 @@ describe('editorRouting', () => {
       tags: 'tags',
       chat: 'chat',
       import: 'import',
+      'menu-editor': 'menu-editor',
       'metadata-diff': 'metadata-diff',
       'git-diff': 'git-diff',
       documentation: 'documentation',
