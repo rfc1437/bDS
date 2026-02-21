@@ -288,7 +288,7 @@ export class BlogGenerationEngine {
     }
     const publishedListPosts = Array.from(publishedListPostById.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    const feedPosts = publishedPosts.slice(0, maxPostsPerPage);
+    const feedPosts = publishedListPosts.slice(0, maxPostsPerPage);
 
     onProgress(3, `Found ${publishedPosts.length} published posts`);
 

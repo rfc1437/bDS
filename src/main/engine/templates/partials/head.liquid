@@ -5,6 +5,8 @@
   {% assign resolved_pico_stylesheet_href = pico_stylesheet_href | default: '/assets/pico.min.css' %}
   <link rel="stylesheet" href="{{ resolved_pico_stylesheet_href }}" />
   <link rel="stylesheet" href="/assets/lightbox.min.css" />
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
+  <link rel="alternate" type="application/atom+xml" title="Atom" href="/atom.xml" />
   {% render 'partials/styles' %}
   <script defer src="/assets/d3.layout.cloud.js"></script>
   <script defer src="/assets/tag-cloud.js"></script>

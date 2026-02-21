@@ -153,8 +153,21 @@ describe('BlogGenerationEngine', () => {
   });
 
   function setupPosts(posts: PostData[]): void {
-    mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
-      return posts.filter((p) => p.status === (filter.status ?? p.status));
+    mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string; excludeCategories?: string[] }) => {
+      return posts.filter((p) => {
+        if (p.status !== (filter.status ?? p.status)) {
+          return false;
+        }
+
+        if (Array.isArray(filter.excludeCategories) && filter.excludeCategories.length > 0) {
+          const categories = Array.isArray(p.categories) ? p.categories : [];
+          if (categories.some((category) => filter.excludeCategories?.includes(category))) {
+            return false;
+          }
+        }
+
+        return true;
+      });
     });
     mockPostEngine.getPublishedVersion.mockResolvedValue(null);
     mockPostEngine.getPost.mockImplementation(async (id: string) => {
@@ -162,7 +175,15 @@ describe('BlogGenerationEngine', () => {
     });
   }
 
-  async function generate(posts: PostData[], options?: Partial<{ maxPostsPerPage: number; language: string; pageTitle: string }>) {
+  async function generate(
+    posts: PostData[],
+    options?: Partial<{
+      maxPostsPerPage: number;
+      language: string;
+      pageTitle: string;
+      categorySettings: Record<string, { renderInLists: boolean; showTitle: boolean }>;
+    }>,
+  ) {
     setupPosts(posts);
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
     const engine = new BlogGenerationEngine();
@@ -175,6 +196,7 @@ describe('BlogGenerationEngine', () => {
       maxPostsPerPage: options?.maxPostsPerPage,
       language: options?.language,
       pageTitle: options?.pageTitle,
+      categorySettings: options?.categorySettings,
     }, onProgress);
   }
 
@@ -211,6 +233,10 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('/assets/pico.min.css');
     expect(html).toContain('/assets/lightbox.min.css');
     expect(html).toContain('/assets/tag-cloud.js');
+    expect(html).toContain('rel="alternate" type="application/rss+xml"');
+    expect(html).toContain('href="/rss.xml"');
+    expect(html).toContain('rel="alternate" type="application/atom+xml"');
+    expect(html).toContain('href="/atom.xml"');
     expect(html).not.toContain('function parseWords(');
     expect(html).toContain('archive-day-marker');
     expect(html).toContain('15.01.2025');
@@ -416,6 +442,66 @@ describe('BlogGenerationEngine', () => {
     await generate(posts);
 
     expect(await fileExists(path.join(tempDir, 'html', 'category', 'my%20category', 'index.html'))).toBe(true);
+  });
+
+  it('omits excluded categories from category archives and sitemap', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'aside-post', title: 'Aside Post', categories: ['aside'] }),
+    ];
+
+    await generate(posts, {
+      categorySettings: {
+        aside: { renderInLists: false, showTitle: false },
+      },
+    });
+
+    const categoryArchivePath = path.join(tempDir, 'html', 'category', 'aside', 'index.html');
+    expect(await fileExists(categoryArchivePath)).toBe(false);
+
+    const sitemap = await readFile(path.join(tempDir, 'html', 'sitemap.xml'), 'utf-8');
+    expect(sitemap).not.toContain('https://example.com/category/aside');
+  });
+
+  it('omits excluded-category posts from RSS and Atom feeds', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'aside-post', title: 'Aside Post', categories: ['aside'] }),
+    ];
+
+    await generate(posts, {
+      categorySettings: {
+        aside: { renderInLists: false, showTitle: false },
+      },
+    });
+
+    const rss = await readFile(path.join(tempDir, 'html', 'rss.xml'), 'utf-8');
+    const atom = await readFile(path.join(tempDir, 'html', 'atom.xml'), 'utf-8');
+
+    expect(rss).not.toContain('<title>Aside Post</title>');
+    expect(atom).not.toContain('<title>Aside Post</title>');
+  });
+
+  it('omits posts that mix included and excluded categories from list outputs and feeds', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'mixed-post', title: 'Mixed Post', categories: ['news', 'aside'] }),
+    ];
+
+    await generate(posts, {
+      categorySettings: {
+        aside: { renderInLists: false, showTitle: false },
+      },
+    });
+
+    expect(await fileExists(path.join(tempDir, 'html', 'category', 'news', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', 'category', 'aside', 'index.html'))).toBe(false);
+
+    const rss = await readFile(path.join(tempDir, 'html', 'rss.xml'), 'utf-8');
+    const atom = await readFile(path.join(tempDir, 'html', 'atom.xml'), 'utf-8');
+    const sitemap = await readFile(path.join(tempDir, 'html', 'sitemap.xml'), 'utf-8');
+
+    expect(rss).not.toContain('<title>Mixed Post</title>');
+    expect(atom).not.toContain('<title>Mixed Post</title>');
+    expect(sitemap).not.toContain('https://example.com/category/news');
+    expect(sitemap).not.toContain('https://example.com/category/aside');
   });
 
   it('generates static page routes at /{slug}/index.html for posts in category page', async () => {
