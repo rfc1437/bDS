@@ -228,6 +228,32 @@ describe('PreviewServer', () => {
     expect(singleTextIndex).toBeGreaterThan(singleMenuIndex);
   });
 
+  it('renders menu on category and tag archive pages', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'news-post', title: 'News Post', categories: ['news'], tags: ['dev'], createdAt: new Date('2025-01-03T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: makeSettings(50),
+      menuEngine: makeMenuEngine({
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+          { id: 'dev', title: 'Dev', kind: 'category-archive', categoryName: 'news', children: [] },
+        ],
+      }),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const categoryHtml = await (await fetch(`${server.getBaseUrl()}/category/news`)).text();
+    expect(categoryHtml).toContain('class="blog-menu"');
+
+    const tagHtml = await (await fetch(`${server.getBaseUrl()}/tag/dev`)).text();
+    expect(tagHtml).toContain('class="blog-menu"');
+  });
+
   it('uses local CSS/JS assets and serves them from the preview server', async () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),
@@ -591,6 +617,14 @@ describe('PreviewServer', () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('<h1>Explicit Single Post Title</h1>');
+
+    const mainIndex = html.indexOf('<main>');
+    const h1Index = html.indexOf('<h1>Explicit Single Post Title</h1>');
+    const articleIndex = html.indexOf('<article class="single-post" data-template="single-post">');
+    expect(mainIndex).toBeGreaterThan(-1);
+    expect(h1Index).toBeGreaterThan(mainIndex);
+    expect(articleIndex).toBeGreaterThan(mainIndex);
+    expect(h1Index).toBeLessThan(articleIndex);
   });
 
   it('uses blog description as h1 on first date archive page and date range h1 on later pages', async () => {

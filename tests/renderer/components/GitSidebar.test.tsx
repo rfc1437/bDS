@@ -73,6 +73,49 @@ describe('GitSidebar', () => {
     expect(screen.getByRole('button', { name: /initialize git/i })).toBeInTheDocument();
   });
 
+  it('ignores stale load results when active project becomes available during async load', async () => {
+    useAppStore.setState({ activeProject: null });
+
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: false,
+    });
+    (window as any).electronAPI.git.getStatus = vi.fn().mockResolvedValue({
+      files: [{ path: 'posts/first.md', status: 'modified' }],
+      counts: { untracked: 0, modified: 1, deleted: 0, renamed: 0, staged: 0, total: 1 },
+    });
+    (window as any).electronAPI.git.getHistory = vi.fn().mockResolvedValue([]);
+
+    let checkAvailabilityCall = 0;
+    (window as any).electronAPI.git.checkAvailability = vi.fn().mockImplementation(async () => {
+      checkAvailabilityCall += 1;
+      if (checkAvailabilityCall === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      return { gitFound: true, version: '2.49.0' };
+    });
+
+    render(<GitSidebar />);
+
+    await act(async () => {
+      useAppStore.setState({
+        activeProject: {
+          id: 'project-1',
+          name: 'Test Project',
+          slug: 'test-project',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    });
+
+    expect(await screen.findByText(/open changes/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no active project selected/i)).not.toBeInTheDocument();
+  });
+
   it('renders open changes list when repository exists', async () => {
     (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
       isRepo: true,

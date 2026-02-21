@@ -390,6 +390,7 @@ export class PreviewServer {
         categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);

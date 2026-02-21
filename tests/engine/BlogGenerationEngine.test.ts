@@ -264,6 +264,34 @@ describe('BlogGenerationEngine', () => {
     expect(singleContentIndex).toBeGreaterThan(singleMenuIndex);
   });
 
+  it('renders menu on generated category and tag archive pages', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'news-post',
+        title: 'News Post',
+        categories: ['news'],
+        tags: ['dev'],
+        createdAt: new Date('2025-03-15T10:00:00Z'),
+      }),
+    ];
+
+    await generate(posts, {
+      menu: {
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+          { id: 'news', title: 'News', kind: 'category-archive', categoryName: 'news', children: [] },
+        ],
+      },
+    });
+
+    const categoryHtml = await readFile(path.join(tempDir, 'html', 'category', 'news', 'index.html'), 'utf-8');
+    const tagHtml = await readFile(path.join(tempDir, 'html', 'tag', 'dev', 'index.html'), 'utf-8');
+
+    expect(categoryHtml).toContain('class="blog-menu"');
+    expect(tagHtml).toContain('class="blog-menu"');
+  });
+
   it('copies all required asset files to html/assets/ and html/images/', async () => {
     const result = await generate([]);
 

@@ -3,9 +3,9 @@
   {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href %}
   <body>
     <main>
+      <h1>{{ post.title }}</h1>
+      {% render 'partials/menu', menu_items: menu_items, language: language %}
       <article class="single-post" data-template="single-post">
-        <h1>{{ post.title }}</h1>
-        {% render 'partials/menu', menu_items: menu_items, language: language %}
         <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}</div>
       </article>
     </main>

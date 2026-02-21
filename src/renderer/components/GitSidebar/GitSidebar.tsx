@@ -57,6 +57,7 @@ export const GitSidebar: React.FC = () => {
   const commitMessageInputRef = useRef<HTMLInputElement | null>(null);
   const statusRefreshInFlightRef = useRef(false);
   const remoteRefreshInFlightRef = useRef(false);
+  const loadRepoStateRequestRef = useRef(0);
 
   const refreshRepoDetails = useCallback(
     async (targetProjectPath: string, options?: { background?: boolean; historyLimit?: number }) => {
@@ -189,12 +190,19 @@ export const GitSidebar: React.FC = () => {
   }, [activeProject]);
 
   const loadRepoState = useCallback(async () => {
+    const requestId = ++loadRepoStateRequestRef.current;
+    const isCurrentRequest = () => requestId === loadRepoStateRequestRef.current;
+
     setLoading(true);
     setError(null);
     setErrorGuidance([]);
 
     try {
       const availability = await window.electronAPI.git.checkAvailability();
+      if (!isCurrentRequest()) {
+        return;
+      }
+
       if (!availability.gitFound) {
         setError(tr('gitSidebar.error.gitMissing'));
         setIsRepo(false);
@@ -203,6 +211,10 @@ export const GitSidebar: React.FC = () => {
       }
 
       const resolvedProjectPath = await resolveProjectPath();
+      if (!isCurrentRequest()) {
+        return;
+      }
+
       setProjectPath(resolvedProjectPath);
 
       if (!resolvedProjectPath) {
@@ -213,14 +225,25 @@ export const GitSidebar: React.FC = () => {
       }
 
       const repoState = await window.electronAPI.git.getRepoState(resolvedProjectPath);
+      if (!isCurrentRequest()) {
+        return;
+      }
+
       setIsRepo(repoState.isRepo);
       setHasRemote(repoState.hasRemote);
       setCurrentBranch(repoState.currentBranch || null);
 
       if (repoState.isRepo) {
         await refreshRepoDetails(resolvedProjectPath);
+        if (!isCurrentRequest()) {
+          return;
+        }
+
         if (repoState.hasRemote) {
           await refreshRemoteState(resolvedProjectPath);
+          if (!isCurrentRequest()) {
+            return;
+          }
         } else {
           setRemoteState(null);
           setRemoteStateError(null);
@@ -233,6 +256,10 @@ export const GitSidebar: React.FC = () => {
         setRemoteStateError(null);
       }
     } catch {
+      if (!isCurrentRequest()) {
+        return;
+      }
+
       setError(tr('gitSidebar.error.loadRepoStatus'));
       setIsRepo(false);
       setHasRemote(false);
@@ -242,7 +269,9 @@ export const GitSidebar: React.FC = () => {
       setRemoteState(null);
       setRemoteStateError(null);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) {
+        setLoading(false);
+      }
     }
   }, [refreshRemoteState, refreshRepoDetails, resolveProjectPath, tr]);
 
@@ -499,7 +528,7 @@ export const GitSidebar: React.FC = () => {
             </div>
           )}
 
-          <div className="git-sidebar-section">
+          <div className="git-sidebar-section git-sidebar-section--changes">
             <div className="sidebar-section-title">{tr('gitSidebar.openChanges', { count: statusFiles.length })}</div>
 
             <div className="git-sidebar-commit-row">
