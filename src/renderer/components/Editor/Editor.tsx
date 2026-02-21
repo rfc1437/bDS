@@ -20,7 +20,16 @@ import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
+import { useI18n } from '../../i18n';
 import './Editor.css';
+
+const UI_DATE_LOCALE: Record<string, string> = {
+  en: 'en-US',
+  de: 'de-DE',
+  fr: 'fr-FR',
+  it: 'it-IT',
+  es: 'es-ES',
+};
 
 /** Get display name for media: prefer title over originalName */
 function getMediaDisplayName(media: { title?: string; originalName: string }): string {
@@ -121,6 +130,7 @@ interface PostEditorProps {
 }
 
 export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
+  const { t: tr, language } = useI18n();
   const {
     updatePost,
     markDirty,
@@ -653,7 +663,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       <div className="editor">
         <div className="editor-empty">
           <div className="welcome-content">
-            <p className="text-muted">Loading post...</p>
+            <p className="text-muted">{tr('editor.loadingPost')}</p>
           </div>
         </div>
       </div>
@@ -665,36 +675,36 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       <div className="editor-header">
         <div className="editor-tabs">
           <div className={`editor-tab active ${isDirty ? 'dirty' : ''}`}>
-            <span className="editor-tab-title">{title || 'Untitled'}</span>
-            {isDirty && <span className="editor-tab-dirty" title="Unsaved changes (auto-saves on switch)">●</span>}
+            <span className="editor-tab-title">{title || tr('editor.untitled')}</span>
+            {isDirty && <span className="editor-tab-dirty" title={tr('editor.unsavedChanges')}>●</span>}
           </div>
         </div>
         <div className="editor-actions">
           <span className={`status-badge status-${post.status}`}>
             {post.status}
           </span>
-          {isSaving && <span className="auto-save-indicator">Saving...</span>}
+          {isSaving && <span className="auto-save-indicator">{tr('editor.saving')}</span>}
           {post.status === 'draft' && (
             <button 
               onClick={handlePublish} 
               className="success"
-              title="Save and make this post public"
+              title={tr('editor.publishTitle')}
             >
-              Publish
+              {tr('editor.publish')}
             </button>
           )}
           {post.status === 'draft' && (
             <button 
               onClick={handleDiscard} 
               className="secondary danger"
-              title={hasPublishedVersion ? "Revert to last published version" : "Delete this draft permanently"}
+              title={hasPublishedVersion ? tr('editor.discardChangesTitle') : tr('editor.discardDraftTitle')}
             >
-              {hasPublishedVersion ? 'Discard Changes' : 'Discard Draft'}
+              {hasPublishedVersion ? tr('editor.discardChanges') : tr('editor.discardDraft')}
             </button>
           )}
           {post.status === 'published' && (
-            <button onClick={handleDelete} className="secondary danger" title="Delete this post permanently">
-              Delete
+            <button onClick={handleDelete} className="secondary danger" title={tr('editor.deleteTitle')}>
+              {tr('editor.delete')}
             </button>
           )}
         </div>
@@ -704,34 +714,34 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         <div className="editor-header-row">
           <div className="editor-meta">
             <div className="editor-field">
-              <label>Title</label>
+              <label>{tr('editor.field.title')}</label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Untitled"
+                placeholder={tr('editor.untitled')}
               />
             </div>
             <div className="editor-field">
-              <label>Tags</label>
+              <label>{tr('editor.field.tags')}</label>
               <TagInput
                 value={tags}
                 onChange={setTags}
-                placeholder="Add tags..."
+                placeholder={tr('editor.placeholder.tags')}
               />
             </div>
             <div className="editor-field">
-              <label>Author</label>
+              <label>{tr('editor.field.author')}</label>
               <input
                 type="text"
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
-                placeholder="Author name"
+                placeholder={tr('editor.placeholder.author')}
               />
             </div>
             <div className="editor-field-row">
               <div className="editor-field">
-                <label>Slug</label>
+                <label>{tr('editor.field.slug')}</label>
                 <input
                   type="text"
                   value={post.slug}
@@ -740,13 +750,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 />
               </div>
               <div className="editor-field">
-                <label>Categories</label>
+                <label>{tr('editor.field.categories')}</label>
                 <TagInput
                   value={selectedCategories}
                   onChange={(categories) => {
                     setSelectedCategories(categories.length > 0 ? categories : ['article']);
                   }}
-                  placeholder="Add categories..."
+                  placeholder={tr('editor.placeholder.categories')}
                   mode="category"
                 />
               </div>
@@ -767,30 +777,30 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         <div className="editor-body">
           <div className="editor-toolbar">
             <div className="editor-toolbar-left">
-              <label>Content</label>
+              <label>{tr('editor.field.content')}</label>
             </div>
             <div className="editor-toolbar-center">
               <div className="editor-mode-toggle">
                 <button 
                   className={editorMode === 'wysiwyg' ? 'active' : ''} 
                   onClick={() => handleEditorModeChange('wysiwyg')}
-                  title="Visual editor"
+                  title={tr('editor.mode.visualTitle')}
                 >
-                  Visual
+                  {tr('editor.mode.visual')}
                 </button>
                 <button 
                   className={editorMode === 'markdown' ? 'active' : ''} 
                   onClick={() => handleEditorModeChange('markdown')}
-                  title="Markdown source"
+                  title={tr('editor.mode.markdownTitle')}
                 >
-                  Markdown
+                  {tr('settings.editor.mode.markdown')}
                 </button>
                 <button 
                   className={editorMode === 'preview' ? 'active' : ''} 
                   onClick={() => handleEditorModeChange('preview')}
-                  title="Read-only preview"
+                  title={tr('editor.mode.previewTitle')}
                 >
-                  Preview
+                  {tr('settings.editor.mode.preview')}
                 </button>
               </div>
             </div>
@@ -799,7 +809,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 <button
                   className="gallery-button"
                   onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
-                  title={`View ${images.length} image(s)`}
+                  title={tr('editor.galleryTitle', { count: images.length })}
                 >
                   📷 {images.length}
                 </button>
@@ -809,14 +819,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                   <button
                     className="insert-post-link-button"
                     onClick={() => setShowPostSearch(true)}
-                    title="Link to post (Ctrl+K)"
+                    title={tr('editor.insertPostLinkTitle')}
                   >
                     📝
                   </button>
                   <button
                     className="insert-media-button"
                     onClick={() => setShowMediaSearch(true)}
-                    title="Insert image from media library"
+                    title={tr('editor.insertMediaTitle')}
                   >
                     🖼️
                   </button>
@@ -829,7 +839,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             <MilkdownEditor
               content={content}
               onChange={setContent}
-              placeholder="Start writing..."
+              placeholder={tr('editor.placeholder.startWriting')}
             />
           )}
           
@@ -866,10 +876,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 <iframe
                   className="editor-preview-frame"
                   src={previewUrl}
-                  title="Post preview"
+                  title={tr('editor.previewFrameTitle')}
                 />
               ) : (
-                <div className="editor-preview-loading">Loading preview...</div>
+                <div className="editor-preview-loading">{tr('editor.previewLoading')}</div>
               )}
             </div>
           )}
@@ -886,14 +896,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
       <div className="editor-footer">
         <span className="text-muted text-small">
-          Created: {new Date(post.createdAt).toLocaleString()}
+          {tr('editor.footer.created')}: {new Date(post.createdAt).toLocaleString(UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en)}
         </span>
         <span className="text-muted text-small">
-          Updated: {new Date(post.updatedAt).toLocaleString()}
+          {tr('editor.footer.updated')}: {new Date(post.updatedAt).toLocaleString(UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en)}
         </span>
         {post.publishedAt && (
           <span className="text-muted text-small">
-            Published: {new Date(post.publishedAt).toLocaleString()}
+            {tr('editor.footer.published')}: {new Date(post.publishedAt).toLocaleString(UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en)}
           </span>
         )}
       </div>

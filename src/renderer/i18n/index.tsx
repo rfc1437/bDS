@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import enJson from './locales/en.json';
 import deJson from './locales/de.json';
 import frJson from './locales/fr.json';
@@ -6,6 +6,10 @@ import itJson from './locales/it.json';
 import esJson from './locales/es.json';
 
 export type UiLanguage = 'en' | 'de' | 'fr' | 'it' | 'es';
+
+export const UI_LANGUAGE_STORAGE_KEY = 'bds-ui-language';
+
+export const SUPPORTED_UI_LANGUAGES: UiLanguage[] = ['en', 'de', 'fr', 'it', 'es'];
 
 type TranslationTable = Record<string, string>;
 
@@ -58,29 +62,59 @@ export function translateUi(
 export interface I18nContextValue {
   language: UiLanguage;
   t: (key: string, params?: Record<string, string | number>) => string;
+  setLanguage: (language: UiLanguage) => void;
+  supportedLanguages: UiLanguage[];
 }
 
 const I18nContext = createContext<I18nContextValue>({
   language: 'en',
   t: (key, params) => translateUi('en', key, params),
+  setLanguage: () => {},
+  supportedLanguages: SUPPORTED_UI_LANGUAGES,
 });
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<UiLanguage>('en');
+  const [language, setLanguageState] = useState<UiLanguage>('en');
+
+  const setLanguage = useCallback((nextLanguage: UiLanguage) => {
+    const normalized = resolveSupportedUiLanguage(nextLanguage);
+    setLanguageState(normalized);
+    try {
+      localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, normalized);
+    } catch {
+      // Ignore storage errors and keep in-memory language state.
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+
+    const persistedLanguage = (() => {
+      try {
+        const value = localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+        return value ? resolveSupportedUiLanguage(value) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (persistedLanguage) {
+      setLanguageState(persistedLanguage);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const detectLanguage = async () => {
       try {
         const systemLocale = await window.electronAPI?.app.getSystemLanguage?.();
         const locale = systemLocale || navigator.language;
         if (!cancelled) {
-          setLanguage(resolveUiLanguageFromSystemLocale(locale));
+          setLanguageState(resolveUiLanguageFromSystemLocale(locale));
         }
       } catch {
         if (!cancelled) {
-          setLanguage(resolveUiLanguageFromSystemLocale(navigator.language));
+          setLanguageState(resolveUiLanguageFromSystemLocale(navigator.language));
         }
       }
     };
@@ -96,8 +130,10 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => ({
       language,
       t: (key, params) => translateUi(language, key, params),
+      setLanguage,
+      supportedLanguages: SUPPORTED_UI_LANGUAGES,
     }),
-    [language]
+    [language, setLanguage]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

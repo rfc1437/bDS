@@ -2,9 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
 import { ProjectSelector } from '../ProjectSelector';
 import { getRendererPicoTheme } from '../../utils/picoTheme';
+import { useI18n, type UiLanguage } from '../../i18n';
 import './StatusBar.css';
 
+const UI_LANGUAGE_LABEL_KEYS: Record<UiLanguage, string> = {
+  en: 'settings.language.english',
+  de: 'settings.language.german',
+  fr: 'settings.language.french',
+  it: 'settings.language.italian',
+  es: 'settings.language.spanish',
+};
+
 export const StatusBar: React.FC = () => {
+  const { language, setLanguage, supportedLanguages, t } = useI18n();
   const {
     media,
     tasks,
@@ -66,6 +76,23 @@ export const StatusBar: React.FC = () => {
 
         <div className="status-bar-item theme-badge">
           <span>Theme: {activeTheme}</span>
+        </div>
+
+        <div className="status-bar-item language-badge">
+          <span>UI</span>
+          <select
+            className="status-bar-language-select"
+            data-testid="statusbar-language-select"
+            aria-label="UI language"
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as UiLanguage)}
+          >
+            {supportedLanguages.map((supportedLanguage) => (
+              <option key={supportedLanguage} value={supportedLanguage}>
+                {t(UI_LANGUAGE_LABEL_KEYS[supportedLanguage])}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* App Name */}

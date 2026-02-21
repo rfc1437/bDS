@@ -4,6 +4,7 @@ import { showToast } from '../Toast';
 import { getContrastColor, groupPostsByStatus } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import { GitSidebar } from '../GitSidebar/GitSidebar';
+import { useI18n } from '../../i18n';
 import './Sidebar.css';
 
 /** Get display name for media: title (truncated to 60 chars) or fallback to filename */
@@ -23,9 +24,17 @@ interface TagData {
   color?: string;
 }
 
-const formatDate = (dateString: string) => {
+const UI_DATE_LOCALE: Record<string, string> = {
+  en: 'en-US',
+  de: 'de-DE',
+  fr: 'fr-FR',
+  it: 'it-IT',
+  es: 'es-ES',
+};
+
+const formatDate = (dateString: string, locale: string = 'en-US') => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const formatFileSize = (bytes: number) => {
@@ -86,6 +95,7 @@ interface CalendarViewProps {
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear, selectedMonth }) => {
+  const { t } = useI18n();
   const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
   const [expandedYear, setExpandedYear] = useState<number | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -118,12 +128,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear,
         onClick={() => setIsCollapsed(!isCollapsed)}
       >
         <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
-        <span>ARCHIVE</span>
+        <span>{t('sidebar.archive')}</span>
         {(selectedYear || selectedMonth !== undefined) && (
           <button 
             className="clear-filter" 
             onClick={(e) => { e.stopPropagation(); onDateSelect(0); }} 
-            title="Clear filter"
+            title={t('sidebar.clearFilter')}
           >
             ✕
           </button>
@@ -163,7 +173,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear,
           </div>
         ))}
         {years.length === 0 && (
-          <div className="calendar-empty">No posts yet</div>
+          <div className="calendar-empty">{t('sidebar.noPostsYet')}</div>
         )}
       </div>}
     </div>
@@ -189,6 +199,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onTagSelect,
   onCategorySelect,
 }) => {
+  const { t } = useI18n();
   const [tagsCollapsed, setTagsCollapsed] = useState(true);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(true);
 
@@ -201,12 +212,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             onClick={() => setTagsCollapsed(!tagsCollapsed)}
           >
             <span className="collapse-icon">{tagsCollapsed ? '▶' : '▼'}</span>
-            <span>TAGS</span>
+            <span>{t('sidebar.tags')}</span>
             {selectedTags.length > 0 && (
               <button 
                 className="clear-filter" 
                 onClick={(e) => { e.stopPropagation(); onTagSelect([]); }} 
-                title="Clear tags"
+                title={t('sidebar.clearTags')}
               >
                 ✕
               </button>
@@ -250,12 +261,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
           >
             <span className="collapse-icon">{categoriesCollapsed ? '▶' : '▼'}</span>
-            <span>CATEGORIES</span>
+            <span>{t('sidebar.categories')}</span>
             {selectedCategories.length > 0 && (
               <button 
                 className="clear-filter" 
                 onClick={(e) => { e.stopPropagation(); onCategorySelect([]); }} 
-                title="Clear categories"
+                title={t('sidebar.clearCategories')}
               >
                 ✕
               </button>
@@ -292,6 +303,7 @@ interface MediaCalendarViewProps {
 }
 
 const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, selectedYear, selectedMonth }) => {
+  const { t } = useI18n();
   const [yearMonthData, setYearMonthData] = useState<{ year: number; month: number; count: number }[]>([]);
   const [expandedYear, setExpandedYear] = useState<number | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -323,12 +335,12 @@ const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, sel
         onClick={() => setIsCollapsed(!isCollapsed)}
       >
         <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
-        <span>ARCHIVE</span>
+        <span>{t('sidebar.archive')}</span>
         {(selectedYear || selectedMonth !== undefined) && (
           <button 
             className="clear-filter" 
             onClick={(e) => { e.stopPropagation(); onDateSelect(0); }} 
-            title="Clear filter"
+            title={t('sidebar.clearFilter')}
           >
             ✕
           </button>
@@ -368,7 +380,7 @@ const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, sel
           </div>
         ))}
         {years.length === 0 && (
-          <div className="calendar-empty">No media yet</div>
+          <div className="calendar-empty">{t('sidebar.noMediaYet')}</div>
         )}
       </div>}
     </div>
@@ -389,6 +401,7 @@ const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
   selectedTags,
   onTagSelect,
 }) => {
+  const { t } = useI18n();
   const [tagsCollapsed, setTagsCollapsed] = useState(true);
 
   return (
@@ -400,12 +413,12 @@ const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
             onClick={() => setTagsCollapsed(!tagsCollapsed)}
           >
             <span className="collapse-icon">{tagsCollapsed ? '▶' : '▼'}</span>
-            <span>TAGS</span>
+            <span>{t('sidebar.tags')}</span>
             {selectedTags.length > 0 && (
               <button 
                 className="clear-filter" 
                 onClick={(e) => { e.stopPropagation(); onTagSelect([]); }} 
-                title="Clear tags"
+                title={t('sidebar.clearTags')}
               >
                 ✕
               </button>
@@ -448,9 +461,11 @@ const MediaFilterPanel: React.FC<MediaFilterPanelProps> = ({
 
 interface SearchBoxProps {
   onSearch: (query: string) => void;
+  placeholder: string;
 }
 
-const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
+const SearchBox: React.FC<SearchBoxProps> = ({ onSearch, placeholder }) => {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -462,17 +477,17 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
     <form className="search-box" onSubmit={handleSubmit}>
       <input
         type="text"
-        placeholder="Search posts..."
+        placeholder={placeholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <button type="submit" title="Search">
+      <button type="submit" title={t('sidebar.search')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
           <path d="M15.7 14.3l-4.2-4.2c-.2-.2-.5-.3-.8-.3.9-1.1 1.5-2.5 1.5-4C12.2 2.6 9.6 0 6.4 0S.6 2.6.6 5.8s2.6 5.8 5.8 5.8c1.5 0 2.9-.5 4-1.4 0 .3.1.6.3.8l4.2 4.2c.2.2.5.3.7.3s.5-.1.7-.3c.4-.4.4-1 0-1.4zm-9.3-4c-2.5 0-4.5-2-4.5-4.5s2-4.5 4.5-4.5 4.5 2 4.5 4.5-2 4.5-4.5 4.5z"/>
         </svg>
       </button>
       {query && (
-        <button type="button" className="clear-search" onClick={() => { setQuery(''); onSearch(''); }} title="Clear">
+        <button type="button" className="clear-search" onClick={() => { setQuery(''); onSearch(''); }} title={t('common.clear')}>
           ✕
         </button>
       )}
@@ -488,6 +503,8 @@ interface PostsListProps {
 }
 
 const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
+  const { t, language } = useI18n();
+  const uiLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
   const { posts, hasMorePosts, totalPosts, appendPosts, openTab, activeTabId } = useAppStore();
   const isPagesMode = mode === 'pages';
   const postSubset = useMemo(() => applyPageFilter(posts, isPagesMode), [posts, isPagesMode]);
@@ -513,7 +530,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
       const [tags, categories, allTagsData] = await Promise.all([
         window.electronAPI?.posts.getTags(),
         window.electronAPI?.posts.getCategories(),
-        window.electronAPI?.tags.getAll(),
+        window.electronAPI?.tags?.getAll?.(),
       ]);
       if (tags) setAvailableTags(tags as string[]);
       if (categories) {
@@ -588,7 +605,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
       }
     } catch (error) {
       console.error('Search failed:', error);
-      showToast.error('Search failed');
+      showToast.error(t('sidebar.search'));
     }
   };
 
@@ -793,18 +810,18 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
     <div className="sidebar-content">
       <div className="sidebar-section">
         <div className="sidebar-section-header">
-          <span>{isPagesMode ? 'PAGES' : 'POSTS'}</span>
+          <span>{(isPagesMode ? t('activity.pages') : t('activity.posts')).toUpperCase()}</span>
           <div className="sidebar-actions">
             <button 
               className={`sidebar-action ${showFilters ? 'active' : ''}`} 
               onClick={() => setShowFilters(!showFilters)} 
-              title="Toggle Filters"
+              title={t('sidebar.toggleFilters')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M6 12v-1h4v1H6zM4 8v-1h8v1H4zm-2-4v-1h12v1H2z"/>
               </svg>
             </button>
-            <button className="sidebar-action" onClick={handleCreatePost} title="New Post">
+            <button className="sidebar-action" onClick={handleCreatePost} title={t('sidebar.newPost')}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/>
               </svg>
@@ -813,7 +830,10 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
         </div>
       </div>
 
-      <SearchBox onSearch={handleSearch} />
+      <SearchBox
+        onSearch={handleSearch}
+        placeholder={isPagesMode ? t('sidebar.searchPagesPlaceholder') : t('sidebar.searchPostsPlaceholder')}
+      />
       
       {showFilters && (
         <>
@@ -837,11 +857,15 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
       {hasActiveFilters && (
         <div className="filter-status">
           <span>
-            {groupedPosts.published.length + groupedPosts.archived.length} result{groupedPosts.published.length + groupedPosts.archived.length !== 1 ? 's' : ''}
-            {searchQuery && ` for "${searchQuery}"`}
+            {searchQuery
+              ? t('sidebar.resultsFor', {
+                  count: groupedPosts.published.length + groupedPosts.archived.length,
+                  query: searchQuery,
+                })
+              : t('sidebar.results', { count: groupedPosts.published.length + groupedPosts.archived.length })}
           </span>
-          <button onClick={clearAllFilters} title="Clear all filters">
-            Clear filters
+          <button onClick={clearAllFilters} title={t('sidebar.clearFilters')}>
+            {t('sidebar.clearFilters')}
           </button>
         </div>
       )}
@@ -850,7 +874,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
         <div className="sidebar-section">
           <div className="sidebar-section-title">
             <span className="section-icon status-draft">●</span>
-            Drafts ({groupedPosts.draft.length})
+            {t('sidebar.drafts')} ({groupedPosts.draft.length})
           </div>
           <div className="sidebar-list">
             {groupedPosts.draft.map(post => {
@@ -864,8 +888,8 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title || 'Untitled'}</div>
-                    <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
+                    <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                    <div className="sidebar-item-meta">{formatDate(post.updatedAt, uiLocale)}</div>
                   </div>
                 </div>
               );
@@ -878,7 +902,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
         <div className="sidebar-section">
           <div className="sidebar-section-title">
             <span className="section-icon status-published">●</span>
-            Published ({groupedPosts.published.length})
+            {t('sidebar.published')} ({groupedPosts.published.length})
           </div>
           <div className="sidebar-list">
             {groupedPosts.published.map(post => {
@@ -892,8 +916,8 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title || 'Untitled'}</div>
-                    <div className="sidebar-item-meta">{formatDate(post.publishedAt || post.updatedAt)}</div>
+                    <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                    <div className="sidebar-item-meta">{formatDate(post.publishedAt || post.updatedAt, uiLocale)}</div>
                   </div>
                 </div>
               );
@@ -906,7 +930,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
         <div className="sidebar-section">
           <div className="sidebar-section-title">
             <span className="section-icon status-archived">●</span>
-            Archived ({groupedPosts.archived.length})
+            {t('sidebar.archived')} ({groupedPosts.archived.length})
           </div>
           <div className="sidebar-list">
             {groupedPosts.archived.map(post => {
@@ -920,8 +944,8 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title || 'Untitled'}</div>
-                    <div className="sidebar-item-meta">{formatDate(post.updatedAt)}</div>
+                    <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                    <div className="sidebar-item-meta">{formatDate(post.updatedAt, uiLocale)}</div>
                   </div>
                 </div>
               );
@@ -932,15 +956,15 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
 
       {baseDisplayPosts.length === 0 && !isFiltered && (
         <div className="sidebar-empty">
-          <p>{isPagesMode ? 'No pages yet' : 'No posts yet'}</p>
-          <button onClick={handleCreatePost}>Create your first post</button>
+          <p>{isPagesMode ? t('sidebar.noPagesYet') : t('sidebar.noPostsYet')}</p>
+          <button onClick={handleCreatePost}>{t('sidebar.createFirstPost')}</button>
         </div>
       )}
 
       {groupedPosts.published.length === 0 && groupedPosts.archived.length === 0 && isFiltered && (
         <div className="sidebar-empty">
-          <p>No matching posts</p>
-          <button onClick={clearAllFilters}>Clear filters</button>
+          <p>{t('sidebar.noMatchingPosts')}</p>
+          <button onClick={clearAllFilters}>{t('sidebar.clearFilters')}</button>
         </div>
       )}
 
@@ -952,7 +976,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
             disabled={isLoadingMore}
             className="load-more-button"
           >
-            {isLoadingMore ? 'Loading...' : `Load more (${posts.length} of ${totalPosts})`}
+            {isLoadingMore ? t('sidebar.loading') : t('sidebar.loadMore', { loaded: posts.length, total: totalPosts })}
           </button>
         </div>
       )}
@@ -961,6 +985,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
 };
 
 const MediaList: React.FC = () => {
+  const { t } = useI18n();
   const { media, openTab, activeTabId } = useAppStore();
 
   // Filter state
@@ -979,7 +1004,7 @@ const MediaList: React.FC = () => {
     const loadTags = async () => {
       const [tags, allTagsData] = await Promise.all([
         window.electronAPI?.media.getTags(),
-        window.electronAPI?.tags.getAll(),
+        window.electronAPI?.tags?.getAll?.(),
       ]);
       if (tags) setAvailableTags(tags as string[]);
       if (allTagsData) {
@@ -1010,7 +1035,7 @@ const MediaList: React.FC = () => {
       }
     } catch (error) {
       console.error('Search failed:', error);
-      showToast.error('Search failed');
+      showToast.error(t('sidebar.search'));
     }
   };
 
@@ -1097,18 +1122,18 @@ const MediaList: React.FC = () => {
     <div className="sidebar-content">
       <div className="sidebar-section">
         <div className="sidebar-section-header">
-          <span>MEDIA</span>
+          <span>{t('activity.media').toUpperCase()}</span>
           <div className="sidebar-actions">
             <button
               className={`sidebar-action ${showFilters ? 'active' : ''}`}
               onClick={() => setShowFilters(!showFilters)}
-              title="Toggle Filters"
+              title={t('sidebar.toggleFilters')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M6 12v-1h4v1H6zM4 8v-1h8v1H4zm-2-4v-1h12v1H2z"/>
               </svg>
             </button>
-            <button className="sidebar-action" onClick={handleImportMedia} title="Import Media">
+            <button className="sidebar-action" onClick={handleImportMedia} title={t('sidebar.importMedia')}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/>
               </svg>
@@ -1117,7 +1142,7 @@ const MediaList: React.FC = () => {
         </div>
       </div>
 
-      <SearchBox onSearch={handleSearch} />
+      <SearchBox onSearch={handleSearch} placeholder={t('sidebar.searchMediaPlaceholder')} />
 
       {showFilters && (
         <>
@@ -1138,11 +1163,12 @@ const MediaList: React.FC = () => {
       {hasActiveFilters && (
         <div className="filter-status">
           <span>
-            {filteredDisplayMedia.length} result{filteredDisplayMedia.length !== 1 ? 's' : ''}
-            {searchQuery && ` for "${searchQuery}"`}
+            {searchQuery
+              ? t('sidebar.resultsFor', { count: filteredDisplayMedia.length, query: searchQuery })
+              : t('sidebar.results', { count: filteredDisplayMedia.length })}
           </span>
-          <button onClick={clearAllFilters} title="Clear all filters">
-            Clear filters
+          <button onClick={clearAllFilters} title={t('sidebar.clearFilters')}>
+            {t('sidebar.clearFilters')}
           </button>
         </div>
       )}
@@ -1184,8 +1210,8 @@ const MediaList: React.FC = () => {
 
       {filteredDisplayMedia.length === 0 && (
         <div className="sidebar-empty">
-          <p>No media files</p>
-          <button onClick={handleImportMedia}>Import media</button>
+          <p>{t('sidebar.noMediaFiles')}</p>
+          <button onClick={handleImportMedia}>{t('sidebar.importMedia')}</button>
         </div>
       )}
     </div>
@@ -1196,6 +1222,7 @@ import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/Setti
 import { scrollToTagsSection, TagsCategory } from '../TagsView';
 
 const TagsNav: React.FC = () => {
+  const { t } = useI18n();
   const [activeSection, setActiveSection] = useState<TagsCategory | null>(null);
 
   const handleNavClick = (category: TagsCategory) => {
@@ -1207,7 +1234,7 @@ const TagsNav: React.FC = () => {
     <div className="sidebar-content settings-panel">
       <div className="sidebar-section">
         <div className="sidebar-section-header">
-          <span>TAGS</span>
+          <span>{t('sidebar.tagsHeader').toUpperCase()}</span>
         </div>
       </div>
 
@@ -1217,21 +1244,21 @@ const TagsNav: React.FC = () => {
           onClick={() => handleNavClick('cloud')}
         >
           <span className="settings-nav-entry-icon">☁️</span>
-          <span>Tag Cloud</span>
+          <span>{t('sidebar.tagCloud')}</span>
         </button>
         <button
           className={`settings-nav-entry ${activeSection === 'manage' ? 'active' : ''}`}
           onClick={() => handleNavClick('manage')}
         >
           <span className="settings-nav-entry-icon">✏️</span>
-          <span>Create & Edit</span>
+          <span>{t('sidebar.createEdit')}</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'merge' ? 'active' : ''}`}
           onClick={() => handleNavClick('merge')}
         >
           <span className="settings-nav-entry-icon">🔀</span>
-          <span>Merge Tags</span>
+          <span>{t('sidebar.mergeTags')}</span>
         </button>
       </div>
     </div>
@@ -1239,6 +1266,7 @@ const TagsNav: React.FC = () => {
 };
 
 const SettingsNav: React.FC = () => {
+  const { t } = useI18n();
   const { tabs, activeTabId, openTab } = useAppStore();
   const [activeSection, setActiveSection] = useState<SettingsCategory | null>(null);
 
@@ -1266,7 +1294,7 @@ const SettingsNav: React.FC = () => {
     <div className="sidebar-content settings-panel">
       <div className="sidebar-section">
         <div className="sidebar-section-header">
-          <span>SETTINGS</span>
+          <span>{t('sidebar.settingsHeader').toUpperCase()}</span>
         </div>
       </div>
 
@@ -1276,49 +1304,49 @@ const SettingsNav: React.FC = () => {
           onClick={() => handleNavClick('project')}
         >
           <span className="settings-nav-entry-icon">📁</span>
-          <span>Project</span>
+          <span>{t('sidebar.nav.project')}</span>
         </button>
         <button
           className={`settings-nav-entry ${activeSection === 'editor' ? 'active' : ''}`}
           onClick={() => handleNavClick('editor')}
         >
           <span className="settings-nav-entry-icon">📝</span>
-          <span>Editor</span>
+          <span>{t('sidebar.nav.editor')}</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'content' ? 'active' : ''}`}
           onClick={() => handleNavClick('content')}
         >
           <span className="settings-nav-entry-icon">📋</span>
-          <span>Content</span>
+          <span>{t('sidebar.nav.content')}</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'ai' ? 'active' : ''}`}
           onClick={() => handleNavClick('ai')}
         >
           <span className="settings-nav-entry-icon">🤖</span>
-          <span>AI Assistant</span>
+          <span>{t('sidebar.nav.ai')}</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'publishing' ? 'active' : ''}`}
           onClick={() => handleNavClick('publishing')}
         >
           <span className="settings-nav-entry-icon">🚀</span>
-          <span>Publishing</span>
+          <span>{t('sidebar.nav.publishing')}</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'data' ? 'active' : ''}`}
           onClick={() => handleNavClick('data')}
         >
           <span className="settings-nav-entry-icon">🗄️</span>
-          <span>Data</span>
+          <span>{t('sidebar.nav.data')}</span>
         </button>
         <button
           className={`settings-nav-entry ${isStyleTabActive ? 'active' : ''}`}
           onClick={handleStyleClick}
         >
           <span className="settings-nav-entry-icon">🎨</span>
-          <span>Style</span>
+          <span>{t('sidebar.nav.style')}</span>
         </button>
       </div>
     </div>

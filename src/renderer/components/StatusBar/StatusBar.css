@@ -94,3 +94,21 @@
   border: 1px solid var(--vscode-statusBar-border, transparent);
   border-radius: 3px;
 }
+
+.status-bar-item.language-badge {
+  border: 1px solid var(--vscode-statusBar-border, transparent);
+  border-radius: 3px;
+  gap: 4px;
+}
+
+.status-bar-language-select {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+
+.status-bar-language-select:focus {
+  outline: none;
+}

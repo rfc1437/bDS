@@ -338,18 +338,18 @@ export const SettingsView: React.FC = () => {
     <SettingSection
       id="settings-section-project"
       title={t('settings.project.title')}
-      description="General settings for the active blog project."
+      description={t('settings.project.descriptionGeneral')}
       hidden={!sectionHasMatches(projectKeywords)}
     >
       <SettingRow
         id="project-name"
-        label="Project Name"
-        description="The display name of your blog project."
+        label={t('settings.project.nameLabel')}
+        description={t('settings.project.nameDescription')}
       >
         <input
           id="project-name"
           type="text"
-          placeholder="My Blog"
+          placeholder={t('settings.project.namePlaceholder')}
           value={projectName}
           onChange={(e) => setProjectName(e.target.value)}
         />
@@ -357,12 +357,12 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="project-description"
-        label="Description"
-        description="A short description of your blog. This can be used in templates and metadata."
+        label={t('settings.project.descriptionLabel')}
+        description={t('settings.project.descriptionDescription')}
       >
         <textarea
           id="project-description"
-          placeholder="A blog about..."
+          placeholder={t('settings.project.descriptionPlaceholder')}
           value={projectDescription}
           onChange={(e) => setProjectDescription(e.target.value)}
           rows={3}
@@ -371,14 +371,14 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="project-datapath"
-        label="Project Data Path"
-        description={`Custom folder for storing posts, media, and metadata. Leave empty to use the default location: ${defaultProjectPath}`}
+        label={t('settings.project.dataPathLabel')}
+        description={t('settings.project.dataPathDescription', { path: defaultProjectPath })}
       >
         <div className="setting-input-group">
           <input
             id="project-datapath"
             type="text"
-            placeholder={defaultProjectPath || 'Default location'}
+            placeholder={defaultProjectPath || t('settings.project.defaultLocation')}
             value={projectDataPath}
             onChange={(e) => setProjectDataPath(e.target.value)}
           />
@@ -395,13 +395,13 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="project-public-url"
-        label="Public URL"
-        description="The public base URL of your published blog (used for sitemap generation)."
+        label={t('settings.project.publicUrlLabel')}
+        description={t('settings.project.publicUrlDescription')}
       >
         <input
           id="project-public-url"
           type="url"
-          placeholder="https://example.com"
+          placeholder={t('settings.project.publicUrlPlaceholder')}
           value={projectPublicUrl}
           onChange={(e) => setProjectPublicUrl(e.target.value)}
         />
@@ -409,8 +409,8 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="project-language"
-        label="Main Language"
-        description="The primary language for your blog content. AI-generated titles, alt text, and captions will use this language."
+        label={t('settings.project.mainLanguageLabel')}
+        description={t('settings.project.mainLanguageDescription')}
       >
         <select
           id="project-language"
@@ -442,13 +442,13 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="project-author"
-        label="Default Author"
-        description="The default author name for new posts and media. Can be overridden per item."
+        label={t('settings.project.defaultAuthorLabel')}
+        description={t('settings.project.defaultAuthorDescription')}
       >
         <input
           id="project-author"
           type="text"
-          placeholder="Author Name"
+          placeholder={t('settings.project.defaultAuthorPlaceholder')}
           value={projectDefaultAuthor}
           onChange={(e) => setProjectDefaultAuthor(e.target.value)}
         />
@@ -456,8 +456,8 @@ export const SettingsView: React.FC = () => {
 
       <SettingRow
         id="project-max-posts-per-page"
-        label="Max Posts Per Page"
-        description="Maximum number of posts shown per preview route page."
+        label={t('settings.project.maxPostsPerPageLabel')}
+        description={t('settings.project.maxPostsPerPageDescription')}
       >
         <input
           id="project-max-posts-per-page"
@@ -478,7 +478,7 @@ export const SettingsView: React.FC = () => {
 
       <div className="setting-actions">
         <button className="primary" onClick={handleSaveProject}>
-          Save Project Settings
+          {t('settings.project.saveButton')}
         </button>
       </div>
     </SettingSection>
