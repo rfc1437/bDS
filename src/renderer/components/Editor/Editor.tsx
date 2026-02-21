@@ -22,6 +22,7 @@ import { AutoSaveManager, getContrastColor } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
 import { openEntityTab } from '../../navigation/tabPolicy';
+import { EditorRoute, resolveEditorRoute } from '../../navigation/editorRouting';
 import { useI18n } from '../../i18n';
 import './Editor.css';
 
@@ -1724,20 +1725,7 @@ export const Editor: React.FC = () => {
   // Get the active tab
   const activeTab = tabs.find(t => t.id === activeTabId);
 
-  // Determine what to show based on active tab
-  // Settings and tags should only show when their tab is active, not based on activeView
-  // (activeView controls the sidebar, not the main content area)
-  const showPost = activeTab?.type === 'post';
-  const showMedia = activeTab?.type === 'media';
-  const showSettings = activeTab?.type === 'settings';
-  const showStyle = activeTab?.type === 'style';
-  const showTags = activeTab?.type === 'tags';
-  const showChat = activeTab?.type === 'chat';
-  const showImport = activeTab?.type === 'import';
-  const showMetadataDiff = activeTab?.type === 'metadata-diff';
-  const showGitDiff = activeTab?.type === 'git-diff';
-  const showDocumentation = activeTab?.type === 'documentation';
-  const showSiteValidation = activeTab?.type === 'site-validation';
+  const editorRoute = resolveEditorRoute(activeTab);
 
   useEffect(() => {
     const activePostId = activeTab?.type === 'post' ? activeTab.id : null;
@@ -1789,129 +1777,30 @@ export const Editor: React.FC = () => {
     <ConfirmDeleteModal details={confirmDeleteModal} onClose={hideConfirmDeleteModal} />
   );
 
-  // Show settings only if settings tab is active
-  if (showSettings) {
-    return (
-      <div className="editor">
-        <SettingsView />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
+  const editorViewRenderers: Record<EditorRoute, () => React.ReactNode> = {
+    settings: () => <SettingsView />,
+    style: () => <StyleView />,
+    tags: () => <TagsView />,
+    chat: () => (editorRoute.tabId ? <ChatPanel key={editorRoute.tabId} conversationId={editorRoute.tabId} /> : <Dashboard />),
+    import: () =>
+      editorRoute.tabId ? <ImportAnalysisView key={editorRoute.tabId} definitionId={editorRoute.tabId} /> : <Dashboard />,
+    'metadata-diff': () => <MetadataDiffPanel />,
+    'git-diff': () =>
+      editorRoute.tabId && editorRoute.gitDiffResource
+        ? <GitDiffView key={editorRoute.tabId} filePath={editorRoute.gitDiffResource} />
+        : <Dashboard />,
+    documentation: () => <DocumentationView />,
+    'site-validation': () => <SiteValidationView />,
+    post: () => (editorRoute.tabId ? <PostEditor key={editorRoute.tabId} postId={editorRoute.tabId} /> : <Dashboard />),
+    media: () => (editorRoute.tabId ? <MediaEditor key={editorRoute.tabId} mediaId={editorRoute.tabId} /> : <Dashboard />),
+    dashboard: () => <Dashboard />,
+  };
 
-  if (showStyle) {
-    return (
-      <div className="editor">
-        <StyleView />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
+  const editorContent = editorViewRenderers[editorRoute.route]();
 
-  // Show tags if tags tab is active
-  if (showTags) {
-    return (
-      <div className="editor">
-        <TagsView />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // Show chat if chat tab is active
-  if (showChat && activeTabId) {
-    return (
-      <div className="editor">
-        <ChatPanel key={activeTabId} conversationId={activeTabId} />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // Show import analysis if import tab is active
-  if (showImport && activeTabId) {
-    return (
-      <div className="editor">
-        <ImportAnalysisView key={activeTabId} definitionId={activeTabId} />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // Show metadata diff if metadata-diff tab is active
-  if (showMetadataDiff) {
-    return (
-      <div className="editor">
-        <MetadataDiffPanel />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // Show git diff view if git-diff tab is active
-  if (showGitDiff && activeTabId) {
-    const filePath = activeTabId.startsWith('git-diff:') ? activeTabId.slice('git-diff:'.length) : activeTabId;
-    return (
-      <div className="editor">
-        <GitDiffView key={activeTabId} filePath={filePath} />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  if (showDocumentation) {
-    return (
-      <div className="editor">
-        <DocumentationView />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  if (showSiteValidation) {
-    return (
-      <div className="editor">
-        <SiteValidationView />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // Show post editor if a post tab is active
-  if (showPost && activeTabId) {
-    return (
-      <div className="editor">
-        <PostEditor key={activeTabId} postId={activeTabId} />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // Show media editor if a media tab is active
-  if (showMedia && activeTabId) {
-    return (
-      <div className="editor">
-        <MediaEditor key={activeTabId} mediaId={activeTabId} />
-        {renderErrorModal()}
-        {renderConfirmDeleteModal()}
-      </div>
-    );
-  }
-
-  // No tab active - show dashboard
   return (
     <div className="editor">
-      <Dashboard />
+      {editorContent}
       {renderErrorModal()}
       {renderConfirmDeleteModal()}
     </div>
