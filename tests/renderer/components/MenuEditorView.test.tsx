@@ -14,14 +14,19 @@ describe('MenuEditorView entry editor', () => {
         get: vi.fn().mockResolvedValue({
           items: [
             {
-              id: 'root-page',
+              id: 'menu-home',
               title: 'Home',
               kind: 'page',
+              pageSlug: 'home',
               children: [],
             },
           ],
         }),
         save: vi.fn().mockResolvedValue({ items: [] }),
+      },
+      meta: {
+        ...(window as any).electronAPI?.meta,
+        getCategories: vi.fn().mockResolvedValue(['news', 'tech']),
       },
       posts: {
         ...(window as any).electronAPI?.posts,
@@ -186,6 +191,30 @@ describe('MenuEditorView entry editor', () => {
 
     expect(screen.queryByPlaceholderText(/type a page title or submenu label/i)).not.toBeInTheDocument();
     expect(screen.getByText('About')).toBeInTheDocument();
+  });
+
+  it('shows a category archive create button (C+) in toolbar', async () => {
+    render(<MenuEditorView />);
+
+    await screen.findByRole('button', { name: /add entry/i });
+    expect(screen.getByRole('button', { name: /add category archive/i })).toBeInTheDocument();
+  });
+
+  it('opens category input when category archive button is clicked', async () => {
+    render(<MenuEditorView />);
+
+    const button = await screen.findByRole('button', { name: /add category archive/i });
+    fireEvent.click(button);
+
+    expect(await screen.findByPlaceholderText(/type a category name/i)).toBeInTheDocument();
+  });
+
+  it('disables delete action when Home entry is selected', async () => {
+    render(<MenuEditorView />);
+
+    await screen.findByText('Home');
+    const deleteButton = screen.getByRole('button', { name: /^delete$/i });
+    expect(deleteButton).toBeDisabled();
   });
 
 });

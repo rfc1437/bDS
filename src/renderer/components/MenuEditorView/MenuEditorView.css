@@ -29,16 +29,25 @@
 }
 
 .menu-editor-main {
-  display: block;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1;
 }
 
 .menu-editor-tree-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   border: 1px solid var(--vscode-panel-border);
   border-radius: 6px;
   background: var(--vscode-editor-background);
   padding: 0.5rem;
+  min-height: 0;
+}
+
+.menu-editor-tree-wrap [role='tree'] {
+  flex: 1;
   min-height: 0;
 }
 

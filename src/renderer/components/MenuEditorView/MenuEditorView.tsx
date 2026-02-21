@@ -4,11 +4,14 @@ import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
 import type { MenuDocument, MenuItemData, PostData } from '../../../main/shared/electronApi';
 import { PageInput } from '../PageInput';
+import { CategoryInput } from '../CategoryInput';
 import { createAutoExpandController } from './menuAutoExpand';
 import { resolveInsertTarget } from './menuInsertTarget';
 import { isPickerCloseKey } from './menuPagePicker';
 import { applyTreeMove } from './menuTreeMove';
 import './MenuEditorView.css';
+
+const HOME_MENU_ID = 'menu-home';
 
 interface ToolButtonProps {
   label: string;
@@ -152,13 +155,14 @@ function mapItems(items: MenuItemData[], mapper: (item: MenuItemData) => MenuIte
   });
 }
 
-function createDraftEntry(): MenuItemData {
+function createDraftEntry(kind: MenuItemData['kind'] = 'submenu'): MenuItemData {
   return {
     id: createMenuItemId(),
     title: '',
-    kind: 'submenu',
+    kind,
     pageId: undefined,
     pageSlug: undefined,
+    categoryName: undefined,
     children: [],
   };
 }
@@ -171,9 +175,15 @@ export const MenuEditorView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pagePosts, setPagePosts] = useState<PostData[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingEntryType, setEditingEntryType] = useState<'page' | 'category' | null>(null);
+  const [treeHeight, setTreeHeight] = useState<number>(460);
   const [toolbarTooltip, setToolbarTooltip] = useState<string>('');
   const [recentParentInsertId, setRecentParentInsertId] = useState<string | null>(null);
+  const treeWrapRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
   const recentInsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoExpandController = useMemo(() => createAutoExpandController(450), []);
 
@@ -220,6 +230,7 @@ export const MenuEditorView: React.FC = () => {
           return removeItemByPath(previous, path).next;
         });
         setEditingEntryId(null);
+        setEditingEntryType(null);
       }
     };
 
@@ -230,7 +241,7 @@ export const MenuEditorView: React.FC = () => {
   }, [editingEntryId]);
 
   useEffect(() => {
-    if (!editingEntryId || isLoadingPages) {
+    if (!editingEntryId || (editingEntryType === 'page' && isLoadingPages) || (editingEntryType === 'category' && isLoadingCategories)) {
       return;
     }
 
@@ -250,7 +261,50 @@ export const MenuEditorView: React.FC = () => {
       clearTimeout(immediate);
       clearTimeout(delayed);
     };
-  }, [editingEntryId, isLoadingPages]);
+  }, [editingEntryId, editingEntryType, isLoadingPages, isLoadingCategories]);
+
+  useEffect(() => {
+    const updateTreeHeight = (): void => {
+      const wrap = treeWrapRef.current;
+      const toolbar = toolbarRef.current;
+      if (!wrap) {
+        return;
+      }
+
+      const wrapHeight = wrap.clientHeight;
+      const toolbarHeight = toolbar?.offsetHeight ?? 0;
+      const next = Math.max(120, wrapHeight - toolbarHeight - 8);
+      setTreeHeight(next);
+    };
+
+    updateTreeHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      if (typeof window.addEventListener !== 'function') {
+        return;
+      }
+
+      window.addEventListener('resize', updateTreeHeight);
+      return () => {
+        window.removeEventListener('resize', updateTreeHeight);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateTreeHeight();
+    });
+
+    if (treeWrapRef.current) {
+      observer.observe(treeWrapRef.current);
+    }
+    if (toolbarRef.current) {
+      observer.observe(toolbarRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [editingEntryId]);
 
   const selectedPath = useMemo(() => {
     if (!selectedId) {
@@ -277,6 +331,24 @@ export const MenuEditorView: React.FC = () => {
     }
   };
 
+  const ensureCategoriesLoaded = async (): Promise<void> => {
+    if (categories.length > 0) {
+      return;
+    }
+
+    setIsLoadingCategories(true);
+    try {
+      const nextCategories = await window.electronAPI.meta.getCategories();
+      setCategories(nextCategories);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+      showToast.error(tr('menuEditor.categoryPicker.loadError'));
+      setCategories([]);
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  };
+
   const setDraftAsSubmenu = (label: string): void => {
     if (!editingEntryId) {
       return;
@@ -300,6 +372,7 @@ export const MenuEditorView: React.FC = () => {
     }));
 
     setEditingEntryId(null);
+    setEditingEntryType(null);
   };
 
   const setDraftAsPage = (post: PostData): void => {
@@ -322,6 +395,36 @@ export const MenuEditorView: React.FC = () => {
     }));
 
     setEditingEntryId(null);
+    setEditingEntryType(null);
+  };
+
+  const setDraftAsCategoryArchive = (categoryName: string): void => {
+    if (!editingEntryId) {
+      return;
+    }
+
+    const trimmed = categoryName.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setItems((previous) => mapItems(previous, (item) => {
+      if (item.id !== editingEntryId) {
+        return item;
+      }
+
+      return {
+        ...item,
+        title: trimmed,
+        kind: 'category-archive',
+        pageId: undefined,
+        pageSlug: undefined,
+        categoryName: trimmed,
+      };
+    }));
+
+    setEditingEntryId(null);
+    setEditingEntryType(null);
   };
 
   const startCreateEntry = async (): Promise<void> => {
@@ -360,6 +463,22 @@ export const MenuEditorView: React.FC = () => {
 
     setSelectedId(newEntry.id);
     setEditingEntryId(newEntry.id);
+    setEditingEntryType('page');
+  };
+
+  const startCreateCategoryArchive = async (): Promise<void> => {
+    await ensureCategoriesLoaded();
+
+    const newEntry = createDraftEntry('category-archive');
+    const target = resolveInsertTarget(items, selectedId);
+
+    setItems((previous) => {
+      return insertItemAtPath(previous, target.parentPath, target.index, newEntry);
+    });
+
+    setSelectedId(newEntry.id);
+    setEditingEntryId(newEntry.id);
+    setEditingEntryType('category');
   };
 
   const save = async (): Promise<void> => {
@@ -445,6 +564,10 @@ export const MenuEditorView: React.FC = () => {
       return;
     }
 
+    if (selectedId === HOME_MENU_ID) {
+      return;
+    }
+
     setItems((previous) => {
       const removed = removeItemByPath(previous, selectedPath);
       return removed.next;
@@ -452,9 +575,12 @@ export const MenuEditorView: React.FC = () => {
 
     if (editingEntryId === selectedId) {
       setEditingEntryId(null);
+      setEditingEntryType(null);
     }
     setSelectedId(null);
   };
+
+  const isHomeSelected = selectedId === HOME_MENU_ID;
 
   return (
     <div className="menu-editor-view">
@@ -469,8 +595,8 @@ export const MenuEditorView: React.FC = () => {
         <div className="menu-editor-loading">{tr('menuEditor.loading')}</div>
       ) : (
         <div className="menu-editor-main">
-          <div className="menu-editor-tree-wrap">
-            <div className="menu-editor-toolbar" role="toolbar" aria-label={tr('menuEditor.title')}>
+          <div className="menu-editor-tree-wrap" ref={treeWrapRef}>
+            <div className="menu-editor-toolbar" role="toolbar" aria-label={tr('menuEditor.title')} ref={toolbarRef}>
               <ToolButton
                 label={tr('menuEditor.addEntry')}
                 onClick={() => void startCreateEntry()}
@@ -487,6 +613,14 @@ export const MenuEditorView: React.FC = () => {
                 onHideTooltip={() => setToolbarTooltip('')}
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h9l3 3v9H2V2zm2 1v3h6V3H4zm0 9h8V7H4v5z" /></svg>
+              </ToolButton>
+              <ToolButton
+                label={tr('menuEditor.addCategoryArchive')}
+                onClick={() => void startCreateCategoryArchive()}
+                onShowTooltip={setToolbarTooltip}
+                onHideTooltip={() => setToolbarTooltip('')}
+              >
+                <span aria-hidden="true">{tr('menuEditor.addCategoryArchiveShort')}</span>
               </ToolButton>
               <ToolButton
                 label={tr('menuEditor.moveUp')}
@@ -527,7 +661,7 @@ export const MenuEditorView: React.FC = () => {
               <ToolButton
                 label={tr('menuEditor.delete')}
                 onClick={deleteSelected}
-                disabled={!selectedPath}
+                disabled={!selectedPath || isHomeSelected}
                 onShowTooltip={setToolbarTooltip}
                 onHideTooltip={() => setToolbarTooltip('')}
               >
@@ -544,7 +678,7 @@ export const MenuEditorView: React.FC = () => {
               <Tree<MenuItemData>
                 data={items}
                 width="100%"
-                height={editingEntryId ? 320 : 460}
+                height={treeHeight}
                 rowHeight={32}
                 indent={20}
                 openByDefault
@@ -584,20 +718,36 @@ export const MenuEditorView: React.FC = () => {
                   >
                     <>
                       <span className="menu-editor-row-kind">
-                        {node.data.kind === 'page' ? tr('menuEditor.type.page') : tr('menuEditor.type.submenu')}
+                        {node.data.kind === 'page'
+                          ? tr('menuEditor.type.page')
+                          : node.data.kind === 'category-archive'
+                            ? tr('menuEditor.type.categoryArchive')
+                            : tr('menuEditor.type.submenu')}
                       </span>
                       <span className={`menu-editor-row-title ${editingEntryId === node.data.id ? 'is-editing' : ''}`}>
                         {editingEntryId === node.data.id ? (
-                          <PageInput
-                            pages={pagePosts}
-                            onSelectPage={setDraftAsPage}
-                            onCreateSubmenu={setDraftAsSubmenu}
-                            createSubmenuLabel={tr('menuEditor.addSubmenu')}
-                            placeholder={tr('menuEditor.newEntryPlaceholder')}
-                            disabled={isLoadingPages}
-                            autoFocus
-                            inlinePlain
-                          />
+                          editingEntryType === 'category' ? (
+                            <CategoryInput
+                              categories={categories}
+                              onSelectCategory={setDraftAsCategoryArchive}
+                              createCategoryArchiveLabel={tr('menuEditor.addCategoryArchive')}
+                              placeholder={tr('menuEditor.newCategoryPlaceholder')}
+                              disabled={isLoadingCategories}
+                              autoFocus
+                              inlinePlain
+                            />
+                          ) : (
+                            <PageInput
+                              pages={pagePosts}
+                              onSelectPage={setDraftAsPage}
+                              onCreateSubmenu={setDraftAsSubmenu}
+                              createSubmenuLabel={tr('menuEditor.addSubmenu')}
+                              placeholder={tr('menuEditor.newEntryPlaceholder')}
+                              disabled={isLoadingPages}
+                              autoFocus
+                              inlinePlain
+                            />
+                          )
                         ) : node.data.title}
                       </span>
                     </>

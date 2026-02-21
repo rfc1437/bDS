@@ -50,7 +50,13 @@ describe('MenuEngine', () => {
   it('returns an empty menu when no OPML file exists', async () => {
     const result = await menuEngine.getMenu();
 
-    expect(result.items).toEqual([]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: 'menu-home',
+      title: 'Home',
+      kind: 'page',
+      pageSlug: 'home',
+    });
   });
 
   it('parses nested OPML outlines into menu items', async () => {
@@ -64,7 +70,7 @@ describe('MenuEngine', () => {
 
     expect(result.items).toHaveLength(2);
     expect(result.items[0]).toMatchObject({
-      id: 'home',
+      id: 'menu-home',
       title: 'Home',
       kind: 'page',
       pageSlug: 'home',
@@ -102,9 +108,26 @@ describe('MenuEngine', () => {
       ],
     });
 
-    expect(saved.items[0].title).toBe('Top');
+    expect(saved.items.some((item) => item.id === 'menu-home')).toBe(true);
+    expect(saved.items.some((item) => item.title === 'Top')).toBe(true);
 
     const roundTrip = await menuEngine.getMenu();
     expect(roundTrip).toEqual(saved);
+  });
+
+  it('keeps Home entry when payload tries to remove it', async () => {
+    const saved = await menuEngine.saveMenu({
+      items: [
+        {
+          id: 'custom-page',
+          title: 'Custom',
+          kind: 'page',
+          pageSlug: 'custom',
+          children: [],
+        },
+      ],
+    });
+
+    expect(saved.items.some((item) => item.id === 'menu-home')).toBe(true);
   });
 });

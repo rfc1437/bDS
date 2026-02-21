@@ -1,0 +1,18 @@
+.category-input-wrapper-inline {
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  gap: 0;
+}
+
+.category-input-wrapper-inline:focus-within {
+  border: none;
+  outline: none;
+}
+
+.category-input-field-inline {
+  min-width: 0;
+  padding: 0;
+  line-height: 1.25;
+}

@@ -422,7 +422,7 @@ export interface SiteValidationApplyResult {
   removedEmptyDirCount: number;
 }
 
-export type MenuItemKind = 'page' | 'submenu';
+export type MenuItemKind = 'page' | 'submenu' | 'category-archive';
 
 export interface MenuItemData {
   id: string;
@@ -430,6 +430,7 @@ export interface MenuItemData {
   kind: MenuItemKind;
   pageId?: string;
   pageSlug?: string;
+  categoryName?: string;
   children: MenuItemData[];
 }
 
