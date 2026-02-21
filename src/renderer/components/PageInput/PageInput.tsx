@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { PostData } from '../../../main/shared/electronApi';
 import '../TagInput/TagInput.css';
+import './PageInput.css';
 
 interface PageInputProps {
   pages: PostData[];
@@ -10,6 +11,7 @@ interface PageInputProps {
   createSubmenuLabel: string;
   disabled?: boolean;
   autoFocus?: boolean;
+  inlinePlain?: boolean;
 }
 
 export const PageInput: React.FC<PageInputProps> = ({
@@ -20,6 +22,7 @@ export const PageInput: React.FC<PageInputProps> = ({
   createSubmenuLabel,
   disabled = false,
   autoFocus = false,
+  inlinePlain = false,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -127,11 +130,11 @@ export const PageInput: React.FC<PageInputProps> = ({
 
   return (
     <div className="tag-input-container" ref={containerRef}>
-      <div className="tag-input-wrapper">
+      <div className={`tag-input-wrapper ${inlinePlain ? 'page-input-wrapper-inline' : ''}`}>
         <input
           ref={inputRef}
           type="text"
-          className="tag-input-field"
+          className={`tag-input-field ${inlinePlain ? 'page-input-field-inline' : ''}`}
           value={inputValue}
           autoFocus={autoFocus}
           onChange={(event) => {

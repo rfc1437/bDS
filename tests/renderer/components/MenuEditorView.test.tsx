@@ -59,6 +59,10 @@ describe('MenuEditorView entry editor', () => {
     fireEvent.input(input, { target: { value: 'ab' } });
     const suggestion = await screen.findByRole('button', { name: /^about$/i });
     expect(suggestion.className).toContain('tag-suggestion');
+
+    const wrapper = input.closest('.tag-input-wrapper');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.className).toContain('page-input-wrapper-inline');
   });
 
   it('focuses the new in-row page input immediately after creating an entry', async () => {

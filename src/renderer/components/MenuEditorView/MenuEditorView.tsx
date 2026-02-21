@@ -596,6 +596,7 @@ export const MenuEditorView: React.FC = () => {
                             placeholder={tr('menuEditor.newEntryPlaceholder')}
                             disabled={isLoadingPages}
                             autoFocus
+                            inlinePlain
                           />
                         ) : node.data.title}
                       </span>
