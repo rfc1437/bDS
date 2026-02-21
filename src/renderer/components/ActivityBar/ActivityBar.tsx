@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import { useI18n } from '../../i18n';
 import {
@@ -65,7 +65,71 @@ const GitIcon = () => (
 
 export const ActivityBar: React.FC = () => {
   const { t } = useI18n();
-  const { activeView, setActiveView, sidebarVisible, toggleSidebar, tabs, activeTabId } = useAppStore();
+  const { activeView, setActiveView, sidebarVisible, toggleSidebar, tabs, activeTabId, activeProject } = useAppStore();
+  const [pendingPullCount, setPendingPullCount] = useState(0);
+  const gitRefreshInFlightRef = useRef(false);
+
+  const refreshPendingPullCount = useCallback(async () => {
+    if (gitRefreshInFlightRef.current) {
+      return;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setPendingPullCount(0);
+      return;
+    }
+
+    if (!activeProject) {
+      setPendingPullCount(0);
+      return;
+    }
+
+    const gitApi = window.electronAPI?.git;
+    if (!gitApi?.getRepoState || !gitApi?.fetch || !gitApi?.getRemoteState) {
+      setPendingPullCount(0);
+      return;
+    }
+
+    gitRefreshInFlightRef.current = true;
+    try {
+      const targetProjectPath = activeProject.dataPath || (await window.electronAPI?.app.getDefaultProjectPath(activeProject.id));
+      if (!targetProjectPath) {
+        setPendingPullCount(0);
+        return;
+      }
+
+      const repoState = await gitApi.getRepoState(targetProjectPath);
+      if (!repoState.isRepo || !repoState.hasRemote) {
+        setPendingPullCount(0);
+        return;
+      }
+
+      const fetchResult = await gitApi.fetch(targetProjectPath);
+      if (!fetchResult.success) {
+        return;
+      }
+
+      const remoteState = await gitApi.getRemoteState(targetProjectPath);
+      setPendingPullCount(Math.max(0, remoteState.behind));
+    } catch {
+      setPendingPullCount(0);
+    } finally {
+      gitRefreshInFlightRef.current = false;
+    }
+  }, [activeProject]);
+
+  useEffect(() => {
+    void refreshPendingPullCount();
+
+    const intervalId = globalThis.setInterval(() => {
+      void refreshPendingPullCount();
+    }, 30000);
+
+    return () => {
+      globalThis.clearInterval(intervalId);
+    };
+  }, [refreshPendingPullCount]);
+
   const snapshot: ActivitySnapshot = {
     activeView,
     sidebarVisible,
@@ -136,6 +200,7 @@ export const ActivityBar: React.FC = () => {
           title={getTitle('git')}
         >
           <GitIcon />
+          {pendingPullCount > 0 ? <span className="activity-bar-badge">{pendingPullCount > 99 ? '99+' : pendingPullCount}</span> : null}
         </button>
         <button
           className={`activity-bar-item ${isActivityActive(snapshot, 'settings') ? 'active' : ''}`}

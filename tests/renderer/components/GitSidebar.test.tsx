@@ -750,6 +750,50 @@ describe('GitSidebar', () => {
     }
   });
 
+  it('skips remote fetch polling while offline', async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(globalThis.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git.getRemoteState = vi.fn().mockResolvedValue({
+      localBranch: 'main',
+      upstreamBranch: 'origin/main',
+      hasUpstream: true,
+      ahead: 0,
+      behind: 0,
+    });
+    (window as any).electronAPI.git.fetch = vi.fn().mockResolvedValue({ success: true });
+
+    try {
+      render(<GitSidebar />);
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(0);
+
+      await act(async () => {
+        vi.advanceTimersByTime(30000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('polls repository status on an interval and prevents overlapping in-flight requests', async () => {
     vi.useFakeTimers();
 

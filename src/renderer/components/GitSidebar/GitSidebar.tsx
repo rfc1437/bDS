@@ -98,6 +98,10 @@ export const GitSidebar: React.FC = () => {
 
       remoteRefreshInFlightRef.current = true;
       try {
+        if (fetchFirst && typeof navigator !== 'undefined' && navigator.onLine === false) {
+          return;
+        }
+
         if (fetchFirst) {
           const fetchResult = await window.electronAPI.git.fetch(targetProjectPath);
           if (!fetchResult.success) {
