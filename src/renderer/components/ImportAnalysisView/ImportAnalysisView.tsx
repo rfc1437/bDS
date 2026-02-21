@@ -1245,6 +1245,7 @@ const TaxonomySection: React.FC<{
   onMappingsAnalyzed: (categoryMappings: Record<string, string>, tagMappings: Record<string, string>) => void;
   onMappingUpdated: (type: 'category' | 'tag', itemName: string, mappedTo: string | undefined) => void;
 }> = ({ categories, tags, expanded, onToggle, onMappingsAnalyzed, onMappingUpdated }) => {
+  const { t } = useI18n();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
@@ -1335,10 +1336,10 @@ const TaxonomySection: React.FC<{
     <div className="import-detail-section">
       <h3 onClick={onToggle}>
         <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
-        Categories & Tags
+        {t('importAnalysis.taxonomyTitle')}
         {(mappedCategoriesCount > 0 || mappedTagsCount > 0) && (
           <span className="taxonomy-mapped-count">
-            {mappedCategoriesCount + mappedTagsCount} mapped
+            {t('importAnalysis.mappedCount', { count: mappedCategoriesCount + mappedTagsCount })}
           </span>
         )}
       </h3>
@@ -1354,14 +1355,14 @@ const TaxonomySection: React.FC<{
                 {isAnalyzing ? (
                   <>
                     <span className="import-spinner small" />
-                    Analyzing...
+                    {t('importAnalysis.analyzing')}
                   </>
                 ) : (
                   <>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                     </svg>
-                    Analyze with...
+                    {t('importAnalysis.analyzeWith')}
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 4 }}>
                       <path d="M7 10l5 5 5-5z"/>
                     </svg>
@@ -1383,14 +1384,14 @@ const TaxonomySection: React.FC<{
               )}
             </div>
             <span className="taxonomy-analyze-hint">
-              AI will suggest mappings from new to existing items to avoid duplicates
+              {t('importAnalysis.aiMappingHint')}
             </span>
           </div>
           
           {categories.length > 0 && (
             <div style={{ marginBottom: 12, marginTop: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--vscode-descriptionForeground)', marginBottom: 6 }}>
-                Categories
+                {t('importAnalysis.categories')}
               </div>
               <div className="import-taxonomy-list">
                 {categories.map((cat, idx) => (
@@ -1414,7 +1415,7 @@ const TaxonomySection: React.FC<{
           {tags.length > 0 && (
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--vscode-descriptionForeground)', marginBottom: 6 }}>
-                Tags
+                {t('importAnalysis.tags')}
               </div>
               <div className="import-taxonomy-list">
                 {tags.map((tag, idx) => (
@@ -1453,6 +1454,7 @@ const TaxonomyPill: React.FC<{
   onCancelEdit: () => void;
   onClearMapping: () => void;
 }> = ({ item, type: _type, isEditing, editValue, suggestions, onEditValueChange, onStartEdit, onSaveEdit, onCancelEdit, onClearMapping }) => {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -1536,7 +1538,7 @@ const TaxonomyPill: React.FC<{
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             onFocus={() => setShowDropdown(true)}
-            placeholder="Map to..."
+            placeholder={t('importAnalysis.mapToPlaceholder')}
           />
           {showDropdown && filteredSuggestions.length > 0 && (
             <div className="pill-suggestions-dropdown" ref={dropdownRef}>
@@ -1564,7 +1566,13 @@ const TaxonomyPill: React.FC<{
   const className = `import-taxonomy-pill ${item.existsInProject ? 'exists' : 'new-tax'} ${hasMaping ? 'mapped' : ''}`;
 
   return (
-    <span className={className} onClick={onStartEdit} title={`Click to ${hasMaping ? 'edit' : 'add'} mapping`}>
+    <span
+      className={className}
+      onClick={onStartEdit}
+      title={t('importAnalysis.mappingTooltip', {
+        action: hasMaping ? t('importAnalysis.mappingActionEdit') : t('importAnalysis.mappingActionAdd'),
+      })}
+    >
       {item.name}
       {hasMaping && (
         <>
@@ -1573,7 +1581,7 @@ const TaxonomyPill: React.FC<{
           <button 
             className="pill-clear-btn" 
             onClick={(e) => { e.stopPropagation(); onClearMapping(); }}
-            title="Clear mapping"
+            title={t('importAnalysis.clearMapping')}
           >
             ×
           </button>
@@ -1592,6 +1600,7 @@ const MacrosSection: React.FC<{
   expanded: boolean;
   onToggle: () => void;
 }> = ({ macros, expanded, onToggle }) => {
+  const { t } = useI18n();
   const [expandedMacros, setExpandedMacros] = useState<Set<string>>(new Set());
 
   const toggleMacro = (name: string) => {
@@ -1610,11 +1619,11 @@ const MacrosSection: React.FC<{
     <div className="import-detail-section">
       <h3 onClick={onToggle}>
         <span className={`toggle-icon ${expanded ? 'open' : ''}`}>&#9654;</span>
-        Macros ({macros.total})
+        {t('importAnalysis.macrosWithCount', { count: macros.total })}
         <span className="macro-summary-counts">
-          <span className="mapped-count">{macros.mappedCount} mapped</span>
+          <span className="mapped-count">{t('importAnalysis.mappedCount', { count: macros.mappedCount })}</span>
           {macros.unmappedCount > 0 && (
-            <span className="unmapped-count">{macros.unmappedCount} unmapped</span>
+            <span className="unmapped-count">{t('importAnalysis.unmappedCount', { count: macros.unmappedCount })}</span>
           )}
         </span>
       </h3>
@@ -1626,15 +1635,22 @@ const MacrosSection: React.FC<{
                 <span className={`toggle-icon small ${expandedMacros.has(macro.name) ? 'open' : ''}`}>&#9654;</span>
                 <span className="macro-name">[{macro.name}]</span>
                 <span className={`macro-status-badge ${macro.mapped ? 'mapped' : 'unmapped'}`}>
-                  {macro.mapped ? 'Mapped' : 'Unknown'}
+                  {macro.mapped ? t('importAnalysis.macroStatusMapped') : t('importAnalysis.macroStatusUnknown')}
                 </span>
-                <span className="macro-count">{macro.totalCount} uses</span>
+                <span className="macro-count">{t('importAnalysis.macroUses', { count: macro.totalCount })}</span>
               </div>
               
               {expandedMacros.has(macro.name) && (
                 <div className="macro-usages">
                   <div className="macro-usages-header">
-                    <span className="macro-posts-label">Used in: {macro.postSlugs.slice(0, 5).join(', ')}{macro.postSlugs.length > 5 ? `, +${macro.postSlugs.length - 5} more` : ''}</span>
+                    <span className="macro-posts-label">
+                      {t('importAnalysis.usedIn', {
+                        items: macro.postSlugs.slice(0, 5).join(', '),
+                        more: macro.postSlugs.length > 5
+                          ? t('importAnalysis.moreSuffix', { count: macro.postSlugs.length - 5 })
+                          : '',
+                      })}
+                    </span>
                   </div>
                   
                   <div className="macro-usages-list">
@@ -1646,7 +1662,7 @@ const MacrosSection: React.FC<{
                       >
                         <div className="macro-usage-params">
                           {Object.keys(usage.params).length === 0 ? (
-                            <span className="no-params">(no parameters)</span>
+                            <span className="no-params">{t('importAnalysis.noParameters')}</span>
                           ) : (
                             Object.entries(usage.params).map(([key, value]) => (
                               <span key={key} className="macro-param">

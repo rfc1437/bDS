@@ -329,7 +329,7 @@ export const SettingsView: React.FC = () => {
   };
 
   const handleBrowseDataPath = async () => {
-    const selected = await window.electronAPI?.app.selectFolder('Select Project Data Folder');
+    const selected = await window.electronAPI?.app.selectFolder(t('settings.project.selectDataFolder'));
     if (selected) {
       setProjectDataPath(selected);
     }
@@ -668,7 +668,7 @@ export const SettingsView: React.FC = () => {
     <SettingSection
       id="settings-section-content"
       title={t('settings.content.title')}
-      description="Manage the available categories for blog posts. Each post can have one category that determines its display template."
+      description={t('settings.content.description')}
       hidden={!sectionHasMatches(contentKeywords)}
     >
         <div className="categories-list">
@@ -677,12 +677,12 @@ export const SettingsView: React.FC = () => {
             const setting = categorySettings[cat] || { renderInLists: true, showTitle: true };
             return (
             <div key={cat} className="category-item">
-              <span className="category-name">{cat}{isProtected && ' (standard)'}</span>
+              <span className="category-name">{cat}{isProtected && t('settings.content.standardSuffix')}</span>
               <div className="category-settings-controls">
                 <label className="category-setting-toggle" htmlFor={`category-${cat}-render-in-lists`}>
                   <input
                     id={`category-${cat}-render-in-lists`}
-                    aria-label={`${cat} render in lists`}
+                    aria-label={t('settings.content.renderInListsAria', { category: cat })}
                     type="checkbox"
                     checked={setting.renderInLists}
                     onChange={(event) => handleCategorySettingToggle(cat, 'renderInLists', event.target.checked)}
@@ -692,7 +692,7 @@ export const SettingsView: React.FC = () => {
                 <label className="category-setting-toggle" htmlFor={`category-${cat}-show-title`}>
                   <input
                     id={`category-${cat}-show-title`}
-                    aria-label={`${cat} show titles`}
+                    aria-label={t('settings.content.showTitlesAria', { category: cat })}
                     type="checkbox"
                     checked={setting.showTitle}
                     onChange={(event) => handleCategorySettingToggle(cat, 'showTitle', event.target.checked)}
@@ -704,7 +704,7 @@ export const SettingsView: React.FC = () => {
               <button
                 className="category-remove"
                 onClick={() => handleRemoveCategory(cat)}
-                title={`Remove "${cat}" category`}
+                title={t('settings.content.removeCategoryTitle', { category: cat })}
               >
                 ✕
               </button>
@@ -808,7 +808,7 @@ export const SettingsView: React.FC = () => {
     <SettingSection
       id="settings-section-ai"
       title={t('settings.ai.title')}
-      description="Configure the AI chat assistant that helps you manage your blog content."
+      description={t('settings.ai.description')}
       hidden={!sectionHasMatches(aiKeywords)}
     >
       <SettingRow
@@ -1059,8 +1059,8 @@ export const SettingsView: React.FC = () => {
 
         <SettingRow
           id="rebuild-media"
-          label="Rebuild Media Database"
-          description="Re-scan all media files and sidecar metadata. Regenerates missing entries."
+          label={t('settings.data.rebuildMediaLabel')}
+          description={t('settings.data.rebuildMediaDescription')}
         >
           <button
             className="secondary"
@@ -1080,14 +1080,14 @@ export const SettingsView: React.FC = () => {
               }
             }}
           >
-            Rebuild Media
+            {t('settings.data.rebuildMediaAction')}
           </button>
         </SettingRow>
 
         <SettingRow
           id="rebuild-links"
-          label="Rebuild Post Links"
-          description="Re-scan all posts and rebuild the internal link graph between posts."
+          label={t('settings.data.rebuildLinksLabel')}
+          description={t('settings.data.rebuildLinksDescription')}
         >
           <button
             className="secondary"
@@ -1103,14 +1103,14 @@ export const SettingsView: React.FC = () => {
               }
             }}
           >
-            Rebuild Links
+            {t('settings.data.rebuildLinksAction')}
           </button>
         </SettingRow>
 
         <SettingRow
           id="regenerate-thumbnails"
-          label="Regenerate Thumbnails"
-          description="Generate missing thumbnails for all images. Useful after importing media externally."
+          label={t('settings.data.regenerateThumbnailsLabel')}
+          description={t('settings.data.regenerateThumbnailsDescription')}
         >
           <button
             className="secondary"
@@ -1132,20 +1132,20 @@ export const SettingsView: React.FC = () => {
               }
             }}
           >
-            Generate Thumbnails
+            {t('settings.data.regenerateThumbnailsAction')}
           </button>
         </SettingRow>
       </SettingSection>
 
       <SettingSection
         title={t('settings.data.fileSystemTitle')}
-        description="Access project data files and directories."
+        description={t('settings.data.fileSystemDescription')}
         hidden={!sectionHasMatches(dataKeywords)}
       >
         <SettingRow
           id="open-data"
-          label="Open Data Folder"
-          description="Open the project data folder containing posts, media, and database files."
+          label={t('settings.data.openDataFolderLabel')}
+          description={t('settings.data.openDataFolderDescription')}
         >
           <button
             className="secondary"
@@ -1156,7 +1156,7 @@ export const SettingsView: React.FC = () => {
               }
             }}
           >
-            Open Folder
+            {t('settings.data.openFolderAction')}
           </button>
         </SettingRow>
       </SettingSection>

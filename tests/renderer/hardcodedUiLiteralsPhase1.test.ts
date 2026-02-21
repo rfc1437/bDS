@@ -41,8 +41,31 @@ describe('Phase 1 i18n hardcoded literals', () => {
         literals: ['Save Failed', 'Post published', 'Media not found', 'title="Quick Actions"'],
       },
       {
+        file: 'src/renderer/components/SettingsView/SettingsView.tsx',
+        literals: [
+          'Manage the available categories for blog posts. Each post can have one category that determines its display template.',
+          'Configure the AI chat assistant that helps you manage your blog content.',
+          'Rebuild Media Database',
+          'Rebuild Post Links',
+          'Regenerate Thumbnails',
+          'Open Data Folder',
+          'Open Folder',
+        ],
+      },
+      {
         file: 'src/renderer/components/ImportAnalysisView/ImportAnalysisView.tsx',
-        literals: ['Loading import definition...', 'Import name...', 'Select & Analyze', 'Import completed successfully!'],
+        literals: [
+          'Loading import definition...',
+          'Import name...',
+          'Select & Analyze',
+          'Import completed successfully!',
+          'Categories & Tags',
+          'Analyze with...',
+          'Map to...',
+          'Clear mapping',
+          'Used in:',
+          '(no parameters)',
+        ],
       },
     ];
 
