@@ -40,11 +40,15 @@ describe('Help menu documentation entry', () => {
     expect(viewGroup?.items.some((item) => item.action === 'toggleFullScreen')).toBe(true);
   });
 
-  it('assigns Command/Ctrl+R shortcut for generateSitemap menu item', () => {
+  it('includes Validate Site action in Blog menu with a V shortcut', () => {
     const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
-    const generateSiteItem = blogGroup?.items.find((item) => item.action === 'generateSitemap');
+    const validateSiteItem = blogGroup?.items.find((item) => item.action === 'validateSite');
 
-    expect(generateSiteItem).toBeDefined();
-    expect(generateSiteItem?.accelerator).toBe('CmdOrCtrl+R');
+    expect(validateSiteItem).toBeDefined();
+    expect(validateSiteItem?.accelerator).toContain('V');
+  });
+
+  it('maps Validate Site to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.validateSite).toBe('menu:validateSite');
   });
 });

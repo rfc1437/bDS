@@ -1,0 +1,70 @@
+.site-validation-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  height: 100%;
+  overflow: auto;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+.site-validation-summary h2 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.site-validation-summary p {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.site-validation-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+}
+
+.site-validation-list {
+  margin: 0;
+  padding-left: 20px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+}
+
+.site-validation-list-missing {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.site-validation-list-extra {
+  color: var(--vscode-notificationsErrorIcon-foreground);
+}
+
+.site-validation-empty,
+.site-validation-status {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.site-validation-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.site-validation-apply {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.site-validation-apply:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.site-validation-apply:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

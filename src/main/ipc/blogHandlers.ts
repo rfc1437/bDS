@@ -10,19 +10,20 @@ import {
   resolvePublicBaseUrl,
   type BlogGenerationResult,
   type BlogGenerationSection,
+  type BlogGenerationOptions,
+  type SiteValidationReport,
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
 export function registerBlogHandlers(safeHandle: SafeHandle): void {
-  safeHandle('blog:generateSitemap', async () => {
+  const resolveBlogGenerationBaseOptions = async (): Promise<BlogGenerationOptions> => {
     const projectEngine = getProjectEngine();
     const postEngine = getPostEngine();
     const metaEngine = getMetaEngine();
     const mediaEngine = getMediaEngine();
     const postMediaEngine = getPostMediaEngine();
-    const blogGenerationEngine = getBlogGenerationEngine();
 
     const project = await projectEngine.getActiveProject();
     if (!project) {
@@ -51,12 +52,10 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       throw new Error('Project public URL is not configured');
     }
 
-    const taskTimestamp = Date.now();
-    const taskGroupId = `site-render-${taskTimestamp}`;
-    const taskGroupName = 'Render Site';
     const language = metadata?.mainLanguage?.trim() || 'en';
     const pageTitle = resolvePageTitle(metadata, project.name, project.description ?? undefined);
-    const baseOptions = {
+
+    return {
       projectId: project.id,
       projectName: metadata?.name?.trim() || project.name,
       projectDescription: metadata?.description,
@@ -68,6 +67,15 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       picoTheme: metadata?.picoTheme,
       categorySettings: (metadata as any)?.categorySettings,
     };
+  };
+
+  safeHandle('blog:generateSitemap', async () => {
+    const blogGenerationEngine = getBlogGenerationEngine();
+    const baseOptions = await resolveBlogGenerationBaseOptions();
+
+    const taskTimestamp = Date.now();
+    const taskGroupId = `site-render-${taskTimestamp}`;
+    const taskGroupName = 'Render Site';
 
     const runSectionTask = async (
       section: BlogGenerationSection,
@@ -132,5 +140,19 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
     ]);
 
     return mergeResults([coreResult, singleResult, categoryResult, tagResult, dateResult]);
+  });
+
+  safeHandle('blog:validateSite', async () => {
+    const blogGenerationEngine = getBlogGenerationEngine();
+    const baseOptions = await resolveBlogGenerationBaseOptions();
+
+    return blogGenerationEngine.validateSite(baseOptions, () => {});
+  });
+
+  safeHandle('blog:applyValidation', async (_event, report: SiteValidationReport) => {
+    const blogGenerationEngine = getBlogGenerationEngine();
+    const baseOptions = await resolveBlogGenerationBaseOptions();
+
+    return blogGenerationEngine.applyValidation(baseOptions, report, () => {});
   });
 }

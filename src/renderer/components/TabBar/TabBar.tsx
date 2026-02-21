@@ -84,6 +84,10 @@ const getTabTitle = (
     return tr('docs.title');
   }
 
+  if (tab.type === 'site-validation') {
+    return tr('siteValidation.tabTitle');
+  }
+
   return tr('tabBar.unknown');
 };
 
@@ -148,6 +152,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h7A1.5 1.5 0 0 1 13 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-11zm1.5-.5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7z"/>
           <path d="M5 4h6v1H5V4zm0 2h6v1H5V6zm0 2h6v1H5V8zm0 2h4v1H5v-1z"/>
+        </svg>
+      );
+    case 'site-validation':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 8 1.5zm0 1a5.5 5.5 0 0 1 4.39 8.82l-.88-.88a.5.5 0 0 0-.7.7l.8.8A5.5 5.5 0 1 1 8 2.5zm2.35 3.15L7 9 5.65 7.65a.5.5 0 1 0-.7.7l1.7 1.7a.5.5 0 0 0 .7 0l3.7-3.7a.5.5 0 1 0-.7-.7z"/>
         </svg>
       );
     default:

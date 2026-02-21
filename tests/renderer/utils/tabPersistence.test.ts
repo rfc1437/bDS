@@ -47,4 +47,23 @@ describe('tabPersistence', () => {
 
     expect(() => saveTabsForProject(projectId, sampleTabState)).not.toThrow();
   });
+
+  it('does not persist transient tabs', () => {
+    const tabStateWithTransient = {
+      tabs: [
+        { id: 'documentation', type: 'documentation', isTransient: false },
+        { id: 'site-validation-report', type: 'site-validation', isTransient: true },
+      ],
+      activeTabId: 'site-validation-report',
+    } as unknown as TabState;
+
+    saveTabsForProject(projectId, tabStateWithTransient);
+
+    const loaded = loadTabsForProject(projectId);
+
+    expect(loaded?.tabs).toEqual([
+      { id: 'documentation', type: 'documentation', isTransient: false },
+    ]);
+    expect(loaded?.activeTabId).toBe('documentation');
+  });
 });

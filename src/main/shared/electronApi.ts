@@ -407,6 +407,21 @@ export interface ChatTitleUpdate {
   title: string;
 }
 
+export interface SiteValidationReport {
+  sitemapPath: string;
+  sitemapChanged: boolean;
+  missingUrlPaths: string[];
+  extraUrlPaths: string[];
+  expectedUrlCount: number;
+  existingHtmlUrlCount: number;
+}
+
+export interface SiteValidationApplyResult {
+  renderedUrlCount: number;
+  deletedUrlCount: number;
+  removedEmptyDirCount: number;
+}
+
 export interface ElectronAPI {
   git: {
     checkAvailability: () => Promise<GitAvailability>;
@@ -611,6 +626,8 @@ export interface ElectronAPI {
       archiveCount: number;
       pagesGenerated: number;
     }>;
+    validateSite: () => Promise<SiteValidationReport>;
+    applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
   };
   chat: {
     // API Key Management

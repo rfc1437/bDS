@@ -31,6 +31,7 @@ export type AppMenuAction =
   | 'reindexText'
   | 'metadataDiff'
   | 'generateSitemap'
+  | 'validateSite'
   | 'openDocumentation'
   | 'about'
   | 'viewOnGitHub'
@@ -121,6 +122,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: '', action: 'blog-separator-3', separator: true },
       { label: 'menu.item.metadataDiff', action: 'metadataDiff' },
       { label: 'menu.item.generateSitemap', action: 'generateSitemap', accelerator: 'CmdOrCtrl+R' },
+      { label: 'menu.item.validateSite', action: 'validateSite', accelerator: 'CmdOrCtrl+Alt+V' },
     ],
   },
   {
@@ -152,6 +154,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   reindexText: 'menu:reindexText',
   metadataDiff: 'menu:metadataDiff',
   generateSitemap: 'menu:generateSitemap',
+  validateSite: 'menu:validateSite',
   openDocumentation: 'menu:openDocumentation',
   about: 'menu:about',
 };

@@ -17,6 +17,7 @@ import { ImportAnalysisView } from '../ImportAnalysisView';
 import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { DocumentationView } from '../DocumentationView/DocumentationView';
+import { SiteValidationView } from '../SiteValidationView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
@@ -1735,6 +1736,7 @@ export const Editor: React.FC = () => {
   const showMetadataDiff = activeTab?.type === 'metadata-diff';
   const showGitDiff = activeTab?.type === 'git-diff';
   const showDocumentation = activeTab?.type === 'documentation';
+  const showSiteValidation = activeTab?.type === 'site-validation';
 
   useEffect(() => {
     const activePostId = activeTab?.type === 'post' ? activeTab.id : null;
@@ -1867,6 +1869,16 @@ export const Editor: React.FC = () => {
     return (
       <div className="editor">
         <DocumentationView />
+        {renderErrorModal()}
+        {renderConfirmDeleteModal()}
+      </div>
+    );
+  }
+
+  if (showSiteValidation) {
+    return (
+      <div className="editor">
+        <SiteValidationView />
         {renderErrorModal()}
         {renderConfirmDeleteModal()}
       </div>

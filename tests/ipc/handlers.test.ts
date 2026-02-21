@@ -2246,6 +2246,64 @@ describe('IPC Handlers', () => {
         expect(sitemapXml).not.toContain('http://127.0.0.1:4123/2024/03/25/public-url-test-post');
       });
     });
+
+    describe('blog:validateSite', () => {
+      it('should generate sitemap-only validation report against html folder', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: { status?: string }) => {
+          if (filter.status === 'published') {
+            return [
+              {
+                id: 'post-1',
+                projectId: 'test-project',
+                title: 'Test Post',
+                slug: 'test-post',
+                excerpt: '',
+                content: '# Test',
+                status: 'published',
+                createdAt: new Date('2024-01-15T10:00:00Z'),
+                updatedAt: new Date('2024-01-20T15:00:00Z'),
+                publishedAt: new Date('2024-01-15T10:00:00Z'),
+                tags: ['tag1'],
+                categories: ['category1'],
+              },
+            ];
+          }
+          if (filter.status === 'draft') {
+            return [];
+          }
+          return [];
+        });
+        mockPostEngine.getPublishedVersion.mockResolvedValue(null);
+
+        const { writeFile, mkdir, readdir } = await import('fs/promises');
+        vi.mocked(mkdir).mockResolvedValue(undefined);
+        vi.mocked(writeFile).mockResolvedValue(undefined);
+        vi.mocked(readdir).mockResolvedValue([] as never);
+
+        const result = await invokeHandler('blog:validateSite');
+
+        expect(result).toEqual(expect.objectContaining({
+          missingUrlPaths: expect.any(Array),
+          extraUrlPaths: expect.any(Array),
+        }));
+        expect(writeFile).toHaveBeenCalledWith(
+          expect.stringContaining('sitemap.xml'),
+          expect.stringContaining('<?xml version="1.0" encoding="UTF-8"?>'),
+          'utf-8',
+        );
+      });
+    });
   });
 
   // ============ Error Handling ============

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, readdir, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, readdir, stat, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import type { PostData } from '../../src/main/engine/PostEngine';
@@ -440,6 +440,171 @@ describe('BlogGenerationEngine', () => {
 
     // Should have: root(1) + single(1) + category/news(1) + tag/js(1) + year(1) + month(1) + day(1) = 7
     expect(result.pagesGenerated).toBe(7);
+  });
+
+  it('validates sitemap against html folder without rendering missing pages', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'validation-main-post',
+        title: 'Validation Main Post',
+        categories: ['news'],
+        tags: ['validation-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+      makePost({
+        id: '2',
+        slug: 'validation-page',
+        title: 'Validation Page',
+        categories: ['page'],
+        tags: [],
+        createdAt: new Date('2025-01-16T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    await mkdir(path.join(tempDir, 'html', 'stale'), { recursive: true });
+    await writeFile(path.join(tempDir, 'html', 'stale', 'index.html'), '<html>stale</html>', 'utf-8');
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toContain('/2025/01/15/validation-main-post');
+    expect(report.missingUrlPaths).toContain('/category/news');
+    expect(report.missingUrlPaths).toContain('/tag/validation-tag');
+    expect(report.missingUrlPaths).toContain('/validation-page');
+    expect(report.extraUrlPaths).toContain('/stale');
+
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'validation-main-post', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', 'sitemap.xml'))).toBe(true);
+  });
+
+  it('applies validation by rendering missing pages and deleting extra pages with folder pruning', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'apply-post',
+        title: 'Apply Post',
+        categories: ['news'],
+        tags: ['apply-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    await mkdir(path.join(tempDir, 'html', 'obsolete', 'deep'), { recursive: true });
+    await writeFile(path.join(tempDir, 'html', 'obsolete', 'deep', 'index.html'), '<html>obsolete</html>', 'utf-8');
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    const applyResult = await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, report, vi.fn());
+
+    expect(applyResult.deletedUrlCount).toBeGreaterThan(0);
+    expect(applyResult.renderedUrlCount).toBeGreaterThan(0);
+
+    expect(await fileExists(path.join(tempDir, 'html', 'obsolete', 'deep', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', 'obsolete', 'deep'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', 'obsolete'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'apply-post', 'index.html'))).toBe(true);
+  });
+
+  it('does not report valid pagination routes as extra html content', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'p1', categories: ['news'], tags: ['tag-news'], createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'p2', categories: ['news'], tags: ['tag-news'], createdAt: new Date('2025-01-14T10:00:00Z') }),
+      makePost({ id: '3', slug: 'p3', categories: ['news'], tags: ['tag-news'], createdAt: new Date('2025-01-13T10:00:00Z') }),
+    ];
+
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      maxPostsPerPage: 2,
+    }, vi.fn());
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      maxPostsPerPage: 2,
+    }, vi.fn());
+
+    expect(report.extraUrlPaths).not.toContain('/page/2');
+    expect(report.extraUrlPaths).not.toContain('/category/news/page/2');
+    expect(report.extraUrlPaths).not.toContain('/tag/tag-news/page/2');
+  });
+
+  it('emits sitemap urls with trailing slash canonical form', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'canonical-post',
+        categories: ['news'],
+        tags: ['canonical-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+      makePost({
+        id: '2',
+        slug: 'canonical-post-2',
+        categories: ['news'],
+        tags: ['canonical-tag'],
+        createdAt: new Date('2025-01-14T10:00:00Z'),
+      }),
+      makePost({
+        id: '3',
+        slug: 'canonical-post-3',
+        categories: ['news'],
+        tags: ['canonical-tag'],
+        createdAt: new Date('2025-01-13T10:00:00Z'),
+      }),
+      makePost({
+        id: '4',
+        slug: 'canonical-page',
+        categories: ['page'],
+        tags: [],
+        createdAt: new Date('2025-01-12T10:00:00Z'),
+      }),
+    ];
+
+    await generate(posts, { maxPostsPerPage: 2 });
+
+    const sitemap = await readFile(path.join(tempDir, 'html', 'sitemap.xml'), 'utf-8');
+
+    expect(sitemap).toContain('<loc>https://example.com/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/2025/01/15/canonical-post/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/category/news/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/category/news/page/2/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/tag/canonical-tag/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/canonical-page/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/page/2/</loc>');
   });
 
   it('generates HTML that references local assets not CDN', async () => {

@@ -36,6 +36,7 @@
   "menu.item.reindexText": "Reindex Recherche Text",
   "menu.item.metadataDiff": "Outil de diff des métadonnées",
   "menu.item.generateSitemap": "Rendre le site",
+  "menu.item.validateSite": "Valider le site",
   "menu.item.about": "À propos de Blogging Desktop Server",
   "menu.item.openDocumentation": "Ouvrir la documentation",
   "menu.item.viewOnGitHub": "Voir sur GitHub",

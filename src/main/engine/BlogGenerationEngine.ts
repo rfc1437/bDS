@@ -56,6 +56,21 @@ export interface BlogGenerationResult {
   };
 }
 
+export interface SiteValidationReport {
+  sitemapPath: string;
+  sitemapChanged: boolean;
+  missingUrlPaths: string[];
+  extraUrlPaths: string[];
+  expectedUrlCount: number;
+  existingHtmlUrlCount: number;
+}
+
+export interface SiteValidationApplyResult {
+  renderedUrlCount: number;
+  deletedUrlCount: number;
+  removedEmptyDirCount: number;
+}
+
 export function resolvePublicBaseUrl(publicUrl?: string): string | null {
   const trimmed = (publicUrl || '').trim();
   if (!trimmed) {
@@ -141,14 +156,98 @@ function buildSitemapUrl(
   changefreq: 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never',
   priority: string,
 ): string {
+  const canonicalLoc = (() => {
+    try {
+      const parsed = new URL(loc);
+      if (!parsed.pathname.endsWith('/')) {
+        parsed.pathname = `${parsed.pathname}/`;
+      }
+      return parsed.toString();
+    } catch {
+      return loc.endsWith('/') ? loc : `${loc}/`;
+    }
+  })();
+
   return [
     '  <url>',
-    `    <loc>${escapeXml(loc)}</loc>`,
+    `    <loc>${escapeXml(canonicalLoc)}</loc>`,
     `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
     `    <changefreq>${changefreq}</changefreq>`,
     `    <priority>${priority}</priority>`,
     '  </url>',
   ].join('\n');
+}
+
+function normalizeUrlPath(urlPath: string): string {
+  const trimmed = (urlPath || '').trim();
+  if (!trimmed || trimmed === '/') {
+    return '/';
+  }
+
+  const noQuery = trimmed.split('?')[0]?.split('#')[0] ?? '';
+  const withoutSlashes = noQuery.replace(/^\/+|\/+$/g, '');
+  return withoutSlashes ? `/${withoutSlashes}` : '/';
+}
+
+function urlPathToHtmlIndexPath(htmlDir: string, urlPath: string): string {
+  const normalizedPath = normalizeUrlPath(urlPath);
+  if (normalizedPath === '/') {
+    return path.join(htmlDir, 'index.html');
+  }
+
+  return path.join(htmlDir, normalizedPath.slice(1), 'index.html');
+}
+
+function sitemapLocToProjectPath(loc: string, baseUrl: string): string {
+  try {
+    const locUrl = new URL(loc);
+    const base = new URL(baseUrl);
+    const locPath = locUrl.pathname.replace(/\/+$/, '');
+    const basePath = base.pathname.replace(/\/+$/, '');
+
+    if (basePath && locPath.startsWith(basePath)) {
+      const stripped = locPath.slice(basePath.length);
+      return normalizeUrlPath(stripped || '/');
+    }
+
+    return normalizeUrlPath(locPath || '/');
+  } catch {
+    return normalizeUrlPath(loc);
+  }
+}
+
+function extractSitemapLocs(sitemapXml: string): string[] {
+  const matches = sitemapXml.matchAll(/<loc>(.*?)<\/loc>/g);
+  const locs: string[] = [];
+  for (const match of matches) {
+    const value = match[1]?.trim();
+    if (value) {
+      locs.push(value);
+    }
+  }
+  return locs;
+}
+
+function appendPaginatedSitemapUrls(
+  target: string[],
+  baseUrl: string,
+  basePath: string,
+  totalItems: number,
+  maxPostsPerPage: number,
+  lastmod: string,
+  changefreq: 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never',
+  priority: string,
+): void {
+  if (totalItems <= 0) {
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / maxPostsPerPage));
+  for (let page = 2; page <= totalPages; page += 1) {
+    const normalizedBase = basePath.replace(/\/+$/, '');
+    const pagePath = `${normalizedBase}/page/${page}`;
+    target.push(buildSitemapUrl(`${baseUrl}${pagePath}`, lastmod, changefreq, priority));
+  }
 }
 
 function splitParagraphs(markdown: string | null | undefined): string[] {
@@ -299,6 +398,7 @@ export class BlogGenerationEngine {
     const years = new Map<number, Date>();
     const yearMonthDays = new Map<string, Date>();
     const postUrls: Array<{ loc: string; lastmod: string }> = [];
+    const pageUrls: Array<{ loc: string; lastmod: string }> = [];
 
     for (const post of publishedPosts) {
       const createdAt = resolvePostCreatedAt(post);
@@ -306,6 +406,17 @@ export class BlogGenerationEngine {
       const postUrl = `${options.baseUrl}${canonicalPath}`;
       const updatedAt = post.updatedAt;
       postUrls.push({ loc: postUrl, lastmod: updatedAt.toISOString() });
+
+      const categories = Array.isArray(post.categories) ? post.categories : [];
+      if (categories.includes('page')) {
+        const trimmedSlug = (post.slug || '').replace(/^\/+|\/+$/g, '');
+        if (trimmedSlug.length > 0) {
+          pageUrls.push({
+            loc: `${options.baseUrl}/${trimmedSlug}`,
+            lastmod: updatedAt.toISOString(),
+          });
+        }
+      }
     }
 
     for (const post of publishedListPosts) {
@@ -338,26 +449,58 @@ export class BlogGenerationEngine {
 
     const urls: string[] = [];
     urls.push(buildSitemapUrl(`${options.baseUrl}/`, latestPostUpdatedAt, 'daily', '1.0'));
+    appendPaginatedSitemapUrls(urls, options.baseUrl, '', publishedListPosts.length, maxPostsPerPage, latestPostUpdatedAt, 'daily', '0.9');
     for (const post of postUrls) {
       urls.push(buildSitemapUrl(post.loc, post.lastmod, 'monthly', '0.8'));
+    }
+    for (const page of pageUrls) {
+      urls.push(buildSitemapUrl(page.loc, page.lastmod, 'weekly', '0.7'));
     }
 
     for (const [year, lastmod] of Array.from(years.entries()).sort((a, b) => b[0] - a[0])) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${year}`, lastmod.toISOString(), 'monthly', '0.5'));
+
+      const yearCount = publishedListPosts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/${year}`, yearCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
     }
     for (const [ym, lastmod] of Array.from(yearMonths.entries()).sort().reverse()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${ym}`, lastmod.toISOString(), 'monthly', '0.5'));
+
+      const [yearStr, monthStr] = ym.split('/');
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const monthCount = publishedListPosts.filter((post) => {
+        const d = resolvePostCreatedAt(post);
+        return d.getFullYear() === year && (d.getMonth() + 1) === month;
+      }).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ym}`, monthCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
     }
     for (const [ymd, lastmod] of Array.from(yearMonthDays.entries()).sort().reverse()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${ymd}`, lastmod.toISOString(), 'monthly', '0.4'));
+
+      const [yearStr, monthStr, dayStr] = ymd.split('/');
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      const dayCount = publishedListPosts.filter((post) => {
+        const d = resolvePostCreatedAt(post);
+        return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
+      }).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ymd}`, dayCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.3');
     }
 
     for (const category of Array.from(allCategories).sort()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/category/${encodeURIComponent(category)}`, latestPostUpdatedAt, 'weekly', '0.6'));
+
+      const categoryCount = publishedListPosts.filter((post) => (post.categories || []).includes(category)).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/category/${encodeURIComponent(category)}`, categoryCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
     }
 
     for (const tag of Array.from(allTags).sort()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/tag/${encodeURIComponent(tag)}`, latestPostUpdatedAt, 'weekly', '0.6'));
+
+      const tagCount = publishedListPosts.filter((post) => (post.tags || []).includes(tag)).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/tag/${encodeURIComponent(tag)}`, tagCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
     }
 
     onProgress(8, 'Building RSS and Atom feeds...');
@@ -565,6 +708,367 @@ export class BlogGenerationEngine {
         rss: rssWritten,
         atom: atomWritten,
       },
+    };
+  }
+
+  async validateSite(
+    options: BlogGenerationOptions,
+    onProgress: (progress: number, message?: string) => void,
+  ): Promise<SiteValidationReport> {
+    onProgress(0, 'Collecting sitemap URLs...');
+
+    const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
+    const categorySettings = resolveCategorySettings(options.categorySettings);
+    const listExcludedCategories = Object.entries(categorySettings)
+      .filter(([, settings]) => settings.renderInLists === false)
+      .map(([category]) => category);
+
+    const publishedCandidates = await this.postEngine.getPostsFiltered({ status: 'published' });
+    const draftCandidates = await this.postEngine.getPostsFiltered({ status: 'draft' });
+    const publishedListCandidates = await this.postEngine.getPostsFiltered({
+      status: 'published',
+      excludeCategories: listExcludedCategories,
+    });
+    const draftListCandidates = await this.postEngine.getPostsFiltered({
+      status: 'draft',
+      excludeCategories: listExcludedCategories,
+    });
+
+    const publishedSnapshots = await Promise.all(
+      publishedCandidates.map(async (post) => {
+        const snapshot = await this.postEngine.getPublishedVersion(post.id);
+        return snapshot || post;
+      }),
+    );
+    const draftPublishedSnapshots = await Promise.all(
+      draftCandidates.map(async (post) => this.postEngine.getPublishedVersion(post.id)),
+    );
+    const publishedListSnapshots = await Promise.all(
+      publishedListCandidates.map(async (post) => {
+        const snapshot = await this.postEngine.getPublishedVersion(post.id);
+        return snapshot || post;
+      }),
+    );
+    const draftListPublishedSnapshots = await Promise.all(
+      draftListCandidates.map(async (post) => this.postEngine.getPublishedVersion(post.id)),
+    );
+
+    const publishedPostById = new Map<string, PostData>();
+    for (const post of publishedSnapshots) {
+      publishedPostById.set(post.id, post);
+    }
+    for (const snapshot of draftPublishedSnapshots) {
+      if (snapshot) {
+        publishedPostById.set(snapshot.id, snapshot);
+      }
+    }
+
+    const publishedPosts = Array.from(publishedPostById.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const publishedListPostById = new Map<string, PostData>();
+    for (const post of publishedListSnapshots) {
+      publishedListPostById.set(post.id, post);
+    }
+    for (const snapshot of draftListPublishedSnapshots) {
+      if (snapshot) {
+        publishedListPostById.set(snapshot.id, snapshot);
+      }
+    }
+    const publishedListPosts = Array.from(publishedListPostById.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const now = new Date().toISOString();
+    const allTags = new Set<string>();
+    const allCategories = new Set<string>();
+    const yearMonths = new Map<string, Date>();
+    const years = new Map<number, Date>();
+    const yearMonthDays = new Map<string, Date>();
+    const postUrls: Array<{ loc: string; lastmod: string }> = [];
+    const pageUrls: Array<{ loc: string; lastmod: string }> = [];
+
+    for (const post of publishedPosts) {
+      const createdAt = resolvePostCreatedAt(post);
+      const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
+      const postUrl = `${options.baseUrl}${canonicalPath}`;
+      const updatedAt = post.updatedAt;
+      postUrls.push({ loc: postUrl, lastmod: updatedAt.toISOString() });
+
+      const categories = Array.isArray(post.categories) ? post.categories : [];
+      if (categories.includes('page')) {
+        const trimmedSlug = (post.slug || '').replace(/^\/+|\/+$/g, '');
+        if (trimmedSlug.length > 0) {
+          pageUrls.push({
+            loc: `${options.baseUrl}/${trimmedSlug}`,
+            lastmod: updatedAt.toISOString(),
+          });
+        }
+      }
+    }
+
+    for (const post of publishedListPosts) {
+      for (const tag of post.tags || []) allTags.add(tag);
+      for (const category of post.categories || []) allCategories.add(category);
+
+      const createdAt = resolvePostCreatedAt(post);
+      const updatedAt = post.updatedAt;
+
+      const year = createdAt.getFullYear();
+      const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+      const day = String(createdAt.getDate()).padStart(2, '0');
+      const ymKey = `${year}/${month}`;
+      const ymdKey = `${year}/${month}/${day}`;
+
+      if (!yearMonths.has(ymKey) || updatedAt > yearMonths.get(ymKey)!) {
+        yearMonths.set(ymKey, updatedAt);
+      }
+      if (!years.has(year) || updatedAt > years.get(year)!) {
+        years.set(year, updatedAt);
+      }
+      if (!yearMonthDays.has(ymdKey) || updatedAt > yearMonthDays.get(ymdKey)!) {
+        yearMonthDays.set(ymdKey, updatedAt);
+      }
+    }
+
+    const latestPostUpdatedAt = publishedListPosts[0]?.updatedAt.toISOString() || now;
+
+    const urls: string[] = [];
+    urls.push(buildSitemapUrl(`${options.baseUrl}/`, latestPostUpdatedAt, 'daily', '1.0'));
+    appendPaginatedSitemapUrls(urls, options.baseUrl, '', publishedListPosts.length, maxPostsPerPage, latestPostUpdatedAt, 'daily', '0.9');
+    for (const post of postUrls) {
+      urls.push(buildSitemapUrl(post.loc, post.lastmod, 'monthly', '0.8'));
+    }
+    for (const page of pageUrls) {
+      urls.push(buildSitemapUrl(page.loc, page.lastmod, 'weekly', '0.7'));
+    }
+
+    for (const [year, lastmod] of Array.from(years.entries()).sort((a, b) => b[0] - a[0])) {
+      urls.push(buildSitemapUrl(`${options.baseUrl}/${year}`, lastmod.toISOString(), 'monthly', '0.5'));
+
+      const yearCount = publishedListPosts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/${year}`, yearCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
+    }
+    for (const [ym, lastmod] of Array.from(yearMonths.entries()).sort().reverse()) {
+      urls.push(buildSitemapUrl(`${options.baseUrl}/${ym}`, lastmod.toISOString(), 'monthly', '0.5'));
+
+      const [yearStr, monthStr] = ym.split('/');
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const monthCount = publishedListPosts.filter((post) => {
+        const d = resolvePostCreatedAt(post);
+        return d.getFullYear() === year && (d.getMonth() + 1) === month;
+      }).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ym}`, monthCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
+    }
+    for (const [ymd, lastmod] of Array.from(yearMonthDays.entries()).sort().reverse()) {
+      urls.push(buildSitemapUrl(`${options.baseUrl}/${ymd}`, lastmod.toISOString(), 'monthly', '0.4'));
+
+      const [yearStr, monthStr, dayStr] = ymd.split('/');
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      const dayCount = publishedListPosts.filter((post) => {
+        const d = resolvePostCreatedAt(post);
+        return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
+      }).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ymd}`, dayCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.3');
+    }
+
+    for (const category of Array.from(allCategories).sort()) {
+      urls.push(buildSitemapUrl(`${options.baseUrl}/category/${encodeURIComponent(category)}`, latestPostUpdatedAt, 'weekly', '0.6'));
+
+      const categoryCount = publishedListPosts.filter((post) => (post.categories || []).includes(category)).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/category/${encodeURIComponent(category)}`, categoryCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
+    }
+
+    for (const tag of Array.from(allTags).sort()) {
+      urls.push(buildSitemapUrl(`${options.baseUrl}/tag/${encodeURIComponent(tag)}`, latestPostUpdatedAt, 'weekly', '0.6'));
+
+      const tagCount = publishedListPosts.filter((post) => (post.tags || []).includes(tag)).length;
+      appendPaginatedSitemapUrls(urls, options.baseUrl, `/tag/${encodeURIComponent(tag)}`, tagCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
+    }
+
+    const sitemapXml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      ...urls,
+      '</urlset>',
+      '',
+    ].join('\n');
+
+    const htmlDir = path.join(options.dataDir, 'html');
+    await fs.mkdir(htmlDir, { recursive: true });
+    const sitemapPath = path.join(htmlDir, 'sitemap.xml');
+    const sitemapChanged = await writeFileIfHashChanged(options.projectId, sitemapPath, 'sitemap.xml', sitemapXml);
+
+    onProgress(50, 'Comparing sitemap to html pages...');
+
+    const expectedPathSet = new Set(
+      extractSitemapLocs(sitemapXml)
+        .map((loc) => sitemapLocToProjectPath(loc, options.baseUrl))
+        .map((value) => normalizeUrlPath(value)),
+    );
+
+    const existingHtmlPathSet = new Set<string>();
+    const collectIndexPaths = async (dir: string, relativePrefix = ''): Promise<void> => {
+      let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true, encoding: 'utf8' });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        const nextRelative = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name;
+        const nextPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          await collectIndexPaths(nextPath, nextRelative);
+          continue;
+        }
+
+        if (!entry.isFile() || entry.name !== 'index.html') {
+          continue;
+        }
+
+        const normalizedRelative = nextRelative.replace(/(^|\/)index\.html$/, '');
+        existingHtmlPathSet.add(normalizeUrlPath(normalizedRelative ? `/${normalizedRelative}` : '/'));
+      }
+    };
+
+    await collectIndexPaths(htmlDir);
+
+    const missingUrlPaths = Array.from(expectedPathSet)
+      .filter((value) => !existingHtmlPathSet.has(value))
+      .sort();
+
+    const extraUrlPaths = Array.from(existingHtmlPathSet)
+      .filter((value) => !expectedPathSet.has(value))
+      .sort();
+
+    onProgress(100, `Validation complete (${missingUrlPaths.length} missing, ${extraUrlPaths.length} extra)`);
+
+    return {
+      sitemapPath,
+      sitemapChanged,
+      missingUrlPaths,
+      extraUrlPaths,
+      expectedUrlCount: expectedPathSet.size,
+      existingHtmlUrlCount: existingHtmlPathSet.size,
+    };
+  }
+
+  async applyValidation(
+    options: BlogGenerationOptions,
+    report: SiteValidationReport,
+    onProgress: (progress: number, message?: string) => void,
+  ): Promise<SiteValidationApplyResult> {
+    onProgress(0, 'Applying validation changes...');
+
+    const missingPaths = Array.isArray(report.missingUrlPaths) ? report.missingUrlPaths : [];
+    const extraPaths = Array.isArray(report.extraUrlPaths) ? report.extraUrlPaths : [];
+
+    const sections = new Set<BlogGenerationSection>();
+    for (const missingPath of missingPaths) {
+      const normalizedPath = normalizeUrlPath(missingPath);
+
+      if (normalizedPath === '/' || /^\/page\/\d+$/.test(normalizedPath)) {
+        sections.add('core');
+        continue;
+      }
+
+      if (/^\/category\//.test(normalizedPath)) {
+        sections.add('category');
+        continue;
+      }
+
+      if (/^\/tag\//.test(normalizedPath)) {
+        sections.add('tag');
+        continue;
+      }
+
+      if (/^\/\d{4}\/\d{2}\/\d{2}\/[^/]+$/.test(normalizedPath)) {
+        sections.add('single');
+        continue;
+      }
+
+      if (/^\/\d{4}(?:\/\d{2}(?:\/\d{2})?)?(?:\/page\/\d+)?$/.test(normalizedPath)) {
+        sections.add('date');
+        continue;
+      }
+
+      if (/^\/[^/]+$/.test(normalizedPath)) {
+        sections.add('core');
+        continue;
+      }
+
+      sections.clear();
+      sections.add('core');
+      sections.add('single');
+      sections.add('category');
+      sections.add('tag');
+      sections.add('date');
+      break;
+    }
+
+    let renderedUrlCount = 0;
+
+    if (sections.size > 0) {
+      onProgress(20, 'Rendering missing URLs...');
+      const generationResult = await this.generate({
+        ...options,
+        maxPostsPerPage: options.maxPostsPerPage,
+        sections: Array.from(sections),
+      }, (progress, message) => {
+        onProgress(Math.min(70, 20 + Math.floor(progress * 0.5)), message);
+      });
+      renderedUrlCount = generationResult.pagesGenerated;
+    }
+
+    onProgress(75, 'Deleting extra URLs...');
+
+    const htmlDir = path.join(options.dataDir, 'html');
+    let deletedUrlCount = 0;
+    let removedEmptyDirCount = 0;
+
+    const pruneEmptyParents = async (startDir: string): Promise<void> => {
+      let currentDir = startDir;
+
+      while (path.resolve(currentDir) !== path.resolve(htmlDir)) {
+        let entries: string[];
+        try {
+          entries = await fs.readdir(currentDir);
+        } catch {
+          break;
+        }
+
+        if (entries.length > 0) {
+          break;
+        }
+
+        await fs.rm(currentDir, { recursive: true, force: true });
+        removedEmptyDirCount += 1;
+        currentDir = path.dirname(currentDir);
+      }
+    };
+
+    for (const urlPath of extraPaths) {
+      const filePath = urlPathToHtmlIndexPath(htmlDir, urlPath);
+      try {
+        await fs.unlink(filePath);
+        deletedUrlCount += 1;
+        await pruneEmptyParents(path.dirname(filePath));
+      } catch {
+        // ignore missing files and continue
+      }
+    }
+
+    onProgress(100, `Apply complete (${renderedUrlCount} rendered, ${deletedUrlCount} deleted)`);
+
+    return {
+      renderedUrlCount,
+      deletedUrlCount,
+      removedEmptyDirCount,
     };
   }
 

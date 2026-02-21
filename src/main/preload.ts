@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ElectronAPI } from './shared/electronApi';
 import type { GitInitProgress } from './shared/electronApi';
+import type { SiteValidationReport } from './shared/electronApi';
 
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
@@ -253,6 +254,8 @@ export const electronAPI: ElectronAPI = {
   // Blog operations
   blog: {
     generateSitemap: () => ipcRenderer.invoke('blog:generateSitemap'),
+    validateSite: () => ipcRenderer.invoke('blog:validateSite'),
+    applyValidation: (report: SiteValidationReport) => ipcRenderer.invoke('blog:applyValidation', report),
   },
 
   // AI Chat (OpenCode Zen API integration)

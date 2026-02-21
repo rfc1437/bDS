@@ -305,6 +305,12 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:validateSite', () => {
+        openTab({ id: 'site-validation-report', type: 'site-validation', isTransient: true });
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:previewPost', async () => {
         try {
           const selectedPostId = useAppStore.getState().selectedPostId;
