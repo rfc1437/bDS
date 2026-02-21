@@ -105,6 +105,16 @@ describe('MenuEditorView entry editor', () => {
     expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
   });
 
+  it('marks outliner rows as drag handles so drag-and-drop can start from rows', async () => {
+    const { container } = render(<MenuEditorView />);
+
+    await screen.findByRole('button', { name: /add entry/i });
+
+    const row = container.querySelector('.menu-editor-row');
+    expect(row).not.toBeNull();
+    expect(row).toHaveAttribute('data-drag-handle', 'true');
+  });
+
   it('finalizes entry as page on a double-click gesture', async () => {
     render(<MenuEditorView />);
 

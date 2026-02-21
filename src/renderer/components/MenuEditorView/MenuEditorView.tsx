@@ -597,8 +597,10 @@ export const MenuEditorView: React.FC = () => {
                   setSelectedId(nodes[0]?.data.id || null);
                 }}
               >
-                {({ node, style, tree }) => (
+                {({ node, style, tree, dragHandle }) => (
                   <div
+                    ref={dragHandle}
+                    data-drag-handle="true"
                     style={style}
                     className={`menu-editor-row ${selectedId === node.data.id ? 'is-selected' : ''} ${recentParentInsertId === node.data.id ? 'is-parent-target' : ''}`}
                     onClick={() => setSelectedId(node.data.id)}
