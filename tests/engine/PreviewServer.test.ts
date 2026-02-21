@@ -4,6 +4,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import type { PostData, PostFilter } from '../../src/main/engine/PostEngine';
 import { PreviewServer } from '../../src/main/engine/PreviewServer';
+import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 
 type PostEngineLike = {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
@@ -605,6 +606,63 @@ describe('PreviewServer', () => {
 
     const monthPageHtml = await (await fetch(`${server.getBaseUrl()}/2020/2/`)).text();
     expect(monthPageHtml).toContain('<h1 class="archive-heading">Archive February 2020</h1>');
+  });
+
+  it('uses project mainLanguage for translated archive heading text', async () => {
+    const posts = [
+      makePost({ id: 'fr-1', slug: 'fr-1', title: 'FR1', content: 'Body 1', createdAt: new Date('2020-02-05T10:00:00.000Z') }),
+      makePost({ id: 'fr-2', slug: 'fr-2', title: 'FR2', content: 'Body 2', createdAt: new Date('2020-02-04T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            mainLanguage: 'fr',
+            maxPostsPerPage: 50,
+          };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const monthPageHtml = await (await fetch(`${server.getBaseUrl()}/2020/2/`)).text();
+    expect(monthPageHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
+  });
+
+  it('keeps preview render language from project settings when ui language differs', async () => {
+    const uiLanguage = resolveUiLanguageFromSystemLocale('de-DE');
+    expect(uiLanguage).toBe('de');
+
+    const posts = [
+      makePost({ id: 'mixed-1', slug: 'mixed-1', title: 'Mixed 1', content: 'Body 1', createdAt: new Date('2020-02-05T10:00:00.000Z') }),
+      makePost({ id: 'mixed-2', slug: 'mixed-2', title: 'Mixed 2', content: 'Body 2', createdAt: new Date('2020-02-04T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            mainLanguage: 'fr',
+            maxPostsPerPage: 50,
+          };
+        },
+      },
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const monthPageHtml = await (await fetch(`${server.getBaseUrl()}/2020/2/`)).text();
+    expect(monthPageHtml).toContain('<html lang="fr">');
+    expect(monthPageHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
+    expect(monthPageHtml).not.toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
   });
 
   it('renders tag heading on first page and adds date range on later pages', async () => {

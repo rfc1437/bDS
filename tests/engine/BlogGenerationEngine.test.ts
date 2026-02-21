@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import type { PostData } from '../../src/main/engine/PostEngine';
+import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 
 const generatedFileHashes = new Map<string, string>();
 const getGeneratedFileHashMock = vi.fn(async (projectId: string, relativePath: string) => {
@@ -363,6 +364,25 @@ describe('BlogGenerationEngine', () => {
     // Day archives
     expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', '2025', '02', '20', 'index.html'))).toBe(true);
+  });
+
+  it('keeps static render language from project settings when ui language differs', async () => {
+    const uiLanguage = resolveUiLanguageFromSystemLocale('de-DE');
+    expect(uiLanguage).toBe('de');
+
+    const posts = [
+      makePost({ id: 'fr-1', slug: 'fr-1', title: 'FR 1', createdAt: new Date('2020-02-15T10:00:00Z') }),
+      makePost({ id: 'fr-2', slug: 'fr-2', title: 'FR 2', createdAt: new Date('2020-02-14T10:00:00Z') }),
+    ];
+
+    await generate(posts, { language: 'fr', maxPostsPerPage: 50 });
+
+    const monthArchivePath = path.join(tempDir, 'html', '2020', '02', 'index.html');
+    const monthHtml = await readFile(monthArchivePath, 'utf-8');
+
+    expect(monthHtml).toContain('<html lang="fr">');
+    expect(monthHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
+    expect(monthHtml).not.toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
   });
 
   it('excludes draft-only posts from generated pages', async () => {
