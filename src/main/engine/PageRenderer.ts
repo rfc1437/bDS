@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { Liquid } from 'liquidjs';
 import type { MediaData } from './MediaEngine';
 import type { PostData } from './PostEngine';
+import type { MenuDocument, MenuItemData } from './MenuEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
 import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
@@ -50,6 +51,7 @@ export type DateArchiveContext = {
 export interface PostListTemplateContext {
   page_title: string;
   language: string;
+  menu_items: TemplateMenuItem[];
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
   is_date_archive: boolean;
@@ -78,6 +80,7 @@ export interface PostListTemplateContext {
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
+  menu_items: TemplateMenuItem[];
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
   post: TemplatePostEntry;
@@ -88,10 +91,18 @@ export interface SinglePostTemplateContext {
 export interface NotFoundTemplateContext {
   page_title: string;
   language: string;
+  menu_items?: TemplateMenuItem[];
   not_found_message?: string;
   not_found_back_label?: string;
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
+}
+
+export interface TemplateMenuItem {
+  title: string;
+  href: string;
+  has_children: boolean;
+  children: TemplateMenuItem[];
 }
 
 export interface RoutePagination {
@@ -258,6 +269,48 @@ export function parseIntegerParam(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) ? parsed : null;
+}
+
+function buildMenuItemHref(item: MenuItemData): string {
+  if (item.kind === 'home') {
+    return '/';
+  }
+
+  if (item.kind === 'category-archive') {
+    const categoryName = (item.categoryName || '').trim();
+    return categoryName.length > 0 ? `/category/${encodeURIComponent(categoryName)}/` : '/';
+  }
+
+  if (item.kind === 'page') {
+    const normalizedSlug = (item.pageSlug || '')
+      .split('/')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    return normalizedSlug.length > 0 ? `/${normalizedSlug}/` : '/';
+  }
+
+  return '#';
+}
+
+function toTemplateMenuItem(item: MenuItemData): TemplateMenuItem {
+  const children = (Array.isArray(item.children) ? item.children : []).map((child) => toTemplateMenuItem(child));
+  return {
+    title: item.title,
+    href: buildMenuItemHref(item),
+    has_children: children.length > 0,
+    children,
+  };
+}
+
+export function buildTemplateMenuItems(menu: MenuDocument | null | undefined): TemplateMenuItem[] {
+  const items = menu?.items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map((item) => toTemplateMenuItem(item));
 }
 
 export function normalizeMacroName(name: string): string {
@@ -776,6 +829,7 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
       pagination?: PaginationContext;
@@ -890,6 +944,7 @@ export class PageRenderer {
     return {
       page_title: options.page_title,
       language: options.language,
+      menu_items: options.menu_items ?? [],
       pico_stylesheet_href: options.pico_stylesheet_href,
       html_theme_attribute: options.html_theme_attribute,
       is_date_archive: options.routeKind === 'date',
@@ -945,6 +1000,7 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
       pagination?: PaginationContext;
@@ -971,7 +1027,7 @@ export class PageRenderer {
   async renderSinglePost(
     post: PostData,
     rewriteContext: HtmlRewriteContext,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string; html_theme_attribute?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string; html_theme_attribute?: string },
     postEngine?: PostEngineContract,
   ): Promise<string> {
     const renderablePost = postEngine
@@ -979,6 +1035,7 @@ export class PageRenderer {
       : post;
     const context: SinglePostTemplateContext = {
       ...pageContext,
+      menu_items: pageContext.menu_items ?? [],
       post: {
         id: renderablePost.id,
         title: renderablePost.title,

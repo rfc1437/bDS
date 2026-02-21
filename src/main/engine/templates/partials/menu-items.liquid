@@ -1,0 +1,16 @@
+<ul class="blog-menu-list">
+  {% for item in items %}
+    <li class="blog-menu-item{% if item.has_children %} blog-menu-item-with-children{% endif %}">
+      {% if item.href == '#' %}
+        <span class="blog-menu-link">{{ item.title }}</span>
+      {% else %}
+        <a class="blog-menu-link" href="{{ item.href }}">{{ item.title }}</a>
+      {% endif %}
+      {% if item.has_children %}
+        <div class="blog-menu-submenu">
+          {% render 'partials/menu-items', items: item.children %}
+        </div>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>

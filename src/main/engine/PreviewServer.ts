@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getMetaEngine, type ProjectMetadata } from './MetaEngine';
 import { getMediaEngine, type MediaData } from './MediaEngine';
+import { getMenuEngine, type MenuDocument } from './MenuEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
 import { getPostEngine, type PostData, type PostFilter } from './PostEngine';
 import { getProjectEngine } from './ProjectEngine';
@@ -10,6 +11,7 @@ import {
   PageRenderer,
   PREVIEW_ASSETS,
   PREVIEW_IMAGE_ASSETS,
+  buildTemplateMenuItems,
   buildCanonicalPostPath,
   clampMaxPostsPerPage,
   parseRoutePagination,
@@ -43,11 +45,17 @@ interface MetaEngineContract {
   syncOnStartup?: () => Promise<void>;
 }
 
+interface MenuEngineContract {
+  getMenu: () => Promise<MenuDocument>;
+  setProjectContext: (projectId: string, dataDir?: string) => void;
+}
+
 interface PreviewServerDependencies {
   postEngine: PostEngineContract;
   mediaEngine: MediaEngineContract;
   postMediaEngine: PostMediaEngineContract;
   settingsEngine: MetaEngineContract;
+  menuEngine: MenuEngineContract;
   getActiveProjectContext: () => Promise<ActiveProjectContext>;
 }
 
@@ -56,6 +64,7 @@ export class PreviewServer {
   private readonly mediaEngine: MediaEngineContract;
   private readonly postMediaEngine: PostMediaEngineContract;
   private readonly settingsEngine: MetaEngineContract;
+  private readonly menuEngine: MenuEngineContract;
   private readonly getActiveProjectContext: () => Promise<ActiveProjectContext>;
   private readonly pageRenderer: PageRenderer;
   private server: Server | null = null;
@@ -66,6 +75,7 @@ export class PreviewServer {
     this.mediaEngine = dependencies?.mediaEngine ?? getMediaEngine();
     this.postMediaEngine = dependencies?.postMediaEngine ?? getPostMediaEngine();
     this.settingsEngine = dependencies?.settingsEngine ?? getMetaEngine();
+    this.menuEngine = dependencies?.menuEngine ?? getMenuEngine();
     this.getActiveProjectContext = dependencies?.getActiveProjectContext ?? (async () => {
       const projectEngine = getProjectEngine();
       const activeProject = await projectEngine.getActiveProject();
@@ -165,12 +175,15 @@ export class PreviewServer {
       this.mediaEngine.setProjectContext?.(context.projectId, context.dataDir, context.dataDir);
       this.postMediaEngine.setProjectContext(context.projectId);
       this.settingsEngine.setProjectContext(context.projectId, context.dataDir);
+      this.menuEngine.setProjectContext(context.projectId, context.dataDir);
 
       if (this.settingsEngine.isInitialized && this.settingsEngine.syncOnStartup && !this.settingsEngine.isInitialized()) {
         await this.settingsEngine.syncOnStartup();
       }
 
       const metadata = await this.settingsEngine.getProjectMetadata();
+      const menu = await this.menuEngine.getMenu().catch(() => ({ items: [] }));
+      const menuItems = buildTemplateMenuItems(menu);
       const categorySettings = this.resolveCategorySettings(metadata);
       const listExcludedCategories = this.resolveListExcludedCategories(categorySettings);
       const language = metadata?.mainLanguage?.trim() || 'en';
@@ -190,6 +203,7 @@ export class PreviewServer {
         const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
           pageTitle,
           language,
+          menuItems,
           picoStylesheetHref,
           htmlThemeAttribute: previewThemeMode && previewThemeMode !== 'auto' ? `data-theme="${previewThemeMode}"` : undefined,
         }, categorySettings, listExcludedCategories);
@@ -218,6 +232,7 @@ export class PreviewServer {
       const result = await this.resolveRoute(pathname, maxPostsPerPage, htmlRewriteContext, {
         pageTitle,
         language,
+        menuItems,
         picoStylesheetHref,
         htmlThemeAttribute: undefined,
       }, categorySettings, listExcludedCategories, {
@@ -228,6 +243,7 @@ export class PreviewServer {
         const notFoundHtml = await this.pageRenderer.renderNotFound({
           page_title: '404 Not Found',
           language,
+          menu_items: menuItems,
           pico_stylesheet_href: picoStylesheetHref,
           html_theme_attribute: undefined,
         });
@@ -246,7 +262,7 @@ export class PreviewServer {
     pathname: string,
     maxPostsPerPage: number,
     rewriteContext: HtmlRewriteContext,
-    pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
+    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
     listExcludedCategories: string[],
     singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
@@ -274,6 +290,7 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -287,6 +304,7 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -303,6 +321,7 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -316,6 +335,7 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -332,6 +352,7 @@ export class PreviewServer {
         categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -350,6 +371,7 @@ export class PreviewServer {
         categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -384,6 +406,7 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(post, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -407,6 +430,7 @@ export class PreviewServer {
         categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -427,6 +451,7 @@ export class PreviewServer {
         categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -445,6 +470,7 @@ export class PreviewServer {
         categorySettings,
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -459,6 +485,7 @@ export class PreviewServer {
       return this.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       }, this.postEngine);
@@ -469,7 +496,7 @@ export class PreviewServer {
 
   private async renderStylePreview(
     rewriteContext: HtmlRewriteContext,
-    pageContext: { pageTitle: string; language: string; picoStylesheetHref: string; htmlThemeAttribute?: string },
+    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
     listExcludedCategories: string[],
   ): Promise<string> {
@@ -482,6 +509,7 @@ export class PreviewServer {
       return this.pageRenderer.renderNotFound({
         page_title: pageContext.pageTitle,
         language: pageContext.language,
+        menu_items: pageContext.menuItems,
         pico_stylesheet_href: pageContext.picoStylesheetHref,
         html_theme_attribute: pageContext.htmlThemeAttribute,
       });
@@ -496,6 +524,7 @@ export class PreviewServer {
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
     }, this.postEngine);

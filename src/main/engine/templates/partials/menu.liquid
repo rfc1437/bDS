@@ -1,0 +1,5 @@
+{% if menu_items and menu_items.size > 0 %}
+  <nav class="blog-menu">
+    {% render 'partials/menu-items', items: menu_items %}
+  </nav>
+{% endif %}

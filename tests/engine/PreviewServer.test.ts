@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import type { PostData, PostFilter } from '../../src/main/engine/PostEngine';
 import { PreviewServer } from '../../src/main/engine/PreviewServer';
 import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
+import type { MenuDocument } from '../../src/main/engine/MenuEngine';
 
 type PostEngineLike = {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
@@ -16,6 +17,11 @@ type PostEngineLike = {
 
 type SettingsEngineLike = {
   getProjectMetadata: () => Promise<{ maxPostsPerPage?: number; mainLanguage?: string } | null>;
+  setProjectContext: (projectId: string, dataDir?: string) => void;
+};
+
+type MenuEngineLike = {
+  getMenu: () => Promise<MenuDocument>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 };
 
@@ -117,6 +123,15 @@ function makePostMediaEngine(linksByPostId: Record<string, Array<{ media: { id: 
   };
 }
 
+function makeMenuEngine(menu: MenuDocument): MenuEngineLike {
+  return {
+    setProjectContext: vi.fn(),
+    async getMenu(): Promise<MenuDocument> {
+      return menu;
+    },
+  };
+}
+
 describe('PreviewServer', () => {
   let server: PreviewServer;
   let tempDir: string | null = null;
@@ -160,6 +175,57 @@ describe('PreviewServer', () => {
     expect(html).toContain('archive-day-marker');
     expect(html).toContain('03.01.2025');
     expect(html).toContain('02.01.2025');
+  });
+
+  it('renders menu below h1 with nested submenu links', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'hello', title: 'Hello', categories: ['news'], createdAt: new Date('2025-01-03T10:00:00.000Z') }),
+      makePost({ id: '2', slug: 'about', title: 'About', categories: ['page'], createdAt: new Date('2025-01-02T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: makeSettings(50),
+      menuEngine: makeMenuEngine({
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+          { id: 'about', title: 'About', kind: 'page', pageSlug: 'about', children: [] },
+          {
+            id: 'sections',
+            title: 'Sections',
+            kind: 'submenu',
+            children: [
+              { id: 'news', title: 'News', kind: 'category-archive', categoryName: 'news', children: [] },
+            ],
+          },
+        ],
+      }),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const rootHtml = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(rootHtml).toContain('class="blog-menu"');
+    expect(rootHtml).toContain('href="/"');
+    expect(rootHtml).toContain('href="/about/"');
+    expect(rootHtml).toContain('href="/category/news/"');
+    expect(rootHtml).toContain('class="blog-menu-submenu"');
+
+    const rootH1Index = rootHtml.indexOf('<h1 class="archive-heading"');
+    const rootMenuIndex = rootHtml.indexOf('class="blog-menu"');
+    const rootPostListIndex = rootHtml.indexOf('<section class="post-list"');
+    expect(rootH1Index).toBeGreaterThan(-1);
+    expect(rootMenuIndex).toBeGreaterThan(rootH1Index);
+    expect(rootPostListIndex).toBeGreaterThan(rootMenuIndex);
+
+    const singleHtml = await (await fetch(`${server.getBaseUrl()}/posts/hello`)).text();
+    const singleH1Index = singleHtml.indexOf('<h1>Hello</h1>');
+    const singleMenuIndex = singleHtml.indexOf('class="blog-menu"');
+    const singleTextIndex = singleHtml.indexOf('<div class="post">');
+    expect(singleH1Index).toBeGreaterThan(-1);
+    expect(singleMenuIndex).toBeGreaterThan(singleH1Index);
+    expect(singleTextIndex).toBeGreaterThan(singleMenuIndex);
   });
 
   it('uses local CSS/JS assets and serves them from the preview server', async () => {

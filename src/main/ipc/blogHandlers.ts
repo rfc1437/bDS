@@ -4,6 +4,7 @@ import { getProjectEngine } from '../engine/ProjectEngine';
 import { getMetaEngine } from '../engine/MetaEngine';
 import { getMediaEngine } from '../engine/MediaEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
+import { getMenuEngine } from '../engine/MenuEngine';
 import { taskManager } from '../engine/TaskManager';
 import {
   getBlogGenerationEngine,
@@ -24,6 +25,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
     const metaEngine = getMetaEngine();
     const mediaEngine = getMediaEngine();
     const postMediaEngine = getPostMediaEngine();
+    const menuEngine = getMenuEngine();
 
     const project = await projectEngine.getActiveProject();
     if (!project) {
@@ -35,12 +37,14 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
     metaEngine.setProjectContext(project.id, dataDir);
     mediaEngine.setProjectContext(project.id, dataDir, dataDir);
     postMediaEngine.setProjectContext(project.id);
+    menuEngine.setProjectContext(project.id, dataDir);
 
     if (!metaEngine.isInitialized()) {
       await metaEngine.syncOnStartup();
     }
 
     const metadata = await metaEngine.getProjectMetadata();
+    const menu = await menuEngine.getMenu();
     const baseUrl = resolvePublicBaseUrl(metadata?.publicUrl);
     if (!baseUrl) {
       await dialog.showMessageBox({
@@ -66,6 +70,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       pageTitle,
       picoTheme: metadata?.picoTheme,
       categorySettings: (metadata as any)?.categorySettings,
+      menu,
     };
   };
 

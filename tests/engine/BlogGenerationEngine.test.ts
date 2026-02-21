@@ -4,6 +4,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import type { PostData } from '../../src/main/engine/PostEngine';
 import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
+import type { MenuDocument } from '../../src/main/engine/MenuEngine';
 
 const generatedFileHashes = new Map<string, string>();
 const getGeneratedFileHashMock = vi.fn(async (projectId: string, relativePath: string) => {
@@ -183,6 +184,7 @@ describe('BlogGenerationEngine', () => {
       language: string;
       pageTitle: string;
       categorySettings: Record<string, { renderInLists: boolean; showTitle: boolean }>;
+      menu: MenuDocument;
     }>,
   ) {
     setupPosts(posts);
@@ -198,8 +200,69 @@ describe('BlogGenerationEngine', () => {
       language: options?.language,
       pageTitle: options?.pageTitle,
       categorySettings: options?.categorySettings,
+      menu: options?.menu,
     }, onProgress);
   }
+
+  it('renders configured menu below h1 with nested submenu links on list and single pages', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'hello-world',
+        title: 'Hello World',
+        categories: ['news'],
+        createdAt: new Date('2025-03-15T10:00:00Z'),
+      }),
+      makePost({
+        id: '2',
+        slug: 'about',
+        title: 'About',
+        categories: ['page'],
+        createdAt: new Date('2025-03-14T10:00:00Z'),
+      }),
+    ];
+
+    await generate(posts, {
+      menu: {
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+          { id: 'about', title: 'About', kind: 'page', pageSlug: 'about', children: [] },
+          {
+            id: 'sections',
+            title: 'Sections',
+            kind: 'submenu',
+            children: [
+              { id: 'news', title: 'News', kind: 'category-archive', categoryName: 'news', children: [] },
+            ],
+          },
+        ],
+      },
+    });
+
+    const indexHtml = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
+    const singleHtml = await readFile(path.join(tempDir, 'html', '2025', '03', '15', 'hello-world', 'index.html'), 'utf-8');
+
+    expect(indexHtml).toContain('class="blog-menu"');
+    expect(indexHtml).toContain('href="/"');
+    expect(indexHtml).toContain('href="/about/"');
+    expect(indexHtml).toContain('href="/category/news/"');
+    expect(indexHtml).toContain('class="blog-menu-submenu"');
+
+    const listH1Index = indexHtml.indexOf('<h1 class="archive-heading"');
+    const listMenuIndex = indexHtml.indexOf('class="blog-menu"');
+    const listContentIndex = indexHtml.indexOf('<section class="post-list"');
+    expect(listH1Index).toBeGreaterThan(-1);
+    expect(listMenuIndex).toBeGreaterThan(listH1Index);
+    expect(listContentIndex).toBeGreaterThan(listMenuIndex);
+
+    expect(singleHtml).toContain('class="blog-menu"');
+    const singleH1Index = singleHtml.indexOf('<h1>Hello World</h1>');
+    const singleMenuIndex = singleHtml.indexOf('class="blog-menu"');
+    const singleContentIndex = singleHtml.indexOf('<div class="post">');
+    expect(singleH1Index).toBeGreaterThan(-1);
+    expect(singleMenuIndex).toBeGreaterThan(singleH1Index);
+    expect(singleContentIndex).toBeGreaterThan(singleMenuIndex);
+  });
 
   it('copies all required asset files to html/assets/ and html/images/', async () => {
     const result = await generate([]);

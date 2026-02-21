@@ -10,11 +10,14 @@ import {
   PageRenderer,
   PREVIEW_ASSETS,
   PREVIEW_IMAGE_ASSETS,
+  buildTemplateMenuItems,
   buildCanonicalPostPath,
   type CategoryRenderSettings,
   type HtmlRewriteContext,
+  type TemplateMenuItem,
 } from './PageRenderer';
 import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
+import type { MenuDocument } from './MenuEngine';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -31,6 +34,7 @@ export interface BlogGenerationOptions {
   pageTitle?: string;
   picoTheme?: PicoThemeName;
   categorySettings?: Record<string, CategoryRenderSettings>;
+  menu?: MenuDocument;
   sections?: BlogGenerationSection[];
 }
 
@@ -654,6 +658,7 @@ export class BlogGenerationEngine {
     const pageContext = {
       page_title: pageTitle,
       language,
+      menu_items: buildTemplateMenuItems(options.menu),
       pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
     };
 
@@ -1269,6 +1274,7 @@ export class BlogGenerationEngine {
       const pageContext = {
         page_title: pageTitle,
         language,
+        menu_items: buildTemplateMenuItems(options.menu),
         pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
       };
       const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
@@ -1424,7 +1430,7 @@ export class BlogGenerationEngine {
     posts: PostData[],
     rewriteContext: HtmlRewriteContext,
     htmlDir: string,
-    pageContext: { page_title: string; language: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[] },
     pageRenderer: PageRenderer,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
@@ -1483,7 +1489,7 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
@@ -1522,7 +1528,7 @@ export class BlogGenerationEngine {
     posts: PostData[],
     rewriteContext: HtmlRewriteContext,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
@@ -1551,7 +1557,7 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
@@ -1602,7 +1608,7 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
@@ -1655,7 +1661,7 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,
@@ -1708,7 +1714,7 @@ export class BlogGenerationEngine {
     rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; pico_stylesheet_href?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     categorySettings: Record<string, CategoryRenderSettings>,
     onPageGenerated: (message: string) => void,

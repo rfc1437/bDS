@@ -27,6 +27,8 @@
         {% endif %}
       {% endif %}
 
+      {% render 'partials/menu', menu_items: menu_items, language: language %}
+
       <section class="post-list" data-template="post-list" data-list-page="{{ is_list_page }}" data-first-page="{{ is_first_page }}" data-last-page="{{ is_last_page }}">
         {% for day_block in day_blocks %}
           {% if day_block.show_date_marker %}
