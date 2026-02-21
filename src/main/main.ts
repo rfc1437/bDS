@@ -9,6 +9,7 @@ import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { PreviewServer } from './engine/PreviewServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
+import { resolveUiLanguageFromSystemLocale, translateMenu } from './shared/i18n';
 
 let mainWindow: BrowserWindow | null = null;
 let previewServer: PreviewServer | null = null;
@@ -170,6 +171,8 @@ async function startPreviewServerOnAppStart(): Promise<void> {
 }
 
 function createApplicationMenu(): Menu {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const uiLanguage = resolveUiLanguageFromSystemLocale(systemLocale);
   const commandDefinitions = APP_MENU_GROUPS
     .flatMap(group => group.items)
     .filter(item => !item.separator)
@@ -258,22 +261,32 @@ function createApplicationMenu(): Menu {
     }
   };
 
+  const getMenuItemLabel = (action: AppMenuAction, fallback: string): string => {
+    return translateMenu(uiLanguage, `menu.item.${action}`) || fallback;
+  };
+
+  const getMenuGroupLabel = (groupLabel: string): string => {
+    return translateMenu(uiLanguage, `menu.group.${groupLabel.toLowerCase()}`) || groupLabel;
+  };
+
   const buildSharedMenuItem = (action: AppMenuAction): MenuItemConstructorOptions => {
     const definition = commandDefinitions[action];
     if (!definition) {
       throw new Error(`Unknown shared menu action: ${action}`);
     }
 
+    const translatedLabel = getMenuItemLabel(action, definition.label);
+
     if (definition.role) {
       return {
-        label: definition.label,
+        label: translatedLabel,
         role: definition.role,
         accelerator: definition.accelerator,
       };
     }
 
     return {
-      label: definition.label,
+      label: translatedLabel,
       accelerator: definition.accelerator,
       id: definition.id,
       enabled: definition.enabled,
@@ -302,23 +315,23 @@ function createApplicationMenu(): Menu {
 
   const template: MenuItemConstructorOptions[] = [
     {
-      label: 'File',
+      label: getMenuGroupLabel('File'),
       submenu: buildSharedGroupMenuItems('File'),
     },
     {
-      label: 'Edit',
+      label: getMenuGroupLabel('Edit'),
       submenu: buildSharedGroupMenuItems('Edit'),
     },
     {
-      label: 'View',
+      label: getMenuGroupLabel('View'),
       submenu: buildSharedGroupMenuItems('View'),
     },
     {
-      label: 'Blog',
+      label: getMenuGroupLabel('Blog'),
       submenu: buildSharedGroupMenuItems('Blog'),
     },
     {
-      label: 'Help',
+      label: getMenuGroupLabel('Help'),
       submenu: buildSharedGroupMenuItems('Help'),
     },
   ];

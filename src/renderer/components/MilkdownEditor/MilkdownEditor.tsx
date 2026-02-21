@@ -23,6 +23,7 @@ import '../../macros';
 import './MilkdownEditor.css';
 import { InsertModal } from '../InsertModal';
 import { normalizeMilkdownMarkdown } from '../../utils/markdownEscape';
+import { useI18n } from '../../i18n';
 
 // Remark plugin to force tight lists (no blank lines between list items)
 const remarkTightListsPlugin: Plugin<[Record<string, unknown>], Root> = () => {
@@ -89,6 +90,7 @@ interface EditorToolbarProps {
 
 // Toolbar component that uses the editor instance
 const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
+  const { t: tr } = useI18n();
   const [loading, getEditor] = useInstance();
   const [insertMode, setInsertMode] = useState<InsertModalMode>(null);
   const [selectedText, setSelectedText] = useState('');
@@ -218,21 +220,21 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
     <>
       <div className="milkdown-toolbar">
         <div className="toolbar-group">
-          <button onClick={() => insertHeading(1)} title="Heading 1">H1</button>
-          <button onClick={() => insertHeading(2)} title="Heading 2">H2</button>
-          <button onClick={() => insertHeading(3)} title="Heading 3">H3</button>
+          <button onClick={() => insertHeading(1)} title={tr('milkdown.heading1')}>H1</button>
+          <button onClick={() => insertHeading(2)} title={tr('milkdown.heading2')}>H2</button>
+          <button onClick={() => insertHeading(3)} title={tr('milkdown.heading3')}>H3</button>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button onClick={() => runCommand(toggleStrongCommand.key)} title="Bold (Ctrl+B)">
+          <button onClick={() => runCommand(toggleStrongCommand.key)} title={tr('milkdown.bold')}>
             <strong>B</strong>
           </button>
-          <button onClick={() => runCommand(toggleEmphasisCommand.key)} title="Italic (Ctrl+I)">
+          <button onClick={() => runCommand(toggleEmphasisCommand.key)} title={tr('milkdown.italic')}>
             <em>I</em>
           </button>
-          <button onClick={() => runCommand(toggleStrikethroughCommand.key)} title="Strikethrough">
+          <button onClick={() => runCommand(toggleStrikethroughCommand.key)} title={tr('milkdown.strikethrough')}>
             <s>S</s>
           </button>
         </div>
@@ -240,25 +242,25 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button onClick={() => runCommand(wrapInBulletListCommand.key)} title="Bullet List">•</button>
-          <button onClick={() => runCommand(wrapInOrderedListCommand.key)} title="Numbered List">1.</button>
-          <button onClick={() => runCommand(wrapInBlockquoteCommand.key)} title="Quote">❝</button>
-          <button onClick={() => runCommand(toggleInlineCodeCommand.key)} title="Code">{'{}'}</button>
+          <button onClick={() => runCommand(wrapInBulletListCommand.key)} title={tr('milkdown.bulletList')}>•</button>
+          <button onClick={() => runCommand(wrapInOrderedListCommand.key)} title={tr('milkdown.numberedList')}>1.</button>
+          <button onClick={() => runCommand(wrapInBlockquoteCommand.key)} title={tr('milkdown.quote')}>❝</button>
+          <button onClick={() => runCommand(toggleInlineCodeCommand.key)} title={tr('milkdown.code')}>{'{}'}</button>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button onClick={openLinkModal} title="Insert Link (Ctrl+K)">🔗</button>
-          <button onClick={openImageModal} title="Insert Image">🖼</button>
-          <button onClick={() => runCommand(insertHrCommand.key)} title="Horizontal Rule">―</button>
+          <button onClick={openLinkModal} title={tr('milkdown.insertLink')}>🔗</button>
+          <button onClick={openImageModal} title={tr('milkdown.insertImage')}>🖼</button>
+          <button onClick={() => runCommand(insertHrCommand.key)} title={tr('milkdown.horizontalRule')}>―</button>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button onClick={() => runCommand(undoCommand.key)} title="Undo (Ctrl+Z)">↶</button>
-          <button onClick={() => runCommand(redoCommand.key)} title="Redo (Ctrl+Y)">↷</button>
+          <button onClick={() => runCommand(undoCommand.key)} title={tr('milkdown.undo')}>↶</button>
+          <button onClick={() => runCommand(redoCommand.key)} title={tr('milkdown.redo')}>↷</button>
         </div>
       </div>
 
@@ -288,8 +290,10 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = (props) => {
 const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
   content,
   onChange,
-  placeholder = 'Start writing your content...',
+  placeholder,
 }) => {
+  const { t: tr } = useI18n();
+  const resolvedPlaceholder = placeholder || tr('editor.placeholder');
   const [loading, getEditor] = useInstance();
   const lastExternalContent = useRef(content);
   const isInternalChange = useRef(false);
@@ -375,7 +379,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
       onInputCapture={markUserInteraction}
     >
       <EditorToolbar onUserInteraction={markUserInteraction} />
-      <div className="milkdown-content" data-placeholder={placeholder}>
+      <div className="milkdown-content" data-placeholder={resolvedPlaceholder}>
         <Milkdown />
       </div>
     </div>

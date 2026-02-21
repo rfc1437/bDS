@@ -4,26 +4,23 @@
   <body>
     <main>
       {% if archive_context %}
-        {% assign month_names_de = "Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember" | split: "|" %}
         {% if show_archive_range_heading and min_date and max_date %}
           {% if archive_context.kind == 'tag' or archive_context.kind == 'category' %}
             <h1 class="archive-heading">{{ archive_context.name }} - {{ min_date.day }}.{{ min_date.month }}.{{ min_date.year }} - {{ max_date.day }}.{{ max_date.month }}.{{ max_date.year }}</h1>
           {% else %}
-            <h1 class="archive-heading">Archiv {{ min_date.day }}.{{ min_date.month }}.{{ min_date.year }} - {{ max_date.day }}.{{ max_date.month }}.{{ max_date.year }}</h1>
+            <h1 class="archive-heading">{{ 'render.archive' | i18n: language }} {{ min_date.day }}.{{ min_date.month }}.{{ min_date.year }} - {{ max_date.day }}.{{ max_date.month }}.{{ max_date.year }}</h1>
           {% endif %}
         {% else %}
           {% if archive_context.kind == 'tag' or archive_context.kind == 'category' %}
             <h1 class="archive-heading">{{ archive_context.name }}</h1>
           {% elsif archive_context.kind == 'month' and archive_context.month and archive_context.year %}
-            {% assign month_index = archive_context.month | minus: 1 %}
-            {% assign month_name = month_names_de[month_index] %}
-            <h1 class="archive-heading">Archiv {{ month_name }} {{ archive_context.year }}</h1>
+            {% assign month_key = 'render.month.' | append: archive_context.month %}
+            <h1 class="archive-heading">{{ 'render.archive' | i18n: language }} {{ month_key | i18n: language }} {{ archive_context.year }}</h1>
           {% elsif archive_context.kind == 'year' and archive_context.year %}
-            <h1 class="archive-heading">Archiv {{ archive_context.year }}</h1>
+            <h1 class="archive-heading">{{ 'render.archive' | i18n: language }} {{ archive_context.year }}</h1>
           {% elsif archive_context.kind == 'day' and archive_context.day and archive_context.month and archive_context.year %}
-            {% assign day_month_index = archive_context.month | minus: 1 %}
-            {% assign day_month_name = month_names_de[day_month_index] %}
-            <h1 class="archive-heading">Archiv {{ archive_context.day }}. {{ day_month_name }} {{ archive_context.year }}</h1>
+            {% assign day_month_key = 'render.month.' | append: archive_context.month %}
+            <h1 class="archive-heading">{{ 'render.archive' | i18n: language }} {{ archive_context.day }}. {{ day_month_key | i18n: language }} {{ archive_context.year }}</h1>
           {% else %}
             <h1 class="archive-heading">{{ page_title }}</h1>
           {% endif %}
@@ -41,7 +38,7 @@
                     {% if post.show_title %}
                       <h2 class="post-title">{{ post.title }}</h2>
                     {% endif %}
-                    {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}
+                    {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}
                   </div>
                 {% endfor %}
               </div>
@@ -52,7 +49,7 @@
                 {% if post.show_title %}
                   <h2 class="post-title">{{ post.title }}</h2>
                 {% endif %}
-                {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path }}
+                {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}
               </div>
             {% endfor %}
           {% endif %}
@@ -64,15 +61,15 @@
       </section>
 
       {% if has_prev_page or has_next_page %}
-        <nav class="preview-pagination" aria-label="Pagination">
+        <nav class="preview-pagination" aria-label="{{ 'render.pagination.label' | i18n: language }}">
           {% if has_prev_page %}
-            <a href="{{ prev_page_href }}" class="preview-pagination-link" aria-label="Newer posts">neuer</a>
+            <a href="{{ prev_page_href }}" class="preview-pagination-link" aria-label="{{ 'render.pagination.newer' | i18n: language }}">{{ 'render.pagination.newer' | i18n: language }}</a>
           {% else %}
             <span class="spacer"></span>
           {% endif %}
 
           {% if has_next_page %}
-            <a href="{{ next_page_href }}" class="preview-pagination-link" aria-label="Older posts">älter</a>
+            <a href="{{ next_page_href }}" class="preview-pagination-link" aria-label="{{ 'render.pagination.older' | i18n: language }}">{{ 'render.pagination.older' | i18n: language }}</a>
           {% else %}
             <span class="spacer"></span>
           {% endif %}

@@ -2,10 +2,12 @@ import React, { useEffect } from 'react';
 import Markdown from 'marked-react';
 import documentationContent from '../../../../DOCUMENTATION.md?raw';
 import { useAppStore } from '../../store';
+import { useI18n } from '../../i18n';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from '../../utils/picoTheme';
 import './DocumentationView.css';
 
 export const DocumentationView: React.FC = () => {
+  const { t: tr } = useI18n();
   const { picoTheme } = useAppStore();
   const resolvedTheme = getRendererPicoTheme(picoTheme);
 
@@ -18,8 +20,8 @@ export const DocumentationView: React.FC = () => {
   return (
     <div className="documentation-view">
       <div className="documentation-header">
-        <h1>Documentation</h1>
-        <p>User guide for this installed bDS version.</p>
+        <h1>{tr('docs.title')}</h1>
+        <p>{tr('docs.subtitle')}</p>
       </div>
       <main className="documentation-scroll">
         <div className="documentation-content markdown-body pico" data-theme="auto" data-pico-theme={resolvedTheme}>

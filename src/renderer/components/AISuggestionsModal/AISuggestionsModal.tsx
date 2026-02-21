@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '../../i18n';
 import './AISuggestionsModal.css';
 
 export interface AISuggestions {
@@ -21,9 +22,9 @@ interface SuggestionFieldConfig {
 }
 
 const SUGGESTION_FIELDS: SuggestionFieldConfig[] = [
-  { key: 'title', label: 'Title' },
-  { key: 'alt', label: 'Alt Text' },
-  { key: 'caption', label: 'Caption' },
+  { key: 'title', label: 'aiSuggestions.titleField' },
+  { key: 'alt', label: 'aiSuggestions.altField' },
+  { key: 'caption', label: 'aiSuggestions.captionField' },
 ];
 
 interface AISuggestionsModalProps {
@@ -45,6 +46,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
   onConfirm,
   onClose,
 }) => {
+  const { t: tr } = useI18n();
   // Checkbox state - initialized based on whether current values are empty
   const [useTitle, setUseTitle] = useState(false);
   const [useAlt, setUseAlt] = useState(false);
@@ -107,15 +109,15 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
           <div className="ai-suggestion-label">
             {field.label}
             {currentValue && (
-              <span className="ai-suggestion-has-value" title="This field already has a value">
-                (has existing value)
+              <span className="ai-suggestion-has-value" title={tr('aiSuggestions.hasExisting')}>
+                {tr('aiSuggestions.hasExisting')}
               </span>
             )}
           </div>
           <div className="ai-suggestion-value">{suggestedValue}</div>
           {currentValue && (
             <div className="ai-suggestion-current">
-              Current: <em>{currentValue}</em>
+              {tr('aiSuggestions.current')}: <em>{currentValue}</em>
             </div>
           )}
         </div>
@@ -127,9 +129,9 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
     <div className="ai-suggestions-modal-backdrop" onClick={handleBackdropClick}>
       <div className="ai-suggestions-modal">
         <div className="ai-suggestions-modal-header">
-          <h2>AI Image Analysis</h2>
+          <h2>{tr('aiSuggestions.title')}</h2>
           {!isLoading && (
-            <button className="ai-suggestions-modal-close" onClick={onClose} title="Close">
+            <button className="ai-suggestions-modal-close" onClick={onClose} title={tr('aiSuggestions.close')}>
               ✕
             </button>
           )}
@@ -139,7 +141,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
           {isLoading && (
             <div className="ai-suggestions-loading">
               <div className="ai-suggestions-spinner"></div>
-              <p>Analyzing image...</p>
+              <p>{tr('aiSuggestions.analyzing')}</p>
             </div>
           )}
 
@@ -153,15 +155,15 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
           {!isLoading && !error && hasAnySuggestion && (
             <div className="ai-suggestions-list">
               <p className="ai-suggestions-intro">
-                Select which AI-generated values to apply. Existing values are preserved by default.
+                {tr('aiSuggestions.intro')}
               </p>
-              {SUGGESTION_FIELDS.map(renderSuggestionField)}
+              {SUGGESTION_FIELDS.map((field) => renderSuggestionField({ ...field, label: tr(field.label) }))}
             </div>
           )}
 
           {!isLoading && !error && !hasAnySuggestion && suggestions && (
             <div className="ai-suggestions-empty">
-              No suggestions were generated for this image.
+              {tr('aiSuggestions.empty')}
             </div>
           )}
         </div>
@@ -169,12 +171,12 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
         <div className="ai-suggestions-modal-footer">
           {isLoading ? (
             <button className="button-cancel" disabled>
-              Please wait...
+              {tr('aiSuggestions.wait')}
             </button>
           ) : (
             <>
               <button className="button-cancel" onClick={onClose}>
-                Cancel
+                {tr('common.cancel')}
               </button>
               {hasAnySuggestion && (
                 <button
@@ -182,7 +184,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
                   onClick={handleConfirm}
                   disabled={!hasAnySelected}
                 >
-                  Apply Selected
+                  {tr('aiSuggestions.applySelected')}
                 </button>
               )}
             </>

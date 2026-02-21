@@ -137,6 +137,7 @@ export const electronAPI: ElectronAPI = {
   // App
   app: {
     getDataPaths: () => ipcRenderer.invoke('app:getDataPaths'),
+    getSystemLanguage: () => ipcRenderer.invoke('app:getSystemLanguage'),
     getTitleBarMetrics: () => ipcRenderer.invoke('app:getTitleBarMetrics'),
     openFolder: (folderPath: string) => ipcRenderer.invoke('app:openFolder', folderPath),
     showItemInFolder: (itemPath: string) => ipcRenderer.invoke('app:showItemInFolder', itemPath),

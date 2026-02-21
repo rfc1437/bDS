@@ -5,6 +5,7 @@ import type { MediaData } from './MediaEngine';
 import type { PostData } from './PostEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
+import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
 
 export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
@@ -87,6 +88,8 @@ export interface SinglePostTemplateContext {
 export interface NotFoundTemplateContext {
   page_title: string;
   language: string;
+  not_found_message?: string;
+  not_found_back_label?: string;
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
 }
@@ -336,7 +339,9 @@ export function renderGalleryMacro(
   postId: string,
   mediaItems: MediaData[],
   linkedMediaIds: Set<string> | null,
+  renderLanguage: string,
 ): string {
+  const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
   const requestedColumns = parseIntegerParam(params.columns);
   const columns = requestedColumns && requestedColumns >= 1 && requestedColumns <= 6 ? requestedColumns : 3;
   const caption = params.caption ? `<figcaption class="gallery-caption">${escapeHtml(params.caption)}</figcaption>` : '';
@@ -361,12 +366,16 @@ export function renderGalleryMacro(
     return `<a class="gallery-item" href="${mediaPath}" data-lightbox="${groupName}" data-title="${title}"><img src="${mediaPath}" alt="${alt}" loading="lazy" /></a>`;
   }).join('');
 
-  const content = galleryItems || '<div class="gallery-empty">No linked images found.</div>';
+  const content = galleryItems || `<div class="gallery-empty">${escapeHtml(translateRender(language, 'render.gallery.empty'))}</div>`;
   return `<div class="macro-gallery gallery-cols-${columns}" data-post-id="${escapeHtml(postId)}" data-columns="${columns}" data-lightbox="true"><div class="gallery-container gallery-lightbox">${content}</div>${caption}</div>`;
 }
 
-export function renderPhotoArchiveMacro(params: Record<string, string>, mediaItems: MediaData[]): string {
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export function renderPhotoArchiveMacro(
+  params: Record<string, string>,
+  mediaItems: MediaData[],
+  renderLanguage: string,
+): string {
+  const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
   const yearParam = parseIntegerParam(params.year);
   const monthParam = parseIntegerParam(params.month);
 
@@ -393,11 +402,12 @@ export function renderPhotoArchiveMacro(params: Record<string, string>, mediaIte
   const buckets = buildPhotoArchiveBuckets(renderableMedia, params);
 
   if (buckets.length === 0) {
-    return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container"><div class="photo-archive-empty">No photos found for this archive.</div></div></div>`;
+    const emptyLabel = escapeHtml(translateRender(language, 'render.photoArchive.empty'));
+    return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container"><div class="photo-archive-empty">${emptyLabel}</div></div></div>`;
   }
 
   const monthsHtml = buckets.map((bucket) => {
-    const monthName = monthNames[bucket.month - 1] || String(bucket.month);
+    const monthName = translateRender(language, `render.month.${bucket.month}`);
     const label = `${monthName} ${bucket.year}`;
     const groupName = `photo-archive-${bucket.year}-${String(bucket.month).padStart(2, '0')}`;
 
@@ -414,7 +424,8 @@ export function renderPhotoArchiveMacro(params: Record<string, string>, mediaIte
   return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container">${monthsHtml}</div></div>`;
 }
 
-export function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageEntry[]): string {
+export function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageEntry[], renderLanguage: string): string {
+  const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
   const widthParam = parseIntegerParam(params.width);
   const heightParam = parseIntegerParam(params.height);
   const orientation = normalizeTagCloudOrientation(params.orientation);
@@ -422,7 +433,7 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
   const height = heightParam && heightParam >= 180 && heightParam <= 900 ? heightParam : 420;
 
   if (tagUsage.length === 0) {
-    return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico"><div class="tag-cloud-empty">No tags found.</div></div>`;
+    return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico"><div class="tag-cloud-empty">${escapeHtml(translateRender(language, 'render.tagCloud.empty'))}</div></div>`;
   }
 
   const minCount = Math.min(...tagUsage.map((entry) => entry.count));
@@ -445,7 +456,8 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
 
   const wordsJson = escapeHtml(JSON.stringify(words));
 
-  return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico" data-tag-cloud-words="${wordsJson}" data-width="${width}" data-height="${height}"><svg class="tag-cloud-canvas" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-label="Tag cloud"></svg></div>`;
+  const ariaLabel = escapeHtml(translateRender(language, 'render.tagCloud.ariaLabel'));
+  return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico" data-tag-cloud-words="${wordsJson}" data-width="${width}" data-height="${height}"><svg class="tag-cloud-canvas" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-label="${ariaLabel}"></svg></div>`;
 }
 
 export function isExternalOrSpecialUrl(value: string): boolean {
@@ -551,33 +563,36 @@ export function renderMacro(
   mediaItems: MediaData[],
   linkedMediaIds: Set<string> | null,
   tagUsage: TagUsageEntry[],
+  renderLanguage: string,
 ): string {
   const normalizedName = normalizeMacroName(name);
 
   if (normalizedName === 'youtube') {
+    const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
     const id = escapeHtml(params.id || '');
-    const title = escapeHtml(params.title || 'YouTube video');
+    const title = escapeHtml(params.title || translateRender(language, 'render.video.youtubeTitle'));
     if (!id) return '';
     return `<div class="macro-youtube"><iframe src="https://www.youtube.com/embed/${id}?rel=0" title="${title}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
   }
 
   if (normalizedName === 'vimeo') {
+    const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
     const id = escapeHtml(params.id || '');
-    const title = escapeHtml(params.title || 'Vimeo video');
+    const title = escapeHtml(params.title || translateRender(language, 'render.video.vimeoTitle'));
     if (!id) return '';
     return `<div class="macro-vimeo"><iframe src="https://player.vimeo.com/video/${id}" title="${title}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
   }
 
   if (normalizedName === 'gallery') {
-    return renderGalleryMacro(params, postId, mediaItems, linkedMediaIds);
+    return renderGalleryMacro(params, postId, mediaItems, linkedMediaIds, renderLanguage);
   }
 
   if (normalizedName === 'photo_archive') {
-    return renderPhotoArchiveMacro(params, mediaItems);
+    return renderPhotoArchiveMacro(params, mediaItems, renderLanguage);
   }
 
   if (normalizedName === 'tag_cloud') {
-    return renderTagCloudMacro(params, tagUsage);
+    return renderTagCloudMacro(params, tagUsage, renderLanguage);
   }
 
   return '';
@@ -677,9 +692,23 @@ export class PageRenderer {
       cache: true,
     });
 
-    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown) => {
+    this.liquid.registerFilter('i18n', (keyArg: unknown, renderLanguageArg: unknown) => {
+      const key = typeof keyArg === 'string' ? keyArg : '';
+      const resolved = resolveRenderLanguageFromProjectPreferences(
+        typeof renderLanguageArg === 'string' ? renderLanguageArg : 'en',
+      );
+
+      if (!key) {
+        return '';
+      }
+
+      return translateRender(resolved, key);
+    });
+
+    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown) => {
       const content = typeof value === 'string' ? value : '';
       const postId = typeof postIdArg === 'string' ? postIdArg : '';
+      const renderLanguage = typeof renderLanguageArg === 'string' ? renderLanguageArg : 'en';
       const rewriteContext: HtmlRewriteContext = {
         canonicalPostPathBySlug: recordToMap(canonicalPostsArg),
         canonicalMediaPathBySourcePath: recordToMap(canonicalMediaArg),
@@ -703,7 +732,7 @@ export class PageRenderer {
 
       const withMacros = content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
         const params = parseMacroParams(rawParams);
-        return renderMacro(macroName.toLowerCase(), params, postId, mediaItems, linkedMediaIds, tagUsage);
+        return renderMacro(macroName.toLowerCase(), params, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage);
       });
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
@@ -964,6 +993,10 @@ export class PageRenderer {
   }
 
   async renderNotFound(context: NotFoundTemplateContext): Promise<string> {
-    return this.liquid.renderFile('not-found', context);
+    return this.liquid.renderFile('not-found', {
+      ...context,
+      not_found_message: context.not_found_message,
+      not_found_back_label: context.not_found_back_label,
+    });
   }
 }

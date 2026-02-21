@@ -1,0 +1,55 @@
+import enJson from './i18n/locales/en.json';
+import deJson from './i18n/locales/de.json';
+import frJson from './i18n/locales/fr.json';
+import itJson from './i18n/locales/it.json';
+import esJson from './i18n/locales/es.json';
+
+export type SupportedLanguage = 'en' | 'de' | 'fr' | 'it' | 'es';
+
+type TranslationMap = Record<string, string>;
+
+const en = enJson as TranslationMap;
+const de = { ...en, ...(deJson as TranslationMap) };
+const fr = { ...en, ...(frJson as TranslationMap) };
+const it = { ...en, ...(itJson as TranslationMap) };
+const es = { ...en, ...(esJson as TranslationMap) };
+
+const catalog: Record<SupportedLanguage, TranslationMap> = { en, de, fr, it, es };
+
+function normalizeLanguage(input: string | undefined | null): SupportedLanguage {
+  const normalized = (input || '').trim().toLowerCase();
+  if (!normalized) {
+    return 'en';
+  }
+
+  const base = normalized.split('-')[0];
+  if (base === 'en' || base === 'de' || base === 'fr' || base === 'it' || base === 'es') {
+    return base;
+  }
+
+  return 'en';
+}
+
+export function resolveSupportedRenderLanguage(language: string | undefined | null): SupportedLanguage {
+  return normalizeLanguage(language);
+}
+
+export function resolveRenderLanguageFromProjectPreferences(mainLanguage: string | undefined | null): SupportedLanguage {
+  return normalizeLanguage(mainLanguage);
+}
+
+export function resolveSupportedUiLanguage(language: string | undefined | null): SupportedLanguage {
+  return normalizeLanguage(language);
+}
+
+export function resolveUiLanguageFromSystemLocale(systemLocale: string | undefined | null): SupportedLanguage {
+  return normalizeLanguage(systemLocale);
+}
+
+export function translateRender(language: SupportedLanguage, key: string): string {
+  return catalog[language]?.[key] ?? catalog.en[key] ?? key;
+}
+
+export function translateMenu(language: SupportedLanguage, key: string): string {
+  return catalog[language]?.[key] ?? catalog.en[key] ?? key;
+}

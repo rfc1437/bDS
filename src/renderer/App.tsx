@@ -3,9 +3,11 @@ import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer,
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
+import { useI18n } from './i18n';
 import './App.css';
 
 const App: React.FC = () => {
+  const { t: tr } = useI18n();
   const {
     setPosts,
     setMedia,
@@ -93,7 +95,7 @@ const App: React.FC = () => {
 
     window.addEventListener('beforeunload', saveTabsOnUnload);
     return () => window.removeEventListener('beforeunload', saveTabsOnUnload);
-  }, []);
+  }, [tr]);
 
   // Set up event listeners for real-time updates
   useEffect(() => {
@@ -166,7 +168,7 @@ const App: React.FC = () => {
       window.electronAPI?.on('task:completed', (task: unknown) => {
         const t = task as TaskProgress;
         updateTask(t.taskId, t);
-        showToast.success(`Task completed: ${t.message}`);
+        showToast.success(tr('app.taskCompleted', { message: t.message }));
       }) || (() => {})
     );
 
@@ -174,7 +176,7 @@ const App: React.FC = () => {
       window.electronAPI?.on('task:failed', (task: unknown) => {
         const t = task as TaskProgress;
         updateTask(t.taskId, t);
-        showToast.error(`Task failed: ${t.error || t.message}`);
+        showToast.error(tr('app.taskFailed', { message: t.error || t.message }));
       }) || (() => {})
     );
 
@@ -265,7 +267,7 @@ const App: React.FC = () => {
           await window.electronAPI?.media.regenerateMissingThumbnails();
         } catch (error) {
           console.error('Database rebuild failed:', error);
-          showToast.error('Database rebuild failed');
+          showToast.error(tr('app.databaseRebuildFailed'));
         }
       }) || (() => {})
     );
@@ -279,7 +281,7 @@ const App: React.FC = () => {
           ]);
         } catch (error) {
           console.error('Text reindex failed:', error);
-          showToast.error('Text reindex failed');
+          showToast.error(tr('app.textReindexFailed'));
         }
       }) || (() => {})
     );
@@ -287,7 +289,7 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('menu:metadataDiff', () => {
         // Open metadata diff tool tab
-        openTab({ id: 'metadata-diff', type: 'metadata-diff', title: 'Metadata Diff' });
+        openTab({ id: 'metadata-diff', type: 'metadata-diff', title: tr('app.metadataDiff') });
       }) || (() => {})
     );
 
@@ -297,7 +299,7 @@ const App: React.FC = () => {
           await window.electronAPI?.blog.generateSitemap();
         } catch (error) {
           console.error('Sitemap generation failed:', error);
-          showToast.error('Sitemap generation failed');
+          showToast.error(tr('app.sitemapGenerationFailed'));
         }
       }) || (() => {})
     );
@@ -316,7 +318,7 @@ const App: React.FC = () => {
           }
         } catch (error) {
           console.error('Failed to open selected post preview:', error);
-          showToast.error('Failed to open selected post preview');
+          showToast.error(tr('app.previewOpenFailed'));
         }
       }) || (() => {})
     );
@@ -351,7 +353,7 @@ const App: React.FC = () => {
         const importedCount = data.posts.imported + data.pages.imported;
         const importedMedia = data.media.imported;
         if (data.success) {
-          showToast.success(`Import complete: ${importedCount} posts, ${importedMedia} media files`);
+          showToast.success(tr('app.importComplete', { posts: importedCount, media: importedMedia }));
         }
       }) || (() => {})
     );

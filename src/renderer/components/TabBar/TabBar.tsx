@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore, Tab } from '../../store';
+import { useI18n } from '../../i18n';
 import './TabBar.css';
 
 const MAX_CHAT_TITLE_LENGTH = 18;
@@ -22,7 +23,8 @@ const getTabTitle = (
   media: { id: string; originalName: string }[],
   chatTitles: Map<string, string>,
   importDefTitles: Map<string, string>,
-  commitTitles: Map<string, string>
+  commitTitles: Map<string, string>,
+  tr: (key: string, vars?: Record<string, string | number>) => string,
 ): string => {
   if (tab.type === 'git-diff') {
     const filePath = getGitDiffResource(tab.id);
@@ -32,57 +34,57 @@ const getTabTitle = (
       if (commitTitle) {
         return commitTitle;
       }
-      return `Commit ${commitHash.slice(0, 7)}`;
+      return tr('tabBar.commitTitle', { hash: commitHash.slice(0, 7) });
     }
     const filename = filePath.split('/').pop();
     return filename || filePath;
   }
 
   if (tab.type === 'settings') {
-    return 'Settings';
+    return tr('common.settings');
   }
 
   if (tab.type === 'style') {
-    return 'Style';
+    return tr('tabBar.style');
   }
   
   if (tab.type === 'tags') {
-    return 'Tags';
+    return tr('activity.tags');
   }
   
   if (tab.type === 'post') {
-    return postTitles.get(tab.id) || 'Loading...';
+    return postTitles.get(tab.id) || tr('tabBar.loading');
   }
   
   if (tab.type === 'media') {
     const mediaItem = media.find(m => m.id === tab.id);
-    return mediaItem?.originalName || 'Media';
+    return mediaItem?.originalName || tr('activity.media');
   }
   
   if (tab.type === 'chat') {
     const title = chatTitles.get(tab.id);
-    if (title && title !== 'New Chat') {
+    if (title && title !== tr('chat.newChat')) {
       // Truncate long titles for display
       return title.length > MAX_CHAT_TITLE_LENGTH
         ? title.substring(0, MAX_CHAT_TITLE_LENGTH) + '…'
         : title;
     }
-    return 'New Chat';
+    return tr('chat.newChat');
   }
 
   if (tab.type === 'import') {
-    return importDefTitles.get(tab.id) || 'Import';
+    return importDefTitles.get(tab.id) || tr('activity.import');
   }
 
   if (tab.type === 'metadata-diff') {
-    return 'Metadata Diff';
+    return tr('app.metadataDiff');
   }
 
   if (tab.type === 'documentation') {
-    return 'Documentation';
+    return tr('docs.title');
   }
 
-  return 'Unknown';
+  return tr('tabBar.unknown');
 };
 
 const getTabIcon = (tab: Tab): React.ReactNode => {
@@ -176,6 +178,7 @@ const ChevronRightIcon: React.FC = () => (
 );
 
 export const TabBar: React.FC = () => {
+  const { t: tr } = useI18n();
   const { 
     tabs, 
     activeTabId, 
@@ -218,7 +221,7 @@ export const TabBar: React.FC = () => {
           continue;
         }
 
-        const title = post.title || 'Untitled';
+        const title = post.title || tr('editor.untitled');
         if (next.get(post.id) !== title) {
           next.set(post.id, title);
           changed = true;
@@ -241,11 +244,11 @@ export const TabBar: React.FC = () => {
           try {
             const post = await window.electronAPI?.posts.get(tab.id);
             if (post) {
-              newTitles.set(tab.id, post.title || 'Untitled');
+              newTitles.set(tab.id, post.title || tr('editor.untitled'));
               changed = true;
             }
           } catch (error) {
-            console.error('Failed to fetch post title:', error);
+            console.error(tr('tabBar.error.fetchPostTitle'), error);
           }
         }
       }
@@ -256,7 +259,7 @@ export const TabBar: React.FC = () => {
     };
 
     fetchTitles();
-  }, [tabs, posts]); // Note: intentionally not including postTitles to avoid infinite loops
+  }, [tabs, posts, tr]); // Note: intentionally not including postTitles to avoid infinite loops
 
   // Listen for post updates to refresh titles
   useEffect(() => {
@@ -265,7 +268,7 @@ export const TabBar: React.FC = () => {
       if (post) {
         setPostTitles(prev => {
           const newTitles = new Map(prev);
-          newTitles.set(post.id, post.title || 'Untitled');
+          newTitles.set(post.id, post.title || tr('editor.untitled'));
           return newTitles;
         });
       }
@@ -274,7 +277,7 @@ export const TabBar: React.FC = () => {
     return () => {
       unsub?.();
     };
-  }, []);
+  }, [tr]);
 
   // Fetch chat titles for chat tabs
   useEffect(() => {
@@ -293,7 +296,7 @@ export const TabBar: React.FC = () => {
               newTitles.set(tab.id, conversation.title);
             }
           } catch (error) {
-            console.error('Failed to fetch chat title:', error);
+            console.error(tr('tabBar.error.fetchChatTitle'), error);
           }
         }
       }
@@ -304,7 +307,7 @@ export const TabBar: React.FC = () => {
     };
 
     fetchTitles();
-  }, [tabs]); // Note: intentionally not including chatTitles to avoid infinite loops
+  }, [tabs, tr]); // Note: intentionally not including chatTitles to avoid infinite loops
 
   // Listen for chat title updates
   useEffect(() => {
@@ -336,7 +339,7 @@ export const TabBar: React.FC = () => {
               newTitles.set(tab.id, def.name);
             }
           } catch (error) {
-            console.error('Failed to fetch import definition title:', error);
+            console.error(tr('tabBar.error.fetchImportTitle'), error);
           }
         }
       }
@@ -346,7 +349,7 @@ export const TabBar: React.FC = () => {
     };
 
     fetchTitles();
-  }, [tabs]); // Note: intentionally not including importDefTitles to avoid infinite loops
+  }, [tabs, tr]); // Note: intentionally not including importDefTitles to avoid infinite loops
 
   // Listen for import definition name updates
   useEffect(() => {
@@ -411,7 +414,7 @@ export const TabBar: React.FC = () => {
           return changed ? updated : previous;
         });
       } catch (error) {
-        console.error('Failed to fetch commit titles:', error);
+        console.error(tr('tabBar.error.fetchCommitTitle'), error);
       }
     };
 
@@ -420,7 +423,7 @@ export const TabBar: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [tabs, activeProject]);
+  }, [tabs, activeProject, tr]);
 
   // Check if arrows are needed based on scroll position
   const updateArrowVisibility = useCallback(() => {
@@ -534,7 +537,7 @@ export const TabBar: React.FC = () => {
         <button 
           className="tab-scroll-button tab-scroll-left"
           onClick={scrollLeft}
-          title="Scroll tabs left"
+          title={tr('tabBar.scrollLeft')}
         >
           <ChevronLeftIcon />
         </button>
@@ -544,7 +547,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, postTitles, media, chatTitles, importDefTitles, commitTitles);
+          const title = getTabTitle(tab, postTitles, media, chatTitles, importDefTitles, commitTitles, tr);
           const icon = getTabIcon(tab);
           
           return (
@@ -555,7 +558,7 @@ export const TabBar: React.FC = () => {
               onClick={() => handleTabClick(tab.id)}
               onDoubleClick={() => handleTabDoubleClick(tab)}
               onMouseDown={(e) => handleMiddleClick(e, tab.id)}
-              title={`${title}${tab.isTransient ? ' (Preview)' : ''}${isDirty ? ' • Modified' : ''}`}
+              title={`${title}${tab.isTransient ? ` (${tr('tabBar.preview')})` : ''}${isDirty ? ` • ${tr('tabBar.modified')}` : ''}`}
             >
               <span className="tab-icon">{icon}</span>
               <span className={`tab-title ${tab.isTransient ? 'italic' : ''}`}>
@@ -566,7 +569,7 @@ export const TabBar: React.FC = () => {
                 <button 
                   className="tab-close" 
                   onClick={(e) => handleTabClose(e, tab.id)}
-                  title="Close (Ctrl+W)"
+                  title={tr('tabBar.closeHint')}
                 >
                   <CloseIcon />
                 </button>
@@ -580,7 +583,7 @@ export const TabBar: React.FC = () => {
         <button 
           className="tab-scroll-button tab-scroll-right"
           onClick={scrollRight}
-          title="Scroll tabs right"
+          title={tr('tabBar.scrollRight')}
         >
           <ChevronRightIcon />
         </button>

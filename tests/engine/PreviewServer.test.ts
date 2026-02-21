@@ -578,10 +578,10 @@ describe('PreviewServer', () => {
     expect(firstPageHtml).toContain('<h1 class="archive-heading">Meine Blog Beschreibung</h1>');
 
     const secondPageHtml = await (await fetch(`${server.getBaseUrl()}/page/2/`)).text();
-    expect(secondPageHtml).toContain('<h1 class="archive-heading">Archiv 1.1.2020 - 2.1.2020</h1>');
+    expect(secondPageHtml).toContain('<h1 class="archive-heading">Archive 1.1.2020 - 2.1.2020</h1>');
   });
 
-  it('renders month archive heading with German month name on first page', async () => {
+  it('renders month archive heading in the active render language on first page', async () => {
     const posts = [
       makePost({ id: 'm-1', slug: 'm-1', title: 'M1', content: 'Body 1', createdAt: new Date('2020-02-05T10:00:00.000Z') }),
       makePost({ id: 'm-2', slug: 'm-2', title: 'M2', content: 'Body 2', createdAt: new Date('2020-02-04T10:00:00.000Z') }),
@@ -604,7 +604,7 @@ describe('PreviewServer', () => {
     await server.start(0);
 
     const monthPageHtml = await (await fetch(`${server.getBaseUrl()}/2020/2/`)).text();
-    expect(monthPageHtml).toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
+    expect(monthPageHtml).toContain('<h1 class="archive-heading">Archive February 2020</h1>');
   });
 
   it('renders tag heading on first page and adds date range on later pages', async () => {

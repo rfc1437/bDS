@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import { APP_MENU_GROUPS } from '../../../main/shared/menuCommands';
+import { resolveSupportedUiLanguage, translateMenu } from '../../../main/shared/i18n';
+import { useI18n } from '../../i18n';
 import './WindowTitleBar.css';
 
 type WindowControlsOverlayLike = {
@@ -11,6 +13,7 @@ type WindowControlsOverlayLike = {
 };
 
 export const WindowTitleBar: React.FC = () => {
+  const { language } = useI18n();
   const { sidebarVisible, panelVisible, toggleSidebar, togglePanel } = useAppStore();
   const [windowTitle, setWindowTitle] = useState<string>(document.title || 'Blogging Desktop Server');
   const [openMenu, setOpenMenu] = useState<{ label: string; left: number } | null>(null);
@@ -32,6 +35,19 @@ export const WindowTitleBar: React.FC = () => {
       items: group.items.filter(item => isDevMode || item.action !== 'toggleDevTools'),
     };
   });
+
+  const uiLanguage = resolveSupportedUiLanguage(language);
+
+  const getGroupDisplayLabel = (groupLabel: string): string => {
+    return translateMenu(uiLanguage, `menu.group.${groupLabel.toLowerCase()}`) || groupLabel;
+  };
+
+  const getItemDisplayLabel = (itemLabel: string): string => {
+    if (itemLabel.startsWith('menu.')) {
+      return translateMenu(uiLanguage, itemLabel) || itemLabel;
+    }
+    return itemLabel;
+  };
 
   const mnemonicByKey = useMemo(() => {
     return visibleMenuGroups.reduce<Record<string, string>>((acc, group) => {
@@ -247,7 +263,7 @@ export const WindowTitleBar: React.FC = () => {
         const typed = event.key.toLowerCase();
         const matchingIndices = actionableItems
           .map((item, index) => ({ item, index }))
-          .filter(entry => entry.item.label.toLowerCase().startsWith(typed))
+          .filter(entry => getItemDisplayLabel(entry.item.label).toLowerCase().startsWith(typed))
           .map(entry => entry.index);
 
         if (matchingIndices.length === 0) {
@@ -402,7 +418,7 @@ export const WindowTitleBar: React.FC = () => {
               onMouseEnter={(event) => handleMenuButtonMouseEnter(event, group.label)}
               aria-label={group.label}
             >
-              {renderMenuLabel(group.label)}
+              {renderMenuLabel(getGroupDisplayLabel(group.label))}
             </button>
           ))}
         </div>
@@ -452,6 +468,7 @@ export const WindowTitleBar: React.FC = () => {
               return <div key={item.action} className="window-titlebar-menu-separator" />;
             }
 
+            const displayLabel = getItemDisplayLabel(item.label);
             const acceleratorText = item.accelerator ? formatAccelerator(item.accelerator) : null;
             const actionableItems = activeMenu.items.filter(menuItem => !menuItem.separator);
             const currentActionableIndex = actionableItems.findIndex(menuItem => menuItem.action === item.action);
@@ -463,9 +480,9 @@ export const WindowTitleBar: React.FC = () => {
                 type="button"
                 className={`window-titlebar-menu-item${isKeyboardActive ? ' is-keyboard-active' : ''}`}
                 onClick={() => handleMenuItemClick(item.action)}
-                aria-label={acceleratorText ? `${item.label} ${acceleratorText}` : item.label}
+                aria-label={acceleratorText ? `${displayLabel} ${acceleratorText}` : displayLabel}
               >
-                <span className="window-titlebar-menu-item-label">{item.label}</span>
+                <span className="window-titlebar-menu-item-label">{displayLabel}</span>
                 {acceleratorText && <span className="window-titlebar-menu-item-accelerator">{acceleratorText}</span>}
               </button>
             );

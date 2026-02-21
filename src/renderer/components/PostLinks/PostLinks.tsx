@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useI18n } from '../../i18n';
 import './PostLinks.css';
 
 interface PostLinkInfo {
@@ -14,6 +15,7 @@ interface PostLinksProps {
 }
 
 export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updatedAt }) => {
+  const { t: tr } = useI18n();
   const [linksTo, setLinksTo] = useState<PostLinkInfo[]>([]);
   const [linkedBy, setLinkedBy] = useState<PostLinkInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
   if (loading) {
     return (
       <div className="post-links">
-        <div className="post-links-loading">Loading links...</div>
+        <div className="post-links-loading">{tr('postLinks.loading')}</div>
       </div>
     );
   }
@@ -60,7 +62,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
         onClick={() => setExpanded(!expanded)}
       >
         <span className="post-links-icon">🔗</span>
-        <span className="post-links-count">{totalLinks} link{totalLinks !== 1 ? 's' : ''}</span>
+        <span className="post-links-count">{totalLinks} {totalLinks !== 1 ? tr('postLinks.links') : tr('postLinks.link')}</span>
         <span className="post-links-chevron">{expanded ? '▼' : '▶'}</span>
       </button>
 
@@ -70,7 +72,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
             <div className="post-links-section">
               <h4 className="post-links-heading">
                 <span className="post-links-arrow">→</span>
-                Links to ({linksTo.length})
+                {tr('postLinks.linksTo', { count: linksTo.length })}
               </h4>
               <ul className="post-links-list">
                 {linksTo.map(link => (
@@ -78,7 +80,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
                     <button
                       className="post-link-item"
                       onClick={() => onPostClick?.(link.id)}
-                      title={`Open: ${link.title}`}
+                      title={tr('postLinks.openTitle', { title: link.title })}
                     >
                       {link.title}
                     </button>
@@ -92,7 +94,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
             <div className="post-links-section">
               <h4 className="post-links-heading">
                 <span className="post-links-arrow">←</span>
-                Linked by ({linkedBy.length})
+                {tr('postLinks.linkedBy', { count: linkedBy.length })}
               </h4>
               <ul className="post-links-list">
                 {linkedBy.map(link => (
@@ -100,7 +102,7 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
                     <button
                       className="post-link-item"
                       onClick={() => onPostClick?.(link.id)}
-                      title={`Open: ${link.title}`}
+                      title={tr('postLinks.openTitle', { title: link.title })}
                     >
                       {link.title}
                     </button>

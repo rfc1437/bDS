@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { useI18n } from '../../i18n';
 import './ConfirmDeleteModal.css';
 
 export interface DeleteReference {
@@ -20,6 +21,7 @@ interface ConfirmDeleteModalProps {
 }
 
 export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details, onClose }) => {
+  const { t: tr } = useI18n();
   if (!details) return null;
 
   const handleConfirm = useCallback(async () => {
@@ -39,14 +41,14 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details,
     <div className="confirm-delete-modal-backdrop" onClick={handleBackdropClick}>
       <div className="confirm-delete-modal">
         <div className="confirm-delete-modal-header">
-          <h2>Confirm Deletion</h2>
-          <button className="confirm-delete-modal-close" onClick={onClose} title="Close">
+          <h2>{tr('confirmDelete.title')}</h2>
+          <button className="confirm-delete-modal-close" onClick={onClose} title={tr('aiSuggestions.close')}>
             ✕
           </button>
         </div>
         <div className="confirm-delete-modal-body">
           <div className="confirm-delete-message">
-            Are you sure you want to delete {details.itemType === 'post' ? 'the post' : 'the media file'}{' '}
+            {details.itemType === 'post' ? tr('confirmDelete.promptPost') : tr('confirmDelete.promptMedia')}{' '}
             <strong>{details.itemTitle}</strong>?
           </div>
 
@@ -54,7 +56,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details,
             <div className="confirm-delete-warning">
               <div className="warning-icon">⚠️</div>
               <div className="warning-content">
-                <strong>Warning:</strong> This {details.itemType} is referenced by the following items:
+                <strong>{tr('confirmDelete.warning')}</strong> {tr('confirmDelete.referencedBy', { itemType: tr(`confirmDelete.itemType.${details.itemType}`) })}
                 <ul className="reference-list">
                   {details.references.map((ref) => (
                     <li key={ref.id}>
@@ -66,7 +68,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details,
                   ))}
                 </ul>
                 <p className="warning-note">
-                  Deleting this {details.itemType} will remove all these references.
+                  {tr('confirmDelete.note', { itemType: tr(`confirmDelete.itemType.${details.itemType}`) })}
                 </p>
               </div>
             </div>
@@ -74,10 +76,10 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details,
         </div>
         <div className="confirm-delete-modal-footer">
           <button className="button-cancel" onClick={onClose}>
-            Cancel
+            {tr('confirmDelete.cancel')}
           </button>
           <button className="button-delete" onClick={handleConfirm}>
-            Delete {details.itemType === 'post' ? 'Post' : 'Media'}
+            {details.itemType === 'post' ? tr('confirmDelete.deletePost') : tr('confirmDelete.deleteMedia')}
           </button>
         </div>
       </div>

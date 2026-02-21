@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../../store';
 import type { TaskProgress } from '../../../main/shared/electronApi';
+import { useI18n } from '../../i18n';
 import './TaskPopup.css';
 
 interface GroupedTaskEntry {
@@ -70,6 +71,7 @@ function buildTaskEntries(tasks: TaskProgress[]): TaskEntry[] {
 }
 
 export const TaskPopup: React.FC = () => {
+  const { t } = useI18n();
   const { tasks } = useAppStore();
   const [isOpen, setIsOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -174,7 +176,7 @@ export const TaskPopup: React.FC = () => {
         <button
           className="task-cancel"
           onClick={() => handleCancel(task.taskId)}
-          title="Cancel task"
+          title={t('tasks.cancelTask')}
         >
           ✕
         </button>
@@ -216,57 +218,57 @@ export const TaskPopup: React.FC = () => {
       <button 
         className={`task-popup-trigger ${hasActiveTasks ? 'active' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
-        title={`${runningTasks.length} running, ${pendingTasks.length} pending`}
+        title={t('tasks.triggerTitle', { running: runningTasks.length, pending: pendingTasks.length })}
       >
         {runningTasks.length > 0 ? (
           <>
             <span className="task-spinner" />
-            <span>{runningTasks.length} running</span>
+            <span>{`${runningTasks.length} ${t('common.running')}`}</span>
           </>
         ) : pendingTasks.length > 0 ? (
           <>
             <span className="task-icon pending">○</span>
-            <span>{pendingTasks.length} pending</span>
+            <span>{`${pendingTasks.length} ${t('common.pending')}`}</span>
           </>
         ) : (
-          <span>Tasks</span>
+          <span>{t('common.tasks')}</span>
         )}
       </button>
 
       {isOpen && (
         <div className="task-popup">
           <div className="task-popup-header">
-            <h4>Background Tasks</h4>
+            <h4>{t('tasks.backgroundTasks')}</h4>
             {recentTasks.length > 0 && (
               <button className="text-button" onClick={handleClearCompleted}>
-                Clear completed
+                {t('tasks.clearCompleted')}
               </button>
             )}
           </div>
 
           {runningTasks.length > 0 && (
             <div className="task-section">
-              <div className="task-section-title">Running</div>
+              <div className="task-section-title">{t('common.running')}</div>
               {renderEntries(runningEntries)}
             </div>
           )}
 
           {pendingTasks.length > 0 && (
             <div className="task-section">
-              <div className="task-section-title">Pending</div>
+              <div className="task-section-title">{t('common.pending')}</div>
               {renderEntries(pendingEntries)}
             </div>
           )}
 
           {recentTasks.length > 0 && (
             <div className="task-section">
-              <div className="task-section-title">Recent</div>
+              <div className="task-section-title">{t('tasks.recent')}</div>
               {renderEntries(recentEntries)}
             </div>
           )}
 
           {runningTasks.length === 0 && pendingTasks.length === 0 && recentTasks.length === 0 && (
-            <div className="task-empty">No active tasks</div>
+            <div className="task-empty">{t('tasks.noActive')}</div>
           )}
         </div>
       )}

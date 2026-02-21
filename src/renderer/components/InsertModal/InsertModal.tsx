@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../i18n';
 import './InsertModal.css';
 
 interface PostSearchResult {
@@ -54,6 +55,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   onClose,
   initialText = '',
 }) => {
+  const { t: tr } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('internal');
   const [query, setQuery] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
@@ -164,10 +166,10 @@ export const InsertModal: React.FC<InsertModalProps> = ({
       onInsertLink(externalUrl, externalText || undefined);
     } else {
       // External images don't have a mediaId
-      onInsertImage(externalUrl, externalAlt || 'Image', undefined);
+      onInsertImage(externalUrl, externalAlt || tr('insert.title.image'), undefined);
     }
     onClose();
-  }, [mode, externalUrl, externalText, externalAlt, onInsertLink, onInsertImage, onClose]);
+  }, [mode, externalUrl, externalText, externalAlt, onInsertLink, onInsertImage, onClose, tr]);
 
   // Backdrop click handler
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
@@ -184,12 +186,12 @@ export const InsertModal: React.FC<InsertModalProps> = ({
     }
   }, [selectedIndex]);
 
-  const title = mode === 'link' ? 'Insert Link' : 'Insert Image';
-  const internalLabel = mode === 'link' ? 'Link to Post' : 'Media Library';
-  const externalLabel = mode === 'link' ? 'External URL' : 'External Image';
+  const title = mode === 'link' ? tr('insert.title.link') : tr('insert.title.image');
+  const internalLabel = mode === 'link' ? tr('insert.tab.linkInternal') : tr('insert.tab.imageInternal');
+  const externalLabel = mode === 'link' ? tr('insert.tab.linkExternal') : tr('insert.tab.imageExternal');
   const searchPlaceholder = mode === 'link' 
-    ? 'Search posts by title or content...' 
-    : 'Search media by name, title, or alt text...';
+    ? tr('insert.searchPlaceholder.link')
+    : tr('insert.searchPlaceholder.image');
 
   return (
     <div className="insert-modal-backdrop" onClick={handleBackdropClick}>
@@ -228,18 +230,18 @@ export const InsertModal: React.FC<InsertModalProps> = ({
 
             <div className="insert-modal-results">
               {isSearching && (
-                <div className="insert-modal-status">Searching...</div>
+                <div className="insert-modal-status">{tr('insert.status.searching')}</div>
               )}
 
               {!isSearching && query.length < 2 && (
                 <div className="insert-modal-status">
-                  Type at least 2 characters to search
+                  {tr('insert.status.typeMore')}
                 </div>
               )}
 
               {!isSearching && query.length >= 2 && results.length === 0 && (
                 <div className="insert-modal-status">
-                  No {mode === 'link' ? 'posts' : 'media'} found for "{query}"
+                  {tr('insert.status.noResults', { kind: mode === 'link' ? tr('activity.posts').toLowerCase() : tr('activity.media').toLowerCase(), query })}
                 </div>
               )}
 
@@ -277,12 +279,12 @@ export const InsertModal: React.FC<InsertModalProps> = ({
         ) : (
           <div className="insert-modal-external">
             <div className="insert-modal-field">
-              <label className="insert-modal-label">URL</label>
+              <label className="insert-modal-label">{tr('insert.label.url')}</label>
               <input
                 ref={externalUrlRef}
                 type="text"
                 className="insert-modal-input"
-                placeholder={mode === 'link' ? 'https://example.com' : 'https://example.com/image.jpg'}
+                placeholder={mode === 'link' ? tr('insert.placeholder.linkUrl') : tr('insert.placeholder.imageUrl')}
                 value={externalUrl}
                 onChange={(e) => setExternalUrl(e.target.value)}
                 autoComplete="off"
@@ -291,22 +293,22 @@ export const InsertModal: React.FC<InsertModalProps> = ({
             
             {mode === 'link' ? (
               <div className="insert-modal-field">
-                <label className="insert-modal-label">Link Text (optional)</label>
+                <label className="insert-modal-label">{tr('insert.label.linkTextOptional')}</label>
                 <input
                   type="text"
                   className="insert-modal-input"
-                  placeholder="Click here"
+                  placeholder={tr('insert.placeholder.linkText')}
                   value={externalText}
                   onChange={(e) => setExternalText(e.target.value)}
                 />
               </div>
             ) : (
               <div className="insert-modal-field">
-                <label className="insert-modal-label">Alt Text</label>
+                <label className="insert-modal-label">{tr('insert.label.altText')}</label>
                 <input
                   type="text"
                   className="insert-modal-input"
-                  placeholder="Description of the image"
+                  placeholder={tr('insert.placeholder.imageAlt')}
                   value={externalAlt}
                   onChange={(e) => setExternalAlt(e.target.value)}
                 />
@@ -318,7 +320,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
               onClick={handleExternalSubmit}
               disabled={!externalUrl}
             >
-              Insert {mode === 'link' ? 'Link' : 'Image'}
+              {mode === 'link' ? tr('insert.submit.link') : tr('insert.submit.image')}
             </button>
           </div>
         )}
@@ -327,14 +329,14 @@ export const InsertModal: React.FC<InsertModalProps> = ({
           <div className="insert-modal-footer-content">
             <span className="insert-modal-hint">
               {activeTab === 'internal' 
-                ? 'Use ↑↓ to navigate, Enter to select, Esc to close'
-                : 'Enter URL and press Enter or click button, Esc to close'}
+                ? tr('insert.hint.internal')
+                : tr('insert.hint.external')}
             </span>
             {activeTab === 'internal' && (
               <span className="insert-modal-format-hint">
                 {mode === 'link'
-                  ? 'Canonical: /YYYY/MM/DD/slug'
-                  : 'Canonical: /media/YYYY/MM/file.ext'}
+                  ? tr('insert.hint.canonicalPost')
+                  : tr('insert.hint.canonicalMedia')}
               </span>
             )}
           </div>

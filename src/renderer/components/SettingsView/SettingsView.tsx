@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
+import { useI18n } from '../../i18n';
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
@@ -102,6 +103,7 @@ const SettingSection: React.FC<{
 };
 
 export const SettingsView: React.FC = () => {
+  const { t } = useI18n();
   const {
     preferredEditorMode,
     setPreferredEditorMode,
@@ -255,10 +257,10 @@ export const SettingsView: React.FC = () => {
   const handleSavePublishing = async () => {
     try {
       localStorage.setItem('bds-credentials', JSON.stringify(credentials));
-      showToast.success('Publishing credentials saved');
+      showToast.success(t('settings.toast.publishingSaved'));
     } catch (error) {
       console.error('Failed to save publishing credentials:', error);
-      showToast.error('Failed to save credentials');
+      showToast.error(t('settings.toast.saveCredentialsFailed'));
     }
   };
 
@@ -278,7 +280,7 @@ export const SettingsView: React.FC = () => {
     }
     setCredentials(newCreds);
     localStorage.setItem('bds-credentials', JSON.stringify(newCreds));
-    showToast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} credentials cleared`);
+    showToast.success(t('settings.toast.credentialsCleared', { type: type.toUpperCase() }));
   };
 
   // Save project settings
@@ -306,10 +308,10 @@ export const SettingsView: React.FC = () => {
           categorySettings,
         });
       }
-      showToast.success('Project settings saved');
+      showToast.success(t('settings.toast.projectSaved'));
     } catch (error) {
       console.error('Failed to save project settings:', error);
-      showToast.error('Failed to save project settings');
+      showToast.error(t('settings.toast.projectSaveFailed'));
     }
   };
 
@@ -335,7 +337,7 @@ export const SettingsView: React.FC = () => {
   const renderProjectSettings = () => (
     <SettingSection
       id="settings-section-project"
-      title="Project"
+      title={t('settings.project.title')}
       description="General settings for the active blog project."
       hidden={!sectionHasMatches(projectKeywords)}
     >
@@ -380,12 +382,12 @@ export const SettingsView: React.FC = () => {
             value={projectDataPath}
             onChange={(e) => setProjectDataPath(e.target.value)}
           />
-          <button className="secondary" onClick={handleBrowseDataPath} title="Browse...">
-            Browse
+          <button className="secondary" onClick={handleBrowseDataPath} title={t('settings.project.browse')}>
+            {t('settings.project.browse')}
           </button>
           {projectDataPath && (
-            <button className="secondary" onClick={handleResetDataPath} title="Reset to default">
-              Reset
+            <button className="secondary" onClick={handleResetDataPath} title={t('settings.project.resetDefault')}>
+              {t('settings.project.reset')}
             </button>
           )}
         </div>
@@ -415,26 +417,26 @@ export const SettingsView: React.FC = () => {
           value={projectMainLanguage}
           onChange={(e) => setProjectMainLanguage(e.target.value)}
         >
-          <option value="en">English</option>
-          <option value="de">German (Deutsch)</option>
-          <option value="es">Spanish (Español)</option>
-          <option value="fr">French (Français)</option>
-          <option value="it">Italian (Italiano)</option>
-          <option value="pt">Portuguese (Português)</option>
-          <option value="nl">Dutch (Nederlands)</option>
-          <option value="pl">Polish (Polski)</option>
-          <option value="ru">Russian (Русский)</option>
-          <option value="ja">Japanese (日本語)</option>
-          <option value="zh">Chinese (中文)</option>
-          <option value="ko">Korean (한국어)</option>
-          <option value="ar">Arabic (العربية)</option>
-          <option value="hi">Hindi (हिन्दी)</option>
-          <option value="tr">Turkish (Türkçe)</option>
-          <option value="sv">Swedish (Svenska)</option>
-          <option value="da">Danish (Dansk)</option>
-          <option value="no">Norwegian (Norsk)</option>
-          <option value="fi">Finnish (Suomi)</option>
-          <option value="cs">Czech (Čeština)</option>
+          <option value="en">{t('settings.language.english')}</option>
+          <option value="de">{t('settings.language.german')}</option>
+          <option value="es">{t('settings.language.spanish')}</option>
+          <option value="fr">{t('settings.language.french')}</option>
+          <option value="it">{t('settings.language.italian')}</option>
+          <option value="pt">{t('settings.language.portuguese')}</option>
+          <option value="nl">{t('settings.language.dutch')}</option>
+          <option value="pl">{t('settings.language.polish')}</option>
+          <option value="ru">{t('settings.language.russian')}</option>
+          <option value="ja">{t('settings.language.japanese')}</option>
+          <option value="zh">{t('settings.language.chinese')}</option>
+          <option value="ko">{t('settings.language.korean')}</option>
+          <option value="ar">{t('settings.language.arabic')}</option>
+          <option value="hi">{t('settings.language.hindi')}</option>
+          <option value="tr">{t('settings.language.turkish')}</option>
+          <option value="sv">{t('settings.language.swedish')}</option>
+          <option value="da">{t('settings.language.danish')}</option>
+          <option value="no">{t('settings.language.norwegian')}</option>
+          <option value="fi">{t('settings.language.finnish')}</option>
+          <option value="cs">{t('settings.language.czech')}</option>
         </select>
       </SettingRow>
 
@@ -485,7 +487,7 @@ export const SettingsView: React.FC = () => {
   const renderEditorSettings = () => (
     <SettingSection
       id="settings-section-editor"
-      title="Editor"
+      title={t('settings.editor.title')}
       description="Configure the blog post editor behavior and appearance."
       hidden={!sectionHasMatches(editorKeywords)}
     >
@@ -499,9 +501,9 @@ export const SettingsView: React.FC = () => {
           value={preferredEditorMode}
           onChange={(e) => setPreferredEditorMode(e.target.value as 'wysiwyg' | 'markdown' | 'preview')}
         >
-          <option value="wysiwyg">WYSIWYG (Visual Editor)</option>
-          <option value="markdown">Markdown (Source)</option>
-          <option value="preview">Preview (Read-only)</option>
+          <option value="wysiwyg">{t('settings.editor.mode.wysiwyg')}</option>
+          <option value="markdown">{t('settings.editor.mode.markdown')}</option>
+          <option value="preview">{t('settings.editor.mode.preview')}</option>
         </select>
       </SettingRow>
 
@@ -521,8 +523,8 @@ export const SettingsView: React.FC = () => {
             })
           }
         >
-          <option value="inline">Inline</option>
-          <option value="side-by-side">Side by Side</option>
+          <option value="inline">{t('settings.editor.diff.inline')}</option>
+          <option value="side-by-side">{t('settings.editor.diff.sideBySide')}</option>
         </select>
       </SettingRow>
 
@@ -582,23 +584,23 @@ export const SettingsView: React.FC = () => {
         setCategorySettings(nextSettings);
         await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
         setNewCategoryInput('');
-        showToast.success(`Category "${trimmed}" added`);
+        showToast.success(t('settings.toast.categoryAdded', { category: trimmed }));
       } catch (error) {
         console.error('Failed to add category:', error);
-        showToast.error('Failed to add category');
+        showToast.error(t('settings.toast.categoryAddFailed'));
       }
     } else if (postCategories.includes(trimmed)) {
-      showToast.error('Category already exists');
+      showToast.error(t('settings.toast.categoryExists'));
     }
   };
 
   const handleRemoveCategory = async (categoryToRemove: string) => {
     if (PROTECTED_CATEGORIES.includes(categoryToRemove)) {
-      showToast.error(`Cannot delete standard category "${categoryToRemove}"`);
+      showToast.error(t('settings.toast.categoryProtected', { category: categoryToRemove }));
       return;
     }
     if (postCategories.length <= 1) {
-      showToast.error('Must have at least one category');
+      showToast.error(t('settings.toast.categoryAtLeastOne'));
       return;
     }
     try {
@@ -610,10 +612,10 @@ export const SettingsView: React.FC = () => {
       delete nextSettings[categoryToRemove];
       setCategorySettings(nextSettings);
       await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
-      showToast.success(`Category "${categoryToRemove}" removed`);
+      showToast.success(t('settings.toast.categoryRemoved', { category: categoryToRemove }));
     } catch (error) {
       console.error('Failed to remove category:', error);
-      showToast.error('Failed to remove category');
+      showToast.error(t('settings.toast.categoryRemoveFailed'));
     }
   };
 
@@ -636,10 +638,10 @@ export const SettingsView: React.FC = () => {
       const defaults = { ...DEFAULT_CATEGORY_SETTINGS };
       setCategorySettings(defaults);
       await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: defaults });
-      showToast.success('Categories reset to defaults');
+      showToast.success(t('settings.toast.categoriesReset'));
     } catch (error) {
       console.error('Failed to reset categories:', error);
-      showToast.error('Failed to reset categories');
+      showToast.error(t('settings.toast.categoriesResetFailed'));
     }
   };
 
@@ -662,14 +664,14 @@ export const SettingsView: React.FC = () => {
       await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
     } catch (error) {
       console.error('Failed to update category settings:', error);
-      showToast.error('Failed to update category settings');
+      showToast.error(t('settings.toast.categorySettingsUpdateFailed'));
     }
   };
 
   const renderContentSettings = () => (
     <SettingSection
       id="settings-section-content"
-      title="Post Categories"
+      title={t('settings.content.title')}
       description="Manage the available categories for blog posts. Each post can have one category that determines its display template."
       hidden={!sectionHasMatches(contentKeywords)}
     >
@@ -689,7 +691,7 @@ export const SettingsView: React.FC = () => {
                     checked={setting.renderInLists}
                     onChange={(event) => handleCategorySettingToggle(cat, 'renderInLists', event.target.checked)}
                   />
-                  <span>Render in lists</span>
+                  <span>{t('settings.content.renderInLists')}</span>
                 </label>
                 <label className="category-setting-toggle" htmlFor={`category-${cat}-show-title`}>
                   <input
@@ -699,7 +701,7 @@ export const SettingsView: React.FC = () => {
                     checked={setting.showTitle}
                     onChange={(event) => handleCategorySettingToggle(cat, 'showTitle', event.target.checked)}
                   />
-                  <span>Show titles</span>
+                  <span>{t('settings.content.showTitles')}</span>
                 </label>
               </div>
               {!isProtected && (
@@ -748,13 +750,13 @@ export const SettingsView: React.FC = () => {
       const result = await window.electronAPI?.chat.setSystemPrompt(aiSystemPrompt);
       if (result?.success) {
         setAiSystemPromptModified(false);
-        showToast.success('System prompt saved');
+        showToast.success(t('settings.toast.systemPromptSaved'));
       } else {
-        showToast.error('Failed to save system prompt');
+        showToast.error(t('settings.toast.systemPromptSaveFailed'));
       }
     } catch (error) {
       console.error('Failed to save system prompt:', error);
-      showToast.error('Failed to save system prompt');
+      showToast.error(t('settings.toast.systemPromptSaveFailed'));
     }
   };
 
@@ -766,11 +768,11 @@ export const SettingsView: React.FC = () => {
       if (result?.success) {
         setAiSystemPrompt(result.prompt || '');
         setAiSystemPromptModified(false);
-        showToast.success('System prompt reset to default');
+        showToast.success(t('settings.toast.systemPromptReset'));
       }
     } catch (error) {
       console.error('Failed to reset system prompt:', error);
-      showToast.error('Failed to reset system prompt');
+      showToast.error(t('settings.toast.systemPromptResetFailed'));
     }
   };
 
@@ -783,13 +785,13 @@ export const SettingsView: React.FC = () => {
         setAiHasApiKey(true);
         setAiApiKeyMasked('•'.repeat(Math.max(0, newApiKey.length - 4)) + newApiKey.slice(-4));
         setNewApiKey('');
-        showToast.success('API key saved and validated');
+        showToast.success(t('settings.toast.apiKeySaved'));
       } else {
-        showToast.error('Invalid API key');
+        showToast.error(t('settings.toast.apiKeyInvalid'));
       }
     } catch (error) {
       console.error('Failed to save API key:', error);
-      showToast.error('Failed to save API key');
+      showToast.error(t('settings.toast.apiKeySaveFailed'));
     }
   };
 
@@ -798,18 +800,18 @@ export const SettingsView: React.FC = () => {
       const result = await window.electronAPI?.chat.setDefaultModel(modelId);
       if (result?.success) {
         setSelectedModel(modelId);
-        showToast.success('Default model updated');
+        showToast.success(t('settings.toast.defaultModelUpdated'));
       }
     } catch (error) {
       console.error('Failed to set model:', error);
-      showToast.error('Failed to set default model');
+      showToast.error(t('settings.toast.defaultModelUpdateFailed'));
     }
   };
 
   const renderAISettings = () => (
     <SettingSection
       id="settings-section-ai"
-      title="AI Assistant"
+      title={t('settings.ai.title')}
       description="Configure the AI chat assistant that helps you manage your blog content."
       hidden={!sectionHasMatches(aiKeywords)}
     >
@@ -865,7 +867,7 @@ export const SettingsView: React.FC = () => {
           onChange={(e) => handleModelChange(e.target.value)}
           disabled={!aiHasApiKey}
         >
-          {availableModels.length === 0 && <option value="">No models available</option>}
+          {availableModels.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
           {availableModels.map(model => (
             <option key={model.id} value={model.id}>{model.name}</option>
           ))}
@@ -908,7 +910,7 @@ export const SettingsView: React.FC = () => {
     <>
       <SettingSection
         id="settings-section-publishing"
-        title="FTP Publishing"
+        title={t('settings.publishing.ftpTitle')}
         description="Configure FTP credentials for publishing your blog to a web server."
         hidden={!sectionHasMatches(publishingKeywords)}
       >
@@ -964,13 +966,13 @@ export const SettingsView: React.FC = () => {
         </SettingRow>
 
         <div className="setting-actions">
-          <button className="primary" onClick={handleSavePublishing}>Save</button>
-          <button className="secondary danger" onClick={() => handleClearCredentials('ftp')}>Clear</button>
+          <button className="primary" onClick={handleSavePublishing}>{t('common.save')}</button>
+          <button className="secondary danger" onClick={() => handleClearCredentials('ftp')}>{t('common.clear')}</button>
         </div>
       </SettingSection>
 
       <SettingSection
-        title="SSH Publishing"
+        title={t('settings.publishing.sshTitle')}
         description="Configure SSH credentials for secure deployment to your server."
         hidden={!sectionHasMatches(publishingKeywords)}
       >
@@ -1017,8 +1019,8 @@ export const SettingsView: React.FC = () => {
         </SettingRow>
 
         <div className="setting-actions">
-          <button className="primary" onClick={handleSavePublishing}>Save</button>
-          <button className="secondary danger" onClick={() => handleClearCredentials('ssh')}>Clear</button>
+          <button className="primary" onClick={handleSavePublishing}>{t('common.save')}</button>
+          <button className="secondary danger" onClick={() => handleClearCredentials('ssh')}>{t('common.clear')}</button>
         </div>
       </SettingSection>
     </>
@@ -1028,7 +1030,7 @@ export const SettingsView: React.FC = () => {
     <>
       <SettingSection
         id="settings-section-data"
-        title="Database Maintenance"
+        title={t('settings.data.title')}
         description="Rebuild the local database index from source files. Useful if post or media files were edited externally."
         hidden={!sectionHasMatches(dataKeywords)}
       >
@@ -1040,7 +1042,7 @@ export const SettingsView: React.FC = () => {
           <button
             className="secondary"
             onClick={async () => {
-              showToast.loading('Rebuilding posts database...');
+              showToast.loading(t('settings.toast.rebuildPostsLoading'));
               try {
                 await window.electronAPI?.posts.rebuildFromFiles();
                 const postsResult = await window.electronAPI?.posts.getAll({ limit: 500, offset: 0 });
@@ -1048,10 +1050,10 @@ export const SettingsView: React.FC = () => {
                   useAppStore.getState().setPosts(postsResult.items, postsResult.hasMore, postsResult.total);
                 }
                 showToast.dismiss();
-                showToast.success('Posts database rebuilt');
+                showToast.success(t('settings.toast.rebuildPostsSuccess'));
               } catch {
                 showToast.dismiss();
-                showToast.error('Failed to rebuild posts database');
+                showToast.error(t('settings.toast.rebuildPostsFailed'));
               }
             }}
           >
@@ -1067,7 +1069,7 @@ export const SettingsView: React.FC = () => {
           <button
             className="secondary"
             onClick={async () => {
-              showToast.loading('Rebuilding media database...');
+              showToast.loading(t('settings.toast.rebuildMediaLoading'));
               try {
                 await window.electronAPI?.media.rebuildFromFiles();
                 const media = await window.electronAPI?.media.getAll();
@@ -1075,10 +1077,10 @@ export const SettingsView: React.FC = () => {
                   useAppStore.getState().setMedia(media as any[]);
                 }
                 showToast.dismiss();
-                showToast.success('Media database rebuilt');
+                showToast.success(t('settings.toast.rebuildMediaSuccess'));
               } catch {
                 showToast.dismiss();
-                showToast.error('Failed to rebuild media database');
+                showToast.error(t('settings.toast.rebuildMediaFailed'));
               }
             }}
           >
@@ -1094,14 +1096,14 @@ export const SettingsView: React.FC = () => {
           <button
             className="secondary"
             onClick={async () => {
-              showToast.loading('Rebuilding post links...');
+              showToast.loading(t('settings.toast.rebuildLinksLoading'));
               try {
                 await window.electronAPI?.posts.rebuildLinks();
                 showToast.dismiss();
-                showToast.success('Post links rebuilt');
+                showToast.success(t('settings.toast.rebuildLinksSuccess'));
               } catch {
                 showToast.dismiss();
-                showToast.error('Failed to rebuild post links');
+                showToast.error(t('settings.toast.rebuildLinksFailed'));
               }
             }}
           >
@@ -1117,20 +1119,20 @@ export const SettingsView: React.FC = () => {
           <button
             className="secondary"
             onClick={async () => {
-              showToast.loading('Generating thumbnails...');
+              showToast.loading(t('settings.toast.thumbnailsLoading'));
               try {
                 const result = await window.electronAPI?.media.regenerateMissingThumbnails();
                 showToast.dismiss();
                 if (result && result.generated > 0) {
-                  showToast.success(`Generated ${result.generated} thumbnails`);
+                  showToast.success(t('settings.toast.thumbnailsGenerated', { count: result.generated }));
                 } else if (result && result.processed === 0) {
-                  showToast.success('All thumbnails already exist');
+                  showToast.success(t('settings.toast.thumbnailsAlreadyExist'));
                 } else {
-                  showToast.success('Thumbnail generation complete');
+                  showToast.success(t('settings.toast.thumbnailsComplete'));
                 }
               } catch {
                 showToast.dismiss();
-                showToast.error('Failed to generate thumbnails');
+                showToast.error(t('settings.toast.thumbnailsFailed'));
               }
             }}
           >
@@ -1140,7 +1142,7 @@ export const SettingsView: React.FC = () => {
       </SettingSection>
 
       <SettingSection
-        title="File System"
+        title={t('settings.data.fileSystemTitle')}
         description="Access project data files and directories."
         hidden={!sectionHasMatches(dataKeywords)}
       >
@@ -1178,12 +1180,12 @@ export const SettingsView: React.FC = () => {
     <div className="settings-view">
       {/* Header with search */}
       <div className="settings-header">
-        <h2>Settings</h2>
+        <h2>{t('common.settings')}</h2>
         <div className="settings-search">
           <span className="settings-search-icon"><SearchIcon /></span>
           <input
             type="text"
-            placeholder="Search settings..."
+            placeholder={t('settings.search.placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -1211,8 +1213,8 @@ export const SettingsView: React.FC = () => {
           </>
         ) : (
           <div className="settings-no-results">
-            <p>No settings found matching "{searchQuery}"</p>
-            <button onClick={() => setSearchQuery('')}>Clear search</button>
+            <p>{t('settings.search.noResults', { query: searchQuery })}</p>
+            <button onClick={() => setSearchQuery('')}>{t('settings.search.clear')}</button>
           </div>
         )}
       </div>

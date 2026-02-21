@@ -222,6 +222,10 @@ export function registerIpcHandlers(): void {
     return engine.deleteProjectWithData(id);
   });
 
+  safeHandle('app:getSystemLanguage', async () => {
+    return app.getLocale();
+  });
+
   safeHandle('projects:get', async (_, id: string) => {
     const engine = getProjectEngine();
     return engine.getProject(id);

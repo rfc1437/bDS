@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Markdown from 'marked-react';
 import type { ChatMessage, ChatConversation, ChatModel } from '../../types/electron';
+import { useI18n } from '../../i18n';
 import './ChatPanel.css';
 
 interface ChatPanelProps {
@@ -8,6 +9,7 @@ interface ChatPanelProps {
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
+  const { t: tr } = useI18n();
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -126,10 +128,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
         setApiKeyInput('');
         loadData();
       } else {
-        setApiKeyError('Invalid API key. Please check and try again.');
+        setApiKeyError(tr('chat.apiKeyInvalid'));
       }
     } catch {
-      setApiKeyError('Failed to validate API key.');
+      setApiKeyError(tr('chat.apiKeyValidationFailed'));
     } finally {
       setIsValidating(false);
     }
@@ -184,7 +186,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           id: `error-${Date.now()}`,
           conversationId,
           role: 'assistant',
-          content: `Error: ${result.error || 'Failed to get a response. Please try again.'}`,
+          content: tr('chat.errorPrefix', { error: result.error || tr('chat.errorNoResponse') }),
           createdAt: new Date().toISOString()
         };
         setMessages(prev => [...prev, errorMessage]);
@@ -195,7 +197,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           id: `empty-${Date.now()}`,
           conversationId,
           role: 'assistant',
-          content: 'The model returned an empty response. Try a different model or rephrase your question.',
+          content: tr('chat.errorEmptyResponse'),
           createdAt: new Date().toISOString()
         };
         setMessages(prev => [...prev, noContentMessage]);
@@ -206,7 +208,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
         id: `error-${Date.now()}`,
         conversationId,
         role: 'assistant',
-        content: 'Sorry, an error occurred while processing your message.',
+        content: tr('chat.errorGeneric'),
         createdAt: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -241,7 +243,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           id: `partial-${Date.now()}`,
           conversationId,
           role: 'assistant',
-          content: partialContent + '\n\n*(cancelled)*',
+          content: `${partialContent}\n\n*(${tr('chat.cancelledSuffix')})*`,
           createdAt: new Date().toISOString()
         };
         setMessages(prev => [...prev, partialMessage]);
@@ -323,7 +325,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
         <div className="chat-message-content">
           <div className="chat-message-header">
             <span className="chat-message-role">
-              {msg.role === 'user' ? 'You' : 'Assistant'}
+              {msg.role === 'user' ? tr('chat.role.you') : tr('chat.role.assistant')}
             </span>
           </div>
           {storedToolCalls.length > 0 && (
@@ -361,13 +363,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     return (
       <div className="chat-panel">
         <div className="chat-panel-header">
-          <div className="chat-panel-title">AI Chat Setup</div>
+          <div className="chat-panel-title">{tr('chat.setupTitle')}</div>
         </div>
         <div className="chat-messages">
           <div className="chat-welcome">
             <div className="chat-welcome-icon">{'\u{1F511}'}</div>
-            <h2>OpenCode Zen API Key Required</h2>
-            <p>Enter your OpenCode API key to enable AI chat.</p>
+            <h2>{tr('chat.apiKeyRequiredTitle')}</h2>
+            <p>{tr('chat.apiKeyRequiredDescription')}</p>
             <div className="api-key-form">
               <input
                 type="password"
@@ -375,7 +377,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-                placeholder="Enter your API key..."
+                placeholder={tr('chat.apiKeyPlaceholder')}
                 disabled={isValidating}
               />
               <button
@@ -383,7 +385,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
                 onClick={handleApiKeySubmit}
                 disabled={!apiKeyInput.trim() || isValidating}
               >
-                {isValidating ? 'Validating...' : 'Save Key'}
+                {isValidating ? tr('chat.apiKeyValidating') : tr('chat.apiKeySave')}
               </button>
               {apiKeyError && <div className="api-key-error">{apiKeyError}</div>}
             </div>
@@ -397,7 +399,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     <div className="chat-panel">
       <div className="chat-panel-header">
         <div className="chat-panel-title">
-          {conversation?.title || 'New Chat'}
+          {conversation?.title || tr('chat.newChat')}
         </div>
         <div className="chat-panel-model">
           <button
@@ -427,14 +429,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
         {messages.length === 0 && !isStreaming && (
           <div className="chat-welcome">
             <div className="chat-welcome-icon">{'\u{1F916}'}</div>
-            <h2>Welcome to the AI Assistant</h2>
-            <p>I can help you manage your posts and media. Try asking me to:</p>
+            <h2>{tr('chat.welcomeTitle')}</h2>
+            <p>{tr('chat.welcomeDescription')}</p>
             <ul>
-              <li>Search for posts about a specific topic</li>
-              <li>Get details about a specific post</li>
-              <li>List all tags or categories in your blog</li>
-              <li>Update metadata for posts or media</li>
-              <li>List all images in your media library</li>
+              <li>{tr('chat.welcomeTipSearch')}</li>
+              <li>{tr('chat.welcomeTipDetails')}</li>
+              <li>{tr('chat.welcomeTipTags')}</li>
+              <li>{tr('chat.welcomeTipMetadata')}</li>
+              <li>{tr('chat.welcomeTipImages')}</li>
             </ul>
           </div>
         )}
@@ -446,7 +448,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             <div className="chat-message-avatar">{'\u{1F916}'}</div>
             <div className="chat-message-content">
               <div className="chat-message-header">
-                <span className="chat-message-role">Assistant</span>
+                <span className="chat-message-role">{tr('chat.role.assistant')}</span>
                 <span className="streaming-indicator">{'\u25CF'}</span>
               </div>
               {renderToolMarkers(toolEvents)}
@@ -476,7 +478,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       <div className="chat-input-container">
         {isStreaming && (
           <button className="chat-abort-button" onClick={handleAbort}>
-            {'\u25FC'} Stop
+            {'\u25FC'} {tr('chat.stop')}
           </button>
         )}
         <div className="chat-input-wrapper">
@@ -491,7 +493,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
               e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
+            placeholder={tr('chat.inputPlaceholder')}
             rows={1}
             disabled={isStreaming}
           />

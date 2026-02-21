@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
+import { useI18n } from '../../i18n';
 import type { GitInitProgress, GitHistoryEntry, GitRemoteStateDto } from '../../../main/shared/electronApi';
 import './GitSidebar.css';
 import '../Sidebar/Sidebar.css';
@@ -27,6 +28,7 @@ const mergeStatusFilesIncremental = (
 };
 
 export const GitSidebar: React.FC = () => {
+  const { t: tr } = useI18n();
   const { activeProject, openTab, tabs, closeTab } = useAppStore();
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +100,7 @@ export const GitSidebar: React.FC = () => {
         if (fetchFirst) {
           const fetchResult = await window.electronAPI.git.fetch(targetProjectPath);
           if (!fetchResult.success) {
-            const message = fetchResult.error || 'Failed to fetch remote updates.';
+              const message = fetchResult.error || tr('gitSidebar.error.fetchRemoteUpdates');
             setRemoteStateError(message);
             if (!background) {
               setError(message);
@@ -111,7 +113,7 @@ export const GitSidebar: React.FC = () => {
         setRemoteState(nextRemoteState);
         setRemoteStateError(null);
       } catch {
-        const message = 'Unable to refresh remote tracking state.';
+        const message = tr('gitSidebar.error.refreshRemoteState');
         setRemoteStateError(message);
         if (!background) {
           setError(message);
@@ -120,7 +122,7 @@ export const GitSidebar: React.FC = () => {
         remoteRefreshInFlightRef.current = false;
       }
     },
-    [],
+    [tr],
   );
 
   const getDiffTabId = (filePath: string): string => `git-diff:${filePath}`;
@@ -128,28 +130,28 @@ export const GitSidebar: React.FC = () => {
 
   const getActionProgressMessage = (action: 'fetch' | 'pull' | 'push' | 'prune-lfs' | 'commit'): string => {
     if (action === 'push') {
-      return 'Pushing commits to remote... this can take a while for large uploads.';
+      return tr('gitSidebar.progress.pushingRemote');
     }
     if (action === 'fetch') {
-      return 'Fetching remote updates...';
+      return tr('gitSidebar.progress.fetching');
     }
     if (action === 'pull') {
-      return 'Pulling latest changes...';
+      return tr('gitSidebar.progress.pulling');
     }
     if (action === 'prune-lfs') {
-      return 'Pruning local Git LFS cache...';
+      return tr('gitSidebar.progress.pruningLfs');
     }
-    return 'Creating commit...';
+    return tr('gitSidebar.progress.committing');
   };
 
   const getHistoryStatusLabel = (status: GitHistoryEntry['syncStatus']): string => {
     if (status === 'local-only') {
-      return 'Local only';
+      return tr('gitSidebar.history.localOnly');
     }
     if (status === 'remote-only') {
-      return 'Remote only';
+      return tr('gitSidebar.history.remoteOnly');
     }
-    return 'Synced';
+    return tr('gitSidebar.history.synced');
   };
 
   const openDiffTab = useCallback(
@@ -194,7 +196,7 @@ export const GitSidebar: React.FC = () => {
     try {
       const availability = await window.electronAPI.git.checkAvailability();
       if (!availability.gitFound) {
-        setError('Git executable not found. Please install Git and restart the app.');
+        setError(tr('gitSidebar.error.gitMissing'));
         setIsRepo(false);
         return;
       }
@@ -203,7 +205,7 @@ export const GitSidebar: React.FC = () => {
       setProjectPath(resolvedProjectPath);
 
       if (!resolvedProjectPath) {
-        setError('No active project selected.');
+        setError(tr('gitSidebar.error.noActiveProject'));
         setIsRepo(false);
         return;
       }
@@ -228,7 +230,7 @@ export const GitSidebar: React.FC = () => {
         setRemoteStateError(null);
       }
     } catch {
-      setError('Unable to load repository status.');
+      setError(tr('gitSidebar.error.loadRepoStatus'));
       setIsRepo(false);
       setHasRemote(false);
       setStatusFiles([]);
@@ -238,7 +240,7 @@ export const GitSidebar: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [refreshRemoteState, refreshRepoDetails, resolveProjectPath]);
+  }, [refreshRemoteState, refreshRepoDetails, resolveProjectPath, tr]);
 
   useEffect(() => {
     void loadRepoState();
@@ -297,7 +299,7 @@ export const GitSidebar: React.FC = () => {
     setInitProgress({
       phase: 'initializing-repo',
       progress: 0,
-      message: 'Preparing repository initialization...',
+      message: tr('gitSidebar.progress.preparingInit'),
     });
 
     try {
@@ -306,13 +308,13 @@ export const GitSidebar: React.FC = () => {
         ? await window.electronAPI.git.init(projectPath, normalizedRemoteUrl)
         : await window.electronAPI.git.init(projectPath);
       if (!result.success) {
-        setError(result.error || 'Failed to initialize git repository.');
+        setError(result.error || tr('gitSidebar.error.initFailed'));
         return;
       }
 
       await loadRepoState();
     } catch {
-      setError('Failed to initialize git repository.');
+      setError(tr('gitSidebar.error.initFailed'));
     } finally {
       setInitializing(false);
     }
@@ -325,7 +327,7 @@ export const GitSidebar: React.FC = () => {
 
     const effectiveProjectPath = projectPath ?? (await resolveProjectPath());
     if (!effectiveProjectPath) {
-      setError('No active project selected.');
+      setError(tr('gitSidebar.error.noActiveProject'));
       return;
     }
     if (!projectPath) {
@@ -349,13 +351,13 @@ export const GitSidebar: React.FC = () => {
                   recentCommitsToKeep: 2,
                 });
       if (!result.success) {
-        setError(result.error || `Failed to ${action}.`);
+        setError(result.error || tr('gitSidebar.error.actionFailed', { action }));
         setErrorGuidance('guidance' in result ? result.guidance || [] : []);
         return;
       }
       await loadRepoState();
     } catch {
-      setError(`Failed to ${action}.`);
+      setError(tr('gitSidebar.error.actionFailed', { action }));
     } finally {
       setActionLoading(null);
     }
@@ -368,7 +370,7 @@ export const GitSidebar: React.FC = () => {
 
     const effectiveProjectPath = projectPath ?? (await resolveProjectPath());
     if (!effectiveProjectPath) {
-      setError('No active project selected.');
+      setError(tr('gitSidebar.error.noActiveProject'));
       return;
     }
     if (!projectPath) {
@@ -382,7 +384,7 @@ export const GitSidebar: React.FC = () => {
       const messageToCommit = commitMessageInputRef.current?.value ?? commitMessage;
       const result = await window.electronAPI.git.commitAll(effectiveProjectPath, messageToCommit);
       if (!result.success) {
-        setError(result.error || 'Failed to commit changes.');
+        setError(result.error || tr('gitSidebar.error.commitFailed'));
         setErrorGuidance(result.guidance || []);
         return;
       }
@@ -394,7 +396,7 @@ export const GitSidebar: React.FC = () => {
       setCommitMessage('');
       await loadRepoState();
     } catch {
-      setError('Failed to commit changes.');
+      setError(tr('gitSidebar.error.commitFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -403,8 +405,8 @@ export const GitSidebar: React.FC = () => {
   if (loading) {
     return (
       <div className="git-sidebar">
-        <div className="git-sidebar-header">SOURCE CONTROL</div>
-        <div className="git-sidebar-empty">Loading...</div>
+        <div className="git-sidebar-header">{tr('gitSidebar.header')}</div>
+        <div className="git-sidebar-empty">{tr('gitSidebar.loading')}</div>
       </div>
     );
   }
@@ -417,7 +419,7 @@ export const GitSidebar: React.FC = () => {
         onClick={() => setIsTranscriptExpanded((previous) => !previous)}
         aria-expanded={isTranscriptExpanded}
       >
-        Initialization transcript
+        {tr('gitSidebar.init.transcript')}
       </button>
       {isTranscriptExpanded && (
         <ul className="git-sidebar-transcript-list">
@@ -435,16 +437,16 @@ export const GitSidebar: React.FC = () => {
   if (isRepo) {
     return (
       <div className="git-sidebar">
-        <div className="git-sidebar-header">SOURCE CONTROL</div>
+        <div className="git-sidebar-header">{tr('gitSidebar.header')}</div>
         <div className="git-sidebar-content">
-          <div className="git-sidebar-actions" role="group" aria-label="Repository actions">
+          <div className="git-sidebar-actions" role="group" aria-label={tr('gitSidebar.aria.repoActions')}>
             <button
               type="button"
               className="git-sidebar-button"
               onClick={() => handleRepoAction('fetch')}
               disabled={actionLoading !== null}
             >
-              {actionLoading === 'fetch' ? 'Fetching...' : 'Fetch'}
+              {actionLoading === 'fetch' ? tr('gitSidebar.action.fetching') : tr('gitSidebar.action.fetch')}
             </button>
             <button
               type="button"
@@ -452,7 +454,7 @@ export const GitSidebar: React.FC = () => {
               onClick={() => handleRepoAction('pull')}
               disabled={actionLoading !== null}
             >
-              {actionLoading === 'pull' ? 'Pulling...' : 'Pull'}
+              {actionLoading === 'pull' ? tr('gitSidebar.action.pulling') : tr('gitSidebar.action.pull')}
             </button>
             <button
               type="button"
@@ -460,7 +462,7 @@ export const GitSidebar: React.FC = () => {
               onClick={() => handleRepoAction('push')}
               disabled={actionLoading !== null}
             >
-              {actionLoading === 'push' ? 'Pushing...' : 'Push'}
+              {actionLoading === 'push' ? tr('gitSidebar.action.pushing') : tr('gitSidebar.action.push')}
             </button>
             <button
               type="button"
@@ -468,7 +470,7 @@ export const GitSidebar: React.FC = () => {
               onClick={() => handleRepoAction('prune-lfs')}
               disabled={actionLoading !== null}
             >
-              {actionLoading === 'prune-lfs' ? 'Pruning...' : 'Prune LFS'}
+              {actionLoading === 'prune-lfs' ? tr('gitSidebar.action.pruning') : tr('gitSidebar.action.pruneLfs')}
             </button>
           </div>
           {actionLoading && (
@@ -478,14 +480,14 @@ export const GitSidebar: React.FC = () => {
           )}
 
           <div className="git-sidebar-section">
-            <div className="sidebar-section-title">Open Changes ({statusFiles.length})</div>
+            <div className="sidebar-section-title">{tr('gitSidebar.openChanges', { count: statusFiles.length })}</div>
 
             <div className="git-sidebar-commit-row">
               <input
                 ref={commitMessageInputRef}
                 className="git-sidebar-input"
                 type="text"
-                placeholder="Commit message"
+                placeholder={tr('gitSidebar.placeholder.commitMessage')}
                 value={commitMessage}
                 onChange={(event) => setCommitMessage(event.target.value)}
                 disabled={actionLoading !== null}
@@ -496,16 +498,16 @@ export const GitSidebar: React.FC = () => {
                 onClick={handleCommit}
                 disabled={actionLoading !== null}
               >
-                {actionLoading === 'commit' ? 'Committing...' : 'Commit'}
+                {actionLoading === 'commit' ? tr('gitSidebar.action.committing') : tr('gitSidebar.action.commit')}
               </button>
             </div>
 
             {statusLoading ? (
-              <div className="git-sidebar-empty-state">Loading changes...</div>
+              <div className="git-sidebar-empty-state">{tr('gitSidebar.loadingChanges')}</div>
             ) : statusFiles.length === 0 ? (
-              <div className="git-sidebar-empty-state">No changes</div>
+              <div className="git-sidebar-empty-state">{tr('gitSidebar.noChanges')}</div>
             ) : (
-              <div className="git-sidebar-file-list" role="list" aria-label="Open Changes">
+              <div className="git-sidebar-file-list" role="list" aria-label={tr('gitSidebar.aria.openChanges')}>
                 {statusFiles.map((file) => (
                   <button
                     key={file.path}
@@ -524,36 +526,36 @@ export const GitSidebar: React.FC = () => {
           </div>
 
           <div className="git-sidebar-section git-sidebar-history">
-            <div className="sidebar-section-title">Version History ({historyEntries.length})</div>
-            <div className="git-sidebar-history-legend" aria-label="Commit status legend">
+            <div className="sidebar-section-title">{tr('gitSidebar.versionHistory', { count: historyEntries.length })}</div>
+            <div className="git-sidebar-history-legend" aria-label={tr('gitSidebar.aria.commitStatusLegend')}>
               <span className="git-sidebar-history-legend-item">
                 <span
                   className="git-sidebar-history-legend-dot git-sidebar-history-legend-dot--both"
                   data-testid="git-history-legend-both"
                 />
-                Synced
+                {tr('gitSidebar.history.synced')}
               </span>
               <span className="git-sidebar-history-legend-item">
                 <span
                   className="git-sidebar-history-legend-dot git-sidebar-history-legend-dot--local-only"
                   data-testid="git-history-legend-local-only"
                 />
-                Local only
+                {tr('gitSidebar.history.localOnly')}
               </span>
               <span className="git-sidebar-history-legend-item">
                 <span
                   className="git-sidebar-history-legend-dot git-sidebar-history-legend-dot--remote-only"
                   data-testid="git-history-legend-remote-only"
                 />
-                Remote only
+                {tr('gitSidebar.history.remoteOnly')}
               </span>
             </div>
             {historyLoading ? (
-              <div className="git-sidebar-empty-state">Loading history...</div>
+              <div className="git-sidebar-empty-state">{tr('gitSidebar.loadingHistory')}</div>
             ) : historyEntries.length === 0 ? (
-              <div className="git-sidebar-empty-state">No commits yet</div>
+              <div className="git-sidebar-empty-state">{tr('gitSidebar.noCommits')}</div>
             ) : (
-              <div className="git-sidebar-history-list" role="list" aria-label="Version History">
+              <div className="git-sidebar-history-list" role="list" aria-label={tr('gitSidebar.aria.versionHistory')}>
                 {historyEntries.map((entry) => (
                   <button
                     key={entry.hash}
@@ -576,12 +578,12 @@ export const GitSidebar: React.FC = () => {
                 ))}
               </div>
             )}
-            {currentBranch && <div className="git-sidebar-empty-state">Branch: {currentBranch}</div>}
+            {currentBranch && <div className="git-sidebar-empty-state">{tr('gitSidebar.branch', { branch: currentBranch })}</div>}
             {remoteState?.hasUpstream && remoteState.localBranch && remoteState.upstreamBranch && (
               <div className="git-sidebar-empty-state">{remoteState.localBranch} → {remoteState.upstreamBranch}</div>
             )}
             {remoteState?.hasUpstream && (
-              <div className="git-sidebar-empty-state">ahead {remoteState.ahead} / behind {remoteState.behind}</div>
+              <div className="git-sidebar-empty-state">{tr('gitSidebar.aheadBehind', { ahead: remoteState.ahead, behind: remoteState.behind })}</div>
             )}
             {remoteStateError && <div className="git-sidebar-empty-state git-sidebar-error">{remoteStateError}</div>}
           </div>
@@ -605,20 +607,20 @@ export const GitSidebar: React.FC = () => {
 
   return (
     <div className="git-sidebar">
-      <div className="git-sidebar-header">SOURCE CONTROL</div>
+      <div className="git-sidebar-header">{tr('gitSidebar.header')}</div>
       <div className="git-sidebar-empty">
         <div className="git-sidebar-main">
-          <p>This project is not a git repository.</p>
+          <p>{tr('gitSidebar.notRepo')}</p>
           <input
             ref={remoteUrlInputRef}
             className="git-sidebar-input"
             type="text"
-            placeholder="Optional remote repository URL"
+            placeholder={tr('gitSidebar.placeholder.remoteUrl')}
             disabled={initializing}
           />
           {initializing && (
             <p className="git-sidebar-progress">
-              {initProgress?.message || 'Initializing repository...'}
+              {initProgress?.message || tr('gitSidebar.progress.initializingRepo')}
               {typeof initProgress?.progress === 'number' ? ` (${initProgress.progress}%)` : ''}
               {initProgress?.detail ? ` — ${initProgress.detail}` : ''}
             </p>
@@ -629,7 +631,7 @@ export const GitSidebar: React.FC = () => {
             onClick={handleInitialize}
             disabled={initializing || !projectPath}
           >
-            {initializing ? 'Initializing...' : 'Initialize Git'}
+            {initializing ? tr('gitSidebar.action.initializing') : tr('gitSidebar.action.initializeGit')}
           </button>
         </div>
         {transcriptSection}

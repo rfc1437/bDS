@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import { useAppStore } from '../../store';
+import { useI18n } from '../../i18n';
 import './GitDiffView.css';
 
 interface CommitFileDiff {
@@ -47,6 +48,7 @@ function toModelPath(filePath: string, side: 'original' | 'modified', scope: str
 }
 
 export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
+  const { t: tr } = useI18n();
   const { activeProject, gitDiffPreferences } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
 
       try {
         if (!activeProject) {
-          setError('No active project selected.');
+          setError(tr('gitDiff.noProject'));
           return;
         }
 
@@ -103,7 +105,7 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
           : await window.electronAPI.app.getDefaultProjectPath(activeProject.id);
 
         if (!projectPath) {
-          setError('Unable to resolve project path.');
+          setError(tr('gitDiff.noProjectPath'));
           return;
         }
 
@@ -129,20 +131,23 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
           setModified(diff.modified || '');
         }
       } catch {
-        setError('Failed to load diff.');
+        setError(tr('gitDiff.loadFailed'));
       } finally {
         setLoading(false);
       }
     };
 
     void loadDiff();
-  }, [activeProject, filePath, isCommitDiff, commitHash]);
+  }, [activeProject, filePath, isCommitDiff, commitHash, tr]);
+
+  const headerTarget = isCommitDiff ? `Commit ${commitHash}` : filePath;
+  const headerLabel = tr('gitDiff.header', { target: headerTarget });
 
   if (loading) {
     return (
       <div className="git-diff-view">
-        <div className="git-diff-header">Diff: {isCommitDiff ? `Commit ${commitHash}` : filePath}</div>
-        <div className="git-diff-message">Loading diff...</div>
+        <div className="git-diff-header">{headerLabel}</div>
+        <div className="git-diff-message">{tr('gitDiff.loading')}</div>
       </div>
     );
   }
@@ -150,7 +155,7 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
   if (error) {
     return (
       <div className="git-diff-view">
-        <div className="git-diff-header">Diff: {isCommitDiff ? `Commit ${commitHash}` : filePath}</div>
+        <div className="git-diff-header">{headerLabel}</div>
         <div className="git-diff-error">{error}</div>
       </div>
     );
@@ -158,27 +163,27 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
 
   return (
     <div className="git-diff-view">
-      <div className="git-diff-header">Diff: {isCommitDiff ? `Commit ${commitHash}` : filePath}</div>
+      <div className="git-diff-header">{headerLabel}</div>
       {isCommitDiff && commitFiles.length > 0 && (
         <div className="git-diff-commit-nav">
           <label htmlFor="git-diff-commit-files" className="git-diff-commit-label">
-            Changed files
+            {tr('gitDiff.changedFiles')}
           </label>
           <button
             type="button"
             className="git-diff-commit-button"
             onClick={selectPreviousCommitFile}
             disabled={!canSelectPreviousFile}
-            aria-label="Previous file"
+            aria-label={tr('gitDiff.previousFile')}
           >
-            Previous
+            {tr('gitDiff.previousFile')}
           </button>
           <select
             id="git-diff-commit-files"
             className="git-diff-commit-select"
             value={selectedCommitFilePath}
             onChange={(event) => setSelectedCommitFilePath(event.target.value)}
-            aria-label="Changed files"
+            aria-label={tr('gitDiff.changedFiles')}
           >
             {commitFiles.map((entry) => (
               <option key={entry.filePath} value={entry.filePath}>
@@ -191,9 +196,9 @@ export const GitDiffView: React.FC<GitDiffViewProps> = ({ filePath }) => {
               className="git-diff-commit-button"
               onClick={selectNextCommitFile}
               disabled={!canSelectNextFile}
-              aria-label="Next file"
+              aria-label={tr('gitDiff.nextFile')}
             >
-              Next
+              {tr('gitDiff.nextFile')}
             </button>
         </div>
       )}

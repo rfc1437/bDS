@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '../../i18n';
 import './Lightbox.css';
 
 interface LightboxImage {
@@ -20,6 +21,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { t: tr } = useI18n();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isZoomed, setIsZoomed] = useState(false);
 
@@ -88,7 +90,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
     <div className="lightbox-overlay" onClick={handleBackdropClick}>
       <div className="lightbox-container">
         {/* Close button */}
-        <button className="lightbox-close" onClick={onClose} title="Close (Esc)">
+        <button className="lightbox-close" onClick={onClose} title={tr('lightbox.close')}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
@@ -97,12 +99,12 @@ export const Lightbox: React.FC<LightboxProps> = ({
         {/* Navigation arrows */}
         {hasMultiple && (
           <>
-            <button className="lightbox-nav lightbox-prev" onClick={handlePrev} title="Previous (←)">
+            <button className="lightbox-nav lightbox-prev" onClick={handlePrev} title={tr('lightbox.previous')}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
               </svg>
             </button>
-            <button className="lightbox-nav lightbox-next" onClick={handleNext} title="Next (→)">
+            <button className="lightbox-nav lightbox-next" onClick={handleNext} title={tr('lightbox.next')}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
               </svg>

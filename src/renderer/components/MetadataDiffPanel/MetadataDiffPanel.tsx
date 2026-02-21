@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { showToast } from '../Toast';
+import { useI18n } from '../../i18n';
 import './MetadataDiffPanel.css';
 
 interface TableStats {
@@ -40,6 +41,7 @@ interface ScanResult {
 type ScanPhase = 'idle' | 'loading-stats' | 'scanning' | 'complete';
 
 export const MetadataDiffPanel: React.FC = () => {
+  const { t: tr } = useI18n();
   const [stats, setStats] = useState<TableStats | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanPhase, setScanPhase] = useState<ScanPhase>('idle');
@@ -58,12 +60,12 @@ export const MetadataDiffPanel: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to load stats:', error);
-        showToast.error('Failed to load database statistics');
+        showToast.error(tr('metadataDiff.error.loadStats'));
       }
       setScanPhase('idle');
     };
     loadStats();
-  }, []);
+  }, [tr]);
 
   // Subscribe to task progress
   useEffect(() => {
@@ -85,7 +87,7 @@ export const MetadataDiffPanel: React.FC = () => {
 
   const handleScan = useCallback(async () => {
     setScanPhase('scanning');
-    setProgress({ current: 0, total: 100, message: 'Starting scan...' });
+    setProgress({ current: 0, total: 100, message: tr('metadataDiff.progress.starting') });
     setScanResult(null);
 
     try {
@@ -99,10 +101,10 @@ export const MetadataDiffPanel: React.FC = () => {
       setScanPhase('complete');
     } catch (error) {
       console.error('Scan failed:', error);
-      showToast.error('Failed to scan for differences');
+      showToast.error(tr('metadataDiff.error.scan'));
       setScanPhase('idle');
     }
-  }, []);
+  }, [tr]);
 
   const toggleGroup = (field: string) => {
     setExpandedGroups(prev => {
@@ -123,13 +125,13 @@ export const MetadataDiffPanel: React.FC = () => {
     try {
       const result = await window.electronAPI?.metadataDiff.syncDbToFile(postIds, group.label);
       if (result) {
-        showToast.success(`Synced ${result.success} posts to files${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
+        showToast.success(tr('metadataDiff.sync.dbToFile.success', { success: result.success, failed: result.failed > 0 ? `, ${result.failed} ${tr('metadataDiff.sync.failed')}` : '' }));
         // Re-scan to update the view
         handleScan();
       }
     } catch (error) {
       console.error('Sync failed:', error);
-      showToast.error('Failed to sync to files');
+      showToast.error(tr('metadataDiff.sync.dbToFile.error'));
     } finally {
       setSyncingGroups(prev => {
         const next = new Set(prev);
@@ -137,7 +139,7 @@ export const MetadataDiffPanel: React.FC = () => {
         return next;
       });
     }
-  }, [handleScan]);
+  }, [handleScan, tr]);
 
   const handleSyncFileToDb = useCallback(async (group: DiffGroup) => {
     const postIds = group.posts.map(p => p.postId);
@@ -146,13 +148,13 @@ export const MetadataDiffPanel: React.FC = () => {
     try {
       const result = await window.electronAPI?.metadataDiff.syncFileToDb(postIds, group.field, group.label);
       if (result) {
-        showToast.success(`Synced ${result.success} files to database${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
+        showToast.success(tr('metadataDiff.sync.fileToDb.success', { success: result.success, failed: result.failed > 0 ? `, ${result.failed} ${tr('metadataDiff.sync.failed')}` : '' }));
         // Re-scan to update the view
         handleScan();
       }
     } catch (error) {
       console.error('Sync failed:', error);
-      showToast.error('Failed to sync to database');
+      showToast.error(tr('metadataDiff.sync.fileToDb.error'));
     } finally {
       setSyncingGroups(prev => {
         const next = new Set(prev);
@@ -160,7 +162,7 @@ export const MetadataDiffPanel: React.FC = () => {
         return next;
       });
     }
-  }, [handleScan]);
+  }, [handleScan, tr]);
 
   const formatValue = (value: unknown): string => {
     if (Array.isArray(value)) {
@@ -174,28 +176,28 @@ export const MetadataDiffPanel: React.FC = () => {
 
   return (
     <div className="metadata-diff-panel">
-      <h2>Metadata Diff Tool</h2>
+      <h2>{tr('metadataDiff.title')}</h2>
       <p style={{ marginBottom: 16, color: 'var(--descriptionForeground)', fontSize: 13 }}>
-        Compare post metadata between database and markdown files. Fix inconsistencies caused by bugs or manual edits.
+        {tr('metadataDiff.description')}
       </p>
 
       {/* Stats Section */}
       {stats && (
         <div className="diff-stats">
           <div className="stat-item">
-            <span className="stat-label">Total Posts</span>
+            <span className="stat-label">{tr('metadataDiff.stats.totalPosts')}</span>
             <span className="stat-value">{stats.totalPosts}</span>
           </div>
           <div className="stat-item">
-            <span className="stat-label">Published</span>
+            <span className="stat-label">{tr('metadataDiff.stats.published')}</span>
             <span className="stat-value">{stats.publishedPosts}</span>
           </div>
           <div className="stat-item">
-            <span className="stat-label">Drafts</span>
+            <span className="stat-label">{tr('metadataDiff.stats.drafts')}</span>
             <span className="stat-value">{stats.draftPosts}</span>
           </div>
           <div className="stat-item">
-            <span className="stat-label">Media Files</span>
+            <span className="stat-label">{tr('metadataDiff.stats.mediaFiles')}</span>
             <span className="stat-value">{stats.totalMedia}</span>
           </div>
         </div>
@@ -204,7 +206,7 @@ export const MetadataDiffPanel: React.FC = () => {
       {/* Progress Section */}
       {scanPhase === 'scanning' && (
         <div className="diff-progress">
-          <h3>Scanning published posts...</h3>
+          <h3>{tr('metadataDiff.progress.scanningPublished')}</h3>
           <div className="progress-bar-container">
             <div
               className="progress-bar"
@@ -225,12 +227,12 @@ export const MetadataDiffPanel: React.FC = () => {
           {scanPhase === 'scanning' ? (
             <>
               <span className="spinner" style={{ width: 14, height: 14 }} />
-              Scanning...
+              {tr('metadataDiff.progress.scanning')}
             </>
           ) : scanResult ? (
-            '🔄 Re-scan'
+            `🔄 ${tr('metadataDiff.action.rescan')}`
           ) : (
-            '🔍 Scan for Differences'
+            `🔍 ${tr('metadataDiff.action.scan')}`
           )}
         </button>
       </div>
@@ -240,11 +242,10 @@ export const MetadataDiffPanel: React.FC = () => {
         <div className="diff-results">
           <div className={`diff-summary ${scanResult.postsWithDifferences > 0 ? 'has-differences' : 'no-differences'}`}>
             {scanResult.postsWithDifferences === 0 ? (
-              <>✅ No differences found! All {scanResult.totalScanned} published posts are in sync.</>
+              <>{tr('metadataDiff.summary.noDiffs', { total: scanResult.totalScanned })}</>
             ) : (
               <>
-                ⚠️ Found <strong>{scanResult.postsWithDifferences}</strong> posts with differences
-                out of {scanResult.totalScanned} published posts.
+                {tr('metadataDiff.summary.withDiffs', { count: scanResult.postsWithDifferences, total: scanResult.totalScanned })}
               </>
             )}
           </div>
@@ -260,16 +261,16 @@ export const MetadataDiffPanel: React.FC = () => {
                   <span className={`chevron ${expandedGroups.has(group.field) ? 'expanded' : ''}`}>
                     ▶
                   </span>
-                  {group.label} Differences
+                  {tr('metadataDiff.group.differences', { label: group.label })}
                 </div>
                 <div className="diff-group-count">
-                  <span className="badge">{group.posts.length} posts</span>
+                  <span className="badge">{tr('metadataDiff.group.postsCount', { count: group.posts.length })}</span>
                   <div className="diff-group-actions" onClick={e => e.stopPropagation()}>
                     <button
                       className="db-to-file"
                       onClick={() => handleSyncDbToFile(group)}
                       disabled={syncingGroups.has(group.field)}
-                      title="Update files with database values"
+                      title={tr('metadataDiff.sync.dbToFile.title')}
                     >
                       DB → File
                     </button>
@@ -277,7 +278,7 @@ export const MetadataDiffPanel: React.FC = () => {
                       className="file-to-db"
                       onClick={() => handleSyncFileToDb(group)}
                       disabled={syncingGroups.has(group.field)}
-                      title="Update database with file values"
+                      title={tr('metadataDiff.sync.fileToDb.title')}
                     >
                       File → DB
                     </button>
@@ -291,13 +292,13 @@ export const MetadataDiffPanel: React.FC = () => {
                       {post.title || post.slug}
                     </div>
                     <div>
-                      <div className="diff-value-label">Database</div>
+                      <div className="diff-value-label">{tr('metadataDiff.value.database')}</div>
                       <div className="diff-value db-value" title={formatValue(post.dbValue)}>
                         {formatValue(post.dbValue)}
                       </div>
                     </div>
                     <div>
-                      <div className="diff-value-label">File</div>
+                      <div className="diff-value-label">{tr('metadataDiff.value.file')}</div>
                       <div className="diff-value file-value" title={formatValue(post.fileValue)}>
                         {formatValue(post.fileValue)}
                       </div>
@@ -314,7 +315,7 @@ export const MetadataDiffPanel: React.FC = () => {
       {scanPhase === 'idle' && !scanResult && (
         <div className="diff-empty">
           <div className="icon">📊</div>
-          <div>Click "Scan for Differences" to compare database metadata with file metadata.</div>
+          <div>{tr('metadataDiff.empty')}</div>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { useI18n } from '../../i18n';
 import './ErrorModal.css';
 
 export interface ErrorDetails {
@@ -13,16 +14,17 @@ interface ErrorModalProps {
 }
 
 export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
+  const { t: tr } = useI18n();
   if (!error) return null;
 
   const handleCopyStack = useCallback(async () => {
-    const textToCopy = `${error.title || 'Error'}\n${error.message}\n\nStack Trace:\n${error.stack || 'No stack trace available'}`;
+    const textToCopy = `${error.title || tr('errorModal.error')}\n${error.message}\n\n${tr('errorModal.stackTrace')}:\n${error.stack || tr('errorModal.noStack')}`;
     try {
       await navigator.clipboard.writeText(textToCopy);
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
     }
-  }, [error]);
+  }, [error, tr]);
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -34,8 +36,8 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
     <div className="error-modal-backdrop" onClick={handleBackdropClick}>
       <div className="error-modal">
         <div className="error-modal-header">
-          <h2>{error.title || 'Error'}</h2>
-          <button className="error-modal-close" onClick={onClose} title="Close">
+          <h2>{error.title || tr('errorModal.error')}</h2>
+          <button className="error-modal-close" onClick={onClose} title={tr('aiSuggestions.close')}>
             ✕
           </button>
         </div>
@@ -44,9 +46,9 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
           {error.stack && (
             <div className="error-stack-section">
               <div className="error-stack-header">
-                <span>Stack Trace</span>
-                <button className="copy-button" onClick={handleCopyStack} title="Copy to clipboard">
-                  📋 Copy
+                <span>{tr('errorModal.stackTrace')}</span>
+                <button className="copy-button" onClick={handleCopyStack} title={tr('errorModal.copyClipboard')}>
+                  📋 {tr('errorModal.copy')}
                 </button>
               </div>
               <pre className="error-stack">{error.stack}</pre>
@@ -54,7 +56,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
           )}
         </div>
         <div className="error-modal-footer">
-          <button onClick={onClose}>Close</button>
+          <button onClick={onClose}>{tr('aiSuggestions.close')}</button>
         </div>
       </div>
     </div>

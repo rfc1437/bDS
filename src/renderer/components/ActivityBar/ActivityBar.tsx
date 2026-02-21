@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppStore } from '../../store';
+import { useI18n } from '../../i18n';
 import './ActivityBar.css';
 
 // Simple SVG icons
@@ -56,6 +57,7 @@ const GitIcon = () => (
 );
 
 export const ActivityBar: React.FC = () => {
+  const { t } = useI18n();
   const { activeView, setActiveView, sidebarVisible, toggleSidebar, openTab, tabs, activeTabId } = useAppStore();
   
   // Check if settings tab is currently active
@@ -127,42 +129,42 @@ export const ActivityBar: React.FC = () => {
         <button
           className={`activity-bar-item ${activeView === 'posts' && sidebarVisible ? 'active' : ''}`}
           onClick={() => handleViewClick('posts')}
-          title="Posts (click again to toggle sidebar)"
+          title={`${t('activity.posts')} ${t('activity.toggleHint')}`}
         >
           <PostsIcon />
         </button>
         <button
           className={`activity-bar-item ${activeView === 'pages' && sidebarVisible ? 'active' : ''}`}
           onClick={() => handleViewClick('pages')}
-          title="Pages (click again to toggle sidebar)"
+          title={`${t('activity.pages')} ${t('activity.toggleHint')}`}
         >
           <PagesIcon />
         </button>
         <button
           className={`activity-bar-item ${activeView === 'media' && sidebarVisible ? 'active' : ''}`}
           onClick={() => handleViewClick('media')}
-          title="Media (click again to toggle sidebar)"
+          title={`${t('activity.media')} ${t('activity.toggleHint')}`}
         >
           <MediaIcon />
         </button>
         <button
           className={`activity-bar-item ${isTagsTabActive ? 'active' : ''}`}
           onClick={handleTagsClick}
-          title="Tags"
+          title={t('activity.tags')}
         >
           <TagsIcon />
         </button>
         <button
           className={`activity-bar-item ${isChatActive ? 'active' : ''}`}
           onClick={() => handleViewClick('chat')}
-          title="AI Assistant (click again to toggle sidebar)"
+          title={`${t('activity.aiAssistant')} ${t('activity.toggleHint')}`}
         >
           <ChatIcon />
         </button>
         <button
           className={`activity-bar-item ${isImportActive ? 'active' : ''}`}
           onClick={handleImportClick}
-          title="Import (click again to toggle sidebar)"
+          title={`${t('activity.import')} ${t('activity.toggleHint')}`}
         >
           <ImportIcon />
         </button>
@@ -172,14 +174,14 @@ export const ActivityBar: React.FC = () => {
         <button
           className={`activity-bar-item ${isGitActive ? 'active' : ''}`}
           onClick={() => handleViewClick('git')}
-          title="Source Control (click again to toggle sidebar)"
+          title={`${t('activity.sourceControl')} ${t('activity.toggleHint')}`}
         >
           <GitIcon />
         </button>
         <button
           className={`activity-bar-item ${isSettingsActive ? 'active' : ''}`}
           onClick={handleSettingsClick}
-          title="Settings (click again to toggle sidebar)"
+          title={`${t('common.settings')} ${t('activity.toggleHint')}`}
         >
           <SettingsIcon />
         </button>
