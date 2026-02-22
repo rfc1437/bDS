@@ -397,4 +397,254 @@ describe('main bootstrap preview behavior', () => {
     await setPreviewTargetHandler({}, null);
     expect(previewMenuItem.enabled).toBe(false);
   });
+
+  it('restores previous window bounds unchanged when they fit the current display work area', async () => {
+    const mockApp = {
+      name: 'bDS',
+      whenReady: vi.fn(() => Promise.resolve()),
+      on: vi.fn(),
+      quit: vi.fn(),
+      getPath: vi.fn((name: string) => (name === 'userData' ? '/tmp/bds-user-data' : '/tmp')),
+    };
+
+    const browserWindowCalls: any[] = [];
+
+    class MockBrowserWindow {
+      static getAllWindows = vi.fn(() => [{ id: 1 }]);
+
+      loadURL = vi.fn();
+      loadFile = vi.fn();
+      on = vi.fn();
+      isDestroyed = vi.fn(() => false);
+      webContents = {
+        on: vi.fn(),
+        send: vi.fn(),
+        openDevTools: vi.fn(),
+        toggleDevTools: vi.fn(),
+      };
+
+      constructor(options: any) {
+        browserWindowCalls.push(options);
+      }
+    }
+
+    vi.doMock('electron', () => ({
+      app: mockApp,
+      BrowserWindow: MockBrowserWindow,
+      Menu: {
+        buildFromTemplate: vi.fn(() => ({})),
+        setApplicationMenu: vi.fn(),
+      },
+      ipcMain: {
+        on: vi.fn(),
+        handle: vi.fn(),
+        removeHandler: vi.fn(),
+      },
+      protocol: {
+        registerSchemesAsPrivileged: vi.fn(),
+        handle: vi.fn(),
+      },
+      net: {
+        fetch: vi.fn(),
+      },
+      shell: {
+        openExternal: vi.fn(),
+        openPath: vi.fn(),
+      },
+      screen: {
+        getDisplayMatching: vi.fn(() => ({
+          workArea: { x: 0, y: 25, width: 1920, height: 1055 },
+        })),
+      },
+    }));
+
+    class MockPreviewServer {
+      start = vi.fn().mockResolvedValue(4123);
+      stop = vi.fn().mockResolvedValue(undefined);
+      getBaseUrl = vi.fn(() => 'http://127.0.0.1:4123');
+    }
+
+    vi.doMock('../../src/main/engine/PreviewServer', () => ({
+      PreviewServer: MockPreviewServer,
+    }));
+
+    vi.doMock('fs', () => ({
+      existsSync: vi.fn((targetPath: string) => targetPath.includes('window-state.json')),
+      readFileSync: vi.fn(() => JSON.stringify({ x: 120, y: 80, width: 1280, height: 820 })),
+      writeFileSync: vi.fn(),
+    }));
+
+    vi.doMock('../../src/main/database', () => ({
+      getDatabase: vi.fn(() => ({
+        initializeLocal: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        getLocal: vi.fn(() => ({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue(null),
+              })),
+            })),
+          })),
+        })),
+        getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
+      })),
+    }));
+
+    vi.doMock('../../src/main/ipc', () => ({
+      registerIpcHandlers: vi.fn(),
+      registerChatHandlers: vi.fn(),
+      initializeChatHandlers: vi.fn(),
+      cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    vi.doMock('../../src/main/database/schema', () => ({
+      media: {},
+    }));
+
+    vi.doMock('drizzle-orm', () => ({
+      eq: vi.fn(),
+    }));
+
+    vi.doMock('../../src/main/engine/MediaEngine', () => ({
+      getMediaEngine: vi.fn(() => ({
+        getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
+      })),
+    }));
+
+    await import('../../src/main/main');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(browserWindowCalls[0]).toEqual(expect.objectContaining({
+      x: 120,
+      y: 80,
+      width: 1280,
+      height: 820,
+    }));
+  });
+
+  it('clamps restored window bounds only when they overflow the current display work area', async () => {
+    const mockApp = {
+      name: 'bDS',
+      whenReady: vi.fn(() => Promise.resolve()),
+      on: vi.fn(),
+      quit: vi.fn(),
+      getPath: vi.fn((name: string) => (name === 'userData' ? '/tmp/bds-user-data' : '/tmp')),
+    };
+
+    const browserWindowCalls: any[] = [];
+
+    class MockBrowserWindow {
+      static getAllWindows = vi.fn(() => [{ id: 1 }]);
+
+      loadURL = vi.fn();
+      loadFile = vi.fn();
+      on = vi.fn();
+      isDestroyed = vi.fn(() => false);
+      webContents = {
+        on: vi.fn(),
+        send: vi.fn(),
+        openDevTools: vi.fn(),
+        toggleDevTools: vi.fn(),
+      };
+
+      constructor(options: any) {
+        browserWindowCalls.push(options);
+      }
+    }
+
+    vi.doMock('electron', () => ({
+      app: mockApp,
+      BrowserWindow: MockBrowserWindow,
+      Menu: {
+        buildFromTemplate: vi.fn(() => ({})),
+        setApplicationMenu: vi.fn(),
+      },
+      ipcMain: {
+        on: vi.fn(),
+        handle: vi.fn(),
+        removeHandler: vi.fn(),
+      },
+      protocol: {
+        registerSchemesAsPrivileged: vi.fn(),
+        handle: vi.fn(),
+      },
+      net: {
+        fetch: vi.fn(),
+      },
+      shell: {
+        openExternal: vi.fn(),
+        openPath: vi.fn(),
+      },
+      screen: {
+        getDisplayMatching: vi.fn(() => ({
+          workArea: { x: 0, y: 25, width: 1280, height: 775 },
+        })),
+      },
+    }));
+
+    class MockPreviewServer {
+      start = vi.fn().mockResolvedValue(4123);
+      stop = vi.fn().mockResolvedValue(undefined);
+      getBaseUrl = vi.fn(() => 'http://127.0.0.1:4123');
+    }
+
+    vi.doMock('../../src/main/engine/PreviewServer', () => ({
+      PreviewServer: MockPreviewServer,
+    }));
+
+    vi.doMock('fs', () => ({
+      existsSync: vi.fn((targetPath: string) => targetPath.includes('window-state.json')),
+      readFileSync: vi.fn(() => JSON.stringify({ x: -40, y: -10, width: 1800, height: 1000 })),
+      writeFileSync: vi.fn(),
+    }));
+
+    vi.doMock('../../src/main/database', () => ({
+      getDatabase: vi.fn(() => ({
+        initializeLocal: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        getLocal: vi.fn(() => ({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue(null),
+              })),
+            })),
+          })),
+        })),
+        getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
+      })),
+    }));
+
+    vi.doMock('../../src/main/ipc', () => ({
+      registerIpcHandlers: vi.fn(),
+      registerChatHandlers: vi.fn(),
+      initializeChatHandlers: vi.fn(),
+      cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    vi.doMock('../../src/main/database/schema', () => ({
+      media: {},
+    }));
+
+    vi.doMock('drizzle-orm', () => ({
+      eq: vi.fn(),
+    }));
+
+    vi.doMock('../../src/main/engine/MediaEngine', () => ({
+      getMediaEngine: vi.fn(() => ({
+        getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
+      })),
+    }));
+
+    await import('../../src/main/main');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(browserWindowCalls[0]).toEqual(expect.objectContaining({
+      x: 0,
+      y: 25,
+      width: 1280,
+      height: 775,
+    }));
+  });
 });

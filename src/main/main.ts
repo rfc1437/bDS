@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol, net, shell } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol, net, shell, screen } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase } from './database';
@@ -16,9 +16,160 @@ let previewServer: PreviewServer | null = null;
 let activePreviewPostId: string | null = null;
 const PREVIEW_SERVER_PORT = 4123;
 const BLOG_PREVIEW_POST_MENU_ID = APP_MENU_ITEM_IDS.previewPost;
+const WINDOW_MIN_WIDTH = 800;
+const WINDOW_MIN_HEIGHT = 600;
+const WINDOW_DEFAULT_WIDTH = 1400;
+const WINDOW_DEFAULT_HEIGHT = 900;
+const WINDOW_STATE_FILE_NAME = 'window-state.json';
+
+interface PersistedWindowState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface Rectangle {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 // Check if dev server is likely running (only in development)
 const isDev = process.env.NODE_ENV === 'development';
+
+function getWindowStatePath(): string | null {
+  if (typeof app.getPath !== 'function') {
+    return null;
+  }
+
+  return path.join(app.getPath('userData'), WINDOW_STATE_FILE_NAME);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function parsePersistedWindowState(raw: unknown): PersistedWindowState | null {
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+
+  const state = raw as Partial<PersistedWindowState>;
+  if (!isFiniteNumber(state.x) || !isFiniteNumber(state.y) || !isFiniteNumber(state.width) || !isFiniteNumber(state.height)) {
+    return null;
+  }
+
+  if (state.width <= 0 || state.height <= 0) {
+    return null;
+  }
+
+  return {
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
+  };
+}
+
+function readPersistedWindowState(): PersistedWindowState | null {
+  const windowStatePath = getWindowStatePath();
+  if (!windowStatePath || !fs.existsSync(windowStatePath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(windowStatePath, 'utf8');
+    const parsed = JSON.parse(content);
+    return parsePersistedWindowState(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedWindowState(state: PersistedWindowState): void {
+  const windowStatePath = getWindowStatePath();
+  if (!windowStatePath) {
+    return;
+  }
+
+  try {
+    fs.writeFileSync(windowStatePath, JSON.stringify(state), 'utf8');
+  } catch {
+    // best effort persistence, ignore write errors
+  }
+}
+
+function getWorkAreaForState(state: PersistedWindowState): Rectangle {
+  if (screen && typeof screen.getDisplayMatching === 'function') {
+    const matchingDisplay = screen.getDisplayMatching({
+      x: state.x,
+      y: state.y,
+      width: state.width,
+      height: state.height,
+    });
+
+    if (matchingDisplay?.workArea) {
+      return matchingDisplay.workArea;
+    }
+  }
+
+  return {
+    x: 0,
+    y: 0,
+    width: WINDOW_DEFAULT_WIDTH,
+    height: WINDOW_DEFAULT_HEIGHT,
+  };
+}
+
+function clampWindowStateToWorkArea(state: PersistedWindowState, workArea: Rectangle): PersistedWindowState {
+  const width = Math.max(WINDOW_MIN_WIDTH, Math.min(state.width, workArea.width));
+  const height = Math.max(WINDOW_MIN_HEIGHT, Math.min(state.height, workArea.height));
+
+  const maxX = workArea.x + workArea.width - width;
+  const maxY = workArea.y + workArea.height - height;
+
+  return {
+    x: Math.min(Math.max(state.x, workArea.x), maxX),
+    y: Math.min(Math.max(state.y, workArea.y), maxY),
+    width,
+    height,
+  };
+}
+
+function resolveInitialWindowState(): PersistedWindowState {
+  const persistedState = readPersistedWindowState();
+  if (!persistedState) {
+    return {
+      x: 0,
+      y: 0,
+      width: WINDOW_DEFAULT_WIDTH,
+      height: WINDOW_DEFAULT_HEIGHT,
+    };
+  }
+
+  const workArea = getWorkAreaForState(persistedState);
+  return clampWindowStateToWorkArea(persistedState, workArea);
+}
+
+function persistMainWindowState(windowToPersist: BrowserWindow): void {
+  if (typeof windowToPersist.isFullScreen === 'function' && windowToPersist.isFullScreen()) {
+    return;
+  }
+
+  let bounds = windowToPersist.getBounds();
+  if (typeof windowToPersist.isMaximized === 'function' && windowToPersist.isMaximized() && typeof windowToPersist.getNormalBounds === 'function') {
+    bounds = windowToPersist.getNormalBounds();
+  }
+
+  writePersistedWindowState({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  });
+}
 
 // Register custom protocol scheme as privileged (must be done before app is ready)
 protocol.registerSchemesAsPrivileged([
@@ -44,11 +195,14 @@ protocol.registerSchemesAsPrivileged([
 
 function createWindow(): void {
   const isMac = process.platform === 'darwin';
+  const initialWindowState = resolveInitialWindowState();
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
+    x: initialWindowState.x,
+    y: initialWindowState.y,
+    width: initialWindowState.width,
+    height: initialWindowState.height,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     title: 'Blogging Desktop Server',
     backgroundColor: '#1e1e1e', // VS Code dark background
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
@@ -114,6 +268,12 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  mainWindow.on('close', () => {
+    if (mainWindow) {
+      persistMainWindowState(mainWindow);
+    }
   });
 }
 
