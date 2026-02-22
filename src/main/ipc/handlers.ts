@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, clipboard } from 'electron';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
@@ -14,6 +14,7 @@ import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_WEB_CONTENTS_ACTIONS, type AppMenuAction } from '../shared/menuCommands';
+import { generateBlogmarkBookmarkletSource } from '../shared/blogmark';
 import { registerMetadataDiffHandlers } from './metadataDiffHandlers';
 import { registerBlogHandlers } from './blogHandlers';
 
@@ -773,6 +774,15 @@ export function registerIpcHandlers(): void {
   safeHandle('app:getDefaultProjectPath', async (_, projectId: string) => {
     const projectEngine = getProjectEngine();
     return projectEngine.getDefaultProjectBaseDir(projectId);
+  });
+
+  safeHandle('app:getBlogmarkBookmarklet', async () => {
+    return generateBlogmarkBookmarkletSource();
+  });
+
+  safeHandle('app:copyToClipboard', async (_, text: string) => {
+    clipboard.writeText(String(text ?? ''));
+    return true;
   });
 
   safeHandle('app:getTitleBarMetrics', async (event) => {

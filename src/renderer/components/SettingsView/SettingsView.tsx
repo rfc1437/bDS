@@ -76,6 +76,15 @@ const DEFAULT_CATEGORY_METADATA: Record<string, CategoryMetadata> = {
 // Standard categories that cannot be deleted
 const PROTECTED_CATEGORIES = ['article', 'aside', 'page', 'picture'];
 
+function normalizeBlogmarkCategory(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 // Individual setting row component (VS Code style)
 const SettingRow: React.FC<{
   id: string;
@@ -140,6 +149,7 @@ export const SettingsView: React.FC = () => {
   const [projectMainLanguage, setProjectMainLanguage] = useState<SupportedLanguage>('en');
   const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
   const [projectMaxPostsPerPage, setProjectMaxPostsPerPage] = useState(50);
+  const [projectBlogmarkCategory, setProjectBlogmarkCategory] = useState('article');
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -195,6 +205,9 @@ export const SettingsView: React.FC = () => {
           : 50;
         setProjectMaxPostsPerPage(maxPostsPerPage);
 
+        const incomingBlogmarkCategory = normalizeBlogmarkCategory((metadata as { blogmarkCategory?: unknown } | null)?.blogmarkCategory);
+        setProjectBlogmarkCategory(incomingBlogmarkCategory || 'article');
+
         const incomingCategoryMetadata = (metadata as any)?.categoryMetadata as Record<string, CategoryMetadata> | undefined;
         const incomingLegacyCategorySettings = (metadata as any)?.categorySettings as Record<string, { renderInLists: boolean; showTitle: boolean }> | undefined;
         setCategoryMetadata((current) => {
@@ -232,6 +245,7 @@ export const SettingsView: React.FC = () => {
         const categories = await window.electronAPI?.meta.getCategories();
         if (categories && categories.length > 0) {
           setPostCategories(categories);
+          setProjectBlogmarkCategory((current) => categories.includes(current) ? current : categories[0]);
           setCategoryMetadata((current) => {
             const next = { ...DEFAULT_CATEGORY_METADATA, ...current };
             for (const category of categories) {
@@ -244,6 +258,7 @@ export const SettingsView: React.FC = () => {
         } else {
           // Initialize with defaults if no categories exist
           setPostCategories(DEFAULT_POST_CATEGORIES);
+          setProjectBlogmarkCategory((current) => DEFAULT_POST_CATEGORIES.includes(current) ? current : DEFAULT_POST_CATEGORIES[0]);
           setCategoryMetadata(DEFAULT_CATEGORY_METADATA);
         }
 
@@ -326,6 +341,7 @@ export const SettingsView: React.FC = () => {
           mainLanguage: resolveSupportedRenderLanguage(projectMainLanguage),
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
+          blogmarkCategory: normalizeBlogmarkCategory(projectBlogmarkCategory) || undefined,
           categoryMetadata,
         });
       }
@@ -347,8 +363,29 @@ export const SettingsView: React.FC = () => {
     setProjectDataPath('');
   };
 
+  const handleCopyBlogmarkBookmarklet = async () => {
+    try {
+      const bookmarkletSource = await window.electronAPI?.app.getBlogmarkBookmarklet();
+      if (!bookmarkletSource) {
+        showToast.error(t('settings.toast.blogmarkBookmarkletGenerateFailed'));
+        return;
+      }
+
+      const copied = await window.electronAPI?.app.copyToClipboard(bookmarkletSource);
+      if (copied) {
+        showToast.success(t('settings.toast.blogmarkBookmarkletCopied'));
+        return;
+      }
+
+      showToast.error(t('settings.toast.blogmarkBookmarkletCopyFailed'));
+    } catch (error) {
+      console.error('Failed to copy blogmark bookmarklet:', error);
+      showToast.error(t('settings.toast.blogmarkBookmarkletCopyFailed'));
+    }
+  };
+
   // Keywords for each section for search filtering
-  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'url', 'public', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page'];
+  const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'url', 'public', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page', 'bookmarklet', 'blogmark'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
@@ -478,6 +515,32 @@ export const SettingsView: React.FC = () => {
             setProjectMaxPostsPerPage(Math.min(500, Math.max(1, Math.floor(parsed))));
           }}
         />
+      </SettingRow>
+
+      <SettingRow
+        id="project-blogmark-category"
+        label={t('settings.project.blogmarkCategoryLabel')}
+        description={t('settings.project.blogmarkCategoryDescription')}
+      >
+        <select
+          id="project-blogmark-category"
+          value={projectBlogmarkCategory}
+          onChange={(e) => setProjectBlogmarkCategory(e.target.value)}
+        >
+          {postCategories.map((category) => (
+            <option key={category} value={category}>{category}</option>
+          ))}
+        </select>
+      </SettingRow>
+
+      <SettingRow
+        id="project-blogmark-bookmarklet"
+        label={t('settings.project.blogmarkBookmarkletLabel')}
+        description={t('settings.project.blogmarkBookmarkletDescription')}
+      >
+        <button className="secondary" onClick={handleCopyBlogmarkBookmarklet}>
+          {t('settings.project.blogmarkBookmarkletCopyButton')}
+        </button>
       </SettingRow>
 
       <div className="setting-actions">

@@ -42,6 +42,7 @@ export interface ProjectMetadata {
   mainLanguage?: string;
   defaultAuthor?: string;
   maxPostsPerPage?: number;
+  blogmarkCategory?: string;
   picoTheme?: import('./picoThemes').PicoThemeName;
   categoryMetadata?: Record<string, CategoryMetadata>;
   categorySettings?: Record<string, CategoryRenderSettings>;
@@ -564,6 +565,8 @@ export interface ElectronAPI {
     selectFolder: (title?: string) => Promise<string | null>;
     getDefaultProjectPath: (projectId: string) => Promise<string>;
     readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; publicUrl?: string; mainLanguage?: string } | null>;
+    getBlogmarkBookmarklet: () => Promise<string>;
+    copyToClipboard: (text: string) => Promise<boolean>;
     setPreviewPostTarget: (postId: string | null) => Promise<void>;
     triggerMenuAction: (action: string) => Promise<void>;
   };
@@ -577,7 +580,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;

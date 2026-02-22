@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
-import { openSingletonToolTab } from './navigation/tabPolicy';
+import { openEntityTab, openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
 import { executeActivityClick } from './navigation/activityExecution';
 import { createAndFocusPost } from './navigation/postCreation';
@@ -211,6 +211,33 @@ const App: React.FC = () => {
             console.error('Failed to create post:', error);
           },
         });
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('blogmark:created', (post: unknown) => {
+        const created = post as { id?: string } | null;
+        if (!created?.id) {
+          return;
+        }
+
+        const state = useAppStore.getState();
+        executeActivityClick(
+          {
+            activeView: state.activeView,
+            sidebarVisible: state.sidebarVisible,
+            tabs: state.tabs,
+            activeTabId: state.activeTabId,
+          },
+          'posts',
+          {
+            setActiveView: state.setActiveView,
+            toggleSidebar: state.toggleSidebar,
+          },
+        );
+
+        state.setSelectedPost(created.id);
+        openEntityTab(state.openTab, 'post', created.id, 'preview');
       }) || (() => {})
     );
 

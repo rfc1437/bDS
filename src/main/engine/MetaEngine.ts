@@ -23,6 +23,7 @@ export interface ProjectMetadata {
   mainLanguage?: string; // Main language for AI-generated content (ISO code, e.g., 'en', 'de', 'es')
   defaultAuthor?: string; // Default author for new posts and media
   maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
+  blogmarkCategory?: string; // Category used for externally captured bookmark posts
   picoTheme?: PicoThemeName; // Selected Pico CSS theme for preview/rendering
   categoryMetadata?: Record<string, CategoryMetadata>; // Per-category metadata for UI/rendering
   categorySettings?: Record<string, CategoryRenderSettings>; // Per-category list rendering preferences
@@ -81,12 +82,16 @@ type RawCategoryMetadataInput = Record<string, CategoryMetadata | CategoryRender
 function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
   const publicUrl = sanitizePublicUrl(metadata.publicUrl);
+  const blogmarkCategory = typeof metadata.blogmarkCategory === 'string'
+    ? normalizeNonEmptyTaxonomyTerm(metadata.blogmarkCategory) ?? undefined
+    : undefined;
   const picoTheme = sanitizePicoTheme(metadata.picoTheme);
   const categoryMetadata = normalizeCategoryMetadata(metadata.categoryMetadata ?? metadata.categorySettings);
   return {
     ...metadata,
     publicUrl,
     maxPostsPerPage,
+    blogmarkCategory,
     picoTheme,
     categoryMetadata,
     categorySettings: undefined,
@@ -300,6 +305,7 @@ export class MetaEngine extends EventEmitter {
         mainLanguage: normalizedUpdates.mainLanguage,
         defaultAuthor: normalizedUpdates.defaultAuthor,
         maxPostsPerPage: normalizedUpdates.maxPostsPerPage,
+        blogmarkCategory: normalizedUpdates.blogmarkCategory,
         picoTheme: normalizedUpdates.picoTheme,
         categoryMetadata: normalizedUpdates.categoryMetadata,
       });

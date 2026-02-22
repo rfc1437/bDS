@@ -145,6 +145,8 @@ export const electronAPI: ElectronAPI = {
     selectFolder: (title?: string) => ipcRenderer.invoke('app:selectFolder', title),
     getDefaultProjectPath: (projectId: string) => ipcRenderer.invoke('app:getDefaultProjectPath', projectId),
     readProjectMetadata: (folderPath: string) => ipcRenderer.invoke('app:readProjectMetadata', folderPath),
+    getBlogmarkBookmarklet: () => ipcRenderer.invoke('app:getBlogmarkBookmarklet'),
+    copyToClipboard: (text: string) => ipcRenderer.invoke('app:copyToClipboard', text),
     setPreviewPostTarget: (postId: string | null) => ipcRenderer.invoke('app:setPreviewPostTarget', postId),
     triggerMenuAction: (action: string) => ipcRenderer.invoke('app:triggerMenuAction', action),
   },
@@ -160,7 +162,7 @@ export const electronAPI: ElectronAPI = {
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
     getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
     setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('./shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; picoTheme?: import('./shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
   // Tag Management (advanced tag operations)

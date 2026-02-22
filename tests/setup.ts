@@ -128,6 +128,8 @@ Object.defineProperty(globalThis, 'window', {
       },
       app: {
         triggerMenuAction: vi.fn(),
+        getBlogmarkBookmarklet: vi.fn(),
+        copyToClipboard: vi.fn(),
       },
       import: {
         selectAndAnalyze: vi.fn(),

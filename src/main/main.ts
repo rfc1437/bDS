@@ -7,15 +7,22 @@ import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
+import { getMetaEngine } from './engine/MetaEngine';
 import { PreviewServer } from './engine/PreviewServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from './shared/i18n';
+import { buildBlogmarkMarkdownLink, extractBlogmarkPayloadFromDeepLink, normalizeBlogmarkCategory } from './shared/blogmark';
 
 let mainWindow: BrowserWindow | null = null;
 let previewServer: PreviewServer | null = null;
 let activePreviewPostId: string | null = null;
+let appInitialized = false;
+let blogmarkQueue: string[] = [];
+let blogmarkQueueProcessing = false;
 const PREVIEW_SERVER_PORT = 4123;
 const BLOG_PREVIEW_POST_MENU_ID = APP_MENU_ITEM_IDS.previewPost;
+const BLOGMARK_PROTOCOL = 'bds';
+const BLOGMARK_NEW_POST_PREFIX = `${BLOGMARK_PROTOCOL}://new-post`;
 const WINDOW_MIN_WIDTH = 800;
 const WINDOW_MIN_HEIGHT = 600;
 const WINDOW_DEFAULT_WIDTH = 1400;
@@ -330,6 +337,80 @@ async function startPreviewServerOnAppStart(): Promise<void> {
   await previewServer.start(PREVIEW_SERVER_PORT);
 }
 
+function extractBlogmarkDeepLinks(argv: string[]): string[] {
+  return argv.filter((argument) => typeof argument === 'string' && argument.startsWith(BLOGMARK_NEW_POST_PREFIX));
+}
+
+function enqueueBlogmarkDeepLink(rawDeepLink: string): void {
+  if (rawDeepLink.startsWith(BLOGMARK_NEW_POST_PREFIX)) {
+    blogmarkQueue.push(rawDeepLink);
+  }
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  if (typeof mainWindow.focus === 'function') {
+    mainWindow.focus();
+  }
+}
+
+async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
+  const payload = extractBlogmarkPayloadFromDeepLink(rawDeepLink);
+  if (!payload) {
+    return;
+  }
+
+  const metadata = await getMetaEngine().getProjectMetadata();
+  const preferredCategory = normalizeBlogmarkCategory((metadata as { blogmarkCategory?: unknown } | null)?.blogmarkCategory);
+
+  const createdPost = await getPostEngine().createPost({
+    title: payload.title,
+    content: buildBlogmarkMarkdownLink(payload.title, payload.url),
+    categories: preferredCategory ? [preferredCategory] : [],
+  });
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('blogmark:created', createdPost);
+  }
+}
+
+async function processBlogmarkQueue(): Promise<void> {
+  if (!appInitialized || blogmarkQueueProcessing || blogmarkQueue.length === 0) {
+    return;
+  }
+
+  blogmarkQueueProcessing = true;
+  try {
+    while (blogmarkQueue.length > 0) {
+      const rawDeepLink = blogmarkQueue.shift();
+      if (!rawDeepLink) {
+        continue;
+      }
+
+      try {
+        await processBlogmarkDeepLink(rawDeepLink);
+      } catch (error) {
+        console.error('Failed to process blogmark deep link:', error);
+      }
+    }
+  } finally {
+    blogmarkQueueProcessing = false;
+  }
+}
+
+function registerBlogmarkProtocolClient(): void {
+  if (typeof app.setAsDefaultProtocolClient === 'function') {
+    app.setAsDefaultProtocolClient(BLOGMARK_PROTOCOL);
+  }
+}
+
 function createApplicationMenu(): Menu {
   const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
   const uiLanguage = resolveUiLanguageFromSystemLocale(systemLocale);
@@ -633,15 +714,47 @@ async function initialize(): Promise<void> {
   registerChatHandlers();
 }
 
+const hasSingleInstanceLock = typeof app.requestSingleInstanceLock !== 'function'
+  ? true
+  : app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+app.on('second-instance', (_event, argv) => {
+  focusMainWindow();
+  const deepLinks = extractBlogmarkDeepLinks(argv);
+  for (const deepLink of deepLinks) {
+    enqueueBlogmarkDeepLink(deepLink);
+  }
+  void processBlogmarkQueue();
+});
+
+app.on('open-url', (event, deepLink) => {
+  event.preventDefault();
+  enqueueBlogmarkDeepLink(deepLink);
+  focusMainWindow();
+  void processBlogmarkQueue();
+});
+
 // App lifecycle
 app.whenReady().then(async () => {
   await initialize();
+  appInitialized = true;
+  registerBlogmarkProtocolClient();
   try {
     await startPreviewServerOnAppStart();
   } catch (error) {
     console.error('Failed to start preview server on app startup:', error);
   }
   createWindow();
+
+  const startupDeepLinks = extractBlogmarkDeepLinks(process.argv);
+  for (const deepLink of startupDeepLinks) {
+    enqueueBlogmarkDeepLink(deepLink);
+  }
+  await processBlogmarkQueue();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

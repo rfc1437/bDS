@@ -729,6 +729,30 @@ describe('MetaEngine', () => {
       expect(metadata?.maxPostsPerPage).toBe(42);
     });
 
+    it('should set and get blogmarkCategory in project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        blogmarkCategory: 'Article',
+      } as any);
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect((metadata as any)?.blogmarkCategory).toBe('article');
+    });
+
+    it('should persist blogmarkCategory to filesystem', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Test Project',
+        blogmarkCategory: 'links',
+      } as any);
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+      expect(parsed.blogmarkCategory).toBe('links');
+    });
+
     it('should set and get publicUrl in project metadata', async () => {
       await metaEngine.setProjectMetadata({
         name: 'My Blog',
