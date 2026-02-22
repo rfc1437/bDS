@@ -10,6 +10,7 @@ const getTabTitle = (
   tab: Tab,
   postTitles: Map<string, string>,
   media: { id: string; originalName: string }[],
+  scriptTitles: Map<string, string>,
   chatTitles: Map<string, string>,
   importDefTitles: Map<string, string>,
   commitTitles: Map<string, string>,
@@ -81,7 +82,7 @@ const getTabTitle = (
   }
 
   if (tab.type === 'scripts') {
-    return tr('tabBar.scripts');
+    return scriptTitles.get(tab.id) || tr('tabBar.scripts');
   }
 
   return tr('tabBar.unknown');
@@ -214,6 +215,7 @@ export const TabBar: React.FC = () => {
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [postTitles, setPostTitles] = useState<Map<string, string>>(new Map());
+  const [scriptTitles, setScriptTitles] = useState<Map<string, string>>(new Map());
   const [chatTitles, setChatTitles] = useState<Map<string, string>>(new Map());
   const [importDefTitles, setImportDefTitles] = useState<Map<string, string>>(new Map());
   const [commitTitles, setCommitTitles] = useState<Map<string, string>>(new Map());
@@ -296,6 +298,102 @@ export const TabBar: React.FC = () => {
       unsub?.();
     };
   }, [tr]);
+
+  // Fetch script titles for script tabs
+  useEffect(() => {
+    const scriptTabs = tabs.filter((t) => t.type === 'scripts');
+    const scriptTabIds = new Set(scriptTabs.map((t) => t.id));
+
+    setScriptTitles((previous) => {
+      const next = new Map(previous);
+      let changed = false;
+
+      for (const id of Array.from(next.keys())) {
+        if (!scriptTabIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+
+    if (scriptTabs.length === 0) {
+      return;
+    }
+
+    const fetchScriptTitles = async () => {
+      const newTitles = new Map(scriptTitles);
+      let changed = false;
+
+      for (const tab of scriptTabs) {
+        if (scriptTitles.has(tab.id)) {
+          continue;
+        }
+
+        try {
+          const script = await window.electronAPI?.scripts.get(tab.id);
+          if (script) {
+            const title = script.title || tr('editor.untitled');
+            if (newTitles.get(tab.id) !== title) {
+              newTitles.set(tab.id, title);
+              changed = true;
+            }
+          }
+        } catch (error) {
+          console.error(tr('tabBar.error.fetchScriptTitle'), error);
+        }
+      }
+
+      if (changed) {
+        setScriptTitles(newTitles);
+      }
+    };
+
+    void fetchScriptTitles();
+  }, [tabs, tr]); // Note: intentionally not including scriptTitles to avoid infinite loops
+
+  // Listen for script updates to refresh titles
+  useEffect(() => {
+    const handleScriptsChanged = async () => {
+      const scriptTabs = tabs.filter((t) => t.type === 'scripts');
+      if (scriptTabs.length === 0) {
+        return;
+      }
+
+      const updated = new Map(scriptTitles);
+      let changed = false;
+
+      for (const tab of scriptTabs) {
+        try {
+          const script = await window.electronAPI?.scripts.get(tab.id);
+          if (script) {
+            const title = script.title || tr('editor.untitled');
+            if (updated.get(tab.id) !== title) {
+              updated.set(tab.id, title);
+              changed = true;
+            }
+          }
+        } catch (error) {
+          console.error(tr('tabBar.error.fetchScriptTitle'), error);
+        }
+      }
+
+      if (changed) {
+        setScriptTitles(updated);
+      }
+    };
+
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('bds:scripts-changed', handleScriptsChanged);
+    }
+
+    return () => {
+      if (typeof window.removeEventListener === 'function') {
+        window.removeEventListener('bds:scripts-changed', handleScriptsChanged);
+      }
+    };
+  }, [tabs, scriptTitles, tr]);
 
   // Fetch chat titles for chat tabs
   useEffect(() => {
@@ -565,7 +663,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, postTitles, media, chatTitles, importDefTitles, commitTitles, tr);
+          const title = getTabTitle(tab, postTitles, media, scriptTitles, chatTitles, importDefTitles, commitTitles, tr);
           const icon = getTabIcon(tab);
           
           return (

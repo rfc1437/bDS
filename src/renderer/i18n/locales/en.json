@@ -352,6 +352,7 @@
   "tabBar.error.fetchPostTitle": "Failed to fetch post title:",
   "tabBar.error.fetchChatTitle": "Failed to fetch chat title:",
   "tabBar.error.fetchImportTitle": "Failed to fetch import definition title:",
+  "tabBar.error.fetchScriptTitle": "Failed to fetch script title:",
   "tabBar.error.fetchCommitTitle": "Failed to fetch commit titles:",
   "metadataDiff.title": "Metadata Diff Tool",
   "metadataDiff.description": "Compare post metadata between database and markdown files. Fix inconsistencies caused by bugs or manual edits.",

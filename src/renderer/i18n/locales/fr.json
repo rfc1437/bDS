@@ -352,6 +352,7 @@
   "tabBar.error.fetchPostTitle": "Impossible de charger le titre de l’article :",
   "tabBar.error.fetchChatTitle": "Impossible de charger le titre du chat :",
   "tabBar.error.fetchImportTitle": "Impossible de charger le titre de la définition d’import :",
+  "tabBar.error.fetchScriptTitle": "Impossible de charger le titre du script :",
   "tabBar.error.fetchCommitTitle": "Impossible de charger les titres des commits :",
   "metadataDiff.title": "Outil de diff des métadonnées",
   "metadataDiff.description": "Compare les métadonnées des articles entre la base de données et les fichiers Markdown. Corrige les incohérences causées par des bugs ou des modifications manuelles.",
