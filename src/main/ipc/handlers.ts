@@ -171,7 +171,39 @@ export function registerIpcHandlers(): void {
 
   safeHandle('git:pull', async (_, projectPath: string) => {
     const engine = getGitEngine();
-    return engine.pull(projectPath);
+    const beforeHead = await engine.getHeadCommit(projectPath);
+    const pullResult = await engine.pull(projectPath);
+
+    if (!pullResult.success) {
+      return pullResult;
+    }
+
+    const afterHead = await engine.getHeadCommit(projectPath);
+    if (!beforeHead || !afterHead || beforeHead === afterHead) {
+      return pullResult;
+    }
+
+    const changedPostFiles = await engine.getChangedPostFilesBetween(projectPath, beforeHead, afterHead);
+    if (changedPostFiles.length === 0) {
+      return pullResult;
+    }
+
+    try {
+      const projectEngine = getProjectEngine();
+      const project = await projectEngine.getActiveProject();
+      const postEngine = getPostEngine();
+
+      if (project) {
+        const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+        postEngine.setProjectContext(project.id, dataDir);
+      }
+
+      await postEngine.reconcilePublishedPostsFromGitChanges(projectPath, changedPostFiles);
+    } catch (error) {
+      console.error('Failed to reconcile published posts after git pull:', error);
+    }
+
+    return pullResult;
   });
 
   safeHandle('git:push', async (_, projectPath: string) => {

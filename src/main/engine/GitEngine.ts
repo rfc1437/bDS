@@ -132,6 +132,14 @@ export interface GitActionResult {
   guidance?: string[];
 }
 
+export type GitPostFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+
+export interface GitPostFileChange {
+  status: GitPostFileChangeStatus;
+  path: string;
+  previousPath?: string;
+}
+
 type GitProvider = 'unknown' | 'github' | 'gitlab' | 'gitea-forgejo';
 
 let gitEngineInstance: GitEngine | null = null;
@@ -144,6 +152,8 @@ export function getGitEngine(): GitEngine {
 }
 
 export class GitEngine {
+  private readonly markdownExtensions = new Set(['.md', '.markdown', '.mdx']);
+
   private readonly defaultGitignoreEntries = [
     '.DS_Store',
     'Thumbs.db',
@@ -500,6 +510,66 @@ export class GitEngine {
     };
 
     return { files, counts };
+  }
+
+  private normalizeRepoRelativePath(value: string): string {
+    return value.replace(/\\/g, '/').replace(/^\.\//, '');
+  }
+
+  private isPostsMarkdownPath(value: string): boolean {
+    const normalized = this.normalizeRepoRelativePath(value);
+    if (!normalized.startsWith('posts/')) {
+      return false;
+    }
+
+    const extension = path.extname(normalized).toLowerCase();
+    return this.markdownExtensions.has(extension);
+  }
+
+  private parseNameStatusOutput(raw: string): GitPostFileChange[] {
+    const tokens = raw.split('\0').filter((token) => token.length > 0);
+    const changes: GitPostFileChange[] = [];
+
+    let index = 0;
+    while (index < tokens.length) {
+      const statusToken = tokens[index++] ?? '';
+      if (!statusToken) {
+        continue;
+      }
+
+      if (statusToken.startsWith('R')) {
+        const previousPathRaw = tokens[index++] ?? '';
+        const nextPathRaw = tokens[index++] ?? '';
+        const previousPath = this.normalizeRepoRelativePath(previousPathRaw);
+        const pathValue = this.normalizeRepoRelativePath(nextPathRaw);
+
+        if (this.isPostsMarkdownPath(previousPath) || this.isPostsMarkdownPath(pathValue)) {
+          changes.push({
+            status: 'renamed',
+            path: pathValue,
+            previousPath,
+          });
+        }
+        continue;
+      }
+
+      const filePathRaw = tokens[index++] ?? '';
+      const filePath = this.normalizeRepoRelativePath(filePathRaw);
+      if (!this.isPostsMarkdownPath(filePath)) {
+        continue;
+      }
+
+      const statusCode = statusToken[0] ?? '';
+      if (statusCode === 'A') {
+        changes.push({ status: 'added', path: filePath });
+      } else if (statusCode === 'M') {
+        changes.push({ status: 'modified', path: filePath });
+      } else if (statusCode === 'D') {
+        changes.push({ status: 'deleted', path: filePath });
+      }
+    }
+
+    return changes;
   }
 
   private async getStatusViaCli(projectPath: string): Promise<GitStatusDto> {
@@ -1232,6 +1302,54 @@ export class GitEngine {
         }
       }
       return this.toActionFailure(git, error, 'Failed to fetch remote updates.');
+    }
+  }
+
+  async getHeadCommit(projectPath: string): Promise<string | null> {
+    const git = this.createNonInteractiveGit(projectPath);
+    try {
+      const output = await git.raw(['rev-parse', 'HEAD']);
+      const commit = output.trim();
+      return commit.length > 0 ? commit : null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          const output = await this.runGitCli(projectPath, ['rev-parse', 'HEAD']);
+          const commit = output.trim();
+          return commit.length > 0 ? commit : null;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
+  async getChangedPostFilesBetween(projectPath: string, fromCommit: string, toCommit: string): Promise<GitPostFileChange[]> {
+    const fromRef = fromCommit.trim();
+    const toRef = toCommit.trim();
+    if (!fromRef || !toRef || fromRef === toRef) {
+      return [];
+    }
+
+    const git = this.createNonInteractiveGit(projectPath);
+    const args = ['diff', '--name-status', '--find-renames', '-z', `${fromRef}..${toRef}`, '--', 'posts'];
+
+    try {
+      const output = await git.raw(args);
+      return this.parseNameStatusOutput(output);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          const output = await this.runGitCli(projectPath, args);
+          return this.parseNameStatusOutput(output);
+        } catch {
+          return [];
+        }
+      }
+      return [];
     }
   }
 

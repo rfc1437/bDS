@@ -2957,4 +2957,87 @@ Content with [link](/posts/other-post)`);
       expect(ftsInserts.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  describe('reconcilePublishedPostsFromGitChanges', () => {
+    it('should process added and modified markdown files as published posts', async () => {
+      postEngine.setProjectContext('default', '/repo');
+
+      const existingPublishedPath = '/repo/posts/2026/02/existing-post.md';
+      mockPosts.set('published-existing', {
+        id: 'published-existing',
+        projectId: 'default',
+        title: 'Existing Post',
+        slug: 'existing-post',
+        excerpt: null,
+        content: null,
+        status: 'published',
+        author: null,
+        createdAt: new Date('2026-02-01T10:00:00.000Z'),
+        updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+        publishedAt: new Date('2026-02-01T10:00:00.000Z'),
+        filePath: existingPublishedPath,
+        checksum: 'old-checksum',
+        tags: '[]',
+        categories: '[]',
+      });
+
+      mockFiles.set(existingPublishedPath, `---\nid: published-existing\ntitle: Existing Post Updated\nslug: existing-post\nstatus: published\ncreatedAt: 2026-02-01T10:00:00.000Z\nupdatedAt: 2026-02-22T10:00:00.000Z\ntags:\n  - synced\ncategories:\n  - updates\n---\nUpdated content`);
+      mockFiles.set('/repo/posts/2026/02/new-from-pull.md', `---\nid: new-from-pull-id\ntitle: New From Pull\nslug: new-from-pull\nstatus: published\ncreatedAt: 2026-02-22T09:00:00.000Z\nupdatedAt: 2026-02-22T09:00:00.000Z\ntags:\n  - new\ncategories:\n  - updates\n---\nBrand new post content`);
+
+      const emitSpy = vi.spyOn(postEngine, 'emit');
+
+      const result = await postEngine.reconcilePublishedPostsFromGitChanges('/repo', [
+        { status: 'modified', path: 'posts/2026/02/existing-post.md' },
+        { status: 'added', path: 'posts/2026/02/new-from-pull.md' },
+      ]);
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+      expect(emitSpy).toHaveBeenCalledWith('postUpdated', expect.objectContaining({ id: 'published-existing' }));
+      expect(emitSpy).toHaveBeenCalledWith('postCreated', expect.objectContaining({ slug: 'new-from-pull', status: 'published' }));
+      expect(result.created).toBe(1);
+      expect(result.updated).toBe(1);
+      expect(result.deleted).toBe(0);
+      expect(result.processedFiles).toBe(2);
+    });
+
+    it('should ignore draft posts when matching file paths appear in git changes', async () => {
+      postEngine.setProjectContext('default', '/repo');
+
+      const draftPath = '/repo/posts/2026/02/draft-post.md';
+      mockPosts.set('draft-post', {
+        id: 'draft-post',
+        projectId: 'default',
+        title: 'Draft Post',
+        slug: 'draft-post',
+        excerpt: null,
+        content: 'Draft content',
+        status: 'draft',
+        author: null,
+        createdAt: new Date('2026-02-01T10:00:00.000Z'),
+        updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+        publishedAt: null,
+        filePath: draftPath,
+        checksum: 'draft-checksum',
+        tags: '[]',
+        categories: '[]',
+      });
+
+      mockFiles.set(draftPath, `---\nid: draft-post\ntitle: Draft Post From File\nslug: draft-post\nstatus: published\ncreatedAt: 2026-02-01T10:00:00.000Z\nupdatedAt: 2026-02-22T10:00:00.000Z\n---\nShould be ignored`);
+
+      const emitSpy = vi.spyOn(postEngine, 'emit');
+
+      const result = await postEngine.reconcilePublishedPostsFromGitChanges('/repo', [
+        { status: 'modified', path: 'posts/2026/02/draft-post.md' },
+      ]);
+
+      expect(mockLocalDb.update).not.toHaveBeenCalled();
+      expect(mockLocalDb.insert).not.toHaveBeenCalled();
+      expect(emitSpy).not.toHaveBeenCalledWith('postUpdated', expect.objectContaining({ id: 'draft-post' }));
+      expect(result.created).toBe(0);
+      expect(result.updated).toBe(0);
+      expect(result.deleted).toBe(0);
+      expect(result.processedFiles).toBe(0);
+    });
+  });
 });

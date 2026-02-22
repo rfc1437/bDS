@@ -44,6 +44,7 @@ const mockPostEngine = {
   on: vi.fn(),
   setProjectContext: vi.fn(),
   setSearchLanguage: vi.fn(),
+  reconcilePublishedPostsFromGitChanges: vi.fn(),
   createPost: vi.fn(),
   updatePost: vi.fn(),
   deletePost: vi.fn(),
@@ -159,6 +160,8 @@ const mockPostMediaEngine = {
 
 const mockGitEngine = {
   checkAvailability: vi.fn(),
+  getHeadCommit: vi.fn(),
+  getChangedPostFilesBetween: vi.fn(),
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
   getDiff: vi.fn(),
@@ -549,12 +552,58 @@ describe('IPC Handlers', () => {
     });
 
     describe('git:pull', () => {
-      it('should pass project path to GitEngine.pull', async () => {
+      it('should reconcile published posts from pulled post file changes when pull succeeds', async () => {
+        mockGitEngine.getHeadCommit
+          .mockResolvedValueOnce('before-head')
+          .mockResolvedValueOnce('after-head');
+        mockGitEngine.pull.mockResolvedValue({ success: true });
+        mockGitEngine.getChangedPostFilesBetween.mockResolvedValue([
+          { status: 'modified', path: 'posts/2026/02/existing.md' },
+          { status: 'added', path: 'posts/2026/02/new-post.md' },
+        ]);
+        mockPostEngine.reconcilePublishedPostsFromGitChanges.mockResolvedValue({
+          created: 1,
+          updated: 1,
+          deleted: 0,
+          processedFiles: 2,
+        });
+
+        const result = await invokeHandler('git:pull', '/repo');
+
+        expect(mockGitEngine.getHeadCommit).toHaveBeenNthCalledWith(1, '/repo');
+        expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
+        expect(mockGitEngine.getHeadCommit).toHaveBeenNthCalledWith(2, '/repo');
+        expect(mockGitEngine.getChangedPostFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
+        expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).toHaveBeenCalledWith('/repo', [
+          { status: 'modified', path: 'posts/2026/02/existing.md' },
+          { status: 'added', path: 'posts/2026/02/new-post.md' },
+        ]);
+        expect(result).toEqual({ success: true });
+      });
+
+      it('should skip reconciliation when pull fails', async () => {
+        mockGitEngine.getHeadCommit.mockResolvedValue('before-head');
+        mockGitEngine.pull.mockResolvedValue({ success: false, code: 'conflict' });
+
+        const result = await invokeHandler('git:pull', '/repo');
+
+        expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
+        expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
+        expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, code: 'conflict' });
+      });
+
+      it('should skip reconciliation when pull does not change HEAD', async () => {
+        mockGitEngine.getHeadCommit
+          .mockResolvedValueOnce('same-head')
+          .mockResolvedValueOnce('same-head');
         mockGitEngine.pull.mockResolvedValue({ success: true });
 
         const result = await invokeHandler('git:pull', '/repo');
 
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
+        expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
+        expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true });
       });
     });

@@ -72,6 +72,21 @@ export interface PaginationOptions {
   offset?: number;
 }
 
+export type GitPostFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+
+export interface GitPostFileChange {
+  status: GitPostFileChangeStatus;
+  path: string;
+  previousPath?: string;
+}
+
+export interface PublishedPostReconcileResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  processedFiles: number;
+}
+
 export class PostEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private searchLanguage: SupportedLanguage = 'english';
@@ -246,6 +261,40 @@ export class PostEngine extends EventEmitter {
 
   private calculateChecksum(content: string): string {
     return crypto.createHash('md5').update(content).digest('hex');
+  }
+
+  private normalizePathForCompare(filePath: string): string {
+    return path.resolve(filePath).replace(/\\/g, '/');
+  }
+
+  private isMarkdownPostPath(value: string): boolean {
+    const normalized = value.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!normalized.startsWith('posts/')) {
+      return false;
+    }
+
+    const extension = path.extname(normalized).toLowerCase();
+    return extension === '.md' || extension === '.markdown' || extension === '.mdx';
+  }
+
+  private async ensureUniquePostIdentity(id: string, slug: string): Promise<{ id: string; slug: string }> {
+    const uniqueId = id.trim().length > 0 ? id.trim() : uuidv4();
+    const safeSlug = slug.trim().length > 0 ? slug.trim() : await this.generateUniqueSlug('untitled');
+
+    const db = getDatabase().getLocal();
+
+    const existingById = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(eq(posts.id, uniqueId))
+      .get();
+
+    const finalId = existingById ? uuidv4() : uniqueId;
+
+    const slugAvailable = await this.isSlugAvailable(safeSlug);
+    const finalSlug = slugAvailable ? safeSlug : await this.generateUniqueSlug(safeSlug);
+
+    return { id: finalId, slug: finalSlug };
   }
 
   private async writePostFile(post: PostData): Promise<string> {
@@ -1102,6 +1151,233 @@ export class PostEngine extends EventEmitter {
     }
     
     console.log(`Rebuilt FTS index for ${allPosts.length} posts`);
+  }
+
+  async reconcilePublishedPostsFromGitChanges(
+    projectPath: string,
+    changes: GitPostFileChange[],
+  ): Promise<PublishedPostReconcileResult> {
+    const db = getDatabase().getLocal();
+    const normalizedProjectPath = path.resolve(projectPath);
+
+    const relevantChanges = changes.filter((change) => {
+      if (!this.isMarkdownPostPath(change.path)) {
+        return false;
+      }
+      if (change.status === 'renamed' && change.previousPath && !this.isMarkdownPostPath(change.previousPath) && !this.isMarkdownPostPath(change.path)) {
+        return false;
+      }
+      return true;
+    });
+
+    if (relevantChanges.length === 0) {
+      return { created: 0, updated: 0, deleted: 0, processedFiles: 0 };
+    }
+
+    const projectPosts = await db
+      .select()
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    const publishedRows = projectPosts.filter((row) => row.status === 'published' && Boolean(row.filePath));
+    const publishedByFilePath = new Map<string, Post>();
+    for (const row of publishedRows) {
+      if (!row.filePath) {
+        continue;
+      }
+      publishedByFilePath.set(this.normalizePathForCompare(row.filePath), row);
+    }
+
+    let created = 0;
+    let updated = 0;
+    let deleted = 0;
+    let processedFiles = 0;
+
+    for (const change of relevantChanges) {
+      const absolutePath = this.normalizePathForCompare(path.resolve(normalizedProjectPath, change.path));
+      const previousAbsolutePath = change.previousPath
+        ? this.normalizePathForCompare(path.resolve(normalizedProjectPath, change.previousPath))
+        : null;
+
+      if (change.status === 'deleted') {
+        const existingPublished = publishedByFilePath.get(absolutePath);
+        if (!existingPublished) {
+          continue;
+        }
+
+        await db.delete(postLinks).where(eq(postLinks.sourcePostId, existingPublished.id));
+        await db.delete(postLinks).where(eq(postLinks.targetPostId, existingPublished.id));
+        await db.delete(posts).where(eq(posts.id, existingPublished.id));
+        await this.deleteFTSIndex(existingPublished.id);
+        this.emit('postDeleted', existingPublished.id);
+
+        publishedByFilePath.delete(absolutePath);
+        deleted += 1;
+        processedFiles += 1;
+        continue;
+      }
+
+      const existingPublished = previousAbsolutePath
+        ? (publishedByFilePath.get(previousAbsolutePath) || publishedByFilePath.get(absolutePath))
+        : publishedByFilePath.get(absolutePath);
+
+      const fileData = await this.readPostFile(absolutePath);
+      if (!fileData) {
+        continue;
+      }
+
+      if (existingPublished) {
+        const nextSlugCandidate = fileData.slug || existingPublished.slug;
+        const nextSlug = await this.isSlugAvailable(nextSlugCandidate, existingPublished.id)
+          ? nextSlugCandidate
+          : await this.generateUniqueSlug(nextSlugCandidate, existingPublished.id);
+
+        const checksum = this.calculateChecksum(fileData.content);
+        const nextPublishedAt = fileData.publishedAt || existingPublished.publishedAt || fileData.updatedAt;
+
+        await db.update(posts)
+          .set({
+            title: fileData.title,
+            slug: nextSlug,
+            excerpt: fileData.excerpt,
+            content: null,
+            status: 'published',
+            author: fileData.author,
+            createdAt: fileData.createdAt,
+            updatedAt: fileData.updatedAt,
+            publishedAt: nextPublishedAt,
+            filePath: absolutePath,
+            checksum,
+            tags: JSON.stringify(fileData.tags),
+            categories: JSON.stringify(fileData.categories),
+          })
+          .where(eq(posts.id, existingPublished.id));
+
+        await this.updateFTSIndex({
+          id: existingPublished.id,
+          projectId: existingPublished.projectId,
+          title: fileData.title,
+          content: fileData.content,
+          excerpt: fileData.excerpt,
+          tags: fileData.tags,
+          categories: fileData.categories,
+        });
+
+        const updatedPost: PostData = {
+          id: existingPublished.id,
+          projectId: existingPublished.projectId,
+          title: fileData.title,
+          slug: nextSlug,
+          excerpt: fileData.excerpt || undefined,
+          content: fileData.content,
+          status: 'published',
+          author: fileData.author || undefined,
+          createdAt: fileData.createdAt,
+          updatedAt: fileData.updatedAt,
+          publishedAt: nextPublishedAt || undefined,
+          tags: fileData.tags,
+          categories: fileData.categories,
+        };
+
+        this.emit('postUpdated', updatedPost);
+
+        if (previousAbsolutePath) {
+          publishedByFilePath.delete(previousAbsolutePath);
+        }
+
+        publishedByFilePath.set(absolutePath, {
+          ...existingPublished,
+          title: updatedPost.title,
+          slug: updatedPost.slug,
+          excerpt: updatedPost.excerpt ?? null,
+          content: null,
+          status: 'published',
+          author: updatedPost.author ?? null,
+          createdAt: updatedPost.createdAt,
+          updatedAt: updatedPost.updatedAt,
+          publishedAt: updatedPost.publishedAt ?? null,
+          filePath: absolutePath,
+          checksum,
+          tags: JSON.stringify(updatedPost.tags),
+          categories: JSON.stringify(updatedPost.categories),
+        });
+
+        updated += 1;
+        processedFiles += 1;
+        continue;
+      }
+
+      if (change.status !== 'added') {
+        continue;
+      }
+
+      const identity = await this.ensureUniquePostIdentity(fileData.id, fileData.slug);
+      const checksum = this.calculateChecksum(fileData.content);
+      const publishedAt = fileData.publishedAt || fileData.updatedAt;
+      const newPostRow: NewPost = {
+        id: identity.id,
+        projectId: this.currentProjectId,
+        title: fileData.title,
+        slug: identity.slug,
+        excerpt: fileData.excerpt,
+        content: null,
+        status: 'published',
+        author: fileData.author,
+        createdAt: fileData.createdAt,
+        updatedAt: fileData.updatedAt,
+        publishedAt,
+        filePath: absolutePath,
+        checksum,
+        tags: JSON.stringify(fileData.tags),
+        categories: JSON.stringify(fileData.categories),
+      };
+
+      await db.insert(posts).values(newPostRow);
+      await this.updateFTSIndex({
+        id: identity.id,
+        projectId: this.currentProjectId,
+        title: fileData.title,
+        content: fileData.content,
+        excerpt: fileData.excerpt,
+        tags: fileData.tags,
+        categories: fileData.categories,
+      });
+
+      const createdPost: PostData = {
+        id: identity.id,
+        projectId: this.currentProjectId,
+        title: fileData.title,
+        slug: identity.slug,
+        excerpt: fileData.excerpt || undefined,
+        content: fileData.content,
+        status: 'published',
+        author: fileData.author || undefined,
+        createdAt: fileData.createdAt,
+        updatedAt: fileData.updatedAt,
+        publishedAt: publishedAt || undefined,
+        tags: fileData.tags,
+        categories: fileData.categories,
+      };
+
+      this.emit('postCreated', createdPost);
+      publishedByFilePath.set(absolutePath, {
+        ...newPostRow,
+        excerpt: newPostRow.excerpt ?? null,
+        content: null,
+        author: newPostRow.author ?? null,
+      } as Post);
+
+      created += 1;
+      processedFiles += 1;
+    }
+
+    return {
+      created,
+      updated,
+      deleted,
+      processedFiles,
+    };
   }
 
   /**
