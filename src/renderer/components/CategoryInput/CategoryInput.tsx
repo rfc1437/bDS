@@ -2,11 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import '../TagInput/TagInput.css';
 import './CategoryInput.css';
 
+export interface CategoryOption {
+  name: string;
+  title: string;
+}
+
 interface CategoryInputProps {
-  categories: string[];
-  onSelectCategory: (categoryName: string) => void;
+  categories: CategoryOption[];
+  onSelectCategory: (category: CategoryOption) => void;
   placeholder?: string;
   createCategoryArchiveLabel: string;
+  allowCreate?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
   inlinePlain?: boolean;
@@ -17,6 +23,7 @@ export const CategoryInput: React.FC<CategoryInputProps> = ({
   onSelectCategory,
   placeholder = '',
   createCategoryArchiveLabel,
+  allowCreate = true,
   disabled = false,
   autoFocus = false,
   inlinePlain = false,
@@ -34,7 +41,7 @@ export const CategoryInput: React.FC<CategoryInputProps> = ({
 
     const query = inputValue.toLowerCase().trim();
     return categories
-      .filter((categoryName) => categoryName.toLowerCase().includes(query))
+      .filter((category) => category.title.toLowerCase().includes(query) || category.name.toLowerCase().includes(query))
       .slice(0, 8);
   }, [categories, inputValue]);
 
@@ -62,23 +69,33 @@ export const CategoryInput: React.FC<CategoryInputProps> = ({
     return () => clearTimeout(timer);
   }, [autoFocus, disabled]);
 
-  const createArchive = (label: string): void => {
-    const trimmed = label.trim();
-    if (!trimmed) {
+  const selectCategory = (category: CategoryOption): void => {
+    onSelectCategory(category);
+    setInputValue('');
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
+  };
+
+  const createArchiveFromInput = (label: string): void => {
+    const trimmedName = label.trim();
+    if (!trimmedName) {
       return;
     }
 
-    onSelectCategory(trimmed);
+    onSelectCategory({
+      name: trimmedName,
+      title: trimmedName,
+    });
     setInputValue('');
     setShowSuggestions(false);
     setSelectedIndex(-1);
   };
 
   const exactMatchExists = inputValue.trim()
-    ? suggestions.some((item) => item.toLowerCase() === inputValue.trim().toLowerCase())
+    ? suggestions.some((item) => item.title.toLowerCase() === inputValue.trim().toLowerCase() || item.name.toLowerCase() === inputValue.trim().toLowerCase())
     : false;
 
-  const showCreateOption = inputValue.trim() && !exactMatchExists;
+  const showCreateOption = allowCreate && Boolean(inputValue.trim()) && !exactMatchExists;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'ArrowDown') {
@@ -97,15 +114,18 @@ export const CategoryInput: React.FC<CategoryInputProps> = ({
     if (event.key === 'Enter') {
       event.preventDefault();
       if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-        createArchive(suggestions[selectedIndex]);
+        selectCategory(suggestions[selectedIndex]);
       } else if (selectedIndex === suggestions.length && showCreateOption) {
-        createArchive(inputValue);
+        createArchiveFromInput(inputValue);
       } else {
-        const exactMatch = categories.find((categoryName) => categoryName.toLowerCase() === inputValue.trim().toLowerCase());
+        const exactMatch = categories.find((category) => {
+          const query = inputValue.trim().toLowerCase();
+          return category.name.toLowerCase() === query || category.title.toLowerCase() === query;
+        });
         if (exactMatch) {
-          createArchive(exactMatch);
-        } else if (inputValue.trim()) {
-          createArchive(inputValue);
+          selectCategory(exactMatch);
+        } else if (allowCreate && inputValue.trim()) {
+          createArchiveFromInput(inputValue);
         }
       }
       return;
@@ -144,14 +164,14 @@ export const CategoryInput: React.FC<CategoryInputProps> = ({
 
       {showSuggestions && (suggestions.length > 0 || showCreateOption) && (
         <div className="tag-suggestions">
-          {suggestions.map((categoryName, index) => (
+          {suggestions.map((category, index) => (
             <button
-              key={categoryName}
+              key={category.name}
               type="button"
               className={`tag-suggestion ${selectedIndex === index ? 'selected' : ''}`}
-              onClick={() => createArchive(categoryName)}
+              onClick={() => selectCategory(category)}
             >
-              <span className="tag-suggestion-name">{categoryName}</span>
+              <span className="tag-suggestion-name">{category.title}</span>
             </button>
           ))}
 
@@ -159,7 +179,7 @@ export const CategoryInput: React.FC<CategoryInputProps> = ({
             <button
               type="button"
               className={`tag-suggestion create-new ${selectedIndex === suggestions.length ? 'selected' : ''}`}
-              onClick={() => createArchive(inputValue)}
+              onClick={() => createArchiveFromInput(inputValue)}
             >
               <span className="tag-suggestion-icon">+</span>
               <span>{createCategoryArchiveLabel}</span>

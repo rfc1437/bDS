@@ -88,6 +88,24 @@ describe('MenuEngine', () => {
     });
   });
 
+  it('preserves custom title for category archive entries when OPML includes both text and title', async () => {
+    const menuPath = normalizePath(`${menuEngine.getMetaDir()}/menu.opml`);
+    mockFiles.set(
+      menuPath,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head><title>Blog Menu</title></head>\n  <body>\n    <outline id="menu-home" text="Home" type="home" pageSlug="home"/>\n    <outline id="cat-news" text="news" title="Editorial Highlights" type="category-archive" categoryName="news"/>\n  </body>\n</opml>`,
+    );
+
+    const result = await menuEngine.getMenu();
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[1]).toMatchObject({
+      id: 'cat-news',
+      kind: 'category-archive',
+      categoryName: 'news',
+      title: 'Editorial Highlights',
+    });
+  });
+
   it('writes menu state as OPML and can read it back', async () => {
     const saved = await menuEngine.saveMenu({
       items: [
@@ -129,5 +147,28 @@ describe('MenuEngine', () => {
     });
 
     expect(saved.items.some((item) => item.id === 'menu-home')).toBe(true);
+  });
+
+  it('persists category archives as menu references without category metadata fields', async () => {
+    await menuEngine.saveMenu({
+      items: [
+        {
+          id: 'cat-news',
+          title: 'Newsroom',
+          kind: 'category-archive',
+          categoryName: 'news',
+          children: [],
+        },
+      ],
+    });
+
+    const menuPath = normalizePath(`${menuEngine.getMetaDir()}/menu.opml`);
+    const xml = mockFiles.get(menuPath);
+
+    expect(xml).toBeDefined();
+    expect(xml).toContain('categoryName="news"');
+    expect(xml).toContain('text="Newsroom"');
+    expect(xml).not.toContain('renderInLists');
+    expect(xml).not.toContain('showTitle');
   });
 });

@@ -4,7 +4,7 @@ import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
 import type { MenuDocument, MenuItemData, PostData } from '../../../main/shared/electronApi';
 import { PageInput } from '../PageInput';
-import { CategoryInput } from '../CategoryInput';
+import { CategoryInput, type CategoryOption } from '../CategoryInput';
 import { createAutoExpandController } from './menuAutoExpand';
 import { resolveInsertTarget } from './menuInsertTarget';
 import { isPickerCloseKey } from './menuPagePicker';
@@ -191,7 +191,7 @@ export const MenuEditorView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pagePosts, setPagePosts] = useState<PostData[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingEntryType, setEditingEntryType] = useState<'page' | 'category' | null>(null);
@@ -354,8 +354,16 @@ export const MenuEditorView: React.FC = () => {
 
     setIsLoadingCategories(true);
     try {
-      const nextCategories = await window.electronAPI.meta.getCategories();
-      setCategories(nextCategories);
+      const [nextCategories, projectMetadata] = await Promise.all([
+        window.electronAPI.meta.getCategories(),
+        window.electronAPI.meta.getProjectMetadata().catch(() => null),
+      ]);
+
+      const categoryMetadata = projectMetadata?.categoryMetadata ?? {};
+      setCategories(nextCategories.map((categoryName) => ({
+        name: categoryName,
+        title: categoryMetadata[categoryName]?.title?.trim() || categoryName,
+      })));
     } catch (error) {
       console.error('Failed to load categories:', error);
       showToast.error(tr('menuEditor.categoryPicker.loadError'));
@@ -414,33 +422,60 @@ export const MenuEditorView: React.FC = () => {
     setEditingEntryType(null);
   };
 
-  const setDraftAsCategoryArchive = (categoryName: string): void => {
+  const setDraftAsCategoryArchive = (category: CategoryOption): void => {
     if (!editingEntryId) {
       return;
     }
 
-    const trimmed = categoryName.trim();
-    if (!trimmed) {
-      return;
-    }
+    const draftEntryId = editingEntryId;
 
-    setItems((previous) => mapItems(previous, (item) => {
-      if (item.id !== editingEntryId) {
-        return item;
+    void (async () => {
+      const trimmedName = category.name.trim();
+      const trimmedTitle = category.title.trim();
+      if (!trimmedName) {
+        return;
       }
 
-      return {
-        ...item,
-        title: trimmed,
-        kind: 'category-archive',
-        pageId: undefined,
-        pageSlug: undefined,
-        categoryName: trimmed,
-      };
-    }));
+      let nextCategoryName = trimmedName;
+      const exists = categories.some((item) => item.name.toLowerCase() === trimmedName.toLowerCase());
 
-    setEditingEntryId(null);
-    setEditingEntryType(null);
+      if (!exists) {
+        try {
+          const updatedCategories = await window.electronAPI.meta.addCategory(trimmedName);
+          const matched = updatedCategories.find((item) => item.toLowerCase() === trimmedName.toLowerCase());
+          nextCategoryName = matched || trimmedName;
+          setCategories((previous) => {
+            if (previous.some((item) => item.name.toLowerCase() === nextCategoryName.toLowerCase())) {
+              return previous;
+            }
+            return [...previous, {
+              name: nextCategoryName,
+              title: trimmedTitle || nextCategoryName,
+            }];
+          });
+        } catch (error) {
+          console.error('Failed to create category from menu editor:', error);
+        }
+      }
+
+      setItems((previous) => mapItems(previous, (item) => {
+        if (item.id !== draftEntryId) {
+          return item;
+        }
+
+        return {
+          ...item,
+          title: trimmedTitle || nextCategoryName,
+          kind: 'category-archive',
+          pageId: undefined,
+          pageSlug: undefined,
+          categoryName: nextCategoryName,
+        };
+      }));
+
+      setEditingEntryId(null);
+      setEditingEntryType(null);
+    })();
   };
 
   const startCreateEntry = async (): Promise<void> => {

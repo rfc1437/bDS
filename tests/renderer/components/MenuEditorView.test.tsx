@@ -27,6 +27,13 @@ describe('MenuEditorView entry editor', () => {
       meta: {
         ...(window as any).electronAPI?.meta,
         getCategories: vi.fn().mockResolvedValue(['news', 'tech']),
+        getProjectMetadata: vi.fn().mockResolvedValue({
+          name: 'Project 1',
+          categoryMetadata: {
+            news: { title: 'Newsroom', renderInLists: true, showTitle: true },
+            tech: { title: 'Technology', renderInLists: true, showTitle: true },
+          },
+        }),
       },
       posts: {
         ...(window as any).electronAPI?.posts,
@@ -226,6 +233,46 @@ describe('MenuEditorView entry editor', () => {
     expect(icon).not.toBeNull();
     expect(screen.queryByText(/^page$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^submenu$/i)).not.toBeInTheDocument();
+  });
+
+  it('uses category titles for suggestions and outline while saving category slug internally', async () => {
+    render(<MenuEditorView />);
+
+    const categoryButton = await screen.findByRole('button', { name: /add category archive/i });
+    fireEvent.click(categoryButton);
+
+    const input = await screen.findByPlaceholderText(/type a category name/i);
+    fireEvent.input(input, { target: { value: 'room' } });
+
+    const suggestion = await screen.findByRole('button', { name: /newsroom/i });
+    fireEvent.click(suggestion);
+
+    expect(screen.getByText('Newsroom')).toBeInTheDocument();
+
+    const saveButton = screen.getByRole('button', { name: /^save menu$/i });
+    fireEvent.click(saveButton);
+
+    const saveMock = (window as any).electronAPI.menu.save;
+    expect(saveMock).toHaveBeenCalled();
+    const payload = saveMock.mock.calls[0][0];
+
+    const categoryItem = payload.items.find((item: any) => item.kind === 'category-archive');
+    expect(categoryItem).toBeDefined();
+    expect(categoryItem.title).toBe('Newsroom');
+    expect(categoryItem.categoryName).toBe('news');
+  });
+
+  it('allows creating a new category archive from free text', async () => {
+    const { container } = render(<MenuEditorView />);
+
+    const categoryButton = await screen.findByRole('button', { name: /add category archive/i });
+    fireEvent.click(categoryButton);
+
+    const input = await screen.findByPlaceholderText(/type a category name/i);
+    fireEvent.input(input, { target: { value: 'not-existing-category' } });
+
+    const createSuggestion = container.querySelector('.tag-suggestion.create-new');
+    expect(createSuggestion).not.toBeNull();
   });
 
 });

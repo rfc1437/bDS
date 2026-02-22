@@ -172,7 +172,11 @@ function parseOutlineNode(node: OpmlOutlineNode): MenuItemData {
       : rawType === 'home'
         ? 'home'
       : 'page';
-  const title = normalizeNonEmptyString(node['@_text']) || normalizeNonEmptyString(node['@_title']) || 'Untitled';
+  const textTitle = normalizeNonEmptyString(node['@_text']);
+  const explicitTitle = normalizeNonEmptyString(node['@_title']);
+  const title = kind === 'category-archive'
+    ? explicitTitle || textTitle || 'Untitled'
+    : textTitle || explicitTitle || 'Untitled';
 
   return {
     id: normalizeNonEmptyString(node['@_id']) || generateMenuItemId(),
