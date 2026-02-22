@@ -1,4 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="32" fill="#1e1e1e"/>
-  <text x="128" y="160" font-family="system-ui, -apple-system, sans-serif" font-size="100" font-weight="bold" fill="#007acc" text-anchor="middle">bDS</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="224" fill="#0B2D5C"/>
+
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="456" cy="556" r="252" stroke-width="40"/>
+
+    <ellipse cx="456" cy="556" rx="92" ry="252" stroke-width="28"/>
+    <ellipse cx="456" cy="556" rx="176" ry="252" stroke-width="24"/>
+
+    <ellipse cx="456" cy="556" rx="252" ry="98" stroke-width="28"/>
+    <ellipse cx="456" cy="556" rx="252" ry="176" stroke-width="24"/>
+
+    <g transform="rotate(-34 676 350)">
+      <path d="M620 238 L770 238 L770 302 L620 302 Z" stroke-width="34"/>
+      <path d="M770 238 L848 270 L770 302 Z" stroke-width="34"/>
+      <path d="M620 238 L570 270 L620 302 Z" stroke-width="34"/>
+      <line x1="660" y1="238" x2="660" y2="302" stroke-width="24"/>
+    </g>
+  </g>
 </svg>

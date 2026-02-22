@@ -139,6 +139,7 @@
       }
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -150,6 +151,7 @@
       ]
     },
     "mac": {
+      "icon": "assets/icon.icns",
       "target": [
         "dmg",
         "zip"
@@ -161,6 +163,7 @@
       "entitlementsInherit": "build/entitlements.mac.inherit.plist"
     },
     "linux": {
+      "icon": "assets/icon.png",
       "target": [
         "AppImage",
         "deb",
