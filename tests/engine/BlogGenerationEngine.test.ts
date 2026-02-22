@@ -432,6 +432,14 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('href="/category/article/"');
     expect(html).toContain('href="/tag/css-only/"');
     expect(html).toContain('style="--bubble-accent: #22aa88;"');
+    expect(html).toContain('background: var(--bubble-bg, var(--bubble-accent));');
+    expect(html).toContain('color: #000;');
+    expect(html).toContain('.single-post-taxonomy-bubble-category {');
+    expect(html).toContain('--bubble-accent: var(--pico-ins-color');
+    expect(html).toContain('--bubble-bg: var(--pico-ins-color');
+    expect(html).toContain('.single-post-taxonomy-bubble-tag {');
+    expect(html).toContain('--bubble-accent: var(--pico-del-color');
+    expect(html).toContain('--bubble-bg: var(--pico-del-color');
 
     const categoryIndex = html.indexOf('single-post-taxonomy-bubble-category');
     const tagIndex = html.indexOf('single-post-taxonomy-bubble-tag');

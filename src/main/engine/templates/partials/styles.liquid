@@ -50,7 +50,8 @@
   .single-post { margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }
   .single-post-taxonomy { display: flex; flex-wrap: wrap; gap: .4rem .45rem; margin: -.1rem 0 .2rem; }
   .single-post-taxonomy-bubble {
-    --bubble-accent: var(--pico-primary, var(--primary));
+    --bubble-accent: var(--pico-ins-color, rgb(53, 117, 56));
+    --bubble-bg: var(--bubble-accent);
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--bubble-accent);
@@ -58,14 +59,14 @@
     padding: .1rem .5rem;
     font-size: .74rem;
     line-height: 1.35;
-    color: var(--bubble-accent);
-    background: transparent;
+    color: #000;
+    background: var(--bubble-bg, var(--bubble-accent));
     text-decoration: none;
   }
   .single-post-taxonomy-bubble:hover,
   .single-post-taxonomy-bubble:focus-visible { text-decoration: underline; }
-  .single-post-taxonomy-bubble-category { --bubble-accent: var(--pico-primary, var(--primary)); }
-  .single-post-taxonomy-bubble-tag { --bubble-accent: var(--pico-secondary, var(--secondary)); }
+  .single-post-taxonomy-bubble-category { --bubble-accent: var(--pico-ins-color, rgb(53, 117, 56)); --bubble-bg: var(--pico-ins-color, rgb(53, 117, 56)); }
+  .single-post-taxonomy-bubble-tag { --bubble-accent: var(--pico-del-color, rgb(183, 72, 72)); --bubble-bg: var(--pico-del-color, rgb(183, 72, 72)); }
   .preview-pagination { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-top: .25rem; }
   .preview-pagination-link { color: var(--pico-muted-color, var(--muted-color)); text-decoration: none; font-size: .92rem; opacity: .72; transition: opacity .15s ease-in-out; }
   .preview-pagination-link:hover,
