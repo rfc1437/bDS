@@ -17,9 +17,9 @@
   .blog-menu-submenu .blog-menu-list { flex-direction: column; flex-wrap: nowrap; gap: .2rem; }
   .blog-menu-item-with-children:hover > .blog-menu-submenu,
   .blog-menu-item-with-children:focus-within > .blog-menu-submenu { display: block; }
-  .post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); }
-  .post pre { position: relative; overflow-x: auto; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-radius: .3rem; margin: .9rem 0; padding: .85rem .9rem; background: var(--pico-code-background-color, rgba(33, 38, 45, .82)); }
-  .post pre code { display: block; font-size: .88rem; line-height: 1.5; }
+  .post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); min-width: 0; }
+  .post pre { position: relative; overflow-x: auto; max-width: 100%; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-radius: .3rem; margin: .9rem 0; padding: .85rem .9rem; background: var(--pico-code-background-color, rgba(33, 38, 45, .82)); box-sizing: border-box; }
+  .post pre code { display: block; font-size: .88rem; line-height: 1.5; white-space: pre; }
   .code-copy-button {
     position: absolute;
     top: .4rem;

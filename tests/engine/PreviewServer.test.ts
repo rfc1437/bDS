@@ -727,6 +727,21 @@ describe('PreviewServer', () => {
     expect(html).toContain('.lb-nav a, .lb-nav a:hover, .lb-nav a:focus-visible { border: 0; box-shadow: none; outline: none; text-decoration: none; }');
   });
 
+  it('keeps code blocks constrained to post column width with horizontal overflow inside the block', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost({ content: '```js\nconst line = "x".repeat(1000);\n```' })]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(html).toContain('.post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); min-width: 0; }');
+    expect(html).toContain('.post pre { position: relative; overflow-x: auto; max-width: 100%;');
+    expect(html).toContain('.post pre code { display: block; font-size: .88rem; line-height: 1.5; white-space: pre; }');
+  });
+
   it('renders single post title as h1', async () => {
     const post = makePost({
       id: 'single-title',
