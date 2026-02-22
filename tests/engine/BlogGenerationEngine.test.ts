@@ -1243,6 +1243,38 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', '2024', '02', '20', 'index.html'))).toBe(false);
   });
 
+  it('applies validation for a missing post by rerendering the main root page', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'target-post', title: 'Target Post', createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'older-post', title: 'Older Post', createdAt: new Date('2024-02-20T10:00:00Z') }),
+    ];
+    setupPosts(posts);
+
+    await mkdir(path.join(tempDir, 'html'), { recursive: true });
+    await writeFile(path.join(tempDir, 'html', 'index.html'), '<html><body>stale-root</body></html>', 'utf-8');
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/2025/01/15/target-post'],
+      extraUrlPaths: [],
+      expectedUrlCount: 1,
+      existingHtmlUrlCount: 1,
+    }, vi.fn());
+
+    const rootHtml = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
+    expect(rootHtml).not.toContain('stale-root');
+    expect(rootHtml).toContain('Target Post');
+  });
+
   it('merges date archive renders when multiple missing posts share the same date lineage', async () => {
     const posts = [
       makePost({ id: '1', slug: 'target-post-1', createdAt: new Date('2025-01-15T10:00:00Z') }),

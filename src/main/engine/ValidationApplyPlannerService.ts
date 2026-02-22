@@ -238,6 +238,6 @@ export function buildTargetedValidationPlan(params: BuildTargetedValidationPlanP
     requestedYearMonths,
     requestedYearMonthDays,
     requestedPageSlugs: new Set(initialPlan.requestedPageSlugs),
-    requestRootRoutes: initialPlan.requestRootRoutes,
+    requestRootRoutes: initialPlan.requestRootRoutes || initialPlan.requestedPostRoutes.length > 0,
   };
 }

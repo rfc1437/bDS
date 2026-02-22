@@ -90,5 +90,6 @@ describe('ValidationApplyPlannerService', () => {
     expect(targeted.requestedYearMonthDays.has('2025/01/15')).toBe(true);
     expect(targeted.requestedYearMonthDays.has('2025/02/20')).toBe(true);
     expect(targeted.requestedPageSlugs.has('about')).toBe(true);
+    expect(targeted.requestRootRoutes).toBe(true);
   });
 });
