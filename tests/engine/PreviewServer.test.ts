@@ -547,7 +547,7 @@ describe('PreviewServer', () => {
         async getProjectMetadata() {
           return {
             maxPostsPerPage: 50,
-            picoTheme: 'slate',
+            picoTheme: 'green',
           };
         },
       } as any,
@@ -556,12 +556,13 @@ describe('PreviewServer', () => {
 
     await server.start(0);
 
-    const response = await fetch(`${server.getBaseUrl()}/__style-preview?theme=slate&mode=dark`);
+    const response = await fetch(`${server.getBaseUrl()}/__style-preview?theme=green&mode=dark`);
     expect(response.status).toBe(200);
     const html = await response.text();
 
     expect(html).toContain('<html lang="en" data-theme="dark">');
-    expect(html).toContain('href="/assets/pico.slate.min.css"');
+    expect(html).toContain('href="/assets/pico.green.min.css"');
+    expect(html).toContain('--pico-background-color: #13171f;');
   });
 
   it('limits list routes to 50 posts', async () => {

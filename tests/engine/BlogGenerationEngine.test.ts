@@ -186,6 +186,7 @@ describe('BlogGenerationEngine', () => {
       maxPostsPerPage: number;
       language: string;
       pageTitle: string;
+      picoTheme: string;
       categorySettings: Record<string, { renderInLists: boolean; showTitle: boolean }>;
       categoryMetadata: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>;
       menu: MenuDocument;
@@ -203,6 +204,7 @@ describe('BlogGenerationEngine', () => {
       maxPostsPerPage: options?.maxPostsPerPage,
       language: options?.language,
       pageTitle: options?.pageTitle,
+      picoTheme: options?.picoTheme as any,
       categorySettings: options?.categorySettings,
       categoryMetadata: options?.categoryMetadata,
       menu: options?.menu,
@@ -369,6 +371,20 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('archive-day-marker');
     expect(html).toContain('15.01.2025');
     expect(html).toContain('14.01.2025');
+  });
+
+  it('uses anthracite page background override for all pico themes in dark mode', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'first', title: 'First Post', createdAt: new Date('2025-01-15T10:00:00Z') }),
+    ];
+
+    await generate(posts, { picoTheme: 'green' });
+
+    const indexPath = path.join(tempDir, 'html', 'index.html');
+    const html = await readFile(indexPath, 'utf-8');
+    expect(html).toContain('href="/assets/pico.green.min.css"');
+    expect(html).toContain('@media only screen and (prefers-color-scheme: dark)');
+    expect(html).toContain('--pico-background-color: #13171f;');
   });
 
   it('generates single post pages at /{year}/{month}/{day}/{slug}/index.html', async () => {

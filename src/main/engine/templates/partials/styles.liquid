@@ -1,5 +1,9 @@
 <style>
   :root { color-scheme: light dark; }
+  @media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme]) { --pico-background-color: #13171f; }
+  }
+  [data-theme='dark'] { --pico-background-color: #13171f; }
   body { max-width: 960px; margin: 0 auto; padding: 2rem 1rem 4rem; background: var(--pico-background-color, var(--background-color)); color: var(--pico-color, var(--color)); }
   main { display: grid; gap: 1rem; }
   .blog-menu { border-top: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-bottom: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: .4rem 0; margin: -.15rem 0 .2rem; }
