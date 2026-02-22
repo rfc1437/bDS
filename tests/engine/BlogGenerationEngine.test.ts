@@ -251,6 +251,7 @@ describe('BlogGenerationEngine', () => {
     expect(indexHtml).toContain('href="/"');
     expect(indexHtml).toContain('href="/about/"');
     expect(indexHtml).toContain('href="/category/news/"');
+    expect(indexHtml).toContain('<h2 class="post-title"><a href="/2025/03/15/hello-world">Hello World</a></h2>');
     expect(indexHtml).toContain('class="blog-menu-submenu"');
 
     const listH1Index = indexHtml.indexOf('<h1 class="archive-heading"');

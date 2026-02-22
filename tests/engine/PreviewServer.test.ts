@@ -1017,7 +1017,7 @@ describe('PreviewServer', () => {
     await server.start(0);
 
     const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
-    expect(html).toContain('<h2 class="post-title">Article Title</h2>');
+    expect(html).toContain('<h2 class="post-title"><a href="/2025/02/06/pt-1">Article Title</a></h2>');
     expect(html).not.toContain('<h2 class="post-category-title">article</h2>');
   });
 

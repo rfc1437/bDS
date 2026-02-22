@@ -38,7 +38,11 @@
                 {% for post in day_block.posts %}
                   <div class="post">
                     {% if post.show_title %}
-                      <h2 class="post-title">{{ post.title }}</h2>
+                      {% assign canonical_post_href = canonical_post_path_by_slug[post.slug] %}
+                      {% if canonical_post_href == blank %}
+                        {% assign canonical_post_href = '/posts/' | append: post.slug %}
+                      {% endif %}
+                      <h2 class="post-title"><a href="{{ canonical_post_href }}">{{ post.title }}</a></h2>
                     {% endif %}
                     {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}
                   </div>
@@ -49,7 +53,11 @@
             {% for post in day_block.posts %}
               <div class="post">
                 {% if post.show_title %}
-                  <h2 class="post-title">{{ post.title }}</h2>
+                  {% assign canonical_post_href = canonical_post_path_by_slug[post.slug] %}
+                  {% if canonical_post_href == blank %}
+                    {% assign canonical_post_href = '/posts/' | append: post.slug %}
+                  {% endif %}
+                  <h2 class="post-title"><a href="{{ canonical_post_href }}">{{ post.title }}</a></h2>
                 {% endif %}
                 {{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}
               </div>

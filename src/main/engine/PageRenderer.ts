@@ -15,6 +15,7 @@ export interface HtmlRewriteContext {
 
 export interface TemplatePostEntry {
   id: string;
+  slug: string;
   title: string;
   content: string;
   show_title: boolean;
@@ -896,6 +897,7 @@ export class PageRenderer {
         show_separator: false,
         posts: posts.map((post) => ({
           id: post.id,
+          slug: post.slug,
           title: post.title,
           content: post.content,
           show_title: shouldShowListTitle(post),
@@ -921,6 +923,7 @@ export class PageRenderer {
 
         currentBlock.block.posts.push({
           id: post.id,
+          slug: post.slug,
           title: post.title,
           content: post.content,
           show_title: shouldShowListTitle(post),
@@ -1074,6 +1077,7 @@ export class PageRenderer {
       menu_items: pageContext.menu_items ?? [],
       post: {
         id: renderablePost.id,
+        slug: renderablePost.slug,
         title: renderablePost.title,
         content: renderablePost.content,
         show_title: false,
