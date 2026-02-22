@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tree } from 'react-arborist';
 import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
@@ -192,6 +192,7 @@ export const MenuEditorView: React.FC = () => {
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pagePosts, setPagePosts] = useState<PostData[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoryTitlesByName, setCategoryTitlesByName] = useState<Record<string, string>>({});
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingEntryType, setEditingEntryType] = useState<'page' | 'category' | null>(null);
@@ -202,12 +203,33 @@ export const MenuEditorView: React.FC = () => {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const recentInsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoExpandController = useMemo(() => createAutoExpandController(450), []);
+  const recalculateTreeHeight = useCallback((): void => {
+    const wrap = treeWrapRef.current;
+    const toolbar = toolbarRef.current;
+    if (!wrap) {
+      return;
+    }
+
+    const wrapHeight = wrap.clientHeight;
+    const toolbarHeight = toolbar?.offsetHeight ?? 0;
+    const next = Math.max(120, wrapHeight - toolbarHeight - 8);
+    setTreeHeight(next);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        const menu = await window.electronAPI.menu.get();
+        const [menu, projectMetadata] = await Promise.all([
+          window.electronAPI.menu.get(),
+          window.electronAPI.meta.getProjectMetadata().catch(() => null),
+        ]);
+
+        const metadataEntries = Object.entries(projectMetadata?.categoryMetadata ?? {});
+        setCategoryTitlesByName(Object.fromEntries(
+          metadataEntries.map(([name, metadata]) => [name, metadata.title?.trim() || name]),
+        ));
+
         setItems(menu.items);
         setSelectedId(menu.items[0]?.id ?? null);
       } catch (error) {
@@ -280,34 +302,21 @@ export const MenuEditorView: React.FC = () => {
   }, [editingEntryId, editingEntryType, isLoadingPages, isLoadingCategories]);
 
   useEffect(() => {
-    const updateTreeHeight = (): void => {
-      const wrap = treeWrapRef.current;
-      const toolbar = toolbarRef.current;
-      if (!wrap) {
-        return;
-      }
-
-      const wrapHeight = wrap.clientHeight;
-      const toolbarHeight = toolbar?.offsetHeight ?? 0;
-      const next = Math.max(120, wrapHeight - toolbarHeight - 8);
-      setTreeHeight(next);
-    };
-
-    updateTreeHeight();
+    recalculateTreeHeight();
 
     if (typeof ResizeObserver === 'undefined') {
       if (typeof window.addEventListener !== 'function') {
         return;
       }
 
-      window.addEventListener('resize', updateTreeHeight);
+      window.addEventListener('resize', recalculateTreeHeight);
       return () => {
-        window.removeEventListener('resize', updateTreeHeight);
+        window.removeEventListener('resize', recalculateTreeHeight);
       };
     }
 
     const observer = new ResizeObserver(() => {
-      updateTreeHeight();
+      recalculateTreeHeight();
     });
 
     if (treeWrapRef.current) {
@@ -320,7 +329,21 @@ export const MenuEditorView: React.FC = () => {
     return () => {
       observer.disconnect();
     };
-  }, [editingEntryId]);
+  }, [editingEntryId, isLoading, recalculateTreeHeight]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      recalculateTreeHeight();
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isLoading, recalculateTreeHeight]);
 
   const selectedPath = useMemo(() => {
     if (!selectedId) {
@@ -360,6 +383,9 @@ export const MenuEditorView: React.FC = () => {
       ]);
 
       const categoryMetadata = projectMetadata?.categoryMetadata ?? {};
+      setCategoryTitlesByName(Object.fromEntries(
+        Object.entries(categoryMetadata).map(([name, metadata]) => [name, metadata.title?.trim() || name]),
+      ));
       setCategories(nextCategories.map((categoryName) => ({
         name: categoryName,
         title: categoryMetadata[categoryName]?.title?.trim() || categoryName,
@@ -818,7 +844,9 @@ export const MenuEditorView: React.FC = () => {
                               inlinePlain
                             />
                           )
-                        ) : node.data.title}
+                        ) : node.data.kind === 'category-archive' && node.data.categoryName
+                          ? (categoryTitlesByName[node.data.categoryName] || node.data.title)
+                          : node.data.title}
                       </span>
                     </>
                   </div>

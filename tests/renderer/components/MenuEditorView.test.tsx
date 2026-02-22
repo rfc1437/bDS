@@ -216,6 +216,33 @@ describe('MenuEditorView entry editor', () => {
     expect(await screen.findByPlaceholderText(/type a category name/i)).toBeInTheDocument();
   });
 
+  it('shows category metadata title in outline rows for category archives', async () => {
+    (window as any).electronAPI.menu.get = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'menu-home',
+          title: 'Home',
+          kind: 'home',
+          pageSlug: 'home',
+          children: [],
+        },
+        {
+          id: 'cat-news',
+          title: 'news',
+          kind: 'category-archive',
+          categoryName: 'news',
+          children: [],
+        },
+      ],
+    });
+
+    render(<MenuEditorView />);
+
+    await screen.findByText('Home');
+    expect(screen.getByText('Newsroom')).toBeInTheDocument();
+    expect(screen.queryByText(/^news$/i)).not.toBeInTheDocument();
+  });
+
   it('disables delete action when Home entry is selected', async () => {
     render(<MenuEditorView />);
 
@@ -233,6 +260,16 @@ describe('MenuEditorView entry editor', () => {
     expect(icon).not.toBeNull();
     expect(screen.queryByText(/^page$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^submenu$/i)).not.toBeInTheDocument();
+  });
+
+  it('recalculates tree viewport height after loading so outline uses available space', async () => {
+    const { container } = render(<MenuEditorView />);
+    await screen.findByText('Home');
+    await testUtils.wait(0);
+
+    const tree = container.querySelector('[role="tree"]') as HTMLElement | null;
+    expect(tree).not.toBeNull();
+    expect(tree?.style.height).not.toBe('460px');
   });
 
   it('uses category titles for suggestions and outline while saving category slug internally', async () => {
