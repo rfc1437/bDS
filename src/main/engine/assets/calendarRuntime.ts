@@ -18,6 +18,9 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
   let years = {};
   let months = {};
   let days = {};
+  let maxYearCount = 0;
+  let maxMonthCount = 0;
+  let maxDayCount = 0;
 
   function pad2(value) {
     return String(value).padStart(2, '0');
@@ -40,6 +43,29 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
     return map;
   }
 
+  function computeMaxCount(value) {
+    const counts = Object.values(value || {});
+    if (counts.length === 0) {
+      return 0;
+    }
+    return Math.max(...counts.map((count) => Number(count) || 0));
+  }
+
+  function applyHeatStyle(target, count, maxCount) {
+    if (!(target instanceof HTMLElement) || !Number.isFinite(count) || count <= 0 || !Number.isFinite(maxCount) || maxCount <= 0) {
+      target?.style?.setProperty('--blog-calendar-heat-alpha', '0');
+      target?.style?.setProperty('--blog-calendar-heat-hue', '210');
+      return;
+    }
+
+    const normalized = Math.min(1, count / maxCount);
+    const hue = Math.round(210 - (210 * normalized));
+    const alpha = (0.30 + normalized * 0.65).toFixed(3);
+
+    target.style.setProperty('--blog-calendar-heat-hue', String(hue));
+    target.style.setProperty('--blog-calendar-heat-alpha', alpha);
+  }
+
   function navigateTo(pathname) {
     if (!pathname) {
       return;
@@ -57,6 +83,9 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
     years = normalizeCountMap(parsed?.years);
     months = normalizeCountMap(parsed?.months);
     days = normalizeCountMap(parsed?.days);
+    maxYearCount = computeMaxCount(years);
+    maxMonthCount = computeMaxCount(months);
+    maxDayCount = computeMaxCount(days);
   }
 
   function getDateFromClickEvent(event) {
@@ -97,21 +126,61 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
             return;
           }
 
-          const existing = buttonEl.querySelector('.blog-calendar-post-count');
-          if (existing) {
-            existing.remove();
-          }
-
           if (count <= 0) {
             dateEl.removeAttribute('data-blog-calendar-has-posts');
+            applyHeatStyle(buttonEl, 0, maxDayCount);
             return;
           }
 
           dateEl.setAttribute('data-blog-calendar-has-posts', 'true');
-          const marker = document.createElement('span');
-          marker.className = 'blog-calendar-post-count';
-          marker.textContent = String(count);
-          buttonEl.appendChild(marker);
+          applyHeatStyle(buttonEl, count, maxDayCount);
+        },
+        onCreateMonthEls(self, monthEl) {
+          if (!(monthEl instanceof HTMLElement)) {
+            return;
+          }
+
+          const monthIndex = Number(monthEl.dataset.vcMonthsMonth);
+          const selectedYear = Number(self?.context?.selectedYear);
+          if (!Number.isInteger(monthIndex) || !Number.isInteger(selectedYear)) {
+            monthEl.removeAttribute('data-blog-calendar-has-posts');
+            applyHeatStyle(monthEl, 0, maxMonthCount);
+            return;
+          }
+
+          const monthKey = String(selectedYear) + '-' + pad2(monthIndex + 1);
+          const count = Number(months[monthKey] || 0);
+          if (count <= 0) {
+            monthEl.removeAttribute('data-blog-calendar-has-posts');
+            applyHeatStyle(monthEl, 0, maxMonthCount);
+            return;
+          }
+
+          monthEl.setAttribute('data-blog-calendar-has-posts', 'true');
+          applyHeatStyle(monthEl, count, maxMonthCount);
+        },
+        onCreateYearEls(_self, yearEl) {
+          if (!(yearEl instanceof HTMLElement)) {
+            return;
+          }
+
+          const yearValue = Number(yearEl.dataset.vcYearsYear);
+          if (!Number.isInteger(yearValue)) {
+            yearEl.removeAttribute('data-blog-calendar-has-posts');
+            applyHeatStyle(yearEl, 0, maxYearCount);
+            return;
+          }
+
+          const yearKey = String(yearValue);
+          const count = Number(years[yearKey] || 0);
+          if (count <= 0) {
+            yearEl.removeAttribute('data-blog-calendar-has-posts');
+            applyHeatStyle(yearEl, 0, maxYearCount);
+            return;
+          }
+
+          yearEl.setAttribute('data-blog-calendar-has-posts', 'true');
+          applyHeatStyle(yearEl, count, maxYearCount);
         },
         onClickDate(_self, event) {
           const dateKey = getDateFromClickEvent(event);

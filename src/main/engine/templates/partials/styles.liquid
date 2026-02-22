@@ -6,8 +6,9 @@
   [data-theme='dark'] { --pico-background-color: #13171f; }
   body { max-width: 960px; margin: 0 auto; padding: 2rem 1rem 4rem; background: var(--pico-background-color, var(--background-color)); color: var(--pico-color, var(--color)); }
   main { display: grid; gap: 1rem; }
-  .blog-menu { position: relative; display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-top: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-bottom: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: .4rem 0; margin: -.15rem 0 .2rem; }
-  .blog-menu-list { list-style: none; display: flex; flex-wrap: wrap; gap: .25rem .75rem; margin: 0; padding: 0; }
+  .blog-menu { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; border-top: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-bottom: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: .4rem 0; margin: -.15rem 0 .2rem; }
+  .blog-menu > .blog-menu-list { width: 100%; }
+  .blog-menu-list { list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin: 0; padding: 0; }
   .blog-menu-item { position: relative; }
   .blog-menu-link { display: inline-flex; align-items: center; color: var(--pico-muted-color, var(--muted-color)); text-decoration: none; font-size: .94rem; line-height: 1.4; padding: .2rem .1rem; }
   .blog-menu-item-with-children > .blog-menu-link::after { content: '▾'; font-size: .7em; margin-left: .38rem; opacity: .72; }
@@ -17,30 +18,44 @@
   .blog-menu-submenu .blog-menu-list { flex-direction: column; flex-wrap: nowrap; gap: .2rem; }
   .blog-menu-item-with-children:hover > .blog-menu-submenu,
   .blog-menu-item-with-children:focus-within > .blog-menu-submenu { display: block; }
-  .blog-menu-calendar { position: relative; display: inline-flex; align-items: center; justify-content: center; margin-left: auto; align-self: center; }
-  .blog-menu-calendar-button { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; padding: .2rem .1rem; border: 0; background: transparent; color: var(--pico-muted-color, var(--muted-color)); border-radius: 0; cursor: pointer; font-size: .94rem; line-height: 1.4; }
-  .blog-menu-calendar-button svg { display: block; width: .94rem; height: .94rem; fill: none; stroke: currentColor; transform: translateY(1px); }
+  .blog-menu-calendar { position: relative; display: inline-flex; align-items: baseline; justify-content: center; margin-left: auto; align-self: baseline; flex-shrink: 0; }
+  .blog-menu-calendar-button { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; margin: 0; padding: .2rem .1rem; border: 0; background: transparent; color: var(--pico-muted-color, var(--muted-color)); border-radius: 0; cursor: pointer; font: inherit; font-size: .94rem; line-height: 1.4; appearance: none; -webkit-appearance: none; vertical-align: baseline; }
+  .blog-menu-calendar-button svg { display: block; width: .9rem; height: .9rem; fill: none; stroke: currentColor; transform: translateY(2px); }
   .blog-menu-calendar-button:hover,
   .blog-menu-calendar-button:focus-visible { color: var(--pico-color, var(--color)); }
-  .blog-calendar-panel { position: absolute; top: calc(100% + .2rem); right: 0; width: min(19rem, 92vw); border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); background: var(--pico-card-background-color, var(--card-background-color)); padding: .4rem; z-index: 30; }
-  .blog-calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .2rem; }
-  .blog-calendar-close { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); background: transparent; color: var(--pico-muted-color, var(--muted-color)); width: 1.55rem; height: 1.55rem; border-radius: .2rem; padding: 0; cursor: pointer; }
+  .blog-calendar-panel { position: absolute; top: calc(100% + .15rem); right: 0; width: min(17.5rem, 92vw); border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); background: var(--pico-card-background-color, var(--card-background-color)); padding: .32rem; z-index: 30; }
+  .blog-calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .1rem; }
+  .blog-calendar-header strong { font-size: .9rem; line-height: 1.2; }
+  .blog-calendar-close { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); background: transparent; color: var(--pico-muted-color, var(--muted-color)); width: 1.35rem; height: 1.35rem; border-radius: .2rem; padding: 0; cursor: pointer; line-height: 1; }
   .blog-calendar-close:hover,
   .blog-calendar-close:focus-visible { color: var(--pico-color, var(--color)); border-color: var(--pico-color, var(--color)); }
-  .blog-calendar-content { display: grid; gap: .18rem; }
-  .blog-calendar-status { margin: .2rem 0 0; color: var(--pico-muted-color, var(--muted-color)); font-size: .78rem; }
-  [data-blog-calendar-root] [data-vc=header] { margin-bottom: .2rem; }
+  .blog-calendar-content { display: grid; gap: .08rem; }
+  .blog-calendar-status { margin: .1rem 0 0; color: var(--pico-muted-color, var(--muted-color)); font-size: .74rem; }
+  [data-blog-calendar-root] { font-size: .86rem; }
+  [data-blog-calendar-root] [data-vc=header] { margin-bottom: .08rem; }
   [data-blog-calendar-root] [data-vc=month],
-  [data-blog-calendar-root] [data-vc=year] { padding: .15rem .25rem; }
+  [data-blog-calendar-root] [data-vc=year] { padding: .08rem .18rem; font-size: .9rem; line-height: 1.15; }
   [data-blog-calendar-root] [data-vc=months],
-  [data-blog-calendar-root] [data-vc=years] { row-gap: .5rem; }
+  [data-blog-calendar-root] [data-vc=years] { row-gap: .32rem; }
+  [data-blog-calendar-root] [data-vc=years] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   [data-blog-calendar-root] [data-vc-months-month],
-  [data-blog-calendar-root] [data-vc-years-year] { height: 2rem; }
-  [data-blog-calendar-root] [data-vc-week=days] { margin-bottom: .25rem; }
+  [data-blog-calendar-root] [data-vc-years-year] { height: 1.72rem; }
+  [data-blog-calendar-root] [data-vc-months-month],
+  [data-blog-calendar-root] [data-vc-years-year] { word-break: normal; white-space: nowrap; }
+  [data-blog-calendar-root] [data-vc-years-year] { min-width: 2.5rem; font-size: .7rem; line-height: 1; }
+  [data-blog-calendar-root] [data-vc-week=days] { margin-bottom: .08rem; }
+  [data-blog-calendar-root] [data-vc-week-day] { font-size: .68rem; line-height: .9rem; min-width: 1.45rem; }
   [data-blog-calendar-root] [data-vc-date] { padding-top: 0; padding-bottom: 0; }
-  [data-blog-calendar-root] [data-vc-date-btn] { min-height: 1.65rem; min-width: 1.65rem; }
-  [data-blog-calendar-has-posts='true'] [data-vc-date-btn] { border-color: var(--pico-primary, var(--pico-color, var(--color))); }
-  .blog-calendar-post-count { display: inline-flex; align-items: center; justify-content: center; min-width: .95rem; height: .95rem; margin-left: .16rem; border-radius: 999px; font-size: .56rem; line-height: 1; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); color: var(--pico-color, var(--color)); }
+  [data-blog-calendar-root] [data-vc-date-btn] { min-height: 1.45rem; min-width: 1.45rem; font-size: .68rem; line-height: .9rem; }
+  [data-blog-calendar-has-posts='true'] [data-vc-date-btn] {
+    border-color: hsl(var(--blog-calendar-heat-hue, 210) 85% 42% / .95);
+    background-color: hsl(var(--blog-calendar-heat-hue, 210) 88% 52% / var(--blog-calendar-heat-alpha, 0));
+  }
+  [data-blog-calendar-root] [data-vc-months-month][data-blog-calendar-has-posts='true'],
+  [data-blog-calendar-root] [data-vc-years-year][data-blog-calendar-has-posts='true'] {
+    background-color: hsl(var(--blog-calendar-heat-hue, 210) 88% 52% / var(--blog-calendar-heat-alpha, 0));
+    border-color: hsl(var(--blog-calendar-heat-hue, 210) 85% 42% / .95);
+  }
   .post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); min-width: 0; }
   .post pre { position: relative; overflow-x: auto; max-width: 100%; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-radius: .3rem; margin: .9rem 0; padding: .85rem .9rem; background: var(--pico-code-background-color, rgba(33, 38, 45, .82)); box-sizing: border-box; }
   .post pre code { display: block; font-size: .88rem; line-height: 1.5; white-space: pre; }

@@ -400,6 +400,13 @@ describe('BlogGenerationEngine', () => {
     expect(indexHtml).toContain('href="/assets/vanilla-calendar.min.css"');
     expect(indexHtml).toContain('src="/assets/vanilla-calendar.min.js"');
     expect(indexHtml).toContain('src="/assets/calendar-runtime.js"');
+
+    const calendarRuntime = await readFile(path.join(tempDir, 'html', 'assets', 'calendar-runtime.js'), 'utf-8');
+    expect(calendarRuntime).toContain('--blog-calendar-heat-hue');
+    expect(calendarRuntime).toContain('--blog-calendar-heat-alpha');
+    expect(calendarRuntime).toContain('onCreateMonthEls');
+    expect(calendarRuntime).toContain('onCreateYearEls');
+    expect(calendarRuntime).not.toContain('blog-calendar-post-count');
   });
 
   it('generates root index.html for published posts', async () => {
