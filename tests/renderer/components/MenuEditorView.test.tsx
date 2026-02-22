@@ -243,6 +243,42 @@ describe('MenuEditorView entry editor', () => {
     expect(screen.queryByText(/^news$/i)).not.toBeInTheDocument();
   });
 
+  it('saves existing category archive entries with metadata title while keeping category slug', async () => {
+    (window as any).electronAPI.menu.get = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'menu-home',
+          title: 'Home',
+          kind: 'home',
+          pageSlug: 'home',
+          children: [],
+        },
+        {
+          id: 'cat-news',
+          title: 'news',
+          kind: 'category-archive',
+          categoryName: 'news',
+          children: [],
+        },
+      ],
+    });
+
+    render(<MenuEditorView />);
+
+    await screen.findByText('Newsroom');
+    const saveButton = screen.getByRole('button', { name: /^save menu$/i });
+    fireEvent.click(saveButton);
+
+    const saveMock = (window as any).electronAPI.menu.save;
+    expect(saveMock).toHaveBeenCalled();
+    const payload = saveMock.mock.calls[0][0];
+
+    const categoryItem = payload.items.find((item: any) => item.id === 'cat-news');
+    expect(categoryItem).toBeDefined();
+    expect(categoryItem.title).toBe('Newsroom');
+    expect(categoryItem.categoryName).toBe('news');
+  });
+
   it('disables delete action when Home entry is selected', async () => {
     render(<MenuEditorView />);
 

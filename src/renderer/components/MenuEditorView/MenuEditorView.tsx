@@ -226,12 +226,29 @@ export const MenuEditorView: React.FC = () => {
         ]);
 
         const metadataEntries = Object.entries(projectMetadata?.categoryMetadata ?? {});
-        setCategoryTitlesByName(Object.fromEntries(
+        const categoryTitleMap = Object.fromEntries(
           metadataEntries.map(([name, metadata]) => [name, metadata.title?.trim() || name]),
-        ));
+        );
+        setCategoryTitlesByName(categoryTitleMap);
 
-        setItems(menu.items);
-        setSelectedId(menu.items[0]?.id ?? null);
+        const normalizedItems = mapItems(menu.items, (item) => {
+          if (item.kind !== 'category-archive' || !item.categoryName) {
+            return item;
+          }
+
+          const metadataTitle = categoryTitleMap[item.categoryName]?.trim();
+          if (!metadataTitle || metadataTitle === item.title) {
+            return item;
+          }
+
+          return {
+            ...item,
+            title: metadataTitle,
+          };
+        });
+
+        setItems(normalizedItems);
+        setSelectedId(normalizedItems[0]?.id ?? null);
       } catch (error) {
         console.error('Failed to load menu:', error);
         showToast.error(tr('menuEditor.loadError'));
