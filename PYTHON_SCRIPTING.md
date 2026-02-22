@@ -86,15 +86,22 @@ Contract rules:
 Objective: prove runtime viability before product surface growth.
 
 Deliverables:
-- [ ] Add `pyodide` dependency and worker boot sequence.
-- [ ] Run a sample script end-to-end (`run_script`, timeout, captured stdout).
-- [ ] Benchmark baseline cold start + warm run + repeated macro calls.
-- [ ] Define initial macro ABI (`render(context) -> result`) and schema docs.
+- [x] Add `pyodide` dependency and worker boot sequence.
+- [x] Run a sample script end-to-end (`run_script`, timeout, captured stdout).
+- [x] Benchmark baseline cold start + warm run + repeated macro calls.
+- [x] Define initial macro ABI (`render(context) -> result`) and schema docs.
 
 Exit criteria:
-- Warm script execution is stable.
-- Timeout recovery works.
-- Measured baseline captured in repo docs.
+- Warm script execution is stable. ✅
+- Timeout recovery works. ✅
+- Measured baseline captured in repo docs. ✅
+
+Baseline benchmark (22 Feb 2026, local macOS run):
+- Command: `npm run bench:python-runtime -- 200`
+- Cold start: `701.11 ms`
+- Warm run: `5.74 ms`
+- Repeated macro (200 calls): `p50 0.17 ms`, `p95 0.29 ms`, `mean 0.19 ms`
+- Notes: one-machine baseline only; use trend comparisons for regressions.
 
 ## Phase 1 — MVP (Minimal but Usable)
 
@@ -447,9 +454,15 @@ PR-14+: Optional advanced capabilities
 
 ## 10. Current Status
 
-Status: Revised staged plan (MVP-first, full-scope preserved).
+Status: Phase 0 in progress (MVP-first, full-scope preserved).
+
+Progress update (22 Feb 2026):
+- [x] PR-00 complete: Pyodide dependency + renderer worker bootstrap + ready signal.
+- [x] PR-01 complete: worker run/stdout/error protocol + timeout watchdog + runtime recovery.
+- [x] PR-02 complete: ABI v1 shared types/schemas + caller/worker validation.
+- [x] Phase 0 benchmark harness + baseline capture complete.
 
 Recommended next action:
-1. Approve Phase 0 scope and benchmarks.
-2. Implement spike and record numbers.
-3. Lock ABI before building full UI and migration layers.
+1. Start Phase 1 PR-03: script persistence model (`scripts/*.py` + index metadata).
+2. Add round-trip tests for create/update/delete between filesystem and DB.
+3. Keep benchmark command in CI/manual perf checks for regressions.
