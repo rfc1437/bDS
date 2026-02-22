@@ -18,6 +18,7 @@ interface RenderContext {
   menu?: MenuDocument;
   skipContextSetup?: boolean;
   maxPostsPerPage?: number;
+  allowEmptyArchiveRender?: boolean;
 }
 
 export function createGenerationRouteRenderer(params: {
@@ -111,6 +112,10 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
 
   const serializeFilter = (filter: unknown): string => {
     const normalizeValue = (value: unknown): unknown => {
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
       if (Array.isArray(value)) {
         return value.map((entry) => normalizeValue(entry));
       }
@@ -244,6 +249,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       menu,
       skipContextSetup: true,
       maxPostsPerPage: params.maxPostsPerPage,
+      allowEmptyArchiveRender: true,
     },
   });
 }

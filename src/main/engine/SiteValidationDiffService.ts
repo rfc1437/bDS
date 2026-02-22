@@ -55,8 +55,12 @@ function extractSitemapLocs(sitemapXml: string): string[] {
   return locs;
 }
 
-async function collectHtmlIndexPaths(htmlDir: string): Promise<Set<string>> {
+async function collectHtmlIndexPaths(htmlDir: string): Promise<{
+  existingHtmlPathSet: Set<string>;
+  zeroByteHtmlPathSet: Set<string>;
+}> {
   const existingHtmlPathSet = new Set<string>();
+  const zeroByteHtmlPathSet = new Set<string>();
 
   const collectIndexPaths = async (dir: string, relativePrefix = ''): Promise<void> => {
     let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
@@ -80,12 +84,28 @@ async function collectHtmlIndexPaths(htmlDir: string): Promise<Set<string>> {
       }
 
       const normalizedRelative = nextRelative.replace(/(^|\/)index\.html$/, '');
-      existingHtmlPathSet.add(normalizeUrlPath(normalizedRelative ? `/${normalizedRelative}` : '/'));
+      const normalizedUrlPath = normalizeUrlPath(normalizedRelative ? `/${normalizedRelative}` : '/');
+
+      try {
+        const stats = await fs.stat(nextPath);
+        if (stats.size <= 0) {
+          zeroByteHtmlPathSet.add(normalizedUrlPath);
+          continue;
+        }
+      } catch {
+        zeroByteHtmlPathSet.add(normalizedUrlPath);
+        continue;
+      }
+
+      existingHtmlPathSet.add(normalizedUrlPath);
     }
   };
 
   await collectIndexPaths(htmlDir);
-  return existingHtmlPathSet;
+  return {
+    existingHtmlPathSet,
+    zeroByteHtmlPathSet,
+  };
 }
 
 export async function compareSitemapToHtml(params: CompareSitemapToHtmlParams): Promise<SiteValidationDiffResult> {
@@ -95,7 +115,7 @@ export async function compareSitemapToHtml(params: CompareSitemapToHtmlParams): 
       .map((value) => normalizeUrlPath(value)),
   );
 
-  const existingHtmlPathSet = await collectHtmlIndexPaths(params.htmlDir);
+  const { existingHtmlPathSet, zeroByteHtmlPathSet } = await collectHtmlIndexPaths(params.htmlDir);
 
   const missingUrlPaths = Array.from(expectedPathSet)
     .filter((value) => !existingHtmlPathSet.has(value))
@@ -103,6 +123,8 @@ export async function compareSitemapToHtml(params: CompareSitemapToHtmlParams): 
 
   const extraUrlPaths = Array.from(existingHtmlPathSet)
     .filter((value) => !expectedPathSet.has(value))
+    .concat(Array.from(zeroByteHtmlPathSet).filter((value) => !expectedPathSet.has(value)))
+    .filter((value, index, array) => array.indexOf(value) === index)
     .sort();
 
   return {

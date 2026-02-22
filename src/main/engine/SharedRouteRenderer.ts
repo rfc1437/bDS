@@ -30,6 +30,7 @@ export interface SharedRouteRenderOptions {
   maxPostsPerPage?: number;
   requestTheme?: string | null;
   htmlThemeAttribute?: string;
+  allowEmptyArchiveRender?: boolean;
   singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
 }
 
@@ -97,6 +98,7 @@ async function resolveRouteWithSharedServices(
   tagColorByName: Record<string, string>,
   listExcludedCategories: string[],
   services: SharedRouteRenderServices<CategoryMetadata>,
+  allowEmptyArchiveRender: boolean,
   singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
 ): Promise<string | null> {
   const routePagination = parseRoutePagination(pathname);
@@ -125,6 +127,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      renderEmptyState: allowEmptyArchiveRender,
     }, services.postEngineForMacros);
   }
 
@@ -144,6 +147,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      renderEmptyState: allowEmptyArchiveRender,
     }, services.postEngineForMacros);
   }
 
@@ -164,6 +168,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      renderEmptyState: allowEmptyArchiveRender,
     }, services.postEngineForMacros);
   }
 
@@ -206,6 +211,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      renderEmptyState: allowEmptyArchiveRender,
     }, services.postEngineForMacros);
   }
 
@@ -227,6 +233,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      renderEmptyState: allowEmptyArchiveRender,
     }, services.postEngineForMacros);
   }
 
@@ -246,6 +253,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      renderEmptyState: allowEmptyArchiveRender,
     }, services.postEngineForMacros);
   }
 
@@ -310,5 +318,5 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
     menuItems,
     picoStylesheetHref,
     htmlThemeAttribute: options.htmlThemeAttribute,
-  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, tagColorByName, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.singlePostOptions);
+  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, tagColorByName, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.allowEmptyArchiveRender === true, options.singlePostOptions);
 }

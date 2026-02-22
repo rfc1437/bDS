@@ -1105,10 +1105,11 @@ export class PageRenderer {
       html_theme_attribute?: string;
       pagination?: PaginationContext;
       categorySettings?: Record<string, CategoryRenderSettings>;
+      renderEmptyState?: boolean;
     },
     postEngine?: PostEngineContract,
   ): Promise<string> {
-    if (posts.length === 0) {
+    if (posts.length === 0 && !options.renderEmptyState) {
       return '';
     }
 

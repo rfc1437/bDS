@@ -63,4 +63,31 @@ describe('SiteValidationDiffService', () => {
     expect(result.expectedUrlCount).toBe(2);
     expect(result.existingHtmlUrlCount).toBe(0);
   });
+
+  it('treats zero-byte index pages as missing routes that need regeneration', async () => {
+    const tempRoot = path.join('/tmp', makeTempName());
+    const htmlDir = path.join(tempRoot, 'html');
+
+    await mkdir(path.join(htmlDir, '2026', '02', '22'), { recursive: true });
+    await writeFile(path.join(htmlDir, '2026', '02', '22', 'index.html'), '', 'utf-8');
+
+    const sitemapXml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      '  <url><loc>https://example.com/2026/02/22/</loc></url>',
+      '</urlset>',
+      '',
+    ].join('\n');
+
+    const result = await compareSitemapToHtml({
+      sitemapXml,
+      baseUrl: 'https://example.com',
+      htmlDir,
+    });
+
+    expect(result.missingUrlPaths).toEqual(['/2026/02/22']);
+    expect(result.extraUrlPaths).toEqual([]);
+    expect(result.expectedUrlCount).toBe(1);
+    expect(result.existingHtmlUrlCount).toBe(0);
+  });
 });

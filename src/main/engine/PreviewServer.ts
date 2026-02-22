@@ -179,6 +179,7 @@ export class PreviewServer {
       maxPostsPerPage?: number;
       requestTheme?: string | null;
       htmlThemeAttribute?: string;
+      allowEmptyArchiveRender?: boolean;
       singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
     },
   ): Promise<string | null> {
