@@ -281,68 +281,6 @@ export class PreviewServer {
       page,
     };
 
-    const postsYearMonthSlugMatch = pagedPathname.match(/^\/posts\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
-    if (postsYearMonthSlugMatch) {
-      const year = Number(postsYearMonthSlugMatch[1]);
-      const month = Number(postsYearMonthSlugMatch[2]);
-      const slug = postsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
-      if (month < 1 || month > 12) return null;
-      const post = await this.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1 });
-      if (!post) return null;
-      return this.pageRenderer.renderSinglePost(post, rewriteContext, {
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const postsSlugMatch = pagedPathname.match(/^\/posts\/([^/]+)$/);
-    if (postsSlugMatch) {
-      const slug = postsSlugMatch[1].replace(/\.html?$/i, '');
-      const post = await this.findSinglePostBySlug(slug, singlePostOptions);
-      if (!post) return null;
-      return this.pageRenderer.renderSinglePost(post, rewriteContext, {
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const legacyPostsYearMonthSlugMatch = pagedPathname.match(/^\/post\/(\d{4})\/(\d{1,2})\/([^/]+)$/);
-    if (legacyPostsYearMonthSlugMatch) {
-      const year = Number(legacyPostsYearMonthSlugMatch[1]);
-      const month = Number(legacyPostsYearMonthSlugMatch[2]);
-      const slug = legacyPostsYearMonthSlugMatch[3].replace(/\.html?$/i, '');
-      if (month < 1 || month > 12) return null;
-      const post = await this.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1 });
-      if (!post) return null;
-      return this.pageRenderer.renderSinglePost(post, rewriteContext, {
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const legacyPostsSlugMatch = pagedPathname.match(/^\/post\/([^/]+)$/);
-    if (legacyPostsSlugMatch) {
-      const slug = legacyPostsSlugMatch[1].replace(/\.html?$/i, '');
-      const post = await this.findSinglePostBySlug(slug, singlePostOptions);
-      if (!post) return null;
-      return this.pageRenderer.renderSinglePost(post, rewriteContext, {
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
     if (pagedPathname === '/') {
       const result = await this.loadPublishedSnapshotsPage({ status: 'published', excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {

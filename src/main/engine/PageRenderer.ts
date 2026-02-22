@@ -597,6 +597,18 @@ export function normalizePreviewHref(rawHref: string, rewriteContext: HtmlRewrit
     return `${canonical ?? `/posts/${slug}`}${suffix}`;
   }
 
+  const mediaMatch = pathPart.match(/^\/?media\/(\d{4})\/(\d{2})\/([^\s]+)$/i);
+  if (mediaMatch) {
+    const [, year, month, filename] = mediaMatch;
+    const sourceKey = `media/${year}/${month}/${filename}`.toLowerCase();
+    const canonicalPath = rewriteContext.canonicalMediaPathBySourcePath.get(sourceKey);
+    if (canonicalPath) {
+      return `${canonicalPath}${suffix}`;
+    }
+
+    return `/media/${year}/${month}/${filename}${suffix}`;
+  }
+
   return rawHref;
 }
 

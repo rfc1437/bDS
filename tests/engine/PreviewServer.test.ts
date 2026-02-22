@@ -219,7 +219,7 @@ describe('PreviewServer', () => {
     expect(rootMenuIndex).toBeGreaterThan(rootH1Index);
     expect(rootPostListIndex).toBeGreaterThan(rootMenuIndex);
 
-    const singleHtml = await (await fetch(`${server.getBaseUrl()}/posts/hello`)).text();
+    const singleHtml = await (await fetch(`${server.getBaseUrl()}/2025/01/03/hello`)).text();
     const singleH1Index = singleHtml.indexOf('<h1>Hello</h1>');
     const singleMenuIndex = singleHtml.indexOf('class="blog-menu"');
     const singleTextIndex = singleHtml.indexOf('<div class="post">');
@@ -370,7 +370,7 @@ describe('PreviewServer', () => {
 
     await server.start(0);
 
-    const response = await fetch(`${server.getBaseUrl()}/posts/tag-cloud-source`);
+    const response = await fetch(`${server.getBaseUrl()}/2025/01/02/tag-cloud-source`);
     expect(response.status).toBe(200);
     const html = await response.text();
 
@@ -416,12 +416,12 @@ describe('PreviewServer', () => {
 
     await server.start(0);
 
-    const hvResponse = await fetch(`${server.getBaseUrl()}/posts/orientation-hv`);
+    const hvResponse = await fetch(`${server.getBaseUrl()}/2025/01/02/orientation-hv`);
     expect(hvResponse.status).toBe(200);
     const hvHtml = await hvResponse.text();
     expect(hvHtml).toContain('data-orientation="mixed-hv"');
 
-    const diagonalResponse = await fetch(`${server.getBaseUrl()}/posts/orientation-diagonal`);
+    const diagonalResponse = await fetch(`${server.getBaseUrl()}/2025/01/02/orientation-diagonal`);
     expect(diagonalResponse.status).toBe(200);
     const diagonalHtml = await diagonalResponse.text();
     expect(diagonalHtml).toContain('data-orientation="mixed-diagonal"');
@@ -453,14 +453,14 @@ describe('PreviewServer', () => {
 
     await server.start(0);
 
-    const publishedResponse = await fetch(`${server.getBaseUrl()}/posts/shared-slug`);
+    const publishedResponse = await fetch(`${server.getBaseUrl()}/2025/01/03/shared-slug`);
     expect(publishedResponse.status).toBe(200);
     const publishedHtml = await publishedResponse.text();
     expect(publishedHtml).toContain('Published Title');
     expect(publishedHtml).toContain('Published body');
     expect(publishedHtml).not.toContain('Draft-only body');
 
-    const draftResponse = await fetch(`${server.getBaseUrl()}/posts/shared-slug?draft=true&postId=post-2`);
+    const draftResponse = await fetch(`${server.getBaseUrl()}/2025/01/03/shared-slug?draft=true&postId=post-2`);
     expect(draftResponse.status).toBe(200);
     const draftHtml = await draftResponse.text();
     expect(draftHtml).toContain('Draft Title');
@@ -1219,7 +1219,7 @@ describe('PreviewServer', () => {
     expect(html).not.toContain('<title>Blog Preview</title>');
   });
 
-  it('rewrites supported markdown links to preview-safe URLs while leaving external links unchanged', async () => {
+  it('rewrites internal markdown links to canonical URLs while leaving external links unchanged', async () => {
     const targetBySlug = makePost({
       id: 'target-1',
       slug: 'target-post',
@@ -1250,6 +1250,7 @@ describe('PreviewServer', () => {
         '[Post by slug](/posts/target-post)',
         '[Post by year/month](/posts/2025/02/archive-post)',
         '[Legacy post link](post/legacy-post)',
+        '[Media file link](/media/2025/02/example.jpg)',
         '![Local image](media/2025/02/example.jpg)',
         '[External](https://example.com/path)',
       ].join('\n\n'),
@@ -1278,8 +1279,36 @@ describe('PreviewServer', () => {
     expect(html).toContain('href="/2025/02/14/target-post"');
     expect(html).toContain('href="/2025/02/10/archive-post"');
     expect(html).toContain('href="/2025/03/01/legacy-post"');
+    expect(html).toContain('href="/media/2025/02/3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg"');
     expect(html).toContain('src="/media/2025/02/3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg"');
     expect(html).toContain('href="https://example.com/path"');
+  });
+
+  it('does not resolve legacy post URL routes', async () => {
+    const post = makePost({
+      id: 'legacy-route-1',
+      slug: 'legacy-route-target',
+      title: 'Legacy Route Target',
+      createdAt: new Date('2025-04-05T10:00:00.000Z'),
+      content: '# Legacy route target',
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const canonicalResponse = await fetch(`${server.getBaseUrl()}/2025/04/05/legacy-route-target`);
+    expect(canonicalResponse.status).toBe(200);
+
+    const legacyPostsResponse = await fetch(`${server.getBaseUrl()}/posts/legacy-route-target`);
+    expect(legacyPostsResponse.status).toBe(404);
+
+    const legacyPostResponse = await fetch(`${server.getBaseUrl()}/post/legacy-route-target`);
+    expect(legacyPostResponse.status).toBe(404);
   });
 
   it('renders gallery and photo_album macros as interactive lightbox markup in preview', async () => {
@@ -1441,10 +1470,10 @@ describe('PreviewServer', () => {
     expect(rootHtml).toContain('Published content only');
     expect(rootHtml).not.toContain('Draft content must not leak');
 
-    const publishedSlugResponse = await fetch(`${server.getBaseUrl()}/posts/published-slug/`);
+    const publishedSlugResponse = await fetch(`${server.getBaseUrl()}/2025/02/14/published-slug/`);
     expect(publishedSlugResponse.status).toBe(200);
 
-    const draftSlugResponse = await fetch(`${server.getBaseUrl()}/posts/draft-slug/`);
+    const draftSlugResponse = await fetch(`${server.getBaseUrl()}/2025/02/14/draft-slug/`);
     expect(draftSlugResponse.status).toBe(404);
 
     const publishedTagHtml = await (await fetch(`${server.getBaseUrl()}/tag/published-tag/`)).text();
