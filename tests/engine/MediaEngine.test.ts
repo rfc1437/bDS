@@ -229,6 +229,16 @@ describe('MediaEngine', () => {
       expect(mediaEngine.getProjectContext()).toBe('my-blog');
     });
 
+    it('should avoid duplicate context log when context is unchanged', () => {
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      mediaEngine.setProjectContext('same-project', '/tmp/data', '/tmp/internal');
+      mediaEngine.setProjectContext('same-project', '/tmp/data', '/tmp/internal');
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      consoleLogSpy.mockRestore();
+    });
+
     it('should allow changing project context multiple times', () => {
       mediaEngine.setProjectContext('blog-1');
       expect(mediaEngine.getProjectContext()).toBe('blog-1');

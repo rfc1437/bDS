@@ -156,6 +156,10 @@ export class PostMediaEngine extends EventEmitter {
    * Set the current project context
    */
   setProjectContext(projectId: string): void {
+    if (this.currentProjectId === projectId) {
+      return;
+    }
+
     this.currentProjectId = projectId;
     console.log(`[PostMediaEngine] setProjectContext: projectId=${projectId}`);
   }

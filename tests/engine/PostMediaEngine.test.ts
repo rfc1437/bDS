@@ -154,6 +154,16 @@ describe('PostMediaEngine', () => {
       expect(true).toBe(true);
     });
 
+    it('should avoid duplicate context log when context is unchanged', () => {
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      engine.setProjectContext('same-project');
+      engine.setProjectContext('same-project');
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      consoleLogSpy.mockRestore();
+    });
+
     it('should allow changing project context multiple times', () => {
       engine.setProjectContext('blog-1');
       engine.setProjectContext('blog-2');

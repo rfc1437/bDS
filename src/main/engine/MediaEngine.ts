@@ -184,9 +184,19 @@ export class MediaEngine extends EventEmitter {
   }
 
   setProjectContext(projectId: string, dataDir?: string, internalDir?: string): void {
+    const nextDataDir = dataDir || null;
+    const nextInternalDir = internalDir || null;
+    if (
+      this.currentProjectId === projectId
+      && this.dataDir === nextDataDir
+      && this.internalDir === nextInternalDir
+    ) {
+      return;
+    }
+
     this.currentProjectId = projectId;
-    this.dataDir = dataDir || null;
-    this.internalDir = internalDir || null;
+    this.dataDir = nextDataDir;
+    this.internalDir = nextInternalDir;
     console.log(`[MediaEngine] setProjectContext: projectId=${projectId}, dataDir=${this.dataDir}, internalDir=${this.internalDir}`);
   }
 

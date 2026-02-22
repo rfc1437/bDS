@@ -210,6 +210,15 @@ export class PreviewServer {
     }
 
     try {
+        const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+        const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
+
+        const asset = await this.resolveAsset(pathname);
+        if (asset) {
+          this.respondAsset(res, asset.contentType, asset.body);
+          return;
+        }
+
       const context = await this.getActiveProjectContext();
       this.postEngine.setProjectContext(context.projectId, context.dataDir);
       this.mediaEngine.setProjectContext?.(context.projectId, context.dataDir, context.dataDir);
@@ -230,7 +239,6 @@ export class PreviewServer {
       const language = metadata?.mainLanguage?.trim() || 'en';
       const pageTitle = resolvePageTitle(metadata, context.projectName, context.projectDescription);
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
-      const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
       const requestTheme = sanitizePicoTheme(requestUrl.searchParams.get('theme'));
       const previewThemeMode = sanitizePicoThemeMode(requestUrl.searchParams.get('mode'));
       const useDraftContent = requestUrl.searchParams.get('draft') === 'true';
@@ -238,7 +246,6 @@ export class PreviewServer {
       const appliedTheme = requestTheme ?? sanitizePicoTheme((metadata as { picoTheme?: unknown } | null)?.picoTheme);
       const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
       const htmlRewriteContext = await this.buildHtmlRewriteContext();
-      const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
 
       if (pathname === '/__style-preview') {
         const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
@@ -249,12 +256,6 @@ export class PreviewServer {
           htmlThemeAttribute: previewThemeMode && previewThemeMode !== 'auto' ? `data-theme="${previewThemeMode}"` : undefined,
         }, categorySettings, listExcludedCategories);
         this.respond(res, 200, stylePreviewHtml);
-        return;
-      }
-
-      const asset = await this.resolveAsset(pathname);
-      if (asset) {
-        this.respondAsset(res, asset.contentType, asset.body);
         return;
       }
 

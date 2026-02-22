@@ -176,6 +176,7 @@ export class MetaEngine extends EventEmitter {
   private categories: Set<string> = new Set();
   private projectMetadata: ProjectMetadata | null = null;
   private initialized: boolean = false;
+  private startupSyncPromise: Promise<void> | null = null;
 
   constructor() {
     super();
@@ -218,13 +219,19 @@ export class MetaEngine extends EventEmitter {
   }
 
   setProjectContext(projectId: string, dataDir?: string): void {
+    const nextDataDir = dataDir || null;
+    if (this.currentProjectId === projectId && this.dataDir === nextDataDir) {
+      return;
+    }
+
     this.currentProjectId = projectId;
-    this.dataDir = dataDir || null;
+    this.dataDir = nextDataDir;
     // Reset in-memory cache when project changes
     this.tags.clear();
     this.categories.clear();
     this.projectMetadata = null;
     this.initialized = false;
+    this.startupSyncPromise = null;
   }
 
   getProjectContext(): string {
@@ -394,8 +401,7 @@ export class MetaEngine extends EventEmitter {
     try {
       await this.ensureMetaDirExists();
       const filePath = this.getCategoriesFilePath();
-      const content = JSON.stringify(Array.from(this.categories).sort(), null, 2);
-      await fs.writeFile(filePath, content, 'utf-8');
+      await this.writeJsonFileAtomically(filePath, Array.from(this.categories).sort());
     } catch (error) {
       console.error('[MetaEngine] Failed to save categories:', error);
       throw error;
@@ -415,8 +421,7 @@ export class MetaEngine extends EventEmitter {
         categorySettings: _categorySettings,
         ...persistedMetadata
       } = this.projectMetadata || {};
-      const content = JSON.stringify(persistedMetadata, null, 2);
-      await fs.writeFile(filePath, content, 'utf-8');
+      await this.writeJsonFileAtomically(filePath, persistedMetadata);
     } catch (error) {
       console.error('[MetaEngine] Failed to save project metadata:', error);
       throw error;
@@ -433,8 +438,7 @@ export class MetaEngine extends EventEmitter {
       const metadata = this.ensureCategoryMetadataForKnownCategories(
         this.projectMetadata?.categoryMetadata,
       );
-      const content = JSON.stringify(metadata, null, 2);
-      await fs.writeFile(filePath, content, 'utf-8');
+      await this.writeJsonFileAtomically(filePath, metadata);
     } catch (error) {
       console.error('[MetaEngine] Failed to save category metadata:', error);
       throw error;
@@ -582,6 +586,24 @@ export class MetaEngine extends EventEmitter {
     }
   }
 
+  private async writeJsonFileAtomically(filePath: string, value: unknown): Promise<void> {
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    const content = JSON.stringify(value, null, 2);
+
+    await fs.writeFile(tempPath, content, 'utf-8');
+
+    try {
+      await fs.rename(tempPath, filePath);
+    } catch (error) {
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors.
+      }
+      throw error;
+    }
+  }
+
   private ensureCategoryMetadataForKnownCategories(
     categoryMetadata: Record<string, CategoryMetadata> | undefined,
   ): Record<string, CategoryMetadata> {
@@ -611,6 +633,24 @@ export class MetaEngine extends EventEmitter {
    * - Project metadata: read from file or create from database
    */
   async syncOnStartup(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
+    if (this.startupSyncPromise) {
+      await this.startupSyncPromise;
+      return;
+    }
+
+    this.startupSyncPromise = this.performSyncOnStartup();
+    try {
+      await this.startupSyncPromise;
+    } finally {
+      this.startupSyncPromise = null;
+    }
+  }
+
+  private async performSyncOnStartup(): Promise<void> {
     console.log(`[MetaEngine] Syncing metadata for project: ${this.currentProjectId}`);
     
     await this.ensureMetaDirExists();

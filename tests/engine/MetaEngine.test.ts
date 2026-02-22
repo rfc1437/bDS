@@ -48,6 +48,27 @@ vi.mock('fs/promises', () => ({
       throw err;
     }
   }),
+  rename: vi.fn(async (oldPath: string, newPath: string) => {
+    const normalizedOldPath = oldPath.replace(/\\/g, '/');
+    const normalizedNewPath = newPath.replace(/\\/g, '/');
+    const content = mockFiles.get(normalizedOldPath);
+    if (content === undefined) {
+      const err = new Error(`ENOENT: no such file or directory, rename '${oldPath}' -> '${newPath}'`) as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      throw err;
+    }
+    mockFiles.set(normalizedNewPath, content);
+    mockFiles.delete(normalizedOldPath);
+  }),
+  unlink: vi.fn(async (filePath: string) => {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    if (!mockFiles.has(normalizedPath)) {
+      const err = new Error(`ENOENT: no such file or directory, unlink '${filePath}'`) as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      throw err;
+    }
+    mockFiles.delete(normalizedPath);
+  }),
 }));
 
 // Mock electron app
@@ -984,6 +1005,27 @@ describe('MetaEngine', () => {
       
       metaEngine.setProjectContext('different-project');
       expect(metaEngine.isInitialized()).toBe(false);
+    });
+
+    it('should keep initialized flag when project context is unchanged', async () => {
+      await metaEngine.syncOnStartup();
+      expect(metaEngine.isInitialized()).toBe(true);
+
+      metaEngine.setProjectContext('test-project');
+      expect(metaEngine.isInitialized()).toBe(true);
+    });
+
+    it('should de-duplicate concurrent syncOnStartup calls', async () => {
+      const collectTagsSpy = vi.spyOn(metaEngine as unknown as {
+        collectTagsFromPosts: () => Promise<string[]>;
+      }, 'collectTagsFromPosts');
+
+      await Promise.all([
+        metaEngine.syncOnStartup(),
+        metaEngine.syncOnStartup(),
+      ]);
+
+      expect(collectTagsSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should use custom dataDir when provided in setProjectContext', () => {

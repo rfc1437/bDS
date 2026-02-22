@@ -339,6 +339,48 @@ describe('PreviewServer', () => {
     expect(lightboxLoadingImageResponse.headers.get('content-type')).toContain('image/gif');
   });
 
+  it('does not set project context or run startup sync for static asset requests', async () => {
+    const postEngine = makeEngine([makePost()]);
+    const mediaEngine = {
+      setProjectContext: vi.fn(),
+      async getAllMedia() {
+        return [];
+      },
+    };
+    const postMediaEngine = makePostMediaEngine({});
+    const syncOnStartup = vi.fn(async () => undefined);
+    const settingsEngine = {
+      setProjectContext: vi.fn(),
+      isInitialized: vi.fn(() => false),
+      syncOnStartup,
+      async getProjectMetadata() {
+        return { maxPostsPerPage: 50 };
+      },
+    };
+    const menuEngine = makeMenuEngine({ items: [] });
+
+    server = new PreviewServer({
+      postEngine,
+      mediaEngine: mediaEngine as any,
+      postMediaEngine,
+      settingsEngine: settingsEngine as any,
+      menuEngine,
+      getActiveProjectContext: async () => ({ projectId: 'default', dataDir: '/tmp/default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/assets/pico.min.css`);
+    expect(response.status).toBe(200);
+
+    expect(postEngine.setProjectContext).not.toHaveBeenCalled();
+    expect(mediaEngine.setProjectContext).not.toHaveBeenCalled();
+    expect(postMediaEngine.setProjectContext).not.toHaveBeenCalled();
+    expect(settingsEngine.setProjectContext).not.toHaveBeenCalled();
+    expect(menuEngine.setProjectContext).not.toHaveBeenCalled();
+    expect(syncOnStartup).not.toHaveBeenCalled();
+  });
+
   it('renders tag_cloud macro with normalized tag usage and tag archive links', async () => {
     const posts = [
       makePost({
