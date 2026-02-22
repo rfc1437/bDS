@@ -1619,7 +1619,10 @@ const Dashboard: React.FC = () => {
                   <div className="timeline-bar" style={{ height: `${(entry.count / maxCount) * 100}%` }}>
                     <span className="timeline-bar-count">{entry.count}</span>
                   </div>
-                  <div className="timeline-bar-label">{monthFormatter.format(new Date(entry.year, entry.month, 1))}</div>
+                  <div className="timeline-bar-label">
+                    <span className="timeline-bar-label-month">{monthFormatter.format(new Date(entry.year, entry.month, 1))}</span>
+                    <span className="timeline-bar-label-year">{entry.year}</span>
+                  </div>
                 </div>
               ))}
             </div>

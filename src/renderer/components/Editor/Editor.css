@@ -519,10 +519,21 @@
 }
 
 .timeline-bar-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-size: 9px;
   color: var(--vscode-descriptionForeground);
   margin-top: 4px;
+  line-height: 1.15;
+}
+
+.timeline-bar-label-month {
   white-space: nowrap;
+}
+
+.timeline-bar-label-year {
+  font-size: 8px;
 }
 
 /* Tag cloud */
