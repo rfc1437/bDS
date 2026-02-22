@@ -32,6 +32,18 @@ export interface SitemapFeedBuildResult {
   feedPosts: PostData[];
 }
 
+export interface SitemapArchiveMetadata {
+  allTags: Set<string>;
+  allCategories: Set<string>;
+  yearMonths: Map<string, Date>;
+  years: Map<number, Date>;
+  yearMonthDays: Map<string, Date>;
+  feedPosts: PostData[];
+  postUrls: Array<{ loc: string; lastmod: string }>;
+  pageUrls: Array<{ loc: string; lastmod: string }>;
+  latestPostUpdatedAt: string;
+}
+
 function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
   if (post.createdAt instanceof Date) {
     return post.createdAt;
@@ -142,19 +154,19 @@ function escapeCdata(value: string): string {
   return value.replace(/]]>/g, ']]]]><![CDATA[>');
 }
 
-export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): SitemapFeedBuildResult {
+export function collectSitemapArchiveMetadata(params: {
+  baseUrl: string;
+  maxPostsPerPage: number;
+  publishedPosts: PostData[];
+  publishedListPosts: PostData[];
+}): SitemapArchiveMetadata {
   const {
     baseUrl,
-    projectName,
-    projectDescription,
     maxPostsPerPage,
     publishedPosts,
     publishedListPosts,
-    postIndex,
-    includeFeeds,
   } = params;
 
-  const now = new Date().toISOString();
   const allTags = new Set<string>();
   const allCategories = new Set<string>();
   const yearMonths = new Map<string, Date>();
@@ -206,7 +218,53 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     }
   }
 
+  const now = new Date().toISOString();
   const latestPostUpdatedAt = publishedListPosts[0]?.updatedAt.toISOString() || now;
+  const feedPosts = publishedListPosts.slice(0, maxPostsPerPage);
+
+  return {
+    allTags,
+    allCategories,
+    yearMonths,
+    years,
+    yearMonthDays,
+    feedPosts,
+    postUrls,
+    pageUrls,
+    latestPostUpdatedAt,
+  };
+}
+
+export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): SitemapFeedBuildResult {
+  const {
+    baseUrl,
+    projectName,
+    projectDescription,
+    maxPostsPerPage,
+    publishedPosts,
+    publishedListPosts,
+    postIndex,
+    includeFeeds,
+  } = params;
+
+  const archiveMetadata = collectSitemapArchiveMetadata({
+    baseUrl,
+    maxPostsPerPage,
+    publishedPosts,
+    publishedListPosts,
+  });
+
+  const {
+    allTags,
+    allCategories,
+    yearMonths,
+    years,
+    yearMonthDays,
+    postUrls,
+    pageUrls,
+    latestPostUpdatedAt,
+    feedPosts,
+  } = archiveMetadata;
 
   const urls: string[] = [];
   urls.push(buildSitemapUrl(`${baseUrl}/`, latestPostUpdatedAt, 'daily', '1.0'));
@@ -259,7 +317,6 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     '',
   ].join('\n');
 
-  const feedPosts = publishedListPosts.slice(0, maxPostsPerPage);
   if (!includeFeeds) {
     return {
       allTags,

@@ -155,6 +155,10 @@ function normalizeCategorySettings(value: unknown): Record<string, CategoryRende
   );
 }
 
+function isJsonParseError(error: unknown): boolean {
+  return error instanceof SyntaxError;
+}
+
 /**
  * MetaEngine manages project metadata like available tags and categories.
  * 
@@ -447,6 +451,11 @@ export class MetaEngine extends EventEmitter {
       const parsed = JSON.parse(content) as ProjectMetadata;
       this.projectMetadata = normalizeProjectMetadata(parsed);
     } catch (error) {
+      if (isJsonParseError(error)) {
+        console.warn('[MetaEngine] Failed to parse project metadata JSON, using null metadata:', error);
+        this.projectMetadata = null;
+        return;
+      }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('[MetaEngine] Failed to load project metadata:', error);
         throw error;
@@ -466,6 +475,10 @@ export class MetaEngine extends EventEmitter {
       const parsed = JSON.parse(content) as Record<string, unknown>;
       return normalizeCategoryMetadata(parsed);
     } catch (error) {
+      if (isJsonParseError(error)) {
+        console.warn('[MetaEngine] Failed to parse category metadata JSON, using default metadata merge:', error);
+        return null;
+      }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('[MetaEngine] Failed to load category metadata:', error);
         throw error;
@@ -490,6 +503,11 @@ export class MetaEngine extends EventEmitter {
         }
       }
     } catch (error) {
+      if (isJsonParseError(error)) {
+        console.warn('[MetaEngine] Failed to parse categories JSON, treating as empty and rebuilding from DB/defaults:', error);
+        this.categories.clear();
+        return;
+      }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('[MetaEngine] Failed to load categories:', error);
         throw error;
@@ -653,6 +671,18 @@ export class MetaEngine extends EventEmitter {
     // Handle project metadata
     if (projectMetadataFileExists) {
       await this.loadProjectMetadata();
+      if (!this.projectMetadata) {
+        const projectData = await this.fetchProjectFromDatabase();
+        if (!projectData) {
+          throw new Error(`Project not found in database: ${this.currentProjectId}`);
+        }
+        this.projectMetadata = {
+          name: projectData.name,
+          description: projectData.description || undefined,
+          maxPostsPerPage: DEFAULT_MAX_POSTS_PER_PAGE,
+        };
+        await this.saveProjectMetadata();
+      }
       if (this.projectMetadata?.dataPath !== undefined) {
         const { dataPath: _dataPath, ...metadataWithoutDataPath } = this.projectMetadata;
         this.projectMetadata = metadataWithoutDataPath;

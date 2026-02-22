@@ -72,4 +72,77 @@ describe('BlogGenerationOutputService', () => {
     const saved = await readFile(path.join(htmlDir, 'section', 'page', 'index.html'), 'utf-8');
     expect(saved).toBe('<html/>');
   });
+
+  it('reuses in-run hash cache to avoid repeated hash reads for same file', async () => {
+    const tempRoot = path.join('/tmp', makeTempName());
+    await mkdir(tempRoot, { recursive: true });
+    const filePath = path.join(tempRoot, 'cached.txt');
+    const hashCache = new Map<string, string | null>();
+
+    const getHash = vi.fn().mockResolvedValue(null);
+    const setHash = vi.fn().mockResolvedValue(undefined);
+    const hashFn = vi.fn().mockReturnValue('h1');
+
+    await writeFileIfHashChanged({
+      projectId: 'p',
+      filePath,
+      relativePath: 'cached.txt',
+      content: 'hello',
+      getGeneratedFileHash: getHash,
+      setGeneratedFileHash: setHash,
+      computeHash: hashFn,
+      hashCache,
+    });
+
+    await writeFileIfHashChanged({
+      projectId: 'p',
+      filePath,
+      relativePath: 'cached.txt',
+      content: 'hello',
+      getGeneratedFileHash: getHash,
+      setGeneratedFileHash: setHash,
+      computeHash: hashFn,
+      hashCache,
+    });
+
+    expect(getHash).toHaveBeenCalledTimes(1);
+  });
+
+  it('avoids repeated directory ensure calls when known directory cache is provided', async () => {
+    const tempRoot = path.join('/tmp', makeTempName());
+    const htmlDir = path.join(tempRoot, 'html');
+    await mkdir(htmlDir, { recursive: true });
+
+    const ensureDirectory = vi.fn(async (dirPath: string) => {
+      await mkdir(dirPath, { recursive: true });
+    });
+
+    const knownDirectories = new Set<string>();
+
+    await writeHtmlPage({
+      projectId: 'p',
+      htmlDir,
+      urlPath: 'section/page',
+      content: '<html/>',
+      getGeneratedFileHash: async () => null,
+      setGeneratedFileHash: async () => undefined,
+      computeHash: () => 'h',
+      ensureDirectory,
+      knownDirectories,
+    });
+
+    await writeHtmlPage({
+      projectId: 'p',
+      htmlDir,
+      urlPath: 'section/page',
+      content: '<html/>',
+      getGeneratedFileHash: async () => 'h',
+      setGeneratedFileHash: async () => undefined,
+      computeHash: () => 'h',
+      ensureDirectory,
+      knownDirectories,
+    });
+
+    expect(ensureDirectory).toHaveBeenCalledTimes(1);
+  });
 });

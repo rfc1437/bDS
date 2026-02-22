@@ -25,6 +25,8 @@ export interface SharedRouteRenderOptions {
   projectContext: SharedActiveProjectContext;
   metadata?: ProjectMetadata | null;
   menu?: MenuDocument;
+  htmlRewriteContext?: HtmlRewriteContext;
+  skipContextSetup?: boolean;
   maxPostsPerPage?: number;
   requestTheme?: string | null;
   htmlThemeAttribute?: string;
@@ -267,11 +269,13 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   options: SharedRouteRenderOptions,
   services: SharedRouteRenderServices<TCategoryMetadata>,
 ): Promise<string | null> {
-  services.postEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
-  services.mediaEngine.setProjectContext?.(options.projectContext.projectId, options.projectContext.dataDir, options.projectContext.dataDir);
-  services.postMediaEngine.setProjectContext(options.projectContext.projectId);
-  services.settingsEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
-  services.menuEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
+  if (!options.skipContextSetup) {
+    services.postEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
+    services.mediaEngine.setProjectContext?.(options.projectContext.projectId, options.projectContext.dataDir, options.projectContext.dataDir);
+    services.postMediaEngine.setProjectContext(options.projectContext.projectId);
+    services.settingsEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
+    services.menuEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
+  }
 
   let metadata = options.metadata;
   if (metadata === undefined) {
@@ -292,7 +296,7 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const appliedTheme = sanitizePicoTheme(options.requestTheme)
     ?? sanitizePicoTheme((metadata as { picoTheme?: unknown } | null)?.picoTheme);
   const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
-  const htmlRewriteContext = await services.buildHtmlRewriteContext();
+  const htmlRewriteContext = options.htmlRewriteContext ?? await services.buildHtmlRewriteContext();
   const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
 
   return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {

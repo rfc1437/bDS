@@ -15,7 +15,7 @@ import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '..
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import { loadPublishedGenerationSets } from './GenerationPostSnapshotService';
-import { buildSitemapAndFeeds } from './GenerationSitemapFeedService';
+import { buildSitemapAndFeeds, collectSitemapArchiveMetadata } from './GenerationSitemapFeedService';
 import { buildTargetedValidationPlan, planMissingValidationPaths } from './ValidationApplyPlannerService';
 import { compareSitemapToHtml } from './SiteValidationDiffService';
 import {
@@ -218,30 +218,57 @@ export class BlogGenerationEngine {
 
     const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
-    onProgress(5, 'Building sitemap XML...');
-    const {
-      allTags,
-      allCategories,
-      yearMonths,
-      years,
-      yearMonthDays,
-      urls,
-      sitemapXml,
-      rssXml,
-      atomXml,
-      feedPosts,
-    } = buildSitemapAndFeeds({
-      baseUrl: options.baseUrl,
-      projectName: options.projectName,
-      projectDescription: options.projectDescription,
-      maxPostsPerPage,
-      publishedPosts,
-      publishedListPosts,
-      postIndex: generationPostIndex,
-      includeFeeds: true,
-    });
+    let allTags = new Set<string>();
+    let allCategories = new Set<string>();
+    let yearMonths = new Map<string, Date>();
+    let years = new Map<number, Date>();
+    let yearMonthDays = new Map<string, Date>();
+    let urls: string[] = [];
+    let sitemapXml = '';
+    let rssXml = '';
+    let atomXml = '';
+    let feedPosts: PostData[] = [];
 
-    onProgress(8, 'Building RSS and Atom feeds...');
+    if (includeCore) {
+      onProgress(5, 'Building sitemap XML...');
+      const sitemapAndFeedResult = buildSitemapAndFeeds({
+        baseUrl: options.baseUrl,
+        projectName: options.projectName,
+        projectDescription: options.projectDescription,
+        maxPostsPerPage,
+        publishedPosts,
+        publishedListPosts,
+        postIndex: generationPostIndex,
+        includeFeeds: true,
+      });
+
+      allTags = sitemapAndFeedResult.allTags;
+      allCategories = sitemapAndFeedResult.allCategories;
+      yearMonths = sitemapAndFeedResult.yearMonths;
+      years = sitemapAndFeedResult.years;
+      yearMonthDays = sitemapAndFeedResult.yearMonthDays;
+      urls = sitemapAndFeedResult.urls;
+      sitemapXml = sitemapAndFeedResult.sitemapXml;
+      rssXml = sitemapAndFeedResult.rssXml;
+      atomXml = sitemapAndFeedResult.atomXml;
+      feedPosts = sitemapAndFeedResult.feedPosts;
+
+      onProgress(8, 'Building RSS and Atom feeds...');
+    } else if (includeCategory || includeTag || includeDate) {
+      const archiveMetadata = collectSitemapArchiveMetadata({
+        baseUrl: options.baseUrl,
+        maxPostsPerPage,
+        publishedPosts,
+        publishedListPosts,
+      });
+
+      allTags = archiveMetadata.allTags;
+      allCategories = archiveMetadata.allCategories;
+      yearMonths = archiveMetadata.yearMonths;
+      years = archiveMetadata.years;
+      yearMonthDays = archiveMetadata.yearMonthDays;
+      feedPosts = archiveMetadata.feedPosts;
+    }
 
     const htmlDir = path.join(options.dataDir, 'html');
     await fs.mkdir(htmlDir, { recursive: true });
@@ -321,11 +348,16 @@ export class BlogGenerationEngine {
       },
     });
 
+    const knownOutputDirectories = new Set<string>();
+    const generatedHashCache = new Map<string, string | null>();
+
     const writePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
       projectId,
       htmlDir,
       urlPath,
       content,
+      knownDirectories: knownOutputDirectories,
+      hashCache: generatedHashCache,
     });
 
     let pagesGenerated = 0;

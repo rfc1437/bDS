@@ -166,6 +166,8 @@ export class PreviewServer {
       projectContext: ActiveProjectContext;
       metadata?: ProjectMetadata | null;
       menu?: MenuDocument;
+      htmlRewriteContext?: HtmlRewriteContext;
+      skipContextSetup?: boolean;
       maxPostsPerPage?: number;
       requestTheme?: string | null;
       htmlThemeAttribute?: string;

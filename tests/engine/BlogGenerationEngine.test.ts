@@ -640,6 +640,118 @@ describe('BlogGenerationEngine', () => {
     expect(filteredCallCount).toBeLessThanOrEqual(8);
   });
 
+  it('skips core sitemap and feed build phases for single-only generation', async () => {
+    const posts: PostData[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      posts.push(makePost({
+        id: `single-phase-${i}`,
+        slug: `single-phase-${i}`,
+        createdAt: new Date(`2025-${String(i + 1).padStart(2, '0')}-10T10:00:00Z`),
+      }));
+    }
+
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+    const onProgress = vi.fn();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      sections: ['single'],
+    }, onProgress);
+
+    const progressMessages = onProgress.mock.calls.map((call) => String(call[1] ?? ''));
+    expect(progressMessages).not.toContain('Building sitemap XML...');
+    expect(progressMessages).not.toContain('Building RSS and Atom feeds...');
+    expect(progressMessages).not.toContain('Writing sitemap and feeds...');
+  });
+
+  it('skips sitemap XML build phase for archive-only generation sections', async () => {
+    const posts: PostData[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      posts.push(makePost({
+        id: `archive-only-${i}`,
+        slug: `archive-only-${i}`,
+        categories: [`cat-${i % 2}`],
+        tags: [`tag-${i % 3}`],
+        createdAt: new Date(`2025-${String((i % 4) + 1).padStart(2, '0')}-10T10:00:00Z`),
+      }));
+    }
+
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+    const onProgress = vi.fn();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      sections: ['category', 'tag', 'date'],
+    }, onProgress);
+
+    const progressMessages = onProgress.mock.calls.map((call) => String(call[1] ?? ''));
+    expect(progressMessages).not.toContain('Building sitemap XML...');
+    expect(progressMessages).not.toContain('Building RSS and Atom feeds...');
+    expect(progressMessages).not.toContain('Writing sitemap and feeds...');
+  });
+
+  it('does not rebuild canonical rewrite context for every generated html file', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'p1', categories: ['news'], tags: ['t1'], createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'p2', categories: ['news'], tags: ['t2'], createdAt: new Date('2025-01-14T10:00:00Z') }),
+      makePost({ id: '3', slug: 'p3', categories: ['news'], tags: ['t3'], createdAt: new Date('2025-01-13T10:00:00Z') }),
+    ];
+
+    setupPosts(posts);
+
+    const pageRendererModule = await import('../../src/main/engine/PageRenderer');
+    const canonicalPathSpy = vi.spyOn(pageRendererModule, 'buildCanonicalPostPath');
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      maxPostsPerPage: 1,
+    }, vi.fn());
+
+    expect(canonicalPathSpy.mock.calls.length).toBeLessThanOrEqual(6);
+    canonicalPathSpy.mockRestore();
+  });
+
+  it('does not re-setup engine project context for every rendered html file', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'ctx-1', categories: ['news'], tags: ['t1'], createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'ctx-2', categories: ['news'], tags: ['t2'], createdAt: new Date('2025-01-14T10:00:00Z') }),
+      makePost({ id: '3', slug: 'ctx-3', categories: ['news'], tags: ['t3'], createdAt: new Date('2025-01-13T10:00:00Z') }),
+    ];
+
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      maxPostsPerPage: 1,
+    }, vi.fn());
+
+    expect(mockPostEngine.setProjectContext.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
   it('reduces repeated in-memory filtering across category tag and date generation', async () => {
     const posts: PostData[] = [];
     for (let i = 0; i < 30; i += 1) {

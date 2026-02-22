@@ -861,6 +861,47 @@ describe('MetaEngine', () => {
       expect(metadata?.categoryMetadata?.news?.title).toBe('Newsroom');
     });
 
+    it('should continue syncOnStartup when categories.json is malformed and recover from database categories', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Synced Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/categories.json`), '["news",');
+
+      mockPosts = [
+        { categories: JSON.stringify(['db-cat']) },
+      ];
+
+      await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+
+      const categories = await metaEngine.getCategories();
+      expect(categories).toContain('db-cat');
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.name).toBe('Synced Project');
+    });
+
+    it('should continue syncOnStartup when category-meta.json is malformed and keep valid project metadata', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Synced Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/categories.json`), JSON.stringify(['news']));
+      mockFiles.set(normalizePath(`${metaDir}/category-meta.json`), '{"news":');
+
+      await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+
+      const metadata = await metaEngine.getProjectMetadata() as any;
+      expect(metadata?.name).toBe('Synced Project');
+      expect(metadata?.categoryMetadata?.news).toEqual(
+        expect.objectContaining({
+          renderInLists: true,
+          showTitle: true,
+          title: 'news',
+        }),
+      );
+    });
+
     it('should create project.json with data from database during syncOnStartup if file does not exist', async () => {
       const metaDir = metaEngine.getMetaDir();
       const projectPath = normalizePath(`${metaDir}/project.json`);

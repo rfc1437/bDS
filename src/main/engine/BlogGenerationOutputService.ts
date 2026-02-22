@@ -33,6 +33,7 @@ export async function writeFileIfHashChanged(params: {
   filePath: string;
   relativePath: string;
   content: string;
+  hashCache?: Map<string, string | null>;
   getGeneratedFileHash?: (projectId: string, relativePath: string) => Promise<string | null>;
   setGeneratedFileHash?: (projectId: string, relativePath: string, hash: string) => Promise<void>;
   computeHash?: (content: string) => string;
@@ -42,13 +43,21 @@ export async function writeFileIfHashChanged(params: {
   const hashFn = params.computeHash ?? computeContentHash;
 
   const hash = hashFn(params.content);
-  const previousHash = await getHash(params.projectId, params.relativePath);
+  let previousHash: string | null;
+  if (params.hashCache && params.hashCache.has(params.relativePath)) {
+    previousHash = params.hashCache.get(params.relativePath) ?? null;
+  } else {
+    previousHash = await getHash(params.projectId, params.relativePath);
+    params.hashCache?.set(params.relativePath, previousHash);
+  }
+
   if (previousHash === hash) {
     return false;
   }
 
   await fs.writeFile(params.filePath, params.content, 'utf-8');
   await setHash(params.projectId, params.relativePath, hash);
+  params.hashCache?.set(params.relativePath, hash);
   return true;
 }
 
@@ -57,6 +66,9 @@ export async function writeHtmlPage(params: {
   htmlDir: string;
   urlPath: string;
   content: string;
+  knownDirectories?: Set<string>;
+  hashCache?: Map<string, string | null>;
+  ensureDirectory?: (dirPath: string) => Promise<void>;
   getGeneratedFileHash?: (projectId: string, relativePath: string) => Promise<string | null>;
   setGeneratedFileHash?: (projectId: string, relativePath: string, hash: string) => Promise<void>;
   computeHash?: (content: string) => string;
@@ -66,14 +78,26 @@ export async function writeHtmlPage(params: {
     ? path.join(params.htmlDir, normalizedPath, 'index.html')
     : path.join(params.htmlDir, 'index.html');
   const relativePath = normalizedPath ? `${normalizedPath}/index.html` : 'index.html';
+  const directoryPath = path.dirname(filePath);
+  const ensureDirectory = params.ensureDirectory ?? (async (dirPath: string) => {
+    await fs.mkdir(dirPath, { recursive: true });
+  });
 
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  if (params.knownDirectories) {
+    if (!params.knownDirectories.has(directoryPath)) {
+      await ensureDirectory(directoryPath);
+      params.knownDirectories.add(directoryPath);
+    }
+  } else {
+    await ensureDirectory(directoryPath);
+  }
 
   return writeFileIfHashChanged({
     projectId: params.projectId,
     filePath,
     relativePath,
     content: params.content,
+    hashCache: params.hashCache,
     getGeneratedFileHash: params.getGeneratedFileHash,
     setGeneratedFileHash: params.setGeneratedFileHash,
     computeHash: params.computeHash,

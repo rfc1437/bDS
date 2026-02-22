@@ -1,4 +1,5 @@
 import type { CategoryRenderSettings } from './PageRenderer';
+import { buildCanonicalPostPath } from './PageRenderer';
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import type { PostData } from './PostEngine';
@@ -15,6 +16,7 @@ interface RenderContext {
   };
   metadata?: ProjectMetadata | null;
   menu?: MenuDocument;
+  skipContextSetup?: boolean;
   maxPostsPerPage?: number;
 }
 
@@ -88,6 +90,10 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     projectName: params.options.projectName,
     projectDescription: params.options.projectDescription,
   };
+
+  params.engines.postEngine.setProjectContext(projectContext.projectId, projectContext.dataDir);
+  params.engines.mediaEngine.setProjectContext?.(projectContext.projectId, projectContext.dataDir, projectContext.dataDir);
+  params.engines.postMediaEngine.setProjectContext(projectContext.projectId);
 
   const mediaItemsPromiseCache = new Map<string, Promise<unknown[]>>();
   const postsByFilterPromiseCache = new Map<string, Promise<PostData[]>>();
@@ -201,12 +207,42 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     getActiveProjectContext: async () => projectContext,
   });
 
+  const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string> }> = (async () => {
+    const canonicalPostPathBySlug = new Map<string, string>();
+    for (const post of params.publishedPostsForLookup) {
+      canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
+    }
+
+    const canonicalMediaPathBySourcePath = new Map<string, string>();
+    const mediaItems = await cachedMediaEngine.getAllMedia();
+    for (const media of mediaItems as Array<{ createdAt: Date; filename: string; originalName: string }>) {
+      const year = media.createdAt.getFullYear();
+      const month = String(media.createdAt.getMonth() + 1).padStart(2, '0');
+      const canonicalPath = `/media/${year}/${month}/${media.filename}`;
+
+      const originalNameKey = `media/${year}/${month}/${media.originalName}`.toLowerCase();
+      const filenameKey = `media/${year}/${month}/${media.filename}`.toLowerCase();
+
+      canonicalMediaPathBySourcePath.set(originalNameKey, canonicalPath);
+      canonicalMediaPathBySourcePath.set(filenameKey, canonicalPath);
+    }
+
+    return {
+      canonicalPostPathBySlug,
+      canonicalMediaPathBySourcePath,
+    };
+  })();
+
   return createGenerationRouteRenderer({
-    renderWithContext: (pathname, context) => previewServer.renderRouteForContext(pathname, context),
+    renderWithContext: async (pathname, context) => previewServer.renderRouteForContext(pathname, {
+      ...context,
+      htmlRewriteContext: await htmlRewriteContextPromise,
+    }),
     context: {
       projectContext,
       metadata,
       menu,
+      skipContextSetup: true,
       maxPostsPerPage: params.maxPostsPerPage,
     },
   });
