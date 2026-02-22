@@ -39,6 +39,11 @@ import {
   generateSinglePostPages,
   generateTagPages,
 } from './RoutePageGenerationService';
+import {
+  buildApplyValidationArchives,
+  buildRequestedArchiveMaps,
+  selectRequestedPosts,
+} from './ApplyValidationDataService';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -568,34 +573,7 @@ export class BlogGenerationEngine {
       const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
       const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
-      const allCategories = new Set<string>();
-      const allTags = new Set<string>();
-      const years = new Map<number, Date>();
-      const yearMonths = new Map<string, Date>();
-      const yearMonthDays = new Map<string, Date>();
-
-      for (const post of publishedListPosts) {
-        for (const category of post.categories || []) allCategories.add(category);
-        for (const tag of post.tags || []) allTags.add(tag);
-
-        const createdAt = resolvePostCreatedAt(post);
-        const updatedAt = post.updatedAt;
-        const year = createdAt.getFullYear();
-        const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-        const day = String(createdAt.getDate()).padStart(2, '0');
-        const ymKey = `${year}/${month}`;
-        const ymdKey = `${year}/${month}/${day}`;
-
-        if (!years.has(year) || updatedAt > years.get(year)!) {
-          years.set(year, updatedAt);
-        }
-        if (!yearMonths.has(ymKey) || updatedAt > yearMonths.get(ymKey)!) {
-          yearMonths.set(ymKey, updatedAt);
-        }
-        if (!yearMonthDays.has(ymdKey) || updatedAt > yearMonthDays.get(ymdKey)!) {
-          yearMonthDays.set(ymdKey, updatedAt);
-        }
-      }
+      const { allCategories, allTags, years, yearMonths, yearMonthDays } = buildApplyValidationArchives(publishedListPosts);
 
       const targetedPlan = buildTargetedValidationPlan({
         initialPlan: missingPathPlan,
@@ -629,38 +607,20 @@ export class BlogGenerationEngine {
         // no-op for applyValidation
       };
 
-      const requestedSinglePosts = publishedPosts.filter((post) => targetedPlan.requestedPostIds.has(post.id));
-      const requestedPagePosts = publishedPosts.filter((post) => {
-        if (!targetedPlan.requestedPageSlugs.has(post.slug)) {
-          return false;
-        }
-        const categories = Array.isArray(post.categories) ? post.categories : [];
-        return categories.includes('page');
+      const { requestedSinglePosts, requestedPagePosts } = selectRequestedPosts({
+        publishedPosts,
+        requestedPostIds: targetedPlan.requestedPostIds,
+        requestedPageSlugs: targetedPlan.requestedPageSlugs,
       });
 
-      const requestedYearsMap = new Map<number, Date>();
-      for (const year of targetedPlan.requestedYears) {
-        const lastmod = years.get(year);
-        if (lastmod) {
-          requestedYearsMap.set(year, lastmod);
-        }
-      }
-
-      const requestedYearMonthsMap = new Map<string, Date>();
-      for (const ym of targetedPlan.requestedYearMonths) {
-        const lastmod = yearMonths.get(ym);
-        if (lastmod) {
-          requestedYearMonthsMap.set(ym, lastmod);
-        }
-      }
-
-      const requestedYearMonthDaysMap = new Map<string, Date>();
-      for (const ymd of targetedPlan.requestedYearMonthDays) {
-        const lastmod = yearMonthDays.get(ymd);
-        if (lastmod) {
-          requestedYearMonthDaysMap.set(ymd, lastmod);
-        }
-      }
+      const { requestedYearsMap, requestedYearMonthsMap, requestedYearMonthDaysMap } = buildRequestedArchiveMaps({
+        requestedYears: targetedPlan.requestedYears,
+        requestedYearMonths: targetedPlan.requestedYearMonths,
+        requestedYearMonthDays: targetedPlan.requestedYearMonthDays,
+        years,
+        yearMonths,
+        yearMonthDays,
+      });
 
       onProgress(
         48,
