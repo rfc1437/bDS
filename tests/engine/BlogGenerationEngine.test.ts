@@ -613,6 +613,33 @@ describe('BlogGenerationEngine', () => {
     expect(mockMediaEngine.getAllMedia).toHaveBeenCalledTimes(1);
   });
 
+  it('avoids per-route snapshot queries for single-post generation', async () => {
+    const posts: PostData[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      posts.push(makePost({
+        id: `single-${i}`,
+        slug: `single-${i}`,
+        createdAt: new Date(`2025-${String(i + 1).padStart(2, '0')}-15T10:00:00Z`),
+      }));
+    }
+
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      sections: ['single'],
+    }, vi.fn());
+
+    const filteredCallCount = mockPostEngine.getPostsFiltered.mock.calls.length;
+    expect(filteredCallCount).toBeLessThanOrEqual(8);
+  });
+
   it('validates sitemap against html folder without rendering missing pages', async () => {
     const posts = [
       makePost({

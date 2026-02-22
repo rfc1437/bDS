@@ -36,6 +36,7 @@ interface PostEngineContract {
   getPost: (id: string) => Promise<PostData | null>;
   hasPublishedVersion: (id: string) => Promise<boolean>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
+  findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 }
 
@@ -521,6 +522,13 @@ export class PreviewServer {
 
   private async findPublishedPostBySlug(slug: string, dateFilter?: { year: number; month: number }): Promise<PostData | null> {
     if (!slug) return null;
+
+    if (this.postEngine.findPublishedBySlug) {
+      const directMatch = await this.postEngine.findPublishedBySlug(slug, dateFilter);
+      if (directMatch) {
+        return directMatch;
+      }
+    }
 
     const filter: PostFilter = {
       ...(dateFilter ? { year: dateFilter.year, month: dateFilter.month } : {}),

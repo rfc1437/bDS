@@ -679,7 +679,7 @@ export class BlogGenerationEngine {
       reportUnitProgress('Assets copied');
     }
 
-    const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage);
+    const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage, publishedPosts);
 
     let pagesGenerated = 0;
 
@@ -1285,7 +1285,7 @@ export class BlogGenerationEngine {
       const htmlDir = path.join(options.dataDir, 'html');
       await fs.mkdir(htmlDir, { recursive: true });
 
-      const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage);
+      const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage, publishedPosts);
       const onPageGenerated = (_message: string) => {
         // no-op for applyValidation
       };
@@ -1440,6 +1440,7 @@ export class BlogGenerationEngine {
   private createSharedRouteRenderer(
     options: BlogGenerationOptions,
     maxPostsPerPage: number,
+    publishedPostsForLookup: PostData[] = [],
   ): (pathname: string) => Promise<string | null> {
     const metadata: ProjectMetadata = {
       name: options.projectName,
@@ -1464,6 +1465,16 @@ export class BlogGenerationEngine {
     const postsByFilterPromiseCache = new Map<string, Promise<PostData[]>>();
     const publishedSnapshotByIdPromiseCache = new Map<string, Promise<PostData | null>>();
     type PostFilterInput = Parameters<typeof this.postEngine.getPostsFiltered>[0];
+    const publishedBySlugIndex = new Map<string, PostData[]>();
+
+    for (const post of publishedPostsForLookup) {
+      const existing = publishedBySlugIndex.get(post.slug);
+      if (existing) {
+        existing.push(post);
+      } else {
+        publishedBySlugIndex.set(post.slug, [post]);
+      }
+    }
 
     const serializeFilter = (filter: PostFilterInput): string => {
       const normalizeValue = (value: unknown): unknown => {
@@ -1505,6 +1516,24 @@ export class BlogGenerationEngine {
         const promise = this.postEngine.getPublishedVersion(postId);
         publishedSnapshotByIdPromiseCache.set(postId, promise);
         return promise;
+      },
+      findPublishedBySlug: async (slug: string, dateFilter?: { year: number; month: number }) => {
+        const candidates = publishedBySlugIndex.get(slug);
+        if (!candidates || candidates.length === 0) {
+          return null;
+        }
+
+        if (!dateFilter) {
+          return candidates[0] ?? null;
+        }
+
+        const match = candidates.find((candidate) => {
+          const createdAt = candidate.createdAt;
+          return createdAt.getFullYear() === dateFilter.year
+            && createdAt.getMonth() === dateFilter.month;
+        });
+
+        return match ?? null;
       },
       getPost: (postId: string) => this.postEngine.getPost(postId),
       hasPublishedVersion: (postId: string) => this.postEngine.hasPublishedVersion(postId),
