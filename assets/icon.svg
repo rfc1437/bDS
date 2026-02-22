@@ -1,20 +1,71 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="224" fill="#0B2D5C"/>
+  <defs>
+    <radialGradient id="goldBase" cx="36%" cy="24%" r="88%">
+      <stop offset="0%" stop-color="#FCE9A4"/>
+      <stop offset="22%" stop-color="#E8C96A"/>
+      <stop offset="52%" stop-color="#C59A33"/>
+      <stop offset="78%" stop-color="#9B741F"/>
+      <stop offset="100%" stop-color="#6E4E14"/>
+    </radialGradient>
+    <linearGradient id="goldSheen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF8D8" stop-opacity="0.64"/>
+      <stop offset="33%" stop-color="#F7E2A5" stop-opacity="0.08"/>
+      <stop offset="62%" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#7D5A1A" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="penBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6FA3FF"/>
+      <stop offset="50%" stop-color="#2B61CE"/>
+      <stop offset="100%" stop-color="#1D4294"/>
+    </linearGradient>
+    <linearGradient id="penMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FBFCFF"/>
+      <stop offset="45%" stop-color="#C6D0E2"/>
+      <stop offset="100%" stop-color="#8E9AB1"/>
+    </linearGradient>
+    <filter id="scratch" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="1" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.8" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
 
-  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="456" cy="556" r="252" stroke-width="40"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#goldBase)"/>
+  <path d="M44 188 Q312 76 510 180 T980 164" fill="none" stroke="#FFF4C8" stroke-opacity="0.58" stroke-width="84" stroke-linecap="round"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#goldSheen)"/>
 
-    <ellipse cx="456" cy="556" rx="92" ry="252" stroke-width="28"/>
-    <ellipse cx="456" cy="556" rx="176" ry="252" stroke-width="24"/>
+  <g fill="none" stroke="#0D0D0D" stroke-linecap="round" stroke-linejoin="round" filter="url(#scratch)">
+    <path d="M130 884 L512 118 L894 884 Z" stroke-width="34"/>
+    <path d="M116 896 L518 108 L908 892" stroke-width="8" opacity="0.66"/>
+    <path d="M142 876 L506 128 L882 876" stroke-width="7" opacity="0.54"/>
 
-    <ellipse cx="456" cy="556" rx="252" ry="98" stroke-width="28"/>
-    <ellipse cx="456" cy="556" rx="252" ry="176" stroke-width="24"/>
+    <path d="M176 884 Q354 868 560 860" stroke-width="24"/>
+    <path d="M168 892 Q362 876 562 866" stroke-width="8" opacity="0.62"/>
+    <path d="M568 862 Q704 862 848 882" stroke-width="7" opacity="0.3"/>
 
-    <g transform="rotate(-34 676 350)">
-      <path d="M620 238 L770 238 L770 302 L620 302 Z" stroke-width="34"/>
-      <path d="M770 238 L848 270 L770 302 Z" stroke-width="34"/>
-      <path d="M620 238 L570 270 L620 302 Z" stroke-width="34"/>
-      <line x1="660" y1="238" x2="660" y2="302" stroke-width="24"/>
-    </g>
+    <path d="M322 646 Q512 610 706 646" stroke-width="20"/>
+    <path d="M306 656 Q512 620 722 656" stroke-width="7" opacity="0.6"/>
+
+    <path d="M408 438 Q512 418 616 438" stroke-width="16"/>
+    <path d="M396 448 Q512 426 628 448" stroke-width="6" opacity="0.64"/>
+
+    <path d="M372 530 Q512 446 652 530" stroke-width="18"/>
+    <path d="M372 530 Q512 614 652 530" stroke-width="18"/>
+    <path d="M392 530 Q512 462 632 530" stroke-width="6" opacity="0.64"/>
+    <path d="M392 530 Q512 598 632 530" stroke-width="6" opacity="0.64"/>
+    <circle cx="512" cy="530" r="34" stroke-width="18"/>
+    <circle cx="512" cy="530" r="12" stroke-width="6" opacity="0.68"/>
   </g>
+
+  <g transform="rotate(-44 560 860)">
+    <path d="M653.75 811.25 L1088.75 811.25 C1126.25 811.25 1156.25 833.75 1156.25 860 C1156.25 886.25 1126.25 908.75 1088.75 908.75 L653.75 908.75 Z" fill="url(#penBody)"/>
+    <path d="M653.75 811.25 L747.5 811.25 C773.75 811.25 792.5 833.75 792.5 860 C792.5 886.25 773.75 908.75 747.5 908.75 L653.75 908.75 Z" fill="#7FB0FF"/>
+    <rect x="788.75" y="811.25" width="37.5" height="97.5" rx="15" fill="#214A9D"/>
+    <path d="M826.25 833.75 Q935 803.75 1040 833.75" fill="none" stroke="#9FC2FF" stroke-width="11.25"/>
+    <path d="M560 860 L608.75 830 L653.75 860 L608.75 890 Z" fill="url(#penMetal)"/>
+    <path d="M560 860 L537.5 845 L537.5 875 Z" fill="#101318"/>
+    <line x1="560" y1="860" x2="638.75" y2="860" stroke="#4D5C78" stroke-width="5.6"/>
+    <circle cx="601.25" cy="860" r="8.4" fill="#5A6780"/>
+  </g>
+
+  <path d="M172 886 Q356 872 560 860" fill="none" stroke="#0C0C0C" stroke-width="10" stroke-linecap="round"/>
 </svg>
