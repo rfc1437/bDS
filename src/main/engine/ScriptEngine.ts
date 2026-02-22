@@ -94,7 +94,11 @@ export class ScriptEngine extends EventEmitter {
     }
 
     const allScripts = await this.getAllScriptRows();
-    const desiredSlug = this.normalizeSlug(updates.slug || updates.title || existing.slug);
+    const desiredSlug = typeof updates.slug === 'string'
+      ? this.normalizeSlug(updates.slug)
+      : typeof updates.title === 'string'
+        ? this.normalizeSlug(updates.title)
+        : existing.slug;
     const nextSlug = this.ensureUniqueSlug(desiredSlug, allScripts, existing.id);
     const nextFilePath = this.getScriptFilePath(nextSlug);
     const now = new Date();
@@ -228,8 +232,8 @@ export class ScriptEngine extends EventEmitter {
   private normalizeSlug(value: string): string {
     const normalized = value
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
     return normalized || 'script';
   }
 
@@ -246,11 +250,11 @@ export class ScriptEngine extends EventEmitter {
     }
 
     let suffix = 2;
-    while (taken.has(`${baseSlug}-${suffix}`)) {
+    while (taken.has(`${baseSlug}_${suffix}`)) {
       suffix += 1;
     }
 
-    return `${baseSlug}-${suffix}`;
+    return `${baseSlug}_${suffix}`;
   }
 }
 

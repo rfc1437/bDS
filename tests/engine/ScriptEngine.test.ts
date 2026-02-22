@@ -100,9 +100,9 @@ describe('ScriptEngine', () => {
       content: 'def render(context):\n    return {"html": "<h1>Hi</h1>"}',
     });
 
-    expect(created.slug).toBe('render-hero');
+    expect(created.slug).toBe('render_hero');
     expect(mockScripts.has(created.id)).toBe(true);
-    expect(mockFiles.get('/mock/userData/projects/default/scripts/render-hero.py')).toContain('def render');
+    expect(mockFiles.get('/mock/userData/projects/default/scripts/render_hero.py')).toContain('def render');
   });
 
   it('updates script metadata and file content', async () => {
@@ -117,8 +117,29 @@ describe('ScriptEngine', () => {
       content: 'def render(context):\n    return {"html": "<h1>Banner</h1>"}',
     });
 
-    expect(updated?.slug).toBe('render-hero-banner');
-    expect(mockFiles.get('/mock/userData/projects/default/scripts/render-hero-banner.py')).toContain('Banner');
+    expect(updated?.slug).toBe('render_hero_banner');
+    expect(mockFiles.get('/mock/userData/projects/default/scripts/render_hero_banner.py')).toContain('Banner');
+  });
+
+  it('appends underscore numeric suffix for duplicate slugs', async () => {
+    const first = await scriptEngine.createScript({
+      title: 'Render Hero',
+      kind: 'macro',
+      content: 'def render(context):\n    return {"html": "<h1>Hi</h1>"}',
+    });
+
+    vi.mocked((await import('uuid')).v4)
+      .mockReturnValueOnce('mock-script-id-2');
+
+    const second = await scriptEngine.createScript({
+      title: 'Render Hero',
+      kind: 'macro',
+      content: 'def render(context):\n    return {"html": "<h1>Again</h1>"}',
+    });
+
+    expect(first.slug).toBe('render_hero');
+    expect(second.slug).toBe('render_hero_2');
+    expect(mockFiles.get('/mock/userData/projects/default/scripts/render_hero_2.py')).toContain('Again');
   });
 
   it('deletes script metadata and source file', async () => {
@@ -132,6 +153,6 @@ describe('ScriptEngine', () => {
 
     expect(deleted).toBe(true);
     expect(mockScripts.has(created.id)).toBe(false);
-    expect(mockFiles.has('/mock/userData/projects/default/scripts/delete-me.py')).toBe(false);
+    expect(mockFiles.has('/mock/userData/projects/default/scripts/delete_me.py')).toBe(false);
   });
 });

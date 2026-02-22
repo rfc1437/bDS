@@ -1667,9 +1667,9 @@ const ImportList: React.FC = () => {
 };
 
 const ScriptsList: React.FC = () => {
-  const { t } = useI18n();
-  const { openTab, activeTabId } = useAppStore();
-  const [scripts, setScripts] = useState<Array<{ id: string; title: string }>>([]);
+  const { t, language } = useI18n();
+  const { openTab, activeTabId, closeTab } = useAppStore();
+  const [scripts, setScripts] = useState<Array<{ id: string; title: string; updatedAt: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadScripts = useCallback(async () => {
@@ -1678,7 +1678,7 @@ const ScriptsList: React.FC = () => {
       return;
     }
 
-    setScripts(items.map((item) => ({ id: item.id, title: item.title })));
+    setScripts(items.map((item) => ({ id: item.id, title: item.title, updatedAt: item.updatedAt })));
   }, []);
 
   useEffect(() => {
@@ -1692,7 +1692,7 @@ const ScriptsList: React.FC = () => {
           return;
         }
 
-        setScripts((items ?? []).map((item) => ({ id: item.id, title: item.title })));
+        setScripts((items ?? []).map((item) => ({ id: item.id, title: item.title, updatedAt: item.updatedAt })));
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -1702,10 +1702,22 @@ const ScriptsList: React.FC = () => {
 
     void loadInitialScripts();
 
+    const canListen = typeof window.addEventListener === 'function' && typeof window.removeEventListener === 'function';
+    const handleScriptsChanged = () => {
+      void loadScripts();
+    };
+
+    if (canListen) {
+      window.addEventListener('bds:scripts-changed', handleScriptsChanged);
+    }
+
     return () => {
       cancelled = true;
+      if (canListen) {
+        window.removeEventListener('bds:scripts-changed', handleScriptsChanged);
+      }
     };
-  }, []);
+  }, [loadScripts]);
 
   const handleCreateScript = async () => {
     try {
@@ -1722,14 +1734,51 @@ const ScriptsList: React.FC = () => {
       }
 
       setScripts((prev) => [
-        { id: created.id, title: created.title },
+        { id: created.id, title: created.title, updatedAt: created.updatedAt },
         ...prev.filter((script) => script.id !== created.id),
       ]);
+      if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
+      }
       openScriptTab(openTab, created.id, 'pin');
       void loadScripts();
     } catch (error) {
       console.error('Failed to create script:', error);
       showToast.error(t('sidebar.scripts.createFailed'));
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
+    if (diffDays === 0) {
+      return date.toLocaleTimeString(uiDateLocale, { hour: 'numeric', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return t('sidebar.chat.yesterday');
+    } else if (diffDays < 7) {
+      return date.toLocaleDateString(uiDateLocale, { weekday: 'short' });
+    }
+    return date.toLocaleDateString(uiDateLocale, { month: 'short', day: 'numeric' });
+  };
+
+  const handleDeleteScript = async (event: React.MouseEvent, scriptId: string) => {
+    event.stopPropagation();
+    try {
+      const deleted = await window.electronAPI?.scripts.delete(scriptId);
+      if (!deleted) {
+        showToast.error(t('sidebar.scripts.deleteFailed'));
+        return;
+      }
+      setScripts((prev) => prev.filter((script) => script.id !== scriptId));
+      closeTab(scriptId);
+      if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
+      }
+    } catch (error) {
+      console.error('Failed to delete script:', error);
+      showToast.error(t('sidebar.scripts.deleteFailed'));
     }
   };
 
@@ -1767,17 +1816,37 @@ const ScriptsList: React.FC = () => {
           </div>
         ) : (
           scripts.map((script) => (
-            <button
+            <div
               key={script.id}
-              type="button"
+              role="button"
+              tabIndex={0}
+              aria-label={script.title}
               className={`chat-list-item ${activeTabId === script.id ? 'active' : ''}`}
               onClick={() => openScriptTab(openTab, script.id, 'preview')}
               onDoubleClick={() => openScriptTab(openTab, script.id, 'pin')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  openScriptTab(openTab, script.id, 'pin');
+                  return;
+                }
+                if (event.key === ' ') {
+                  event.preventDefault();
+                  openScriptTab(openTab, script.id, 'preview');
+                }
+              }}
             >
               <div className="chat-item-content">
                 <div className="chat-item-title">{script.title}</div>
+                <div className="chat-item-date">{formatDate(script.updatedAt)}</div>
               </div>
-            </button>
+              <button
+                className="chat-item-delete"
+                onClick={(event) => handleDeleteScript(event, script.id)}
+                title={t('sidebar.scripts.deleteScript')}
+              >
+                ×
+              </button>
+            </div>
           ))
         )}
       </div>

@@ -18,6 +18,6 @@ describe('ScriptsView styles', () => {
     const css = fs.readFileSync(cssPath, 'utf8');
 
     expect(css).toMatch(/\.scripts-editor\s*\{[^}]*flex:\s*1;[^}]*min-height:\s*0;[^}]*\}/s);
-    expect(css).toMatch(/\.scripts-textarea\s*\{[^}]*flex:\s*1;[^}]*min-height:\s*0;[^}]*\}/s);
+    expect(css).toMatch(/\.scripts-monaco\s*\{[^}]*flex:\s*1;[^}]*min-height:\s*0;[^}]*\}/s);
   });
 });
