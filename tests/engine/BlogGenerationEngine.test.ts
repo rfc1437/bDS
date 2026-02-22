@@ -358,6 +358,7 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('data-template="post-list"');
     expect(html).toContain('/assets/pico.min.css');
     expect(html).toContain('/assets/lightbox.min.css');
+    expect(html).toContain('.lb-nav a, .lb-nav a:hover, .lb-nav a:focus-visible { border: 0; box-shadow: none; outline: none; text-decoration: none; }');
     expect(html).toContain('/assets/tag-cloud.js');
     expect(html).toContain('rel="alternate" type="application/rss+xml"');
     expect(html).toContain('href="/rss.xml"');

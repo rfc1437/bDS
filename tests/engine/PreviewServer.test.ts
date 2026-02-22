@@ -673,6 +673,27 @@ describe('PreviewServer', () => {
     expect(html).toContain('.single-post { margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }');
   });
 
+  it('resets lightbox nav anchor hover and focus styles to avoid frame artifacts over images', async () => {
+    const post = makePost({
+      id: 'lightbox-style-post',
+      title: 'Lightbox Style Post',
+      slug: 'lightbox-style-post',
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+      content: '{{gallery post="one" columns="2"}}',
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/2025/2/14/lightbox-style-post/`)).text();
+    expect(html).toContain('.lb-nav a, .lb-nav a:hover, .lb-nav a:focus-visible { border: 0; box-shadow: none; outline: none; text-decoration: none; }');
+  });
+
   it('renders single post title as h1', async () => {
     const post = makePost({
       id: 'single-title',
