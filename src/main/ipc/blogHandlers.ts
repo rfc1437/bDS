@@ -125,20 +125,8 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       };
     };
 
-    const coreResult = await taskManager.runTask({
-      id: `site-render-core-${taskTimestamp}`,
-      name: 'Render Site Core',
-      groupId: taskGroupId,
-      groupName: taskGroupName,
-      execute: async (onProgress) => {
-        return blogGenerationEngine.generate({
-          ...baseOptions,
-          sections: ['core'],
-        }, (progress, message) => onProgress(progress, message || ''));
-      },
-    });
-
-    const [singleResult, categoryResult, tagResult, dateResult] = await Promise.all([
+    const [coreResult, singleResult, categoryResult, tagResult, dateResult] = await Promise.all([
+      runSectionTask('core', 'Render Site Core', 'site-render-core'),
       runSectionTask('single', 'Render Single Posts', 'site-render-single'),
       runSectionTask('category', 'Render Category Archives', 'site-render-category'),
       runSectionTask('tag', 'Render Tag Archives', 'site-render-tag'),

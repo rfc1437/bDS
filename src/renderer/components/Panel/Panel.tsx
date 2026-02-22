@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store';
 import type { TaskProgress } from '../../../main/shared/electronApi';
+import { buildTaskEntries, summarizeTaskGroup } from '../../utils/taskGrouping';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import './Panel.css';
@@ -34,72 +35,6 @@ function toRelativePath(absolutePath: string, projectPath: string): string {
   }
 
   return normalizedAbsolute;
-}
-
-interface GroupedTaskEntry {
-  kind: 'group';
-  groupId: string;
-  groupName: string;
-  tasks: TaskProgress[];
-}
-
-interface SingleTaskEntry {
-  kind: 'single';
-  task: TaskProgress;
-}
-
-type TaskEntry = GroupedTaskEntry | SingleTaskEntry;
-
-function buildTaskEntries(tasks: TaskProgress[]): TaskEntry[] {
-  const groupMap = new Map<string, { groupName: string; tasks: TaskProgress[]; firstIndex: number }>();
-  const singles: Array<{ task: TaskProgress; index: number }> = [];
-
-  tasks.forEach((task, index) => {
-    if (!task.groupId) {
-      singles.push({ task, index });
-      return;
-    }
-
-    const existing = groupMap.get(task.groupId);
-    if (existing) {
-      existing.tasks.push(task);
-      return;
-    }
-
-    groupMap.set(task.groupId, {
-      groupName: task.groupName || task.groupId,
-      tasks: [task],
-      firstIndex: index,
-    });
-  });
-
-  const entries: Array<{ entry: TaskEntry; index: number }> = [];
-
-  for (const single of singles) {
-    entries.push({
-      index: single.index,
-      entry: {
-        kind: 'single',
-        task: single.task,
-      },
-    });
-  }
-
-  for (const [groupId, group] of groupMap.entries()) {
-    entries.push({
-      index: group.firstIndex,
-      entry: {
-        kind: 'group',
-        groupId,
-        groupName: group.groupName,
-        tasks: group.tasks,
-      },
-    });
-  }
-
-  return entries
-    .sort((a, b) => a.index - b.index)
-    .map((entry) => entry.entry);
 }
 
 export const Panel: React.FC = () => {
@@ -415,6 +350,16 @@ export const Panel: React.FC = () => {
                   return renderTaskRow(entry.task);
                 }
 
+                const summary = summarizeTaskGroup(entry.tasks);
+                const breakdownParts: string[] = [];
+                if (summary.running > 0) {
+                  breakdownParts.push(`${summary.running} ${t('common.running')}`);
+                }
+                if (summary.pending > 0) {
+                  breakdownParts.push(`${summary.pending} ${t('common.pending')}`);
+                }
+                const breakdownSuffix = breakdownParts.length > 0 ? ` · ${breakdownParts.join(' · ')}` : '';
+                const groupMetaText = `${summary.progressPercent}%${breakdownSuffix}`;
                 const expanded = !collapsedTaskGroups.has(entry.groupId);
                 return (
                   <div key={entry.groupId} className="task-group-row">
@@ -423,10 +368,11 @@ export const Panel: React.FC = () => {
                       className="task-group-toggle"
                       onClick={() => toggleTaskGroup(entry.groupId)}
                       aria-expanded={expanded}
-                      aria-label={`${entry.groupName} (${entry.tasks.length})`}
+                      aria-label={`${entry.groupName} (${entry.tasks.length}, ${groupMetaText})`}
                     >
                       <span className="task-group-chevron">{expanded ? '▾' : '▸'}</span>
                       <span className="task-group-title">{entry.groupName} ({entry.tasks.length})</span>
+                      <span className="task-group-meta">{groupMetaText}</span>
                     </button>
                     {expanded && entry.tasks.map((task) => renderTaskRow(task, true))}
                   </div>

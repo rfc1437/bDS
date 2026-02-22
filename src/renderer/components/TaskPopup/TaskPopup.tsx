@@ -1,74 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../../store';
 import type { TaskProgress } from '../../../main/shared/electronApi';
+import { buildTaskEntries, summarizeTaskGroup, type TaskEntry } from '../../utils/taskGrouping';
 import { useI18n } from '../../i18n';
 import './TaskPopup.css';
-
-interface GroupedTaskEntry {
-  kind: 'group';
-  groupId: string;
-  groupName: string;
-  tasks: TaskProgress[];
-}
-
-interface SingleTaskEntry {
-  kind: 'single';
-  task: TaskProgress;
-}
-
-type TaskEntry = GroupedTaskEntry | SingleTaskEntry;
-
-function buildTaskEntries(tasks: TaskProgress[]): TaskEntry[] {
-  const groupMap = new Map<string, { groupName: string; tasks: TaskProgress[]; firstIndex: number }>();
-  const singles: Array<{ task: TaskProgress; index: number }> = [];
-
-  tasks.forEach((task, index) => {
-    if (!task.groupId) {
-      singles.push({ task, index });
-      return;
-    }
-
-    const existing = groupMap.get(task.groupId);
-    if (existing) {
-      existing.tasks.push(task);
-      return;
-    }
-
-    groupMap.set(task.groupId, {
-      groupName: task.groupName || task.groupId,
-      tasks: [task],
-      firstIndex: index,
-    });
-  });
-
-  const groupedEntries: Array<{ entry: TaskEntry; index: number }> = [];
-
-  for (const single of singles) {
-    groupedEntries.push({
-      index: single.index,
-      entry: {
-        kind: 'single',
-        task: single.task,
-      },
-    });
-  }
-
-  for (const [groupId, group] of groupMap.entries()) {
-    groupedEntries.push({
-      index: group.firstIndex,
-      entry: {
-        kind: 'group',
-        groupId,
-        groupName: group.groupName,
-        tasks: group.tasks,
-      },
-    });
-  }
-
-  return groupedEntries
-    .sort((a, b) => a.index - b.index)
-    .map((item) => item.entry);
-}
 
 export const TaskPopup: React.FC = () => {
   const { t } = useI18n();
@@ -192,6 +127,16 @@ export const TaskPopup: React.FC = () => {
       return renderTaskItem(entry.task);
     }
 
+    const summary = summarizeTaskGroup(entry.tasks);
+    const breakdownParts: string[] = [];
+    if (summary.running > 0) {
+      breakdownParts.push(`${summary.running} ${t('common.running')}`);
+    }
+    if (summary.pending > 0) {
+      breakdownParts.push(`${summary.pending} ${t('common.pending')}`);
+    }
+    const breakdownSuffix = breakdownParts.length > 0 ? ` · ${breakdownParts.join(' · ')}` : '';
+    const groupMetaText = `${summary.progressPercent}%${breakdownSuffix}`;
     const isExpanded = !collapsedGroups.has(entry.groupId);
     return (
       <div key={entry.groupId} className="task-group">
@@ -199,10 +144,11 @@ export const TaskPopup: React.FC = () => {
           className="task-group-toggle"
           onClick={() => toggleGroup(entry.groupId)}
           aria-expanded={isExpanded}
-          aria-label={`${entry.groupName} (${entry.tasks.length})`}
+          aria-label={`${entry.groupName} (${entry.tasks.length}, ${groupMetaText})`}
         >
           <span className="task-group-chevron">{isExpanded ? '▾' : '▸'}</span>
           <span className="task-group-title">{entry.groupName} ({entry.tasks.length})</span>
+          <span className="task-group-meta">{groupMetaText}</span>
         </button>
         {isExpanded && entry.tasks.map((task) => renderTaskItem(task, 'task-group-child'))}
       </div>

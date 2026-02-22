@@ -1697,6 +1697,68 @@ describe('IPC Handlers', () => {
   // ============ Blog Handlers ============
   describe('Blog Handlers', () => {
     describe('blog:generateSitemap', () => {
+      it('should start section tasks without waiting for core completion', async () => {
+        const mockProject = createMockProject({
+          id: 'test-project',
+          dataPath: '/mock/data',
+        });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+
+        let resolveCoreTask: ((value: any) => void) | null = null;
+        const startedTaskNames: string[] = [];
+        const completedResult = {
+          path: '/mock/data/dir/html/sitemap.xml',
+          urlCount: 1,
+          postCount: 0,
+          feedPostCount: 0,
+          tagCount: 0,
+          categoryCount: 0,
+          archiveCount: 0,
+          pagesGenerated: 1,
+          feeds: {
+            rssPath: '/mock/data/dir/html/rss.xml',
+            atomPath: '/mock/data/dir/html/atom.xml',
+          },
+          changed: {
+            sitemap: true,
+            rss: true,
+            atom: true,
+          },
+        };
+
+        mockTaskManager.runTask.mockImplementation((task: any) => {
+          startedTaskNames.push(task.name);
+          if (task.name === 'Render Site Core') {
+            return new Promise((resolve) => {
+              resolveCoreTask = resolve;
+            });
+          }
+          return Promise.resolve(completedResult);
+        });
+
+        const generationPromise = invokeHandler('blog:generateSitemap');
+
+        for (let index = 0; index < 20 && startedTaskNames.length === 0; index += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        expect(startedTaskNames).toContain('Render Site Core');
+        expect(startedTaskNames).toContain('Render Single Posts');
+        expect(startedTaskNames).toContain('Render Category Archives');
+        expect(startedTaskNames).toContain('Render Tag Archives');
+        expect(startedTaskNames).toContain('Render Date Archives');
+
+        expect(resolveCoreTask).toBeTruthy();
+        resolveCoreTask?.(completedResult);
+
+        await generationPromise;
+      });
+
       it('should create separate background tasks for single, category, tag, and date rendering', async () => {
         const mockProject = createMockProject({
           id: 'test-project',

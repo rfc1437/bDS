@@ -39,7 +39,8 @@ describe('TaskPopup grouped tasks', () => {
         }),
         makeTask({
           taskId: 'site-render-date-1',
-          status: 'running',
+          status: 'pending',
+          progress: 0,
           message: 'Generating date archive pages',
           groupId: 'site-render-1',
           groupName: 'Render Site',
@@ -51,8 +52,9 @@ describe('TaskPopup grouped tasks', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /running/i }));
 
-    const groupToggle = screen.getByRole('button', { name: /Render Site \(2\)/i });
+    const groupToggle = screen.getByRole('button', { name: /Render Site \(1, \d+% · 1 running\)/i });
     expect(groupToggle).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Render Site \(1, \d+% · 1 pending\)/i })).toBeInTheDocument();
     expect(screen.getByText('Generating root pages')).toBeInTheDocument();
     expect(screen.getByText('Generating date archive pages')).toBeInTheDocument();
 

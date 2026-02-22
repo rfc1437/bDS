@@ -139,6 +139,12 @@
   font-weight: 600;
 }
 
+.task-group-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
 .task-group-child {
   padding-left: 28px;
 }

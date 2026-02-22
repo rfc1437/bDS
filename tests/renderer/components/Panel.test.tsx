@@ -263,7 +263,7 @@ describe('Panel', () => {
 
     render(<Panel />);
 
-    const parent = screen.getByRole('button', { name: 'Render Site (2)' });
+    const parent = screen.getByRole('button', { name: /Render Site \(2, \d+% · 1 running · 1 pending\)/ });
     expect(parent).toBeInTheDocument();
     expect(await screen.findByText('Render Site Core')).toBeInTheDocument();
     expect(screen.getByText('Render Tag Archives')).toBeInTheDocument();

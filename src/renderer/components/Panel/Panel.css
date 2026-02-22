@@ -115,6 +115,12 @@
   font-weight: 600;
 }
 
+.task-group-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
 .task-item {
   display: flex;
   align-items: center;
