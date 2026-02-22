@@ -95,6 +95,7 @@
     "simple-git": "^3.31.1",
     "snowball-stemmers": "^0.6.0",
     "turndown": "^7.2.2",
+    "vanilla-calendar-pro": "^3.1.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },

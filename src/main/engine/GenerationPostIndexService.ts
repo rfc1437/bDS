@@ -120,7 +120,7 @@ export function estimateGenerationUnitsBySection(params: {
   }
 
   return {
-    core: 4 + rootPages + pageRoutes,
+    core: 5 + rootPages + pageRoutes,
     single: posts.length,
     category: categoryPages,
     tag: tagPages,

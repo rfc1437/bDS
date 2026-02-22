@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PostData } from '../../src/main/engine/PostEngine';
 import {
+  buildCalendarArchiveData,
   buildSitemapAndFeeds,
   type GenerationPostIndexLike,
 } from '../../src/main/engine/GenerationSitemapFeedService';
@@ -71,6 +72,25 @@ function buildIndex(posts: PostData[]): GenerationPostIndexLike {
 }
 
 describe('GenerationSitemapFeedService', () => {
+  it('builds calendar archive data with year/month/day post counts', () => {
+    const publishedPosts = [
+      makePost({ id: '1', slug: 'a', createdAt: new Date('2025-01-15T10:00:00.000Z') }),
+      makePost({ id: '2', slug: 'b', createdAt: new Date('2025-01-15T12:00:00.000Z') }),
+      makePost({ id: '3', slug: 'c', createdAt: new Date('2025-02-01T08:00:00.000Z') }),
+      makePost({ id: '4', slug: 'd', createdAt: new Date('2026-01-01T08:00:00.000Z') }),
+    ];
+
+    const result = buildCalendarArchiveData(publishedPosts);
+
+    expect(result.years['2025']).toBe(3);
+    expect(result.years['2026']).toBe(1);
+    expect(result.months['2025-01']).toBe(2);
+    expect(result.months['2025-02']).toBe(1);
+    expect(result.days['2025-01-15']).toBe(2);
+    expect(result.days['2025-02-01']).toBe(1);
+    expect(result.days['2026-01-01']).toBe(1);
+  });
+
   it('builds canonical sitemap urls and paginated archive routes', () => {
     const publishedPosts = [
       makePost({

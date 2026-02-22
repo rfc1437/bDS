@@ -15,7 +15,7 @@ import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '..
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import { loadPublishedGenerationSets } from './GenerationPostSnapshotService';
-import { buildSitemapAndFeeds, collectSitemapArchiveMetadata } from './GenerationSitemapFeedService';
+import { buildCalendarArchiveData, buildSitemapAndFeeds, collectSitemapArchiveMetadata } from './GenerationSitemapFeedService';
 import { buildTargetedValidationPlan, planMissingValidationPaths } from './ValidationApplyPlannerService';
 import { compareSitemapToHtml } from './SiteValidationDiffService';
 import {
@@ -228,6 +228,7 @@ export class BlogGenerationEngine {
     let rssXml = '';
     let atomXml = '';
     let feedPosts: PostData[] = [];
+    let calendarJson = '';
 
     if (includeCore) {
       onProgress(5, 'Building sitemap XML...');
@@ -252,6 +253,7 @@ export class BlogGenerationEngine {
       rssXml = sitemapAndFeedResult.rssXml;
       atomXml = sitemapAndFeedResult.atomXml;
       feedPosts = sitemapAndFeedResult.feedPosts;
+      calendarJson = `${JSON.stringify(buildCalendarArchiveData(publishedListPosts), null, 2)}\n`;
 
       onProgress(8, 'Building RSS and Atom feeds...');
     } else if (includeCategory || includeTag || includeDate) {
@@ -275,6 +277,7 @@ export class BlogGenerationEngine {
     const sitemapPath = path.join(htmlDir, 'sitemap.xml');
     const rssPath = path.join(htmlDir, 'rss.xml');
     const atomPath = path.join(htmlDir, 'atom.xml');
+    const calendarPath = path.join(htmlDir, 'calendar.json');
 
     const estimatedUnitsBySection = estimateGenerationUnitsBySection({
       posts: publishedListPosts,
@@ -333,6 +336,13 @@ export class BlogGenerationEngine {
         content: atomXml,
       });
       reportUnitProgress('Atom feed written');
+      await writeFileIfHashChanged({
+        projectId: options.projectId,
+        filePath: calendarPath,
+        relativePath: 'calendar.json',
+        content: calendarJson,
+      });
+      reportUnitProgress('Calendar data written');
 
       onProgress(15, 'Copying assets...');
       await copyPreviewAssets(htmlDir, {

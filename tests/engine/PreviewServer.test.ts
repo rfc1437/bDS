@@ -305,11 +305,14 @@ describe('PreviewServer', () => {
     expect(rootHtml).toContain('href="/assets/pico.min.css"');
     expect(rootHtml).toContain('href="/assets/lightbox.min.css"');
     expect(rootHtml).toContain('href="/assets/highlight.min.css"');
+    expect(rootHtml).toContain('href="/assets/vanilla-calendar.min.css"');
     expect(rootHtml).toContain('src="/assets/lightbox.min.js"');
     expect(rootHtml).toContain('src="/assets/highlight.min.js"');
     expect(rootHtml).toContain('src="/assets/code-enhancements.js"');
     expect(rootHtml).toContain('src="/assets/d3.layout.cloud.js"');
     expect(rootHtml).toContain('src="/assets/tag-cloud.js"');
+    expect(rootHtml).toContain('src="/assets/vanilla-calendar.min.js"');
+    expect(rootHtml).toContain('src="/assets/calendar-runtime.js"');
     expect(rootHtml).not.toContain('function parseWords(');
     expect(rootHtml).not.toContain('cdn.jsdelivr.net');
 

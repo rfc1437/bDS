@@ -336,6 +336,9 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', 'assets', 'lightbox.min.css'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'assets', 'lightbox.min.js'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'assets', 'tag-cloud.js'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'assets', 'vanilla-calendar.min.css'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'assets', 'vanilla-calendar.min.js'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'assets', 'calendar-runtime.js'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'images', 'prev.png'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'images', 'next.png'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'images', 'close.png'))).toBe(true);
@@ -343,6 +346,60 @@ describe('BlogGenerationEngine', () => {
 
     const picoContent = await readFile(path.join(tempDir, 'html', 'assets', 'pico.min.css'), 'utf-8');
     expect(picoContent.length).toBeGreaterThan(0);
+  });
+
+  it('writes calendar.json and wires calendar UI in generated html', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'one',
+        title: 'One',
+        categories: ['news'],
+        createdAt: new Date('2025-03-15T10:00:00Z'),
+      }),
+      makePost({
+        id: '2',
+        slug: 'two',
+        title: 'Two',
+        categories: ['news'],
+        createdAt: new Date('2025-03-15T12:00:00Z'),
+      }),
+      makePost({
+        id: '3',
+        slug: 'three',
+        title: 'Three',
+        categories: ['news'],
+        createdAt: new Date('2025-04-01T10:00:00Z'),
+      }),
+    ];
+
+    await generate(posts, {
+      menu: {
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+        ],
+      },
+    });
+
+    const calendarJsonRaw = await readFile(path.join(tempDir, 'html', 'calendar.json'), 'utf-8');
+    const calendarJson = JSON.parse(calendarJsonRaw) as {
+      years: Record<string, number>;
+      months: Record<string, number>;
+      days: Record<string, number>;
+    };
+
+    expect(calendarJson.years['2025']).toBe(3);
+    expect(calendarJson.months['2025-03']).toBe(2);
+    expect(calendarJson.months['2025-04']).toBe(1);
+    expect(calendarJson.days['2025-03-15']).toBe(2);
+    expect(calendarJson.days['2025-04-01']).toBe(1);
+
+    const indexHtml = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
+    expect(indexHtml).toContain('class="blog-menu-calendar-button"');
+    expect(indexHtml).toContain('id="blog-calendar"');
+    expect(indexHtml).toContain('href="/assets/vanilla-calendar.min.css"');
+    expect(indexHtml).toContain('src="/assets/vanilla-calendar.min.js"');
+    expect(indexHtml).toContain('src="/assets/calendar-runtime.js"');
   });
 
   it('generates root index.html for published posts', async () => {

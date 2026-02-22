@@ -6,6 +6,7 @@ import type { PostData } from './PostEngine';
 import type { MenuDocument, MenuItemData } from './MenuEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
 import { CODE_ENHANCEMENTS_RUNTIME_JS } from './assets/codeEnhancementsRuntime';
+import { CALENDAR_RUNTIME_JS } from './assets/calendarRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
 import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
 
@@ -221,6 +222,18 @@ export const PREVIEW_ASSETS: Record<string, PreviewAssetDefinition> = {
   'tag-cloud.js': {
     contentType: 'application/javascript; charset=utf-8',
     sourceText: TAG_CLOUD_RUNTIME_JS,
+  },
+  'vanilla-calendar.min.css': {
+    modulePath: 'vanilla-calendar-pro/styles/index.css',
+    contentType: 'text/css; charset=utf-8',
+  },
+  'vanilla-calendar.min.js': {
+    modulePath: 'vanilla-calendar-pro',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+  'calendar-runtime.js': {
+    contentType: 'application/javascript; charset=utf-8',
+    sourceText: CALENDAR_RUNTIME_JS,
   },
 };
 

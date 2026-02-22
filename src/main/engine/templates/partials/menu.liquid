@@ -1,5 +1,48 @@
-{% if menu_items and menu_items.size > 0 %}
-  <nav class="blog-menu">
+<nav class="blog-menu">
+  {% if menu_items and menu_items.size > 0 %}
     {% render 'partials/menu-items', items: menu_items %}
-  </nav>
-{% endif %}
+  {% endif %}
+
+  <div class="blog-menu-calendar">
+    <button
+      type="button"
+      class="blog-menu-calendar-button"
+      data-blog-calendar-toggle
+      aria-label="{{ 'render.calendar.open' | i18n: language }}"
+      title="{{ 'render.calendar.open' | i18n: language }}"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+        <rect x="3" y="5" width="18" height="16" rx="2" ry="2"></rect>
+        <line x1="3" y1="9" x2="21" y2="9"></line>
+        <line x1="8" y1="3" x2="8" y2="7"></line>
+        <line x1="16" y1="3" x2="16" y2="7"></line>
+      </svg>
+    </button>
+
+    <section
+      id="blog-calendar"
+      class="blog-calendar-panel"
+      data-blog-calendar-panel
+      data-i18n-loading="{{ 'render.calendar.loading' | i18n: language }}"
+      data-i18n-error="{{ 'render.calendar.error' | i18n: language }}"
+      hidden
+    >
+      <header class="blog-calendar-header">
+        <strong>{{ 'render.calendar.title' | i18n: language }}</strong>
+        <button
+          type="button"
+          class="blog-calendar-close"
+          data-blog-calendar-close
+          aria-label="{{ 'render.calendar.close' | i18n: language }}"
+          title="{{ 'render.calendar.close' | i18n: language }}"
+        >
+          ×
+        </button>
+      </header>
+      <div class="blog-calendar-content">
+        <div data-blog-calendar-root></div>
+        <p class="blog-calendar-status" data-blog-calendar-status>{{ 'render.calendar.loading' | i18n: language }}</p>
+      </div>
+    </section>
+  </div>
+</nav>

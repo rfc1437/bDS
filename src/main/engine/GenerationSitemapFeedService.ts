@@ -44,6 +44,12 @@ export interface SitemapArchiveMetadata {
   latestPostUpdatedAt: string;
 }
 
+export interface CalendarArchiveData {
+  years: Record<string, number>;
+  months: Record<string, number>;
+  days: Record<string, number>;
+}
+
 function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
   if (post.createdAt instanceof Date) {
     return post.createdAt;
@@ -152,6 +158,42 @@ function excerptToXhtml(post: PostData): string {
 
 function escapeCdata(value: string): string {
   return value.replace(/]]>/g, ']]]]><![CDATA[>');
+}
+
+export function buildCalendarArchiveData(posts: PostData[]): CalendarArchiveData {
+  const yearCounts = new Map<string, number>();
+  const monthCounts = new Map<string, number>();
+  const dayCounts = new Map<string, number>();
+
+  for (const post of posts) {
+    const createdAt = resolvePostCreatedAt(post);
+    const year = String(createdAt.getFullYear());
+    const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+    const day = String(createdAt.getDate()).padStart(2, '0');
+
+    const monthKey = `${year}-${month}`;
+    const dayKey = `${monthKey}-${day}`;
+
+    yearCounts.set(year, (yearCounts.get(year) ?? 0) + 1);
+    monthCounts.set(monthKey, (monthCounts.get(monthKey) ?? 0) + 1);
+    dayCounts.set(dayKey, (dayCounts.get(dayKey) ?? 0) + 1);
+  }
+
+  const toObject = (entries: Map<string, number>): Record<string, number> => {
+    const result: Record<string, number> = {};
+
+    for (const key of Array.from(entries.keys()).sort()) {
+      result[key] = entries.get(key) ?? 0;
+    }
+
+    return result;
+  };
+
+  return {
+    years: toObject(yearCounts),
+    months: toObject(monthCounts),
+    days: toObject(dayCounts),
+  };
 }
 
 export function collectSitemapArchiveMetadata(params: {
