@@ -82,6 +82,14 @@ export interface SiteValidationApplyResult {
   removedEmptyDirCount: number;
 }
 
+interface GenerationPostIndex {
+  postsByCategory: Map<string, PostData[]>;
+  postsByTag: Map<string, PostData[]>;
+  postsByYear: Map<number, PostData[]>;
+  postsByYearMonth: Map<string, PostData[]>;
+  postsByYearMonthDay: Map<string, PostData[]>;
+}
+
 export function resolvePublicBaseUrl(publicUrl?: string): string | null {
   const trimmed = (publicUrl || '').trim();
   if (!trimmed) {
@@ -474,6 +482,7 @@ export class BlogGenerationEngine {
     }
 
     const latestPostUpdatedAt = publishedListPosts[0]?.updatedAt.toISOString() || now;
+    const generationPostIndex = this.buildGenerationPostIndex(publishedListPosts);
 
     onProgress(5, 'Building sitemap XML...');
 
@@ -490,46 +499,33 @@ export class BlogGenerationEngine {
     for (const [year, lastmod] of Array.from(years.entries()).sort((a, b) => b[0] - a[0])) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${year}`, lastmod.toISOString(), 'monthly', '0.5'));
 
-      const yearCount = publishedListPosts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year).length;
+      const yearCount = generationPostIndex.postsByYear.get(year)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/${year}`, yearCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
     }
     for (const [ym, lastmod] of Array.from(yearMonths.entries()).sort().reverse()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${ym}`, lastmod.toISOString(), 'monthly', '0.5'));
 
-      const [yearStr, monthStr] = ym.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const monthCount = publishedListPosts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month;
-      }).length;
+      const monthCount = generationPostIndex.postsByYearMonth.get(ym)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ym}`, monthCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
     }
     for (const [ymd, lastmod] of Array.from(yearMonthDays.entries()).sort().reverse()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${ymd}`, lastmod.toISOString(), 'monthly', '0.4'));
 
-      const [yearStr, monthStr, dayStr] = ymd.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const day = Number(dayStr);
-      const dayCount = publishedListPosts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
-      }).length;
+      const dayCount = generationPostIndex.postsByYearMonthDay.get(ymd)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ymd}`, dayCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.3');
     }
 
     for (const category of Array.from(allCategories).sort()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/category/${encodeURIComponent(category)}`, latestPostUpdatedAt, 'weekly', '0.6'));
 
-      const categoryCount = publishedListPosts.filter((post) => (post.categories || []).includes(category)).length;
+      const categoryCount = generationPostIndex.postsByCategory.get(category)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/category/${encodeURIComponent(category)}`, categoryCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
     }
 
     for (const tag of Array.from(allTags).sort()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/tag/${encodeURIComponent(tag)}`, latestPostUpdatedAt, 'weekly', '0.6'));
 
-      const tagCount = publishedListPosts.filter((post) => (post.tags || []).includes(tag)).length;
+      const tagCount = generationPostIndex.postsByTag.get(tag)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/tag/${encodeURIComponent(tag)}`, tagCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
     }
 
@@ -642,6 +638,7 @@ export class BlogGenerationEngine {
       yearMonths,
       yearMonthDays,
       maxPostsPerPage,
+      generationPostIndex,
     );
     const totalEstimatedUnits = [
       includeCore ? estimatedUnitsBySection.core : 0,
@@ -696,17 +693,30 @@ export class BlogGenerationEngine {
 
     if (includeCategory) {
       onProgress(50, 'Generating category pages...');
-      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
+      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress, generationPostIndex.postsByCategory);
     }
 
     if (includeTag) {
       onProgress(65, 'Generating tag pages...');
-      pagesGenerated += await this.generateTagPages(options.projectId, publishedListPosts, allTags, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
+      pagesGenerated += await this.generateTagPages(options.projectId, publishedListPosts, allTags, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress, generationPostIndex.postsByTag);
     }
 
     if (includeDate) {
       onProgress(80, 'Generating date archive pages...');
-      pagesGenerated += await this.generateDateArchivePages(options.projectId, publishedListPosts, years, yearMonths, yearMonthDays, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
+      pagesGenerated += await this.generateDateArchivePages(
+        options.projectId,
+        publishedListPosts,
+        years,
+        yearMonths,
+        yearMonthDays,
+        maxPostsPerPage,
+        htmlDir,
+        renderRoute,
+        reportUnitProgress,
+        generationPostIndex.postsByYear,
+        generationPostIndex.postsByYearMonth,
+        generationPostIndex.postsByYearMonthDay,
+      );
     }
 
     onProgress(100, `Site generated (${publishedPosts.length} posts, ${pagesGenerated} pages)`);
@@ -798,6 +808,7 @@ export class BlogGenerationEngine {
     }
     const publishedListPosts = Array.from(publishedListPostById.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const generationPostIndex = this.buildGenerationPostIndex(publishedListPosts);
 
     const now = new Date().toISOString();
     const allTags = new Set<string>();
@@ -866,46 +877,33 @@ export class BlogGenerationEngine {
     for (const [year, lastmod] of Array.from(years.entries()).sort((a, b) => b[0] - a[0])) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${year}`, lastmod.toISOString(), 'monthly', '0.5'));
 
-      const yearCount = publishedListPosts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year).length;
+      const yearCount = generationPostIndex.postsByYear.get(year)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/${year}`, yearCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
     }
     for (const [ym, lastmod] of Array.from(yearMonths.entries()).sort().reverse()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${ym}`, lastmod.toISOString(), 'monthly', '0.5'));
 
-      const [yearStr, monthStr] = ym.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const monthCount = publishedListPosts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month;
-      }).length;
+      const monthCount = generationPostIndex.postsByYearMonth.get(ym)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ym}`, monthCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.4');
     }
     for (const [ymd, lastmod] of Array.from(yearMonthDays.entries()).sort().reverse()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/${ymd}`, lastmod.toISOString(), 'monthly', '0.4'));
 
-      const [yearStr, monthStr, dayStr] = ymd.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const day = Number(dayStr);
-      const dayCount = publishedListPosts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
-      }).length;
+      const dayCount = generationPostIndex.postsByYearMonthDay.get(ymd)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/${ymd}`, dayCount, maxPostsPerPage, lastmod.toISOString(), 'monthly', '0.3');
     }
 
     for (const category of Array.from(allCategories).sort()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/category/${encodeURIComponent(category)}`, latestPostUpdatedAt, 'weekly', '0.6'));
 
-      const categoryCount = publishedListPosts.filter((post) => (post.categories || []).includes(category)).length;
+      const categoryCount = generationPostIndex.postsByCategory.get(category)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/category/${encodeURIComponent(category)}`, categoryCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
     }
 
     for (const tag of Array.from(allTags).sort()) {
       urls.push(buildSitemapUrl(`${options.baseUrl}/tag/${encodeURIComponent(tag)}`, latestPostUpdatedAt, 'weekly', '0.6'));
 
-      const tagCount = publishedListPosts.filter((post) => (post.tags || []).includes(tag)).length;
+      const tagCount = generationPostIndex.postsByTag.get(tag)?.length ?? 0;
       appendPaginatedSitemapUrls(urls, options.baseUrl, `/tag/${encodeURIComponent(tag)}`, tagCount, maxPostsPerPage, latestPostUpdatedAt, 'weekly', '0.5');
     }
 
@@ -1192,6 +1190,7 @@ export class BlogGenerationEngine {
       }
       const publishedListPosts = Array.from(publishedListPostById.values())
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const generationPostIndex = this.buildGenerationPostIndex(publishedListPosts);
 
       const allCategories = new Set<string>();
       const allTags = new Set<string>();
@@ -1367,6 +1366,7 @@ export class BlogGenerationEngine {
           htmlDir,
           renderRoute,
           onPageGenerated,
+          generationPostIndex.postsByCategory,
         );
       }
 
@@ -1379,6 +1379,7 @@ export class BlogGenerationEngine {
           htmlDir,
           renderRoute,
           onPageGenerated,
+          generationPostIndex.postsByTag,
         );
       }
 
@@ -1403,6 +1404,9 @@ export class BlogGenerationEngine {
           htmlDir,
           renderRoute,
           onPageGenerated,
+          generationPostIndex.postsByYear,
+          generationPostIndex.postsByYearMonth,
+          generationPostIndex.postsByYearMonthDay,
         );
       }
     }
@@ -1690,11 +1694,12 @@ export class BlogGenerationEngine {
     htmlDir: string,
     renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
+    postsByCategory?: Map<string, PostData[]>,
   ): Promise<number> {
     let count = 0;
 
     for (const category of Array.from(allCategories).sort()) {
-      const categoryPosts = posts.filter((post) => (post.categories || []).includes(category));
+      const categoryPosts = postsByCategory?.get(category) ?? posts.filter((post) => (post.categories || []).includes(category));
       if (categoryPosts.length === 0) continue;
 
       const totalPages = Math.max(1, Math.ceil(categoryPosts.length / maxPostsPerPage));
@@ -1732,11 +1737,12 @@ export class BlogGenerationEngine {
     htmlDir: string,
     renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
+    postsByTag?: Map<string, PostData[]>,
   ): Promise<number> {
     let count = 0;
 
     for (const tag of Array.from(allTags).sort()) {
-      const tagPosts = posts.filter((post) => (post.tags || []).includes(tag));
+      const tagPosts = postsByTag?.get(tag) ?? posts.filter((post) => (post.tags || []).includes(tag));
       if (tagPosts.length === 0) continue;
 
       const totalPages = Math.max(1, Math.ceil(tagPosts.length / maxPostsPerPage));
@@ -1776,11 +1782,14 @@ export class BlogGenerationEngine {
     htmlDir: string,
     renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
+    postsByYear?: Map<number, PostData[]>,
+    postsByYearMonth?: Map<string, PostData[]>,
+    postsByYearMonthDay?: Map<string, PostData[]>,
   ): Promise<number> {
     let count = 0;
 
     for (const [year] of Array.from(yearsMap.entries()).sort((a, b) => b[0] - a[0])) {
-      const yearPosts = posts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year);
+      const yearPosts = postsByYear?.get(year) ?? posts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year);
       count += await this.generatePaginatedListPages(
         projectId, yearPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
         `${year}`,
@@ -1791,7 +1800,7 @@ export class BlogGenerationEngine {
       const [yearStr, monthStr] = ym.split('/');
       const year = Number(yearStr);
       const month = Number(monthStr);
-      const monthPosts = posts.filter((post) => {
+      const monthPosts = postsByYearMonth?.get(ym) ?? posts.filter((post) => {
         const d = resolvePostCreatedAt(post);
         return d.getFullYear() === year && (d.getMonth() + 1) === month;
       });
@@ -1806,7 +1815,7 @@ export class BlogGenerationEngine {
       const year = Number(yearStr);
       const month = Number(monthStr);
       const day = Number(dayStr);
-      const dayPosts = posts.filter((post) => {
+      const dayPosts = postsByYearMonthDay?.get(ymd) ?? posts.filter((post) => {
         const d = resolvePostCreatedAt(post);
         return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
       });
@@ -1862,48 +1871,37 @@ export class BlogGenerationEngine {
     yearMonthsMap: Map<string, Date>,
     yearMonthDaysMap: Map<string, Date>,
     maxPostsPerPage: number,
+    postIndex?: GenerationPostIndex,
   ): Record<BlogGenerationSection, number> {
+    const index = postIndex ?? this.buildGenerationPostIndex(posts);
     const rootPages = this.countPaginatedPages(posts.length, maxPostsPerPage);
-    const pageRoutes = posts.filter((post) => (post.categories || []).includes('page')).length;
+    const pageRoutes = index.postsByCategory.get('page')?.length ?? 0;
 
     const categoryPages = Array.from(allCategories).reduce((sum, category) => {
-      const count = posts.filter((post) => (post.categories || []).includes(category)).length;
+      const count = index.postsByCategory.get(category)?.length ?? 0;
       return sum + this.countPaginatedPages(count, maxPostsPerPage);
     }, 0);
 
     const tagPages = Array.from(allTags).reduce((sum, tag) => {
-      const count = posts.filter((post) => (post.tags || []).includes(tag)).length;
+      const count = index.postsByTag.get(tag)?.length ?? 0;
       return sum + this.countPaginatedPages(count, maxPostsPerPage);
     }, 0);
 
     let datePages = 0;
 
     for (const [year] of yearsMap) {
-      const yearPosts = posts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year);
-      datePages += this.countPaginatedPages(yearPosts.length, maxPostsPerPage);
+      const count = index.postsByYear.get(year)?.length ?? 0;
+      datePages += this.countPaginatedPages(count, maxPostsPerPage);
     }
 
     for (const [ym] of yearMonthsMap) {
-      const [yearStr, monthStr] = ym.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const monthPosts = posts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month;
-      });
-      datePages += this.countPaginatedPages(monthPosts.length, maxPostsPerPage);
+      const count = index.postsByYearMonth.get(ym)?.length ?? 0;
+      datePages += this.countPaginatedPages(count, maxPostsPerPage);
     }
 
     for (const [ymd] of yearMonthDaysMap) {
-      const [yearStr, monthStr, dayStr] = ymd.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const day = Number(dayStr);
-      const dayPosts = posts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
-      });
-      datePages += this.countPaginatedPages(dayPosts.length, maxPostsPerPage);
+      const count = index.postsByYearMonthDay.get(ymd)?.length ?? 0;
+      datePages += this.countPaginatedPages(count, maxPostsPerPage);
     }
 
     return {
@@ -1920,6 +1918,52 @@ export class BlogGenerationEngine {
       return 0;
     }
     return Math.max(1, Math.ceil(totalPosts / maxPostsPerPage));
+  }
+
+  private buildGenerationPostIndex(posts: PostData[]): GenerationPostIndex {
+    const postsByCategory = new Map<string, PostData[]>();
+    const postsByTag = new Map<string, PostData[]>();
+    const postsByYear = new Map<number, PostData[]>();
+    const postsByYearMonth = new Map<string, PostData[]>();
+    const postsByYearMonthDay = new Map<string, PostData[]>();
+
+    const append = <TKey extends string | number>(target: Map<TKey, PostData[]>, key: TKey, post: PostData) => {
+      const existing = target.get(key);
+      if (existing) {
+        existing.push(post);
+        return;
+      }
+      target.set(key, [post]);
+    };
+
+    for (const post of posts) {
+      for (const category of post.categories || []) {
+        append(postsByCategory, category, post);
+      }
+
+      for (const tag of post.tags || []) {
+        append(postsByTag, tag, post);
+      }
+
+      const createdAt = resolvePostCreatedAt(post);
+      const year = createdAt.getFullYear();
+      const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+      const day = String(createdAt.getDate()).padStart(2, '0');
+      const ym = `${year}/${month}`;
+      const ymd = `${year}/${month}/${day}`;
+
+      append(postsByYear, year, post);
+      append(postsByYearMonth, ym, post);
+      append(postsByYearMonthDay, ymd, post);
+    }
+
+    return {
+      postsByCategory,
+      postsByTag,
+      postsByYear,
+      postsByYearMonth,
+      postsByYearMonthDay,
+    };
   }
 }
 

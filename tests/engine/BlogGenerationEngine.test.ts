@@ -640,6 +640,41 @@ describe('BlogGenerationEngine', () => {
     expect(filteredCallCount).toBeLessThanOrEqual(8);
   });
 
+  it('reduces repeated in-memory filtering across category tag and date generation', async () => {
+    const posts: PostData[] = [];
+    for (let i = 0; i < 30; i += 1) {
+      const month = (i % 6) + 1;
+      const day = (i % 5) + 1;
+      posts.push(makePost({
+        id: `perf-${i}`,
+        slug: `perf-${i}`,
+        categories: [`cat-${i % 10}`],
+        tags: [`tag-${i % 10}`],
+        createdAt: new Date(`2025-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T10:00:00Z`),
+      }));
+    }
+
+    setupPosts(posts);
+
+    const filterSpy = vi.spyOn(Array.prototype, 'filter');
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      maxPostsPerPage: 5,
+      sections: ['category', 'tag', 'date'],
+    }, vi.fn());
+
+    const filterCallCount = filterSpy.mock.calls.length;
+    filterSpy.mockRestore();
+
+    expect(filterCallCount).toBeLessThanOrEqual(750);
+  });
+
   it('validates sitemap against html folder without rendering missing pages', async () => {
     const posts = [
       makePost({

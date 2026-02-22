@@ -4,10 +4,15 @@ import { getPicoStylesheetHref, sanitizePicoTheme } from '../shared/picoThemes';
 import {
   buildTemplateMenuItems,
   clampMaxPostsPerPage,
+  parseRoutePagination,
   resolvePageTitle,
+  type PostEngineContract,
   type CategoryRenderSettings,
   type HtmlRewriteContext,
+  type PageRenderer,
 } from './PageRenderer';
+import type { CategoryMetadata } from './MetaEngine';
+import type { PostData, PostFilter } from './PostEngine';
 
 export interface SharedActiveProjectContext {
   projectId: string;
@@ -26,7 +31,7 @@ export interface SharedRouteRenderOptions {
   singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
 }
 
-export interface SharedRouteRenderServices<CategoryMetadata> {
+export interface SharedRouteRenderServices<TCategoryMetadata> {
   postEngine: {
     setProjectContext: (projectId: string, dataDir?: string) => void;
   };
@@ -46,32 +51,221 @@ export interface SharedRouteRenderServices<CategoryMetadata> {
     setProjectContext: (projectId: string, dataDir?: string) => void;
     getMenu: () => Promise<MenuDocument>;
   };
-  resolveCategoryMetadata: (metadata: ProjectMetadata | null) => Record<string, CategoryMetadata>;
+  resolveCategoryMetadata: (metadata: ProjectMetadata | null) => Record<string, TCategoryMetadata>;
   resolveCategorySettings: (metadata: ProjectMetadata | null) => Record<string, CategoryRenderSettings>;
   resolveListExcludedCategories: (settings: Record<string, CategoryRenderSettings>) => string[];
   buildHtmlRewriteContext: () => Promise<HtmlRewriteContext>;
-  resolveRoute: (
-    pathname: string,
-    maxPostsPerPage: number,
-    rewriteContext: HtmlRewriteContext,
-    pageContext: {
-      pageTitle: string;
-      language: string;
-      menuItems: ReturnType<typeof buildTemplateMenuItems>;
-      picoStylesheetHref: string;
-      htmlThemeAttribute?: string;
-    },
-    categorySettings: Record<string, CategoryRenderSettings>,
-    categoryMetadata: Record<string, CategoryMetadata>,
-    listExcludedCategories: string[],
+  pageRenderer: Pick<PageRenderer, 'renderPostList' | 'renderSinglePost'>;
+  postEngineForMacros?: PostEngineContract;
+  loadPublishedSnapshotsPage: (
+    filter: PostFilter,
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
+  ) => Promise<{ posts: PostData[]; totalPosts: number }>;
+  loadPublishedSnapshots: (
+    filter: PostFilter,
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
+  ) => Promise<PostData[]>;
+  loadPostsForDayPage: (
+    year: number,
+    month: number,
+    day: number,
+    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
+  ) => Promise<{ posts: PostData[]; totalPosts: number }>;
+  findSinglePostBySlug: (
+    slug: string,
     singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
-  ) => Promise<string | null>;
+    dateFilter?: { year: number; month: number; day?: number },
+  ) => Promise<PostData | null>;
 }
 
-export async function renderRouteWithSharedContext<CategoryMetadata>(
+async function resolveRouteWithSharedServices(
+  pathname: string,
+  maxPostsPerPage: number,
+  rewriteContext: HtmlRewriteContext,
+  pageContext: {
+    pageTitle: string;
+    language: string;
+    menuItems: ReturnType<typeof buildTemplateMenuItems>;
+    picoStylesheetHref: string;
+    htmlThemeAttribute?: string;
+  },
+  categorySettings: Record<string, CategoryRenderSettings>,
+  categoryMetadata: Record<string, CategoryMetadata>,
+  listExcludedCategories: string[],
+  services: SharedRouteRenderServices<CategoryMetadata>,
+  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+): Promise<string | null> {
+  const routePagination = parseRoutePagination(pathname);
+  if (!routePagination) {
+    return null;
+  }
+
+  const pagedPathname = routePagination.pathname;
+  const page = routePagination.page;
+  const pageOptions = {
+    maxPostsPerPage,
+    page,
+  };
+
+  if (pagedPathname === '/') {
+    const result = await services.loadPublishedSnapshotsPage({ status: 'published', excludeCategories: listExcludedCategories }, pageOptions);
+    return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'date',
+      archiveContext: { kind: 'root' },
+      basePathname: pagedPathname,
+      pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+      categorySettings,
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const tagMatch = pagedPathname.match(/^\/tag\/([^/]+)$/);
+  if (tagMatch) {
+    const tag = tagMatch[1];
+    const result = await services.loadPublishedSnapshotsPage({ status: 'published', tags: [tag], excludeCategories: listExcludedCategories }, pageOptions);
+    return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'non-date',
+      archiveContext: { kind: 'tag', name: tag },
+      basePathname: pagedPathname,
+      pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+      categorySettings,
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
+  if (categoryMatch) {
+    const category = categoryMatch[1];
+    const categoryDisplayTitle = categoryMetadata[category]?.title?.trim() || category;
+    const result = await services.loadPublishedSnapshotsPage({ status: 'published', categories: [category], excludeCategories: listExcludedCategories }, pageOptions);
+    return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'non-date',
+      archiveContext: { kind: 'category', name: categoryDisplayTitle },
+      basePathname: pagedPathname,
+      pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+      categorySettings,
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const daySlugMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
+  if (daySlugMatch) {
+    const year = Number(daySlugMatch[1]);
+    const month = Number(daySlugMatch[2]);
+    const day = Number(daySlugMatch[3]);
+    const slug = daySlugMatch[4];
+    const post = await services.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1, day });
+    if (!post) return null;
+    return services.pageRenderer.renderSinglePost(post, rewriteContext, {
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const dayMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (dayMatch) {
+    const year = Number(dayMatch[1]);
+    const month = Number(dayMatch[2]);
+    const day = Number(dayMatch[3]);
+    const result = await services.loadPostsForDayPage(year, month, day, {
+      ...pageOptions,
+      excludeCategories: listExcludedCategories,
+    });
+    return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'date',
+      archiveContext: { kind: 'day', year, month, day },
+      basePathname: pagedPathname,
+      pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+      categorySettings,
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const monthMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})$/);
+  if (monthMatch) {
+    const year = Number(monthMatch[1]);
+    const month = Number(monthMatch[2]);
+    if (month < 1 || month > 12) return null;
+    const result = await services.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1, excludeCategories: listExcludedCategories }, pageOptions);
+    return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'date',
+      archiveContext: { kind: 'month', year, month },
+      basePathname: pagedPathname,
+      pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+      categorySettings,
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const yearMatch = pagedPathname.match(/^\/(\d{4})$/);
+  if (yearMatch) {
+    const year = Number(yearMatch[1]);
+    const result = await services.loadPublishedSnapshotsPage({ status: 'published', year, excludeCategories: listExcludedCategories }, pageOptions);
+    return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
+      archiveGrouping: true,
+      routeKind: 'date',
+      archiveContext: { kind: 'year', year },
+      basePathname: pagedPathname,
+      pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
+      categorySettings,
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
+  if (pageSlugMatch) {
+    const slug = pageSlugMatch[1];
+    const pages = await services.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
+    const pagePost = pages.find((candidate) => candidate.slug === slug) || null;
+    if (!pagePost) return null;
+    return services.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
+      page_title: pageContext.pageTitle,
+      language: pageContext.language,
+      menu_items: pageContext.menuItems,
+      pico_stylesheet_href: pageContext.picoStylesheetHref,
+      html_theme_attribute: pageContext.htmlThemeAttribute,
+    }, services.postEngineForMacros);
+  }
+
+  return null;
+}
+
+export async function renderRouteWithSharedContext<TCategoryMetadata>(
   pathname: string,
   options: SharedRouteRenderOptions,
-  services: SharedRouteRenderServices<CategoryMetadata>,
+  services: SharedRouteRenderServices<TCategoryMetadata>,
 ): Promise<string | null> {
   services.postEngine.setProjectContext(options.projectContext.projectId, options.projectContext.dataDir);
   services.mediaEngine.setProjectContext?.(options.projectContext.projectId, options.projectContext.dataDir, options.projectContext.dataDir);
@@ -101,11 +295,11 @@ export async function renderRouteWithSharedContext<CategoryMetadata>(
   const htmlRewriteContext = await services.buildHtmlRewriteContext();
   const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
 
-  return services.resolveRoute(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {
+  return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {
     pageTitle,
     language,
     menuItems,
     picoStylesheetHref,
     htmlThemeAttribute: options.htmlThemeAttribute,
-  }, categorySettings, categoryMetadata, listExcludedCategories, options.singlePostOptions);
+  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.singlePostOptions);
 }

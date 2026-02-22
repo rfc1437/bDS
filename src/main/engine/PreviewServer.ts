@@ -177,25 +177,12 @@ export class PreviewServer {
       resolveCategorySettings: (metadata) => this.resolveCategorySettings(metadata),
       resolveListExcludedCategories: (settings) => this.resolveListExcludedCategories(settings),
       buildHtmlRewriteContext: () => this.buildHtmlRewriteContext(),
-      resolveRoute: (
-        normalizedPathname,
-        maxPostsPerPage,
-        rewriteContext,
-        pageContext,
-        categorySettings,
-        categoryMetadata,
-        listExcludedCategories,
-        singlePostOptions,
-      ) => this.resolveRoute(
-        normalizedPathname,
-        maxPostsPerPage,
-        rewriteContext,
-        pageContext,
-        categorySettings,
-        categoryMetadata,
-        listExcludedCategories,
-        singlePostOptions,
-      ),
+      pageRenderer: this.pageRenderer,
+      postEngineForMacros: this.postEngine,
+      loadPublishedSnapshotsPage: (filter, pagination) => this.loadPublishedSnapshotsPage(filter, pagination),
+      loadPublishedSnapshots: (filter, pagination) => this.loadPublishedSnapshots(filter, pagination),
+      loadPostsForDayPage: (year, month, day, pagination) => this.loadPostsForDayPage(year, month, day, pagination),
+      findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => this.findSinglePostBySlug(slug, singlePostOptions, dateFilter),
     });
   }
 
