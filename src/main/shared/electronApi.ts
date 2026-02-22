@@ -133,6 +133,23 @@ export interface MediaSearchResult {
   createdAt: string;
 }
 
+export type ScriptKind = 'macro' | 'utility' | 'transform';
+
+export interface ScriptData {
+  id: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  kind: ScriptKind;
+  entrypoint: string;
+  enabled: boolean;
+  version: number;
+  filePath: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TaskProgress {
   taskId: string;
   name: string;
@@ -527,6 +544,27 @@ export interface ElectronAPI {
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
     getTags: () => Promise<string[]>;
     getTagsWithCounts: () => Promise<TagCount[]>;
+  };
+  scripts: {
+    create: (data: {
+      title: string;
+      kind: ScriptKind;
+      content: string;
+      slug?: string;
+      entrypoint?: string;
+      enabled?: boolean;
+    }) => Promise<ScriptData>;
+    update: (id: string, data: {
+      title?: string;
+      kind?: ScriptKind;
+      content?: string;
+      slug?: string;
+      entrypoint?: string;
+      enabled?: boolean;
+    }) => Promise<ScriptData | null>;
+    delete: (id: string) => Promise<boolean>;
+    get: (id: string) => Promise<ScriptData | null>;
+    getAll: () => Promise<ScriptData[]>;
   };
   postMedia: {
     link: (postId: string, mediaId: string) => Promise<MediaLinkData>;

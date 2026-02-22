@@ -5,6 +5,7 @@ import {
   getGitDiffCommitTabSpec,
   getGitDiffFileTabSpec,
   getImportTabSpec,
+  getScriptTabSpec,
   parseGitDiffTabId,
   openChatTab,
   getSingletonToolTabSpec,
@@ -12,6 +13,7 @@ import {
   openGitDiffCommitTab,
   openGitDiffFileTab,
   openImportTab,
+  openScriptTab,
   openSingletonToolTab,
 } from '../../../src/renderer/navigation/tabPolicy';
 
@@ -20,6 +22,7 @@ describe('tabPolicy', () => {
     expect(getSingletonToolTabSpec('settings')).toEqual({ type: 'settings', id: 'settings', isTransient: false });
     expect(getSingletonToolTabSpec('tags')).toEqual({ type: 'tags', id: 'tags', isTransient: false });
     expect(getSingletonToolTabSpec('style')).toEqual({ type: 'style', id: 'style', isTransient: false });
+    expect(getSingletonToolTabSpec('scripts')).toEqual({ type: 'scripts', id: 'scripts', isTransient: false });
     expect(getSingletonToolTabSpec('menu-editor')).toEqual({ type: 'menu-editor', id: 'menu-editor', isTransient: false });
     expect(getSingletonToolTabSpec('documentation')).toEqual({ type: 'documentation', id: 'documentation', isTransient: false });
     expect(getSingletonToolTabSpec('metadata-diff')).toEqual({ type: 'metadata-diff', id: 'metadata-diff', isTransient: false });
@@ -90,6 +93,35 @@ describe('tabPolicy', () => {
     expect(opened).toEqual([
       { type: 'chat', id: 'conversation-2', isTransient: false },
       { type: 'import', id: 'definition-2', isTransient: false },
+    ]);
+  });
+
+  it('provides canonical script tab spec for preview and pin intents', () => {
+    expect(getScriptTabSpec('script-1', 'preview')).toEqual({
+      type: 'scripts',
+      id: 'script-1',
+      isTransient: true,
+    });
+
+    expect(getScriptTabSpec('script-1', 'pin')).toEqual({
+      type: 'scripts',
+      id: 'script-1',
+      isTransient: false,
+    });
+  });
+
+  it('opens script tabs from shared policy', () => {
+    const opened: Array<{ type: string; id: string; isTransient: boolean }> = [];
+    const openTab = (tab: { type: string; id: string; isTransient: boolean }) => {
+      opened.push(tab);
+    };
+
+    openScriptTab(openTab, 'script-preview', 'preview');
+    openScriptTab(openTab, 'script-pin', 'pin');
+
+    expect(opened).toEqual([
+      { type: 'scripts', id: 'script-preview', isTransient: true },
+      { type: 'scripts', id: 'script-pin', isTransient: false },
     ]);
   });
 

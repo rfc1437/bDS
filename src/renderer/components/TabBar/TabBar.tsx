@@ -80,6 +80,10 @@ const getTabTitle = (
     return tr('siteValidation.tabTitle');
   }
 
+  if (tab.type === 'scripts') {
+    return tr('tabBar.scripts');
+  }
+
   return tr('tabBar.unknown');
 };
 
@@ -156,6 +160,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 8 1.5zm0 1a5.5 5.5 0 0 1 4.39 8.82l-.88-.88a.5.5 0 0 0-.7.7l.8.8A5.5 5.5 0 1 1 8 2.5zm2.35 3.15L7 9 5.65 7.65a.5.5 0 1 0-.7.7l1.7 1.7a.5.5 0 0 0 .7 0l3.7-3.7a.5.5 0 1 0-.7-.7z"/>
+        </svg>
+      );
+    case 'scripts':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20 3H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7v2H8v2h8v-2h-3v-2h7a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zM5 14V5h14v9H5zm2-7.5L9.5 9 7 11.5l1.4 1.4L12.3 9 8.4 5.1 7 6.5zm6.5 5.5h4v-2h-4v2z"/>
         </svg>
       );
     default:

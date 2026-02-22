@@ -13,7 +13,7 @@ import type {
 const STORAGE_KEY = 'bds-app-state';
 
 // Tab types
-export type TabType = 'post' | 'media' | 'settings' | 'style' | 'tags' | 'chat' | 'import' | 'menu-editor' | 'metadata-diff' | 'git-diff' | 'documentation' | 'site-validation';
+export type TabType = 'post' | 'media' | 'settings' | 'style' | 'tags' | 'chat' | 'import' | 'menu-editor' | 'metadata-diff' | 'git-diff' | 'documentation' | 'site-validation' | 'scripts';
 
 export interface Tab {
   type: TabType;
@@ -42,6 +42,13 @@ export type EditorMode = 'wysiwyg' | 'markdown' | 'preview';
 export type GitDiffViewStyle = 'inline' | 'side-by-side';
 export type PanelTab = 'tasks' | 'output' | 'post-links' | 'git-log';
 
+export interface PanelOutputEntry {
+  id: string;
+  message: string;
+  createdAt: string;
+  kind: 'stdout' | 'result' | 'error';
+}
+
 export interface GitDiffPreferences {
   wordWrap: boolean;
   viewStyle: GitDiffViewStyle;
@@ -63,6 +70,7 @@ interface AppState {
   sidebarVisible: boolean;
   panelVisible: boolean;
   panelActiveTab: PanelTab;
+  panelOutputEntries: PanelOutputEntry[];
   selectedPostId: string | null;
   selectedMediaId: string | null;
   preferredEditorMode: EditorMode;
@@ -112,6 +120,8 @@ interface AppState {
   toggleSidebar: () => void;
   togglePanel: () => void;
   setPanelActiveTab: (tab: PanelTab) => void;
+  appendPanelOutputEntry: (entry: PanelOutputEntry) => void;
+  clearPanelOutputEntries: () => void;
   setSelectedPost: (id: string | null) => void;
   setSelectedMedia: (id: string | null) => void;
   setPreferredEditorMode: (mode: EditorMode) => void;
@@ -166,6 +176,7 @@ export const useAppStore = create<AppState>()(
       sidebarVisible: true,
       panelVisible: false,
       panelActiveTab: 'tasks',
+      panelOutputEntries: [],
       selectedPostId: null,
       selectedMediaId: null,
       preferredEditorMode: 'wysiwyg',
@@ -290,6 +301,10 @@ export const useAppStore = create<AppState>()(
       toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
       togglePanel: () => set((state) => ({ panelVisible: !state.panelVisible })),
       setPanelActiveTab: (panelActiveTab) => set({ panelActiveTab }),
+      appendPanelOutputEntry: (entry) => set((state) => ({
+        panelOutputEntries: [...state.panelOutputEntries, entry],
+      })),
+      clearPanelOutputEntries: () => set({ panelOutputEntries: [] }),
       setSelectedPost: (id) => set({ selectedPostId: id }),
       setSelectedMedia: (id) => set({ selectedMediaId: id }),
       setPreferredEditorMode: (mode) => set({ preferredEditorMode: mode }),

@@ -43,6 +43,7 @@ export const Panel: React.FC = () => {
     panelVisible,
     panelActiveTab,
     setPanelActiveTab,
+    panelOutputEntries,
     tasks,
     tabs,
     activeTabId,
@@ -383,7 +384,17 @@ export const Panel: React.FC = () => {
         )}
 
         {effectiveActivePanelTab === 'output' && (
-          <div className="panel-empty">{t('panel.noOutput')}</div>
+          panelOutputEntries.length === 0 ? (
+            <div className="panel-empty">{t('panel.noOutput')}</div>
+          ) : (
+            <div className="output-list">
+              {panelOutputEntries.map((entry) => (
+                <div key={entry.id} className={`output-item output-${entry.kind}`}>
+                  {entry.message}
+                </div>
+              ))}
+            </div>
+          )
         )}
 
         {effectiveActivePanelTab === 'post-links' && (

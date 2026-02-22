@@ -19,6 +19,7 @@ import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { SiteValidationView } from '../SiteValidationView';
+import { ScriptsView } from '../ScriptsView/ScriptsView';
 import { AutoSaveManager, getContrastColor } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
@@ -1796,6 +1797,7 @@ export const Editor: React.FC = () => {
         : <Dashboard />,
     documentation: () => <DocumentationView />,
     'site-validation': () => <SiteValidationView />,
+    scripts: () => <ScriptsView scriptId={editorRoute.tabId} />,
     post: () => (editorRoute.tabId ? <PostEditor key={editorRoute.tabId} postId={editorRoute.tabId} /> : <Dashboard />),
     media: () => (editorRoute.tabId ? <MediaEditor key={editorRoute.tabId} mediaId={editorRoute.tabId} /> : <Dashboard />),
     dashboard: () => <Dashboard />,

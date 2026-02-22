@@ -235,6 +235,24 @@ describe('Panel', () => {
     expect(screen.getByRole('tab', { name: 'Output' })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('renders output entries when output tab is active', () => {
+    useAppStore.setState({
+      panelActiveTab: 'output',
+      panelOutputEntries: [
+        {
+          id: 'output-1',
+          message: 'hello from script',
+          createdAt: '2026-02-22T00:00:00.000Z',
+          kind: 'stdout',
+        },
+      ],
+    });
+
+    render(<Panel />);
+
+    expect(screen.getByText('hello from script')).toBeInTheDocument();
+  });
+
   it('renders grouped tasks as expandable parent rows with child task names in tasks tab', async () => {
     useAppStore.setState({
       tasks: [

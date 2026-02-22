@@ -8,7 +8,7 @@ import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/Setti
 import { scrollToTagsSection, TagsCategory } from '../TagsView';
 import { activateSidebarSection } from '../../navigation/sectionActivation';
 import { getPersistedSidebarSection, setPersistedSidebarSection } from '../../navigation/sidebarUiPersistence';
-import { openChatTab, openEntityTab, openImportTab, openSingletonToolTab } from '../../navigation/tabPolicy';
+import { openChatTab, openEntityTab, openImportTab, openScriptTab, openSingletonToolTab } from '../../navigation/tabPolicy';
 import { createAndFocusPost } from '../../navigation/postCreation';
 import type { SidebarView } from '../../navigation/sidebarViewRegistry';
 import { useI18n } from '../../i18n';
@@ -1666,6 +1666,125 @@ const ImportList: React.FC = () => {
   );
 };
 
+const ScriptsList: React.FC = () => {
+  const { t } = useI18n();
+  const { openTab, activeTabId } = useAppStore();
+  const [scripts, setScripts] = useState<Array<{ id: string; title: string }>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadScripts = useCallback(async () => {
+    const items = await window.electronAPI?.scripts.getAll();
+    if (!items) {
+      return;
+    }
+
+    setScripts(items.map((item) => ({ id: item.id, title: item.title })));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInitialScripts = async () => {
+      setIsLoading(true);
+      try {
+        const items = await window.electronAPI?.scripts.getAll();
+        if (cancelled) {
+          return;
+        }
+
+        setScripts((items ?? []).map((item) => ({ id: item.id, title: item.title })));
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadInitialScripts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleCreateScript = async () => {
+    try {
+      const created = await window.electronAPI?.scripts.create({
+        title: t('sidebar.scripts.newScript'),
+        kind: 'utility',
+        content: 'print("new script")',
+        entrypoint: 'render',
+        enabled: true,
+      });
+
+      if (!created) {
+        return;
+      }
+
+      setScripts((prev) => [
+        { id: created.id, title: created.title },
+        ...prev.filter((script) => script.id !== created.id),
+      ]);
+      openScriptTab(openTab, created.id, 'pin');
+      void loadScripts();
+    } catch (error) {
+      console.error('Failed to create script:', error);
+      showToast.error(t('sidebar.scripts.createFailed'));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="chat-list">
+        <div className="chat-list-header">
+          <span>{t('sidebar.scripts.header')}</span>
+        </div>
+        <div className="chat-loading">{t('sidebar.loading')}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-list">
+      <div className="chat-list-header">
+        <span>{t('sidebar.scripts.header')}</span>
+        <button
+          className="chat-new-button"
+          onClick={handleCreateScript}
+          aria-label={t('sidebar.scripts.newScript')}
+          title={t('sidebar.scripts.newScript')}
+        >
+          +
+        </button>
+      </div>
+      <div className="chat-list-items">
+        {scripts.length === 0 ? (
+          <div className="chat-empty">
+            <p>{t('sidebar.scripts.none')}</p>
+            <button className="chat-start-button" onClick={handleCreateScript}>
+              {t('sidebar.scripts.createScript')}
+            </button>
+          </div>
+        ) : (
+          scripts.map((script) => (
+            <button
+              key={script.id}
+              type="button"
+              className={`chat-list-item ${activeTabId === script.id ? 'active' : ''}`}
+              onClick={() => openScriptTab(openTab, script.id, 'preview')}
+              onDoubleClick={() => openScriptTab(openTab, script.id, 'pin')}
+            >
+              <div className="chat-item-content">
+                <div className="chat-item-title">{script.title}</div>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const Sidebar: React.FC = () => {
   const { activeView, sidebarVisible } = useAppStore();
 
@@ -1677,6 +1796,7 @@ export const Sidebar: React.FC = () => {
     posts: <PostsList mode="posts" isActive={true} />,
     pages: <PostsList mode="pages" isActive={true} />,
     media: <MediaList />,
+    scripts: <ScriptsList />,
     settings: <SettingsNav />,
     tags: <TagsNav />,
     chat: <ChatList />,

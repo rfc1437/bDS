@@ -108,10 +108,10 @@ Baseline benchmark (22 Feb 2026, local macOS run):
 Objective: user can create/run scripts and see output.
 
 Deliverables:
-- [ ] Script storage model (DB index + filesystem source in `scripts/*.py`).
-- [ ] CRUD APIs in `main/engine` + `ipc` handlers.
-- [ ] Renderer scripts list + editor + run button.
-- [ ] Console/output capture in existing bottom output area.
+- [x] Script storage model (DB index + filesystem source in `scripts/*.py`).
+- [x] CRUD APIs in `main/engine` + `ipc` handlers.
+- [x] Renderer scripts list + editor + run button.
+- [x] Console/output capture in existing bottom output area.
 - [ ] Project rebuild picks up `scripts/` changes.
 
 Out of scope for MVP:
@@ -454,15 +454,18 @@ PR-14+: Optional advanced capabilities
 
 ## 10. Current Status
 
-Status: Phase 0 in progress (MVP-first, full-scope preserved).
+Status: Phase 1 in progress (MVP-first, full-scope preserved).
 
 Progress update (22 Feb 2026):
 - [x] PR-00 complete: Pyodide dependency + renderer worker bootstrap + ready signal.
 - [x] PR-01 complete: worker run/stdout/error protocol + timeout watchdog + runtime recovery.
 - [x] PR-02 complete: ABI v1 shared types/schemas + caller/worker validation.
 - [x] Phase 0 benchmark harness + baseline capture complete.
+- [x] PR-03 complete: scripts table + `ScriptEngine` filesystem/DB round-trip persistence.
+- [x] PR-04 complete: script CRUD IPC handlers + preload/shared API typing + IPC tests.
+- [x] PR-05 complete: renderer scripts list/editor/run flow + output panel integration.
 
 Recommended next action:
-1. Start Phase 1 PR-03: script persistence model (`scripts/*.py` + index metadata).
-2. Add round-trip tests for create/update/delete between filesystem and DB.
+1. Start Phase 1 PR-06: include `scripts/` in rebuild/meta-diff synchronization.
+2. Keep scripts API access in renderer views/store paths only (no deep component IPC sprawl).
 3. Keep benchmark command in CI/manual perf checks for regressions.

@@ -22,4 +22,10 @@ describe('vite renderer chunking', () => {
     const resolved = typeof viteConfig === 'function' ? viteConfig({ command: 'build', mode: 'production', isSsrBuild: false, isPreview: false }) : viteConfig;
     expect(resolved.build?.chunkSizeWarningLimit).toBe(8000);
   });
+
+  it('excludes pyodide from optimizeDeps pre-bundling', () => {
+    const resolved = typeof viteConfig === 'function' ? viteConfig({ command: 'serve', mode: 'development', isSsrBuild: false, isPreview: false }) : viteConfig;
+    const excluded = resolved.optimizeDeps?.exclude ?? [];
+    expect(excluded).toContain('pyodide');
+  });
 });

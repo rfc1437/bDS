@@ -101,6 +101,15 @@ export const electronAPI: ElectronAPI = {
     regenerateMissingThumbnails: () => ipcRenderer.invoke('media:regenerateMissingThumbnails'),
   },
 
+  // Scripts
+  scripts: {
+    create: (data: { title: string; kind: import('./shared/electronApi').ScriptKind; content: string; slug?: string; entrypoint?: string; enabled?: boolean }) => ipcRenderer.invoke('scripts:create', data),
+    update: (id: string, data: { title?: string; kind?: import('./shared/electronApi').ScriptKind; content?: string; slug?: string; entrypoint?: string; enabled?: boolean }) => ipcRenderer.invoke('scripts:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
+    get: (id: string) => ipcRenderer.invoke('scripts:get', id),
+    getAll: () => ipcRenderer.invoke('scripts:getAll'),
+  },
+
   // Post-Media Links
   postMedia: {
     link: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:link', postId, mediaId),

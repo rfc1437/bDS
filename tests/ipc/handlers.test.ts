@@ -158,6 +158,16 @@ const mockPostMediaEngine = {
   rebuildFromSidecars: vi.fn(),
 };
 
+const mockScriptEngine = {
+  on: vi.fn(),
+  setProjectContext: vi.fn(),
+  createScript: vi.fn(),
+  updateScript: vi.fn(),
+  deleteScript: vi.fn(),
+  getScript: vi.fn(),
+  getAllScripts: vi.fn(),
+};
+
 const mockGitEngine = {
   checkAvailability: vi.fn(),
   getHeadCommit: vi.fn(),
@@ -261,6 +271,10 @@ vi.mock('../../src/main/engine/MenuEngine', () => ({
 
 vi.mock('../../src/main/engine/PostMediaEngine', () => ({
   getPostMediaEngine: vi.fn(() => mockPostMediaEngine),
+}));
+
+vi.mock('../../src/main/engine/ScriptEngine', () => ({
+  getScriptEngine: vi.fn(() => mockScriptEngine),
 }));
 
 vi.mock('../../src/main/engine/GitEngine', () => ({
@@ -2589,6 +2603,113 @@ describe('IPC Handlers', () => {
             execute: expect.any(Function),
           }),
         );
+      });
+    });
+  });
+
+  // ============ Script Handlers ============
+  describe('Script Handlers', () => {
+    describe('scripts:create', () => {
+      it('should call ScriptEngine.createScript with payload', async () => {
+        const payload = {
+          title: 'Render Hero',
+          kind: 'macro',
+          content: 'def render(context):\n  return {"html":"<h1>Hi</h1>"}',
+        };
+        const expected = {
+          id: 'script-1',
+          projectId: 'default',
+          ...payload,
+          slug: 'render-hero',
+          entrypoint: 'render',
+          enabled: true,
+          version: 1,
+          filePath: '/mock/userData/projects/default/scripts/render-hero.py',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        mockScriptEngine.createScript.mockResolvedValue(expected);
+
+        const result = await invokeHandler('scripts:create', payload);
+
+        expect(mockScriptEngine.createScript).toHaveBeenCalledWith(payload);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('scripts:update', () => {
+      it('should call ScriptEngine.updateScript with id and updates', async () => {
+        const updates = { title: 'Updated Script', content: 'print("updated")' };
+        const expected = {
+          id: 'script-1',
+          projectId: 'default',
+          slug: 'updated-script',
+          title: 'Updated Script',
+          kind: 'utility',
+          entrypoint: 'render',
+          enabled: true,
+          version: 2,
+          filePath: '/mock/userData/projects/default/scripts/updated-script.py',
+          content: 'print("updated")',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        mockScriptEngine.updateScript.mockResolvedValue(expected);
+
+        const result = await invokeHandler('scripts:update', 'script-1', updates);
+
+        expect(mockScriptEngine.updateScript).toHaveBeenCalledWith('script-1', updates);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('scripts:delete', () => {
+      it('should call ScriptEngine.deleteScript with id', async () => {
+        mockScriptEngine.deleteScript.mockResolvedValue(true);
+
+        const result = await invokeHandler('scripts:delete', 'script-1');
+
+        expect(mockScriptEngine.deleteScript).toHaveBeenCalledWith('script-1');
+        expect(result).toBe(true);
+      });
+    });
+
+    describe('scripts:get', () => {
+      it('should call ScriptEngine.getScript with id', async () => {
+        const expected = {
+          id: 'script-1',
+          projectId: 'default',
+          slug: 'render-hero',
+          title: 'Render Hero',
+          kind: 'macro',
+          entrypoint: 'render',
+          enabled: true,
+          version: 1,
+          filePath: '/mock/userData/projects/default/scripts/render-hero.py',
+          content: 'def render(context):\n  return {"html":"<h1>Hi</h1>"}',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        mockScriptEngine.getScript.mockResolvedValue(expected);
+
+        const result = await invokeHandler('scripts:get', 'script-1');
+
+        expect(mockScriptEngine.getScript).toHaveBeenCalledWith('script-1');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('scripts:getAll', () => {
+      it('should call ScriptEngine.getAllScripts', async () => {
+        const expected = [{ id: 'script-1' }, { id: 'script-2' }];
+        mockScriptEngine.getAllScripts.mockResolvedValue(expected);
+
+        const result = await invokeHandler('scripts:getAll');
+
+        expect(mockScriptEngine.getAllScripts).toHaveBeenCalled();
+        expect(result).toEqual(expected);
       });
     });
   });

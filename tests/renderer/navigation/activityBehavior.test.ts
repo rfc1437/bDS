@@ -87,7 +87,20 @@ describe('activityBehavior', () => {
   });
 
   it('supports all expected activity ids', () => {
-    const ids: ActivityId[] = ['posts', 'pages', 'media', 'tags', 'chat', 'import', 'git', 'settings'];
-    expect(ids).toHaveLength(8);
+    const ids: ActivityId[] = ['posts', 'pages', 'media', 'scripts', 'tags', 'chat', 'import', 'git', 'settings'];
+    expect(ids).toHaveLength(9);
+  });
+
+  it('returns posts-style sidebar actions for scripts', () => {
+    const hiddenSidebarSnapshot = createSnapshot({ activeView: 'posts', sidebarVisible: false });
+    expect(getActivityClickActions(hiddenSidebarSnapshot, 'scripts')).toEqual([
+      { type: 'setActiveView', view: 'scripts' },
+      { type: 'toggleSidebar' },
+    ]);
+
+    const visibleSidebarSnapshot = createSnapshot({ activeView: 'posts', sidebarVisible: true });
+    expect(getActivityClickActions(visibleSidebarSnapshot, 'scripts')).toEqual([
+      { type: 'setActiveView', view: 'scripts' },
+    ]);
   });
 });

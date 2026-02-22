@@ -1,0 +1,32 @@
+.scripts-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.scripts-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 10px;
+  gap: 8px;
+}
+
+.scripts-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.scripts-label {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.scripts-textarea {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}

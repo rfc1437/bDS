@@ -4,6 +4,7 @@ export type SingletonToolTabKey =
   | 'settings'
   | 'tags'
   | 'style'
+  | 'scripts'
   | 'menu-editor'
   | 'documentation'
   | 'metadata-diff'
@@ -17,12 +18,14 @@ export interface CanonicalTabSpec {
 
 export type EntityTabType = 'post' | 'media';
 export type EntityTabOpenIntent = 'preview' | 'pin';
+export type ScriptTabOpenIntent = 'preview' | 'pin';
 export type GitDiffResourceOpenIntent = 'preview' | 'pin';
 
 const SINGLETON_TOOL_TAB_REGISTRY: Record<SingletonToolTabKey, CanonicalTabSpec> = {
   settings: { type: 'settings', id: 'settings', isTransient: false },
   tags: { type: 'tags', id: 'tags', isTransient: false },
   style: { type: 'style', id: 'style', isTransient: false },
+  scripts: { type: 'scripts', id: 'scripts', isTransient: false },
   'menu-editor': { type: 'menu-editor', id: 'menu-editor', isTransient: false },
   documentation: { type: 'documentation', id: 'documentation', isTransient: false },
   'metadata-diff': { type: 'metadata-diff', id: 'metadata-diff', isTransient: false },
@@ -89,6 +92,22 @@ export function openImportTab(
   definitionId: string,
 ): void {
   openTab(getImportTabSpec(definitionId));
+}
+
+export function getScriptTabSpec(scriptId: string, intent: ScriptTabOpenIntent): CanonicalTabSpec {
+  return {
+    type: 'scripts',
+    id: scriptId,
+    isTransient: intent === 'preview',
+  };
+}
+
+export function openScriptTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  scriptId: string,
+  intent: ScriptTabOpenIntent,
+): void {
+  openTab(getScriptTabSpec(scriptId, intent));
 }
 
 export function getGitDiffFileTabId(filePath: string): string {

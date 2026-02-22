@@ -86,6 +86,22 @@
   gap: 4px;
 }
 
+.output-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.output-item {
+  background-color: var(--vscode-sideBar-background);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--vscode-editor-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .task-group-row {
   display: flex;
   flex-direction: column;

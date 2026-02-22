@@ -6,6 +6,7 @@ export {
   type TaskProgress, 
   type EditorMode, 
   type ErrorDetails,
+  type PanelOutputEntry,
   type Tab,
   type TabType,
   type TabState

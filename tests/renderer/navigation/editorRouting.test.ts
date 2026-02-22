@@ -20,6 +20,7 @@ describe('editorRouting', () => {
       'git-diff': 'git-diff',
       documentation: 'documentation',
       'site-validation': 'site-validation',
+      scripts: 'scripts',
     });
   });
 

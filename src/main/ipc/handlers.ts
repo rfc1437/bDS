@@ -9,6 +9,7 @@ import { getMetaEngine } from '../engine/MetaEngine';
 import { getMenuEngine, type MenuDocument } from '../engine/MenuEngine';
 import { getTagEngine } from '../engine/TagEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
+import { getScriptEngine, type CreateScriptInput, type UpdateScriptInput } from '../engine/ScriptEngine';
 import { getGitEngine } from '../engine/GitEngine';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
@@ -284,11 +285,13 @@ export function registerIpcHandlers(): void {
       const metaEngine = getMetaEngine();
       const menuEngine = getMenuEngine();
       const tagEngine = getTagEngine();
+      const scriptEngine = getScriptEngine();
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
       menuEngine.setProjectContext(project.id, dataDir);
       tagEngine.setProjectContext(project.id, dataDir);
+      scriptEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
 
@@ -322,11 +325,13 @@ export function registerIpcHandlers(): void {
       const metaEngine = getMetaEngine();
       const menuEngine = getMenuEngine();
       const tagEngine = getTagEngine();
+      const scriptEngine = getScriptEngine();
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
       menuEngine.setProjectContext(project.id, dataDir);
       tagEngine.setProjectContext(project.id, dataDir);
+      scriptEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
 
@@ -721,6 +726,33 @@ export function registerIpcHandlers(): void {
       engine.setProjectContext(project.id, dataDir, dataDir);
     }
     return engine.regenerateMissingThumbnails();
+  });
+
+  // ============ Script Handlers ============
+
+  safeHandle('scripts:create', async (_, data: CreateScriptInput) => {
+    const engine = getScriptEngine();
+    return engine.createScript(data);
+  });
+
+  safeHandle('scripts:update', async (_, id: string, data: UpdateScriptInput) => {
+    const engine = getScriptEngine();
+    return engine.updateScript(id, data);
+  });
+
+  safeHandle('scripts:delete', async (_, id: string) => {
+    const engine = getScriptEngine();
+    return engine.deleteScript(id);
+  });
+
+  safeHandle('scripts:get', async (_, id: string) => {
+    const engine = getScriptEngine();
+    return engine.getScript(id);
+  });
+
+  safeHandle('scripts:getAll', async () => {
+    const engine = getScriptEngine();
+    return engine.getAllScripts();
   });
 
   // ============ Task Handlers ============

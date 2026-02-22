@@ -11,6 +11,7 @@ describe('sidebarViewRegistry', () => {
       'posts',
       'pages',
       'media',
+      'scripts',
       'settings',
       'tags',
       'chat',
