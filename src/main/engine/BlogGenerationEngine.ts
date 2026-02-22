@@ -307,6 +307,8 @@ export class BlogGenerationEngine {
     let sitemapWritten = false;
     let rssWritten = false;
     let atomWritten = false;
+    const generatedHashCache = new Map<string, string | null>();
+    const knownOutputDirectories = new Set<string>();
 
     if (includeCore) {
       onProgress(10, 'Writing sitemap and feeds...');
@@ -333,7 +335,10 @@ export class BlogGenerationEngine {
       reportUnitProgress('Atom feed written');
 
       onProgress(15, 'Copying assets...');
-      await copyPreviewAssets(htmlDir);
+      await copyPreviewAssets(htmlDir, {
+        projectId: options.projectId,
+        hashCache: generatedHashCache,
+      });
       reportUnitProgress('Assets copied');
     }
 
@@ -347,9 +352,6 @@ export class BlogGenerationEngine {
         postMediaEngine: this.postMediaEngine,
       },
     });
-
-    const knownOutputDirectories = new Set<string>();
-    const generatedHashCache = new Map<string, string | null>();
 
     const writePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
       projectId,

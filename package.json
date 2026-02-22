@@ -61,6 +61,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.5",
+    "@highlightjs/cdn-assets": "^11.11.1",
     "@libsql/client": "^0.17.0",
     "@milkdown/kit": "^7.18.0",
     "@milkdown/plugin-block": "^7.18.0",

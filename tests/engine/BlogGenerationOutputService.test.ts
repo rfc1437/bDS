@@ -2,6 +2,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  copyPreviewAssets,
   normalizeGeneratedUrlPath,
   urlPathToHtmlIndexPath,
   writeFileIfHashChanged,
@@ -144,5 +145,74 @@ describe('BlogGenerationOutputService', () => {
     });
 
     expect(ensureDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies preview assets with hash checks so unchanged files are not rewritten', async () => {
+    const tempRoot = path.join('/tmp', makeTempName());
+    const htmlDir = path.join(tempRoot, 'html');
+    await mkdir(htmlDir, { recursive: true });
+
+    const hashStore = new Map<string, string>();
+    const getHash = vi.fn(async (_projectId: string, relativePath: string) => hashStore.get(relativePath) ?? null);
+    const setHash = vi.fn(async (_projectId: string, relativePath: string, hash: string) => {
+      hashStore.set(relativePath, hash);
+    });
+
+    const hashCache = new Map<string, string | null>();
+
+    await copyPreviewAssets(htmlDir, {
+      projectId: 'project-a',
+      hashCache,
+      previewAssets: {
+        'runtime.js': {
+          contentType: 'application/javascript; charset=utf-8',
+          sourceText: 'console.log("runtime");',
+        },
+      },
+      previewImageAssets: {
+        'pixel.png': {
+          modulePath: 'virtual:pixel.png',
+          contentType: 'image/png',
+        },
+      },
+      readModuleFile: async (modulePath: string) => {
+        if (modulePath === 'virtual:pixel.png') {
+          return Buffer.from([0, 1, 2, 3]);
+        }
+        throw new Error(`Unexpected module path: ${modulePath}`);
+      },
+      getGeneratedFileHash: getHash,
+      setGeneratedFileHash: setHash,
+    });
+
+    await copyPreviewAssets(htmlDir, {
+      projectId: 'project-a',
+      hashCache,
+      previewAssets: {
+        'runtime.js': {
+          contentType: 'application/javascript; charset=utf-8',
+          sourceText: 'console.log("runtime");',
+        },
+      },
+      previewImageAssets: {
+        'pixel.png': {
+          modulePath: 'virtual:pixel.png',
+          contentType: 'image/png',
+        },
+      },
+      readModuleFile: async (modulePath: string) => {
+        if (modulePath === 'virtual:pixel.png') {
+          return Buffer.from([0, 1, 2, 3]);
+        }
+        throw new Error(`Unexpected module path: ${modulePath}`);
+      },
+      getGeneratedFileHash: getHash,
+      setGeneratedFileHash: setHash,
+    });
+
+    expect(setHash).toHaveBeenCalledTimes(2);
+    expect(await readFile(path.join(htmlDir, 'assets', 'runtime.js'), 'utf-8')).toBe('console.log("runtime");');
+    const imageContent = await readFile(path.join(htmlDir, 'images', 'pixel.png'));
+    expect(Array.from(imageContent)).toEqual([0, 1, 2, 3]);
   });
 });

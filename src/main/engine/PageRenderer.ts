@@ -5,6 +5,7 @@ import type { MediaData } from './MediaEngine';
 import type { PostData } from './PostEngine';
 import type { MenuDocument, MenuItemData } from './MenuEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
+import { CODE_ENHANCEMENTS_RUNTIME_JS } from './assets/codeEnhancementsRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
 import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
 
@@ -135,6 +136,29 @@ export interface PreviewAssetDefinition {
   sourceText?: string;
 }
 
+function annotateCodeBlocksWithLanguage(html: string): string {
+  if (!html) {
+    return html;
+  }
+
+  return html.replace(/<code\b([^>]*)>/gi, (fullMatch, rawAttributes: string) => {
+    if (/\bdata-code-language\s*=/.test(rawAttributes)) {
+      return fullMatch;
+    }
+
+    const classMatch = rawAttributes.match(/\bclass\s*=\s*"([^"]*)"/i);
+    const classList = classMatch?.[1] ?? '';
+    const languageMatch = classList.match(/(?:^|\s)language-([\w.+-]+)(?:\s|$)/i);
+    const language = languageMatch?.[1]?.toLowerCase();
+
+    if (!language) {
+      return fullMatch;
+    }
+
+    return `<code${rawAttributes} data-code-language="${escapeHtml(language)}">`;
+  });
+}
+
 export interface TagUsageEntry {
   tag: string;
   count: number;
@@ -177,6 +201,18 @@ export const PREVIEW_ASSETS: Record<string, PreviewAssetDefinition> = {
   'lightbox.min.js': {
     modulePath: 'lightbox2/dist/js/lightbox-plus-jquery.min.js',
     contentType: 'application/javascript; charset=utf-8',
+  },
+  'highlight.min.css': {
+    modulePath: '@highlightjs/cdn-assets/styles/github-dark.min.css',
+    contentType: 'text/css; charset=utf-8',
+  },
+  'highlight.min.js': {
+    modulePath: '@highlightjs/cdn-assets/highlight.min.js',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+  'code-enhancements.js': {
+    contentType: 'application/javascript; charset=utf-8',
+    sourceText: CODE_ENHANCEMENTS_RUNTIME_JS,
   },
   'd3.layout.cloud.js': {
     modulePath: 'd3-cloud/build/d3.layout.cloud.js',
@@ -829,7 +865,8 @@ export class PageRenderer {
       });
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
-      return rewriteRenderedHtmlUrls(markdownHtml, rewriteContext);
+      const annotatedMarkdownHtml = annotateCodeBlocksWithLanguage(markdownHtml);
+      return rewriteRenderedHtmlUrls(annotatedMarkdownHtml, rewriteContext);
     });
   }
 

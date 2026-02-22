@@ -18,6 +18,30 @@
   .blog-menu-item-with-children:hover > .blog-menu-submenu,
   .blog-menu-item-with-children:focus-within > .blog-menu-submenu { display: block; }
   .post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); }
+  .post pre { position: relative; overflow-x: auto; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); border-radius: .3rem; margin: .9rem 0; padding: .85rem .9rem; background: var(--pico-code-background-color, rgba(33, 38, 45, .82)); }
+  .post pre code { display: block; font-size: .88rem; line-height: 1.5; }
+  .code-copy-button {
+    position: absolute;
+    top: .4rem;
+    right: .4rem;
+    border: 1px solid var(--pico-muted-border-color, var(--muted-border-color));
+    background: var(--pico-card-background-color, var(--card-background-color));
+    color: var(--pico-muted-color, var(--muted-color));
+    border-radius: .25rem;
+    width: 1.8rem;
+    height: 1.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    opacity: .88;
+  }
+  .code-copy-button:hover,
+  .code-copy-button:focus-visible { opacity: 1; color: var(--pico-color, var(--color)); }
+  .code-copy-icon { font-size: .95rem; line-height: 1; }
+  .code-copy-success .code-copy-button { color: var(--pico-ins-color, rgb(53, 117, 56)); border-color: var(--pico-ins-color, rgb(53, 117, 56)); }
+  .code-copy-failed .code-copy-button { color: var(--pico-del-color, rgb(183, 72, 72)); border-color: var(--pico-del-color, rgb(183, 72, 72)); }
   .post iframe { width: 100%; min-height: 20rem; }
   .macro-gallery, .macro-photo-archive, .macro-tag-cloud { border: 1px dashed var(--pico-muted-border-color, var(--muted-border-color)); padding: .75rem; margin: 1rem 0; }
   .gallery-container { display: grid; gap: .5rem; }

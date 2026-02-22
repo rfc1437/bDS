@@ -304,7 +304,10 @@ describe('PreviewServer', () => {
 
     expect(rootHtml).toContain('href="/assets/pico.min.css"');
     expect(rootHtml).toContain('href="/assets/lightbox.min.css"');
+    expect(rootHtml).toContain('href="/assets/highlight.min.css"');
     expect(rootHtml).toContain('src="/assets/lightbox.min.js"');
+    expect(rootHtml).toContain('src="/assets/highlight.min.js"');
+    expect(rootHtml).toContain('src="/assets/code-enhancements.js"');
     expect(rootHtml).toContain('src="/assets/d3.layout.cloud.js"');
     expect(rootHtml).toContain('src="/assets/tag-cloud.js"');
     expect(rootHtml).not.toContain('function parseWords(');
@@ -322,6 +325,18 @@ describe('PreviewServer', () => {
     expect(lightboxJsResponse.status).toBe(200);
     expect(lightboxJsResponse.headers.get('content-type')).toContain('application/javascript');
 
+    const highlightCssResponse = await fetch(`${server.getBaseUrl()}/assets/highlight.min.css`);
+    expect(highlightCssResponse.status).toBe(200);
+    expect(highlightCssResponse.headers.get('content-type')).toContain('text/css');
+
+    const highlightJsResponse = await fetch(`${server.getBaseUrl()}/assets/highlight.min.js`);
+    expect(highlightJsResponse.status).toBe(200);
+    expect(highlightJsResponse.headers.get('content-type')).toContain('application/javascript');
+
+    const codeEnhancementsResponse = await fetch(`${server.getBaseUrl()}/assets/code-enhancements.js`);
+    expect(codeEnhancementsResponse.status).toBe(200);
+    expect(codeEnhancementsResponse.headers.get('content-type')).toContain('application/javascript');
+
     const d3CloudJsResponse = await fetch(`${server.getBaseUrl()}/assets/d3.layout.cloud.js`);
     expect(d3CloudJsResponse.status).toBe(200);
     expect(d3CloudJsResponse.headers.get('content-type')).toContain('application/javascript');
@@ -337,6 +352,23 @@ describe('PreviewServer', () => {
     const lightboxLoadingImageResponse = await fetch(`${server.getBaseUrl()}/images/loading.gif`);
     expect(lightboxLoadingImageResponse.status).toBe(200);
     expect(lightboxLoadingImageResponse.headers.get('content-type')).toContain('image/gif');
+  });
+
+  it('keeps markdown code block html minimal and includes code language metadata', async () => {
+    const postWithCode = makePost({
+      content: '```python\nprint("hello")\n```',
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([postWithCode]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(html).toContain('<code class="language-python" data-code-language="python">');
   });
 
   it('does not set project context or run startup sync for static asset requests', async () => {
