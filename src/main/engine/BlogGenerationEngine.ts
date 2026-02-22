@@ -1,15 +1,10 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import * as crypto from 'crypto';
-import { readFile } from 'node:fs/promises';
-import { getGeneratedFileHash, setGeneratedFileHash } from '../database/generatedFileHashStore';
 import { getPostEngine, type PostData } from './PostEngine';
 import { getMediaEngine, type MediaData } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
 import {
   PageRenderer,
-  PREVIEW_ASSETS,
-  PREVIEW_IMAGE_ASSETS,
   buildTemplateMenuItems,
   buildCanonicalPostPath,
   type CategoryRenderSettings,
@@ -19,11 +14,31 @@ import {
 import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
-import { PreviewServer } from './PreviewServer';
 import { loadPublishedGenerationSets } from './GenerationPostSnapshotService';
-import { buildSitemapAndFeeds, type GenerationPostIndexLike } from './GenerationSitemapFeedService';
+import { buildSitemapAndFeeds } from './GenerationSitemapFeedService';
 import { buildTargetedValidationPlan, planMissingValidationPaths } from './ValidationApplyPlannerService';
 import { compareSitemapToHtml } from './SiteValidationDiffService';
+import {
+  copyPreviewAssets,
+  normalizeGeneratedUrlPath,
+  urlPathToHtmlIndexPath,
+  writeFileIfHashChanged,
+  writeHtmlPage,
+} from './BlogGenerationOutputService';
+import { createPreviewBackedGenerationRouteRenderer } from './GenerationRouteRendererFactory';
+import {
+  buildGenerationPostIndex,
+  estimateGenerationUnitsBySection,
+  type GenerationPostIndex,
+} from './GenerationPostIndexService';
+import {
+  generateCategoryPages,
+  generateDateArchivePages,
+  generatePageRoutes,
+  generateRootPages,
+  generateSinglePostPages,
+  generateTagPages,
+} from './RoutePageGenerationService';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -85,8 +100,6 @@ export interface SiteValidationApplyResult {
   deletedUrlCount: number;
   removedEmptyDirCount: number;
 }
-
-type GenerationPostIndex = GenerationPostIndexLike;
 
 export function resolvePublicBaseUrl(publicUrl?: string): string | null {
   const trimmed = (publicUrl || '').trim();
@@ -169,53 +182,6 @@ function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
-
-function normalizeUrlPath(urlPath: string): string {
-  const trimmed = (urlPath || '').trim();
-  if (!trimmed || trimmed === '/') {
-    return '/';
-  }
-
-  const noQuery = trimmed.split('?')[0]?.split('#')[0] ?? '';
-  const withoutSlashes = noQuery.replace(/^\/+|\/+$/g, '');
-  return withoutSlashes ? `/${withoutSlashes}` : '/';
-}
-
-function urlPathToHtmlIndexPath(htmlDir: string, urlPath: string): string {
-  const normalizedPath = normalizeUrlPath(urlPath);
-  if (normalizedPath === '/') {
-    return path.join(htmlDir, 'index.html');
-  }
-
-  return path.join(htmlDir, normalizedPath.slice(1), 'index.html');
-}
-
-
-function computeContentHash(content: string): string {
-  return crypto.createHash('sha256').update(content).digest('hex');
-}
-
-async function writeFileIfHashChanged(projectId: string, filePath: string, relativePath: string, content: string): Promise<boolean> {
-  const hash = computeContentHash(content);
-  const previousHash = await getGeneratedFileHash(projectId, relativePath);
-  if (previousHash === hash) {
-    return false;
-  }
-  await fs.writeFile(filePath, content, 'utf-8');
-  await setGeneratedFileHash(projectId, relativePath, hash);
-  return true;
-}
-
-async function writeHtmlPage(projectId: string, htmlDir: string, urlPath: string, content: string): Promise<boolean> {
-  const normalizedPath = urlPath.replace(/^\//, '');
-  const filePath = normalizedPath
-    ? path.join(htmlDir, normalizedPath, 'index.html')
-    : path.join(htmlDir, 'index.html');
-  const relativePath = normalizedPath ? `${normalizedPath}/index.html` : 'index.html';
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  return writeFileIfHashChanged(projectId, filePath, relativePath, content);
-}
-
 export class BlogGenerationEngine {
   private readonly postEngine = getPostEngine();
   private readonly mediaEngine = getMediaEngine();
@@ -245,7 +211,7 @@ export class BlogGenerationEngine {
 
     onProgress(3, `Found ${publishedPosts.length} published posts`);
 
-    const generationPostIndex = this.buildGenerationPostIndex(publishedListPosts);
+    const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
     onProgress(5, 'Building sitemap XML...');
     const {
@@ -278,16 +244,16 @@ export class BlogGenerationEngine {
     const rssPath = path.join(htmlDir, 'rss.xml');
     const atomPath = path.join(htmlDir, 'atom.xml');
 
-    const estimatedUnitsBySection = this.estimateGenerationUnitsBySection(
-      publishedListPosts,
+    const estimatedUnitsBySection = estimateGenerationUnitsBySection({
+      posts: publishedListPosts,
       allCategories,
       allTags,
-      years,
-      yearMonths,
-      yearMonthDays,
+      yearsMap: years,
+      yearMonthsMap: yearMonths,
+      yearMonthDaysMap: yearMonthDays,
       maxPostsPerPage,
-      generationPostIndex,
-    );
+      postIndex: generationPostIndex,
+    });
     const totalEstimatedUnits = [
       includeCore ? estimatedUnitsBySection.core : 0,
       includeSingle ? estimatedUnitsBySection.single : 0,
@@ -312,59 +278,127 @@ export class BlogGenerationEngine {
 
     if (includeCore) {
       onProgress(10, 'Writing sitemap and feeds...');
-      sitemapWritten = await writeFileIfHashChanged(options.projectId, sitemapPath, 'sitemap.xml', sitemapXml);
+      sitemapWritten = await writeFileIfHashChanged({
+        projectId: options.projectId,
+        filePath: sitemapPath,
+        relativePath: 'sitemap.xml',
+        content: sitemapXml,
+      });
       reportUnitProgress('Sitemap written');
-      rssWritten = await writeFileIfHashChanged(options.projectId, rssPath, 'rss.xml', rssXml);
+      rssWritten = await writeFileIfHashChanged({
+        projectId: options.projectId,
+        filePath: rssPath,
+        relativePath: 'rss.xml',
+        content: rssXml,
+      });
       reportUnitProgress('RSS feed written');
-      atomWritten = await writeFileIfHashChanged(options.projectId, atomPath, 'atom.xml', atomXml);
+      atomWritten = await writeFileIfHashChanged({
+        projectId: options.projectId,
+        filePath: atomPath,
+        relativePath: 'atom.xml',
+        content: atomXml,
+      });
       reportUnitProgress('Atom feed written');
 
       onProgress(15, 'Copying assets...');
-      await this.copyAssets(htmlDir);
+      await copyPreviewAssets(htmlDir);
       reportUnitProgress('Assets copied');
     }
 
-    const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage, publishedPosts);
+    const renderRoute = createPreviewBackedGenerationRouteRenderer({
+      options,
+      maxPostsPerPage,
+      publishedPostsForLookup: publishedPosts,
+      engines: {
+        postEngine: this.postEngine,
+        mediaEngine: this.mediaEngine,
+        postMediaEngine: this.postMediaEngine,
+      },
+    });
+
+    const writePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
+      projectId,
+      htmlDir,
+      urlPath,
+      content,
+    });
 
     let pagesGenerated = 0;
 
     if (includeCore) {
       onProgress(20, 'Generating root pages...');
-      pagesGenerated += await this.generateRootPages(options.projectId, publishedListPosts, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
-      pagesGenerated += await this.generatePageRoutes(options.projectId, publishedPosts, htmlDir, renderRoute, reportUnitProgress);
+      pagesGenerated += await generateRootPages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated: reportUnitProgress,
+      });
+      pagesGenerated += await generatePageRoutes({
+        projectId: options.projectId,
+        posts: publishedPosts,
+        renderRoute,
+        writePage,
+        onPageGenerated: reportUnitProgress,
+      });
     }
 
     if (includeSingle) {
       onProgress(35, 'Generating single post pages...');
-      pagesGenerated += await this.generateSinglePostPages(options.projectId, publishedPosts, htmlDir, renderRoute, reportUnitProgress);
+      pagesGenerated += await generateSinglePostPages({
+        projectId: options.projectId,
+        posts: publishedPosts,
+        renderRoute,
+        writePage,
+        onPageGenerated: reportUnitProgress,
+      });
     }
 
     if (includeCategory) {
       onProgress(50, 'Generating category pages...');
-      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress, generationPostIndex.postsByCategory);
+      pagesGenerated += await generateCategoryPages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        allCategories,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated: reportUnitProgress,
+        postsByCategory: generationPostIndex.postsByCategory,
+      });
     }
 
     if (includeTag) {
       onProgress(65, 'Generating tag pages...');
-      pagesGenerated += await this.generateTagPages(options.projectId, publishedListPosts, allTags, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress, generationPostIndex.postsByTag);
+      pagesGenerated += await generateTagPages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        allTags,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated: reportUnitProgress,
+        postsByTag: generationPostIndex.postsByTag,
+      });
     }
 
     if (includeDate) {
       onProgress(80, 'Generating date archive pages...');
-      pagesGenerated += await this.generateDateArchivePages(
-        options.projectId,
-        publishedListPosts,
-        years,
-        yearMonths,
-        yearMonthDays,
+      pagesGenerated += await generateDateArchivePages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        yearsMap: years,
+        yearMonthsMap: yearMonths,
+        yearMonthDaysMap: yearMonthDays,
         maxPostsPerPage,
-        htmlDir,
         renderRoute,
-        reportUnitProgress,
-        generationPostIndex.postsByYear,
-        generationPostIndex.postsByYearMonth,
-        generationPostIndex.postsByYearMonthDay,
-      );
+        writePage,
+        onPageGenerated: reportUnitProgress,
+        postsByYear: generationPostIndex.postsByYear,
+        postsByYearMonth: generationPostIndex.postsByYearMonth,
+        postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
+      });
     }
 
     onProgress(100, `Site generated (${publishedPosts.length} posts, ${pagesGenerated} pages)`);
@@ -403,7 +437,7 @@ export class BlogGenerationEngine {
       .map(([category]) => category);
 
     const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
-    const generationPostIndex = this.buildGenerationPostIndex(publishedListPosts);
+    const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
     const { sitemapXml } = buildSitemapAndFeeds({
       baseUrl: options.baseUrl,
@@ -419,7 +453,12 @@ export class BlogGenerationEngine {
     const htmlDir = path.join(options.dataDir, 'html');
     await fs.mkdir(htmlDir, { recursive: true });
     const sitemapPath = path.join(htmlDir, 'sitemap.xml');
-    const sitemapChanged = await writeFileIfHashChanged(options.projectId, sitemapPath, 'sitemap.xml', sitemapXml);
+    const sitemapChanged = await writeFileIfHashChanged({
+      projectId: options.projectId,
+      filePath: sitemapPath,
+      relativePath: 'sitemap.xml',
+      content: sitemapXml,
+    });
 
     onProgress(50, 'Comparing sitemap to html pages...');
 
@@ -527,7 +566,7 @@ export class BlogGenerationEngine {
 
       const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
       const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
-      const generationPostIndex = this.buildGenerationPostIndex(publishedListPosts);
+      const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
       const allCategories = new Set<string>();
       const allTags = new Set<string>();
@@ -570,7 +609,22 @@ export class BlogGenerationEngine {
       const htmlDir = path.join(options.dataDir, 'html');
       await fs.mkdir(htmlDir, { recursive: true });
 
-      const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage, publishedPosts);
+      const renderRoute = createPreviewBackedGenerationRouteRenderer({
+        options,
+        maxPostsPerPage,
+        publishedPostsForLookup: publishedPosts,
+        engines: {
+          postEngine: this.postEngine,
+          mediaEngine: this.mediaEngine,
+          postMediaEngine: this.postMediaEngine,
+        },
+      });
+      const writePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
+        projectId,
+        htmlDir,
+        urlPath,
+        content,
+      });
       const onPageGenerated = (_message: string) => {
         // no-op for applyValidation
       };
@@ -616,77 +670,77 @@ export class BlogGenerationEngine {
       onProgress(50, 'Rendering targeted missing routes...');
 
       if (targetedPlan.requestRootRoutes) {
-        renderedUrlCount += await this.generateRootPages(
-          options.projectId,
-          publishedListPosts,
+        renderedUrlCount += await generateRootPages({
+          projectId: options.projectId,
+          posts: publishedListPosts,
           maxPostsPerPage,
-          htmlDir,
           renderRoute,
+          writePage,
           onPageGenerated,
-        );
+        });
       }
 
       if (requestedPagePosts.length > 0) {
-        renderedUrlCount += await this.generatePageRoutes(
-          options.projectId,
-          requestedPagePosts,
-          htmlDir,
+        renderedUrlCount += await generatePageRoutes({
+          projectId: options.projectId,
+          posts: requestedPagePosts,
           renderRoute,
+          writePage,
           onPageGenerated,
-        );
+        });
       }
 
       if (targetedPlan.requestedCategorySet.size > 0) {
-        renderedUrlCount += await this.generateCategoryPages(
-          options.projectId,
-          publishedListPosts,
-          targetedPlan.requestedCategorySet,
+        renderedUrlCount += await generateCategoryPages({
+          projectId: options.projectId,
+          posts: publishedListPosts,
+          allCategories: targetedPlan.requestedCategorySet,
           maxPostsPerPage,
-          htmlDir,
           renderRoute,
+          writePage,
           onPageGenerated,
-          generationPostIndex.postsByCategory,
-        );
+          postsByCategory: generationPostIndex.postsByCategory,
+        });
       }
 
       if (targetedPlan.requestedTagSet.size > 0) {
-        renderedUrlCount += await this.generateTagPages(
-          options.projectId,
-          publishedListPosts,
-          targetedPlan.requestedTagSet,
+        renderedUrlCount += await generateTagPages({
+          projectId: options.projectId,
+          posts: publishedListPosts,
+          allTags: targetedPlan.requestedTagSet,
           maxPostsPerPage,
-          htmlDir,
           renderRoute,
+          writePage,
           onPageGenerated,
-          generationPostIndex.postsByTag,
-        );
+          postsByTag: generationPostIndex.postsByTag,
+        });
       }
 
       if (requestedSinglePosts.length > 0) {
-        renderedUrlCount += await this.generateSinglePostPages(
-          options.projectId,
-          requestedSinglePosts,
-          htmlDir,
+        renderedUrlCount += await generateSinglePostPages({
+          projectId: options.projectId,
+          posts: requestedSinglePosts,
           renderRoute,
+          writePage,
           onPageGenerated,
-        );
+        });
       }
 
       if (requestedYearsMap.size > 0 || requestedYearMonthsMap.size > 0 || requestedYearMonthDaysMap.size > 0) {
-        renderedUrlCount += await this.generateDateArchivePages(
-          options.projectId,
-          publishedListPosts,
-          requestedYearsMap,
-          requestedYearMonthsMap,
-          requestedYearMonthDaysMap,
+        renderedUrlCount += await generateDateArchivePages({
+          projectId: options.projectId,
+          posts: publishedListPosts,
+          yearsMap: requestedYearsMap,
+          yearMonthsMap: requestedYearMonthsMap,
+          yearMonthDaysMap: requestedYearMonthDaysMap,
           maxPostsPerPage,
-          htmlDir,
           renderRoute,
+          writePage,
           onPageGenerated,
-          generationPostIndex.postsByYear,
-          generationPostIndex.postsByYearMonth,
-          generationPostIndex.postsByYearMonthDay,
-        );
+          postsByYear: generationPostIndex.postsByYear,
+          postsByYearMonth: generationPostIndex.postsByYearMonth,
+          postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
+        });
       }
     }
 
@@ -699,551 +753,6 @@ export class BlogGenerationEngine {
     };
   }
 
-  private async generatePageRoutes(
-    projectId: string,
-    posts: PostData[],
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-  ): Promise<number> {
-    let count = 0;
-    const pagePosts = posts.filter((post) => (post.categories || []).includes('page'));
-
-    for (const post of pagePosts) {
-      const routePath = `/${post.slug}`;
-      const html = await this.renderRequiredRoute(renderRoute, routePath);
-      await writeHtmlPage(projectId, htmlDir, post.slug, html);
-      count++;
-      onPageGenerated(`Generated /${post.slug}`);
-    }
-
-    return count;
-  }
-
-  private createSharedRouteRenderer(
-    options: BlogGenerationOptions,
-    maxPostsPerPage: number,
-    publishedPostsForLookup: PostData[] = [],
-  ): (pathname: string) => Promise<string | null> {
-    const metadata: ProjectMetadata = {
-      name: options.projectName,
-      description: options.projectDescription,
-      mainLanguage: options.language,
-      maxPostsPerPage,
-      picoTheme: options.picoTheme,
-      categoryMetadata: options.categoryMetadata,
-      categorySettings: options.categorySettings,
-    };
-
-    const menu = options.menu ?? { items: [] };
-    const projectContext = {
-      projectId: options.projectId,
-      dataDir: options.dataDir,
-      projectName: options.projectName,
-      projectDescription: options.projectDescription,
-    };
-
-    const routeHtmlCache = new Map<string, Promise<string | null>>();
-    const mediaItemsPromiseCache = new Map<string, Promise<Awaited<ReturnType<typeof this.mediaEngine.getAllMedia>>>>();
-    const postsByFilterPromiseCache = new Map<string, Promise<PostData[]>>();
-    const publishedSnapshotByIdPromiseCache = new Map<string, Promise<PostData | null>>();
-    type PostFilterInput = Parameters<typeof this.postEngine.getPostsFiltered>[0];
-    const publishedBySlugIndex = new Map<string, PostData[]>();
-
-    for (const post of publishedPostsForLookup) {
-      const existing = publishedBySlugIndex.get(post.slug);
-      if (existing) {
-        existing.push(post);
-      } else {
-        publishedBySlugIndex.set(post.slug, [post]);
-      }
-    }
-
-    const serializeFilter = (filter: PostFilterInput): string => {
-      const normalizeValue = (value: unknown): unknown => {
-        if (Array.isArray(value)) {
-          return value.map((entry) => normalizeValue(entry));
-        }
-
-        if (value && typeof value === 'object') {
-          const sortedEntries = Object.entries(value as Record<string, unknown>)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([key, nestedValue]) => [key, normalizeValue(nestedValue)] as const);
-          return Object.fromEntries(sortedEntries);
-        }
-
-        return value;
-      };
-
-      return JSON.stringify(normalizeValue(filter));
-    };
-
-    const cachedPostEngine = {
-      getPostsFiltered: (filter: PostFilterInput) => {
-        const cacheKey = serializeFilter(filter);
-        const cached = postsByFilterPromiseCache.get(cacheKey);
-        if (cached) {
-          return cached;
-        }
-
-        const promise = this.postEngine.getPostsFiltered(filter);
-        postsByFilterPromiseCache.set(cacheKey, promise);
-        return promise;
-      },
-      getPublishedVersion: (postId: string) => {
-        const cached = publishedSnapshotByIdPromiseCache.get(postId);
-        if (cached) {
-          return cached;
-        }
-
-        const promise = this.postEngine.getPublishedVersion(postId);
-        publishedSnapshotByIdPromiseCache.set(postId, promise);
-        return promise;
-      },
-      findPublishedBySlug: async (slug: string, dateFilter?: { year: number; month: number }) => {
-        const candidates = publishedBySlugIndex.get(slug);
-        if (!candidates || candidates.length === 0) {
-          return null;
-        }
-
-        if (!dateFilter) {
-          return candidates[0] ?? null;
-        }
-
-        const match = candidates.find((candidate) => {
-          const createdAt = candidate.createdAt;
-          return createdAt.getFullYear() === dateFilter.year
-            && createdAt.getMonth() === dateFilter.month;
-        });
-
-        return match ?? null;
-      },
-      getPost: (postId: string) => this.postEngine.getPost(postId),
-      hasPublishedVersion: (postId: string) => this.postEngine.hasPublishedVersion(postId),
-      setProjectContext: (projectId: string, dataDir?: string) => {
-        this.postEngine.setProjectContext(projectId, dataDir);
-      },
-    };
-
-    const cachedMediaEngine = {
-      getAllMedia: () => {
-        const cacheKey = `${options.projectId}:${options.dataDir ?? ''}`;
-        const cached = mediaItemsPromiseCache.get(cacheKey);
-        if (cached) {
-          return cached;
-        }
-
-        const promise = this.mediaEngine.getAllMedia();
-        mediaItemsPromiseCache.set(cacheKey, promise);
-        return promise;
-      },
-      setProjectContext: (projectId: string, dataDir?: string, internalDir?: string) => {
-        this.mediaEngine.setProjectContext?.(projectId, dataDir, internalDir);
-      },
-    };
-
-    const previewServer = new PreviewServer({
-      postEngine: cachedPostEngine,
-      mediaEngine: cachedMediaEngine,
-      postMediaEngine: this.postMediaEngine,
-      settingsEngine: {
-        setProjectContext: () => {},
-        getProjectMetadata: async () => metadata,
-      },
-      menuEngine: {
-        setProjectContext: () => {},
-        getMenu: async () => menu,
-      },
-      getActiveProjectContext: async () => projectContext,
-    });
-
-    return async (pathname: string): Promise<string | null> => {
-      const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
-      const cached = routeHtmlCache.get(normalizedPathname);
-      if (cached) {
-        return cached;
-      }
-
-      const promise = previewServer.renderRouteForContext(normalizedPathname, {
-        projectContext,
-        metadata,
-        menu,
-        maxPostsPerPage,
-      });
-
-      routeHtmlCache.set(normalizedPathname, promise);
-      return promise;
-    };
-  }
-
-  private async renderRequiredRoute(
-    renderRoute: (pathname: string) => Promise<string | null>,
-    pathname: string,
-  ): Promise<string> {
-    const html = await renderRoute(pathname);
-    if (html !== null) {
-      return html;
-    }
-
-    throw new Error(`Shared route renderer returned null for required path: ${pathname}`);
-  }
-
-  private async copyAssets(htmlDir: string): Promise<void> {
-    const assetsDir = path.join(htmlDir, 'assets');
-    const imagesDir = path.join(htmlDir, 'images');
-    await fs.mkdir(assetsDir, { recursive: true });
-    await fs.mkdir(imagesDir, { recursive: true });
-
-    for (const [filename, definition] of Object.entries(PREVIEW_ASSETS)) {
-      const destPath = path.join(assetsDir, filename);
-      const content = definition.sourceText !== undefined
-        ? Buffer.from(definition.sourceText, 'utf-8')
-        : await readFile(require.resolve(definition.modulePath as string));
-      await fs.writeFile(destPath, content);
-    }
-
-    for (const [filename, definition] of Object.entries(PREVIEW_IMAGE_ASSETS)) {
-      const sourcePath = require.resolve(definition.modulePath);
-      const destPath = path.join(imagesDir, filename);
-      const content = await readFile(sourcePath);
-      await fs.writeFile(destPath, content);
-    }
-  }
-
-  private async generateRootPages(
-    projectId: string,
-    posts: PostData[],
-    maxPostsPerPage: number,
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-  ): Promise<number> {
-    const totalPages = Math.max(1, Math.ceil(posts.length / maxPostsPerPage));
-    let count = 0;
-
-    for (let page = 1; page <= totalPages; page++) {
-      const offset = (page - 1) * maxPostsPerPage;
-      const pagePosts = posts.slice(offset, offset + maxPostsPerPage);
-      if (pagePosts.length === 0) break;
-
-      const routePath = page === 1 ? '/' : `/page/${page}`;
-      const html = await this.renderRequiredRoute(renderRoute, routePath);
-
-      if (html) {
-        const urlPath = page === 1 ? '' : `page/${page}`;
-        await writeHtmlPage(projectId, htmlDir, urlPath, html);
-        count++;
-        onPageGenerated(urlPath ? `Generated /${urlPath}` : 'Generated /');
-      }
-    }
-
-    return count;
-  }
-
-  private async generateSinglePostPages(
-    projectId: string,
-    posts: PostData[],
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-  ): Promise<number> {
-    let count = 0;
-
-    for (const post of posts) {
-      const createdAt = resolvePostCreatedAt(post);
-      const year = createdAt.getFullYear();
-      const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-      const day = String(createdAt.getDate()).padStart(2, '0');
-
-      const urlPath = `${year}/${month}/${day}/${post.slug}`;
-      const html = await this.renderRequiredRoute(renderRoute, `/${urlPath}`);
-      await writeHtmlPage(projectId, htmlDir, urlPath, html);
-      count++;
-      onPageGenerated(`Generated /${urlPath}`);
-    }
-
-    return count;
-  }
-
-  private async generateCategoryPages(
-    projectId: string,
-    posts: PostData[],
-    allCategories: Set<string>,
-    maxPostsPerPage: number,
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-    postsByCategory?: Map<string, PostData[]>,
-  ): Promise<number> {
-    let count = 0;
-
-    for (const category of Array.from(allCategories).sort()) {
-      const categoryPosts = postsByCategory?.get(category) ?? posts.filter((post) => (post.categories || []).includes(category));
-      if (categoryPosts.length === 0) continue;
-
-      const totalPages = Math.max(1, Math.ceil(categoryPosts.length / maxPostsPerPage));
-      const encodedCategory = encodeURIComponent(category);
-
-      for (let page = 1; page <= totalPages; page++) {
-        const offset = (page - 1) * maxPostsPerPage;
-        const pagePosts = categoryPosts.slice(offset, offset + maxPostsPerPage);
-        if (pagePosts.length === 0) break;
-
-        const routePath = page === 1
-          ? `/category/${encodedCategory}`
-          : `/category/${encodedCategory}/page/${page}`;
-        const html = await this.renderRequiredRoute(renderRoute, routePath);
-
-        if (html) {
-          const urlPath = page === 1
-            ? `category/${encodedCategory}`
-            : `category/${encodedCategory}/page/${page}`;
-          await writeHtmlPage(projectId, htmlDir, urlPath, html);
-          count++;
-          onPageGenerated(`Generated /${urlPath}`);
-        }
-      }
-    }
-
-    return count;
-  }
-
-  private async generateTagPages(
-    projectId: string,
-    posts: PostData[],
-    allTags: Set<string>,
-    maxPostsPerPage: number,
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-    postsByTag?: Map<string, PostData[]>,
-  ): Promise<number> {
-    let count = 0;
-
-    for (const tag of Array.from(allTags).sort()) {
-      const tagPosts = postsByTag?.get(tag) ?? posts.filter((post) => (post.tags || []).includes(tag));
-      if (tagPosts.length === 0) continue;
-
-      const totalPages = Math.max(1, Math.ceil(tagPosts.length / maxPostsPerPage));
-      const encodedTag = encodeURIComponent(tag);
-
-      for (let page = 1; page <= totalPages; page++) {
-        const offset = (page - 1) * maxPostsPerPage;
-        const pagePosts = tagPosts.slice(offset, offset + maxPostsPerPage);
-        if (pagePosts.length === 0) break;
-
-        const routePath = page === 1
-          ? `/tag/${encodedTag}`
-          : `/tag/${encodedTag}/page/${page}`;
-        const html = await this.renderRequiredRoute(renderRoute, routePath);
-
-        if (html) {
-          const urlPath = page === 1
-            ? `tag/${encodedTag}`
-            : `tag/${encodedTag}/page/${page}`;
-          await writeHtmlPage(projectId, htmlDir, urlPath, html);
-          count++;
-          onPageGenerated(`Generated /${urlPath}`);
-        }
-      }
-    }
-
-    return count;
-  }
-
-  private async generateDateArchivePages(
-    projectId: string,
-    posts: PostData[],
-    yearsMap: Map<number, Date>,
-    yearMonthsMap: Map<string, Date>,
-    yearMonthDaysMap: Map<string, Date>,
-    maxPostsPerPage: number,
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-    postsByYear?: Map<number, PostData[]>,
-    postsByYearMonth?: Map<string, PostData[]>,
-    postsByYearMonthDay?: Map<string, PostData[]>,
-  ): Promise<number> {
-    let count = 0;
-
-    for (const [year] of Array.from(yearsMap.entries()).sort((a, b) => b[0] - a[0])) {
-      const yearPosts = postsByYear?.get(year) ?? posts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year);
-      count += await this.generatePaginatedListPages(
-        projectId, yearPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
-        `${year}`,
-      );
-    }
-
-    for (const [ym] of Array.from(yearMonthsMap.entries()).sort().reverse()) {
-      const [yearStr, monthStr] = ym.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const monthPosts = postsByYearMonth?.get(ym) ?? posts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month;
-      });
-      count += await this.generatePaginatedListPages(
-        projectId, monthPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
-        ym,
-      );
-    }
-
-    for (const [ymd] of Array.from(yearMonthDaysMap.entries()).sort().reverse()) {
-      const [yearStr, monthStr, dayStr] = ymd.split('/');
-      const year = Number(yearStr);
-      const month = Number(monthStr);
-      const day = Number(dayStr);
-      const dayPosts = postsByYearMonthDay?.get(ymd) ?? posts.filter((post) => {
-        const d = resolvePostCreatedAt(post);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
-      });
-      count += await this.generatePaginatedListPages(
-        projectId, dayPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
-        ymd,
-      );
-    }
-
-    return count;
-  }
-
-  private async generatePaginatedListPages(
-    projectId: string,
-    posts: PostData[],
-    maxPostsPerPage: number,
-    htmlDir: string,
-    renderRoute: (pathname: string) => Promise<string | null>,
-    onPageGenerated: (message: string) => void,
-    urlPrefix: string,
-  ): Promise<number> {
-    if (posts.length === 0) return 0;
-
-    const totalPages = Math.max(1, Math.ceil(posts.length / maxPostsPerPage));
-    let count = 0;
-
-    for (let page = 1; page <= totalPages; page++) {
-      const offset = (page - 1) * maxPostsPerPage;
-      const pagePosts = posts.slice(offset, offset + maxPostsPerPage);
-      if (pagePosts.length === 0) break;
-
-      const routePath = page === 1 ? `/${urlPrefix}` : `/${urlPrefix}/page/${page}`;
-      const html = await this.renderRequiredRoute(renderRoute, routePath);
-
-      if (html) {
-        const urlPath = page === 1
-          ? urlPrefix
-          : `${urlPrefix}/page/${page}`;
-        await writeHtmlPage(projectId, htmlDir, urlPath, html);
-        count++;
-        onPageGenerated(`Generated /${urlPath}`);
-      }
-    }
-
-    return count;
-  }
-
-  private estimateGenerationUnitsBySection(
-    posts: PostData[],
-    allCategories: Set<string>,
-    allTags: Set<string>,
-    yearsMap: Map<number, Date>,
-    yearMonthsMap: Map<string, Date>,
-    yearMonthDaysMap: Map<string, Date>,
-    maxPostsPerPage: number,
-    postIndex?: GenerationPostIndex,
-  ): Record<BlogGenerationSection, number> {
-    const index = postIndex ?? this.buildGenerationPostIndex(posts);
-    const rootPages = this.countPaginatedPages(posts.length, maxPostsPerPage);
-    const pageRoutes = index.postsByCategory.get('page')?.length ?? 0;
-
-    const categoryPages = Array.from(allCategories).reduce((sum, category) => {
-      const count = index.postsByCategory.get(category)?.length ?? 0;
-      return sum + this.countPaginatedPages(count, maxPostsPerPage);
-    }, 0);
-
-    const tagPages = Array.from(allTags).reduce((sum, tag) => {
-      const count = index.postsByTag.get(tag)?.length ?? 0;
-      return sum + this.countPaginatedPages(count, maxPostsPerPage);
-    }, 0);
-
-    let datePages = 0;
-
-    for (const [year] of yearsMap) {
-      const count = index.postsByYear.get(year)?.length ?? 0;
-      datePages += this.countPaginatedPages(count, maxPostsPerPage);
-    }
-
-    for (const [ym] of yearMonthsMap) {
-      const count = index.postsByYearMonth.get(ym)?.length ?? 0;
-      datePages += this.countPaginatedPages(count, maxPostsPerPage);
-    }
-
-    for (const [ymd] of yearMonthDaysMap) {
-      const count = index.postsByYearMonthDay.get(ymd)?.length ?? 0;
-      datePages += this.countPaginatedPages(count, maxPostsPerPage);
-    }
-
-    return {
-      core: 4 + rootPages + pageRoutes,
-      single: posts.length,
-      category: categoryPages,
-      tag: tagPages,
-      date: datePages,
-    };
-  }
-
-  private countPaginatedPages(totalPosts: number, maxPostsPerPage: number): number {
-    if (totalPosts <= 0) {
-      return 0;
-    }
-    return Math.max(1, Math.ceil(totalPosts / maxPostsPerPage));
-  }
-
-  private buildGenerationPostIndex(posts: PostData[]): GenerationPostIndex {
-    const postsByCategory = new Map<string, PostData[]>();
-    const postsByTag = new Map<string, PostData[]>();
-    const postsByYear = new Map<number, PostData[]>();
-    const postsByYearMonth = new Map<string, PostData[]>();
-    const postsByYearMonthDay = new Map<string, PostData[]>();
-
-    const append = <TKey extends string | number>(target: Map<TKey, PostData[]>, key: TKey, post: PostData) => {
-      const existing = target.get(key);
-      if (existing) {
-        existing.push(post);
-        return;
-      }
-      target.set(key, [post]);
-    };
-
-    for (const post of posts) {
-      for (const category of post.categories || []) {
-        append(postsByCategory, category, post);
-      }
-
-      for (const tag of post.tags || []) {
-        append(postsByTag, tag, post);
-      }
-
-      const createdAt = resolvePostCreatedAt(post);
-      const year = createdAt.getFullYear();
-      const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-      const day = String(createdAt.getDate()).padStart(2, '0');
-      const ym = `${year}/${month}`;
-      const ymd = `${year}/${month}/${day}`;
-
-      append(postsByYear, year, post);
-      append(postsByYearMonth, ym, post);
-      append(postsByYearMonthDay, ymd, post);
-    }
-
-    return {
-      postsByCategory,
-      postsByTag,
-      postsByYear,
-      postsByYearMonth,
-      postsByYearMonthDay,
-    };
-  }
 }
 
 let blogGenerationEngine: BlogGenerationEngine | null = null;
