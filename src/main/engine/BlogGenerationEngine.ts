@@ -18,6 +18,8 @@ import {
 } from './PageRenderer';
 import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
 import type { MenuDocument } from './MenuEngine';
+import type { ProjectMetadata } from './MetaEngine';
+import { PreviewServer } from './PreviewServer';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -677,44 +679,34 @@ export class BlogGenerationEngine {
       reportUnitProgress('Assets copied');
     }
 
-    const pageTitle = options.pageTitle || options.projectName;
-    const language = options.language || 'en';
-    const pageContext = {
-      page_title: pageTitle,
-      language,
-      menu_items: buildTemplateMenuItems(options.menu, options.categoryMetadata),
-      pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
-    };
-
-    const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
-    const rewriteContext = this.buildHtmlRewriteContext(publishedPosts);
+    const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage);
 
     let pagesGenerated = 0;
 
     if (includeCore) {
       onProgress(20, 'Generating root pages...');
-      pagesGenerated += await this.generateRootPages(options.projectId, publishedListPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
-      pagesGenerated += await this.generatePageRoutes(options.projectId, publishedPosts, rewriteContext, htmlDir, pageContext, pageRenderer, reportUnitProgress);
+      pagesGenerated += await this.generateRootPages(options.projectId, publishedListPosts, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
+      pagesGenerated += await this.generatePageRoutes(options.projectId, publishedPosts, htmlDir, renderRoute, reportUnitProgress);
     }
 
     if (includeSingle) {
       onProgress(35, 'Generating single post pages...');
-      pagesGenerated += await this.generateSinglePostPages(options.projectId, publishedPosts, rewriteContext, htmlDir, pageContext, pageRenderer, reportUnitProgress);
+      pagesGenerated += await this.generateSinglePostPages(options.projectId, publishedPosts, htmlDir, renderRoute, reportUnitProgress);
     }
 
     if (includeCategory) {
       onProgress(50, 'Generating category pages...');
-      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, options.categoryMetadata, reportUnitProgress);
+      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
     }
 
     if (includeTag) {
       onProgress(65, 'Generating tag pages...');
-      pagesGenerated += await this.generateTagPages(options.projectId, publishedListPosts, allTags, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
+      pagesGenerated += await this.generateTagPages(options.projectId, publishedListPosts, allTags, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
     }
 
     if (includeDate) {
       onProgress(80, 'Generating date archive pages...');
-      pagesGenerated += await this.generateDateArchivePages(options.projectId, publishedListPosts, years, yearMonths, yearMonthDays, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
+      pagesGenerated += await this.generateDateArchivePages(options.projectId, publishedListPosts, years, yearMonths, yearMonthDays, maxPostsPerPage, htmlDir, renderRoute, reportUnitProgress);
     }
 
     onProgress(100, `Site generated (${publishedPosts.length} posts, ${pagesGenerated} pages)`);
@@ -1293,16 +1285,7 @@ export class BlogGenerationEngine {
       const htmlDir = path.join(options.dataDir, 'html');
       await fs.mkdir(htmlDir, { recursive: true });
 
-      const pageTitle = options.pageTitle || options.projectName;
-      const language = options.language || 'en';
-      const pageContext = {
-        page_title: pageTitle,
-        language,
-        menu_items: buildTemplateMenuItems(options.menu, options.categoryMetadata),
-        pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
-      };
-      const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
-      const rewriteContext = this.buildHtmlRewriteContext(publishedPosts);
+      const renderRoute = this.createSharedRouteRenderer(options, maxPostsPerPage);
       const onPageGenerated = (_message: string) => {
         // no-op for applyValidation
       };
@@ -1358,12 +1341,9 @@ export class BlogGenerationEngine {
         renderedUrlCount += await this.generateRootPages(
           options.projectId,
           publishedListPosts,
-          rewriteContext,
           maxPostsPerPage,
           htmlDir,
-          pageContext,
-          pageRenderer,
-          categorySettings,
+          renderRoute,
           onPageGenerated,
         );
       }
@@ -1372,10 +1352,8 @@ export class BlogGenerationEngine {
         renderedUrlCount += await this.generatePageRoutes(
           options.projectId,
           requestedPagePosts,
-          rewriteContext,
           htmlDir,
-          pageContext,
-          pageRenderer,
+          renderRoute,
           onPageGenerated,
         );
       }
@@ -1385,13 +1363,9 @@ export class BlogGenerationEngine {
           options.projectId,
           publishedListPosts,
           requestedCategorySet,
-          rewriteContext,
           maxPostsPerPage,
           htmlDir,
-          pageContext,
-          pageRenderer,
-          categorySettings,
-          options.categoryMetadata,
+          renderRoute,
           onPageGenerated,
         );
       }
@@ -1401,12 +1375,9 @@ export class BlogGenerationEngine {
           options.projectId,
           publishedListPosts,
           requestedTagSet,
-          rewriteContext,
           maxPostsPerPage,
           htmlDir,
-          pageContext,
-          pageRenderer,
-          categorySettings,
+          renderRoute,
           onPageGenerated,
         );
       }
@@ -1415,10 +1386,8 @@ export class BlogGenerationEngine {
         renderedUrlCount += await this.generateSinglePostPages(
           options.projectId,
           requestedSinglePosts,
-          rewriteContext,
           htmlDir,
-          pageContext,
-          pageRenderer,
+          renderRoute,
           onPageGenerated,
         );
       }
@@ -1430,12 +1399,9 @@ export class BlogGenerationEngine {
           requestedYearsMap,
           requestedYearMonthsMap,
           requestedYearMonthDaysMap,
-          rewriteContext,
           maxPostsPerPage,
           htmlDir,
-          pageContext,
-          pageRenderer,
-          categorySettings,
+          renderRoute,
           onPageGenerated,
         );
       }
@@ -1453,17 +1419,16 @@ export class BlogGenerationEngine {
   private async generatePageRoutes(
     projectId: string,
     posts: PostData[],
-    rewriteContext: HtmlRewriteContext,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[] },
-    pageRenderer: PageRenderer,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
     const pagePosts = posts.filter((post) => (post.categories || []).includes('page'));
 
     for (const post of pagePosts) {
-      const html = await pageRenderer.renderSinglePost(post, rewriteContext, pageContext);
+      const routePath = `/${post.slug}`;
+      const html = await this.renderRequiredRoute(renderRoute, routePath);
       await writeHtmlPage(projectId, htmlDir, post.slug, html);
       count++;
       onPageGenerated(`Generated /${post.slug}`);
@@ -1472,18 +1437,63 @@ export class BlogGenerationEngine {
     return count;
   }
 
-  private buildHtmlRewriteContext(publishedPosts: PostData[]): HtmlRewriteContext {
-    const canonicalPostPathBySlug = new Map<string, string>();
-    for (const post of publishedPosts) {
-      canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
+  private createSharedRouteRenderer(
+    options: BlogGenerationOptions,
+    maxPostsPerPage: number,
+  ): (pathname: string) => Promise<string | null> {
+    const metadata: ProjectMetadata = {
+      name: options.projectName,
+      description: options.projectDescription,
+      mainLanguage: options.language,
+      maxPostsPerPage,
+      picoTheme: options.picoTheme,
+      categoryMetadata: options.categoryMetadata,
+      categorySettings: options.categorySettings,
+    };
+
+    const menu = options.menu ?? { items: [] };
+    const projectContext = {
+      projectId: options.projectId,
+      dataDir: options.dataDir,
+      projectName: options.projectName,
+      projectDescription: options.projectDescription,
+    };
+
+    const previewServer = new PreviewServer({
+      postEngine: this.postEngine,
+      mediaEngine: this.mediaEngine,
+      postMediaEngine: this.postMediaEngine,
+      settingsEngine: {
+        setProjectContext: () => {},
+        getProjectMetadata: async () => metadata,
+      },
+      menuEngine: {
+        setProjectContext: () => {},
+        getMenu: async () => menu,
+      },
+      getActiveProjectContext: async () => projectContext,
+    });
+
+    return async (pathname: string): Promise<string | null> => {
+      return previewServer.renderRouteForContext(pathname, {
+        projectContext,
+        metadata,
+        menu,
+        maxPostsPerPage,
+      });
+    };
+  }
+
+  private async renderRequiredRoute(
+    renderRoute: (pathname: string) => Promise<string | null>,
+    pathname: string,
+  ): Promise<string> {
+    const html = await renderRoute(pathname);
+    if (html !== null) {
+      return html;
     }
 
-    const canonicalMediaPathBySourcePath = new Map<string, string>();
-
-    return {
-      canonicalPostPathBySlug,
-      canonicalMediaPathBySourcePath,
-    };
+    throw new Error(`Shared route renderer returned null for required path: ${pathname}`);
   }
 
   private async copyAssets(htmlDir: string): Promise<void> {
@@ -1511,12 +1521,9 @@ export class BlogGenerationEngine {
   private async generateRootPages(
     projectId: string,
     posts: PostData[],
-    rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
-    pageRenderer: PageRenderer,
-    categorySettings: Record<string, CategoryRenderSettings>,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     const totalPages = Math.max(1, Math.ceil(posts.length / maxPostsPerPage));
@@ -1527,15 +1534,8 @@ export class BlogGenerationEngine {
       const pagePosts = posts.slice(offset, offset + maxPostsPerPage);
       if (pagePosts.length === 0) break;
 
-      const html = await pageRenderer.renderPostList(pagePosts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'date',
-        archiveContext: { kind: 'root' },
-        basePathname: '/',
-        pagination: { page, maxPostsPerPage, totalPosts: posts.length },
-        categorySettings,
-        ...pageContext,
-      });
+      const routePath = page === 1 ? '/' : `/page/${page}`;
+      const html = await this.renderRequiredRoute(renderRoute, routePath);
 
       if (html) {
         const urlPath = page === 1 ? '' : `page/${page}`;
@@ -1551,10 +1551,8 @@ export class BlogGenerationEngine {
   private async generateSinglePostPages(
     projectId: string,
     posts: PostData[],
-    rewriteContext: HtmlRewriteContext,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
-    pageRenderer: PageRenderer,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -1565,8 +1563,8 @@ export class BlogGenerationEngine {
       const month = String(createdAt.getMonth() + 1).padStart(2, '0');
       const day = String(createdAt.getDate()).padStart(2, '0');
 
-      const html = await pageRenderer.renderSinglePost(post, rewriteContext, pageContext);
       const urlPath = `${year}/${month}/${day}/${post.slug}`;
+      const html = await this.renderRequiredRoute(renderRoute, `/${urlPath}`);
       await writeHtmlPage(projectId, htmlDir, urlPath, html);
       count++;
       onPageGenerated(`Generated /${urlPath}`);
@@ -1579,13 +1577,9 @@ export class BlogGenerationEngine {
     projectId: string,
     posts: PostData[],
     allCategories: Set<string>,
-    rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
-    pageRenderer: PageRenderer,
-    categorySettings: Record<string, CategoryRenderSettings>,
-    categoryMetadata: Record<string, CategoryMetadata> | undefined,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -1594,26 +1588,18 @@ export class BlogGenerationEngine {
       const categoryPosts = posts.filter((post) => (post.categories || []).includes(category));
       if (categoryPosts.length === 0) continue;
 
-      const categoryDisplayTitle = resolveCategoryDisplayTitle(category, categoryMetadata);
-
       const totalPages = Math.max(1, Math.ceil(categoryPosts.length / maxPostsPerPage));
       const encodedCategory = encodeURIComponent(category);
-      const basePathname = `/category/${encodedCategory}`;
 
       for (let page = 1; page <= totalPages; page++) {
         const offset = (page - 1) * maxPostsPerPage;
         const pagePosts = categoryPosts.slice(offset, offset + maxPostsPerPage);
         if (pagePosts.length === 0) break;
 
-        const html = await pageRenderer.renderPostList(pagePosts, rewriteContext, {
-          archiveGrouping: true,
-          routeKind: 'non-date',
-          archiveContext: { kind: 'category', name: categoryDisplayTitle },
-          basePathname,
-          pagination: { page, maxPostsPerPage, totalPosts: categoryPosts.length },
-          categorySettings,
-          ...pageContext,
-        });
+        const routePath = page === 1
+          ? `/category/${encodedCategory}`
+          : `/category/${encodedCategory}/page/${page}`;
+        const html = await this.renderRequiredRoute(renderRoute, routePath);
 
         if (html) {
           const urlPath = page === 1
@@ -1633,12 +1619,9 @@ export class BlogGenerationEngine {
     projectId: string,
     posts: PostData[],
     allTags: Set<string>,
-    rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
-    pageRenderer: PageRenderer,
-    categorySettings: Record<string, CategoryRenderSettings>,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -1649,22 +1632,16 @@ export class BlogGenerationEngine {
 
       const totalPages = Math.max(1, Math.ceil(tagPosts.length / maxPostsPerPage));
       const encodedTag = encodeURIComponent(tag);
-      const basePathname = `/tag/${encodedTag}`;
 
       for (let page = 1; page <= totalPages; page++) {
         const offset = (page - 1) * maxPostsPerPage;
         const pagePosts = tagPosts.slice(offset, offset + maxPostsPerPage);
         if (pagePosts.length === 0) break;
 
-        const html = await pageRenderer.renderPostList(pagePosts, rewriteContext, {
-          archiveGrouping: true,
-          routeKind: 'non-date',
-          archiveContext: { kind: 'tag', name: tag },
-          basePathname,
-          pagination: { page, maxPostsPerPage, totalPosts: tagPosts.length },
-          categorySettings,
-          ...pageContext,
-        });
+        const routePath = page === 1
+          ? `/tag/${encodedTag}`
+          : `/tag/${encodedTag}/page/${page}`;
+        const html = await this.renderRequiredRoute(renderRoute, routePath);
 
         if (html) {
           const urlPath = page === 1
@@ -1686,12 +1663,9 @@ export class BlogGenerationEngine {
     yearsMap: Map<number, Date>,
     yearMonthsMap: Map<string, Date>,
     yearMonthDaysMap: Map<string, Date>,
-    rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
-    pageRenderer: PageRenderer,
-    categorySettings: Record<string, CategoryRenderSettings>,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -1699,8 +1673,8 @@ export class BlogGenerationEngine {
     for (const [year] of Array.from(yearsMap.entries()).sort((a, b) => b[0] - a[0])) {
       const yearPosts = posts.filter((post) => resolvePostCreatedAt(post).getFullYear() === year);
       count += await this.generatePaginatedListPages(
-        projectId, yearPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, onPageGenerated,
-        `${year}`, `/${year}`, { kind: 'year', year }, 'date',
+        projectId, yearPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
+        `${year}`,
       );
     }
 
@@ -1713,8 +1687,8 @@ export class BlogGenerationEngine {
         return d.getFullYear() === year && (d.getMonth() + 1) === month;
       });
       count += await this.generatePaginatedListPages(
-        projectId, monthPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, onPageGenerated,
-        ym, `/${ym}`, { kind: 'month', year, month }, 'date',
+        projectId, monthPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
+        ym,
       );
     }
 
@@ -1728,8 +1702,8 @@ export class BlogGenerationEngine {
         return d.getFullYear() === year && (d.getMonth() + 1) === month && d.getDate() === day;
       });
       count += await this.generatePaginatedListPages(
-        projectId, dayPosts, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, onPageGenerated,
-        ymd, `/${ymd}`, { kind: 'day', year, month, day }, 'date',
+        projectId, dayPosts, maxPostsPerPage, htmlDir, renderRoute, onPageGenerated,
+        ymd,
       );
     }
 
@@ -1739,17 +1713,11 @@ export class BlogGenerationEngine {
   private async generatePaginatedListPages(
     projectId: string,
     posts: PostData[],
-    rewriteContext: HtmlRewriteContext,
     maxPostsPerPage: number,
     htmlDir: string,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
-    pageRenderer: PageRenderer,
-    categorySettings: Record<string, CategoryRenderSettings>,
+    renderRoute: (pathname: string) => Promise<string | null>,
     onPageGenerated: (message: string) => void,
     urlPrefix: string,
-    basePathname: string,
-    archiveContext: { kind: 'root' | 'year' | 'month' | 'day' | 'tag' | 'category'; name?: string; year?: number; month?: number; day?: number },
-    routeKind: 'date' | 'non-date',
   ): Promise<number> {
     if (posts.length === 0) return 0;
 
@@ -1761,15 +1729,8 @@ export class BlogGenerationEngine {
       const pagePosts = posts.slice(offset, offset + maxPostsPerPage);
       if (pagePosts.length === 0) break;
 
-      const html = await pageRenderer.renderPostList(pagePosts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind,
-        archiveContext,
-        basePathname,
-        pagination: { page, maxPostsPerPage, totalPosts: posts.length },
-        categorySettings,
-        ...pageContext,
-      });
+      const routePath = page === 1 ? `/${urlPrefix}` : `/${urlPrefix}/page/${page}`;
+      const html = await this.renderRequiredRoute(renderRoute, routePath);
 
       if (html) {
         const urlPath = page === 1

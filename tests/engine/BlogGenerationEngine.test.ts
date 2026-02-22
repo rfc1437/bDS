@@ -138,6 +138,7 @@ async function listFiles(dir: string, prefix = ''): Promise<string[]> {
 describe('BlogGenerationEngine', () => {
   let tempDir: string;
   let mockPostEngine: any;
+  let mockMediaEngine: any;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -146,6 +147,8 @@ describe('BlogGenerationEngine', () => {
 
     const { __mockPostEngine } = await import('../../src/main/engine/PostEngine') as any;
     mockPostEngine = __mockPostEngine;
+    const { __mockMediaEngine } = await import('../../src/main/engine/MediaEngine') as any;
+    mockMediaEngine = __mockMediaEngine;
   });
 
   afterEach(async () => {
@@ -1124,6 +1127,33 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', 'posts', '2025', '03', 'alias-test', 'index.html'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html', 'post', 'alias-test', 'index.html'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html', 'post', '2025', '03', 'alias-test', 'index.html'))).toBe(false);
+  });
+
+  it('rewrites legacy internal media image URLs to canonical media URLs in generated html', async () => {
+    mockMediaEngine.getAllMedia.mockResolvedValue([
+      {
+        id: 'media-1',
+        filename: '3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg',
+        originalName: '20221111_0177.jpg',
+        createdAt: new Date('2022-11-11T10:00:00.000Z'),
+      },
+    ]);
+
+    const posts = [
+      makePost({
+        id: 'post-1',
+        slug: 'autumn-leaves',
+        title: 'Autumn Leaves',
+        createdAt: new Date('2022-11-11T10:00:00.000Z'),
+        content: '![autumn](/media/2022/11/20221111_0177.jpg)',
+      }),
+    ];
+
+    await generate(posts);
+
+    const html = await readFile(path.join(tempDir, 'html', '2022', '11', '11', 'autumn-leaves', 'index.html'), 'utf-8');
+    expect(html).toContain('/media/2022/11/3b94f5d1-91f5-4c9b-a8d4-6f3bf8f045cf.jpg');
+    expect(html).not.toContain('/media/2022/11/20221111_0177.jpg');
   });
 
   it('does not overwrite unchanged html files on subsequent generation runs', async () => {

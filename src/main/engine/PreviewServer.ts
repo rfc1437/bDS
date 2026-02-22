@@ -22,6 +22,7 @@ import {
   type PostMediaEngineContract,
 } from './PageRenderer';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
+import { renderRouteWithSharedContext } from './SharedRouteRenderer';
 
 interface ActiveProjectContext {
   projectId: string;
@@ -153,6 +154,50 @@ export class PreviewServer {
     return `http://127.0.0.1:${this.port}`;
   }
 
+  async renderRouteForContext(
+    pathname: string,
+    options: {
+      projectContext: ActiveProjectContext;
+      metadata?: ProjectMetadata | null;
+      menu?: MenuDocument;
+      maxPostsPerPage?: number;
+      requestTheme?: string | null;
+      htmlThemeAttribute?: string;
+      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
+    },
+  ): Promise<string | null> {
+    return renderRouteWithSharedContext(pathname, options, {
+      postEngine: this.postEngine,
+      mediaEngine: this.mediaEngine,
+      postMediaEngine: this.postMediaEngine,
+      settingsEngine: this.settingsEngine,
+      menuEngine: this.menuEngine,
+      resolveCategoryMetadata: (metadata) => this.resolveCategoryMetadata(metadata),
+      resolveCategorySettings: (metadata) => this.resolveCategorySettings(metadata),
+      resolveListExcludedCategories: (settings) => this.resolveListExcludedCategories(settings),
+      buildHtmlRewriteContext: () => this.buildHtmlRewriteContext(),
+      resolveRoute: (
+        normalizedPathname,
+        maxPostsPerPage,
+        rewriteContext,
+        pageContext,
+        categorySettings,
+        categoryMetadata,
+        listExcludedCategories,
+        singlePostOptions,
+      ) => this.resolveRoute(
+        normalizedPathname,
+        maxPostsPerPage,
+        rewriteContext,
+        pageContext,
+        categorySettings,
+        categoryMetadata,
+        listExcludedCategories,
+        singlePostOptions,
+      ),
+    });
+  }
+
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const remoteAddress = req.socket.remoteAddress;
     const isLocal = remoteAddress === '127.0.0.1'
@@ -230,15 +275,17 @@ export class PreviewServer {
         return;
       }
 
-      const result = await this.resolveRoute(pathname, maxPostsPerPage, htmlRewriteContext, {
-        pageTitle,
-        language,
-        menuItems,
-        picoStylesheetHref,
+      const result = await this.renderRouteForContext(pathname, {
+        projectContext: context,
+        metadata,
+        menu,
+        maxPostsPerPage,
+        requestTheme,
         htmlThemeAttribute: undefined,
-      }, categorySettings, categoryMetadata, listExcludedCategories, {
-        useDraftContent,
-        draftPostId,
+        singlePostOptions: {
+          useDraftContent,
+          draftPostId,
+        },
       });
       if (!result) {
         const notFoundHtml = await this.pageRenderer.renderNotFound({
