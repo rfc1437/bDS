@@ -25,6 +25,7 @@
   "app.databaseRebuildFailed": "Database rebuild failed",
   "app.textReindexFailed": "Text reindex failed",
   "app.sitemapGenerationFailed": "Sitemap generation failed",
+  "app.calendarRegenerationFailed": "Calendar regeneration failed",
   "app.previewOpenFailed": "Failed to open selected post preview",
   "app.metadataDiff": "Metadata Diff",
   "app.importComplete": "Import complete: {posts} posts, {media} media files",

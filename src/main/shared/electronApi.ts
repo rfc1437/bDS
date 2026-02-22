@@ -427,6 +427,11 @@ export interface SiteValidationApplyResult {
   removedEmptyDirCount: number;
 }
 
+export interface CalendarRegenerationResult {
+  calendarPath: string;
+  changed: boolean;
+}
+
 export type MenuItemKind = 'page' | 'submenu' | 'category-archive' | 'home';
 
 export interface MenuItemData {
@@ -649,6 +654,7 @@ export interface ElectronAPI {
     }>;
     validateSite: () => Promise<SiteValidationReport>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
+    regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };
   menu: {
     get: () => Promise<MenuDocument>;

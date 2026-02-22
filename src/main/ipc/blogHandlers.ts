@@ -152,6 +152,22 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
     });
   });
 
+  safeHandle('blog:regenerateCalendar', async () => {
+    const blogGenerationEngine = getBlogGenerationEngine();
+    const baseOptions = await resolveBlogGenerationBaseOptions();
+
+    const taskTimestamp = Date.now();
+    return taskManager.runTask({
+      id: `site-calendar-regenerate-${taskTimestamp}`,
+      name: 'Regenerate Calendar',
+      execute: async (onProgress) => {
+        return blogGenerationEngine.regenerateCalendar(baseOptions, (progress, message) => {
+          onProgress(progress, message || 'Regenerating calendar...');
+        });
+      },
+    });
+  });
+
   safeHandle('blog:applyValidation', async (_event, report: SiteValidationReport) => {
     const blogGenerationEngine = getBlogGenerationEngine();
     const baseOptions = await resolveBlogGenerationBaseOptions();

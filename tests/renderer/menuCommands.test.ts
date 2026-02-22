@@ -52,6 +52,17 @@ describe('Help menu documentation entry', () => {
     expect(APP_MENU_ACTION_EVENT_MAP.validateSite).toBe('menu:validateSite');
   });
 
+  it('includes Regenerate Calendar action in Blog menu', () => {
+    const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
+
+    expect(blogGroup).toBeDefined();
+    expect(blogGroup?.items.some((item) => item.action === 'regenerateCalendar')).toBe(true);
+  });
+
+  it('maps Regenerate Calendar to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.regenerateCalendar).toBe('menu:regenerateCalendar');
+  });
+
   it('includes Edit Preferences action in Edit menu with comma shortcut', () => {
     const editGroup = APP_MENU_GROUPS.find((group) => group.label === 'Edit');
     const preferencesItem = editGroup?.items.find((item) => item.action === 'editPreferences');

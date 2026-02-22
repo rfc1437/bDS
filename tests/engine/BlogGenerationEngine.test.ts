@@ -994,6 +994,16 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', 'obsolete'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'apply-post', 'index.html'))).toBe(true);
+
+    const calendarJsonRaw = await readFile(path.join(tempDir, 'html', 'calendar.json'), 'utf-8');
+    const calendarJson = JSON.parse(calendarJsonRaw) as {
+      years: Record<string, number>;
+      months: Record<string, number>;
+      days: Record<string, number>;
+    };
+    expect(calendarJson.years['2025']).toBe(1);
+    expect(calendarJson.months['2025-01']).toBe(1);
+    expect(calendarJson.days['2025-01-15']).toBe(1);
   });
 
   it('does not report valid pagination routes as extra html content', async () => {

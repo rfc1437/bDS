@@ -25,6 +25,7 @@
   "app.databaseRebuildFailed": "Ricostruzione database non riuscita",
   "app.textReindexFailed": "Reindicizzazione testo non riuscita",
   "app.sitemapGenerationFailed": "Generazione sitemap non riuscita",
+  "app.calendarRegenerationFailed": "Rigenerazione del calendario non riuscita",
   "app.previewOpenFailed": "Impossibile aprire l’anteprima del post selezionato",
   "app.metadataDiff": "Diff Metadati",
   "app.importComplete": "Import completato: {posts} post, {media} file multimediali",

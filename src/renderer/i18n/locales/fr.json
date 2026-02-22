@@ -25,6 +25,7 @@
   "app.databaseRebuildFailed": "Échec de la reconstruction de la base de données",
   "app.textReindexFailed": "Échec de la réindexation du texte",
   "app.sitemapGenerationFailed": "Échec de la génération du sitemap",
+  "app.calendarRegenerationFailed": "Échec de la régénération du calendrier",
   "app.previewOpenFailed": "Impossible d’ouvrir l’aperçu de l’article sélectionné",
   "app.metadataDiff": "Diff Métadonnées",
   "app.importComplete": "Import terminé : {posts} articles, {media} fichiers média",

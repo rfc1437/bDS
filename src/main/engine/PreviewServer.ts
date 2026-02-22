@@ -28,6 +28,8 @@ import {
   loadPublishedSnapshots,
   loadPublishedSnapshotsPage,
 } from './SharedSnapshotService';
+import { buildCalendarArchiveData } from './GenerationSitemapFeedService';
+import { loadPublishedGenerationSets } from './GenerationPostSnapshotService';
 
 interface ActiveProjectContext {
   projectId: string;
@@ -253,6 +255,12 @@ export class PreviewServer {
       const appliedTheme = requestTheme ?? sanitizePicoTheme((metadata as { picoTheme?: unknown } | null)?.picoTheme);
       const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
       const htmlRewriteContext = await this.buildHtmlRewriteContext();
+
+      if (pathname === '/calendar.json') {
+        const calendarJson = await this.resolveCalendarJson(context.dataDir, listExcludedCategories);
+        this.respondAsset(res, 'application/json; charset=utf-8', calendarJson);
+        return;
+      }
 
       if (pathname === '/__style-preview') {
         const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
@@ -489,6 +497,21 @@ export class PreviewServer {
     } catch {
       return null;
     }
+  }
+
+  private async resolveCalendarJson(dataDir: string | undefined, listExcludedCategories: string[]): Promise<Buffer> {
+    if (dataDir) {
+      const calendarPath = path.join(dataDir, 'html', 'calendar.json');
+      try {
+        return await readFile(calendarPath);
+      } catch {
+        // fall through to dynamic generation for preview runtime
+      }
+    }
+
+    const { publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
+    const calendarJson = `${JSON.stringify(buildCalendarArchiveData(publishedListPosts), null, 2)}\n`;
+    return Buffer.from(calendarJson, 'utf-8');
   }
 
   private getMediaContentType(filePath: string): string {

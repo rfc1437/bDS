@@ -38,6 +38,7 @@
   "menu.item.metadataDiff": "Outil de diff des métadonnées",
   "menu.item.editMenu": "Modifier le menu du blog",
   "menu.item.generateSitemap": "Rendre le site",
+  "menu.item.regenerateCalendar": "Régénérer le calendrier",
   "menu.item.validateSite": "Valider le site",
   "menu.item.about": "À propos de Blogging Desktop Server",
   "menu.item.openDocumentation": "Ouvrir la documentation",

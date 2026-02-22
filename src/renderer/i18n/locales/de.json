@@ -25,6 +25,7 @@
   "app.databaseRebuildFailed": "Datenbank-Neuaufbau fehlgeschlagen",
   "app.textReindexFailed": "Text-Neuindizierung fehlgeschlagen",
   "app.sitemapGenerationFailed": "Sitemap-Erstellung fehlgeschlagen",
+  "app.calendarRegenerationFailed": "Kalender-Neuerstellung fehlgeschlagen",
   "app.previewOpenFailed": "Ausgewählte Beitragsvorschau konnte nicht geöffnet werden",
   "app.metadataDiff": "Metadaten-Diff",
   "app.importComplete": "Import abgeschlossen: {posts} Beiträge, {media} Mediendateien",

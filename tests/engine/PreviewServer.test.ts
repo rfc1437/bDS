@@ -357,6 +357,38 @@ describe('PreviewServer', () => {
     expect(lightboxLoadingImageResponse.headers.get('content-type')).toContain('image/gif');
   });
 
+  it('serves calendar.json for preview calendar runtime', async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), 'bds-preview-calendar-'));
+    await mkdir(path.join(tempDir, 'html'), { recursive: true });
+    await writeFile(path.join(tempDir, 'html', 'calendar.json'), JSON.stringify({
+      years: { '2025': 2 },
+      months: { '2025-01': 2 },
+      days: { '2025-01-02': 1, '2025-01-03': 1 },
+    }), 'utf-8');
+
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default', dataDir: tempDir ?? undefined }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/calendar.json`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+
+    const payload = await response.json() as {
+      years: Record<string, number>;
+      months: Record<string, number>;
+      days: Record<string, number>;
+    };
+
+    expect(payload.years['2025']).toBe(2);
+    expect(payload.months['2025-01']).toBe(2);
+    expect(payload.days['2025-01-03']).toBe(1);
+  });
+
   it('keeps markdown code block html minimal and includes code language metadata', async () => {
     const postWithCode = makePost({
       content: '```python\nprint("hello")\n```',

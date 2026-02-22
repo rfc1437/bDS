@@ -106,6 +106,11 @@ export interface SiteValidationApplyResult {
   removedEmptyDirCount: number;
 }
 
+export interface CalendarRegenerationResult {
+  calendarPath: string;
+  changed: boolean;
+}
+
 export function resolvePublicBaseUrl(publicUrl?: string): string | null {
   const trimmed = (publicUrl || '').trim();
   if (!trimmed) {
@@ -473,6 +478,41 @@ export class BlogGenerationEngine {
     };
   }
 
+  async regenerateCalendar(
+    options: BlogGenerationOptions,
+    onProgress: (progress: number, message?: string) => void,
+  ): Promise<CalendarRegenerationResult> {
+    onProgress(0, 'Loading posts...');
+
+    const categorySettings = resolveCategorySettings(options.categoryMetadata, options.categorySettings);
+    const listExcludedCategories = Object.entries(categorySettings)
+      .filter(([, settings]) => settings.renderInLists === false)
+      .map(([category]) => category);
+
+    const { publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
+
+    onProgress(50, 'Building calendar data...');
+
+    const calendarJson = `${JSON.stringify(buildCalendarArchiveData(publishedListPosts), null, 2)}\n`;
+    const htmlDir = path.join(options.dataDir, 'html');
+    await fs.mkdir(htmlDir, { recursive: true });
+    const calendarPath = path.join(htmlDir, 'calendar.json');
+
+    const changed = await writeFileIfHashChanged({
+      projectId: options.projectId,
+      filePath: calendarPath,
+      relativePath: 'calendar.json',
+      content: calendarJson,
+    });
+
+    onProgress(100, 'Calendar data regenerated');
+
+    return {
+      calendarPath,
+      changed,
+    };
+  }
+
   async validateSite(
     options: BlogGenerationOptions,
     onProgress: (progress: number, message?: string) => void,
@@ -746,6 +786,14 @@ export class BlogGenerationEngine {
           postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
         });
       }
+    }
+
+    if (renderedUrlCount > 0 || deletedUrlCount > 0) {
+      onProgress(90, 'Regenerating calendar data...');
+      await this.regenerateCalendar(options, (progress, message) => {
+        const mappedProgress = 90 + Math.floor((progress / 100) * 9);
+        onProgress(Math.min(99, mappedProgress), message || 'Regenerating calendar data...');
+      });
     }
 
     onProgress(100, `Apply complete (${deletedUrlCount} deleted, ${renderedUrlCount} rendered)`);

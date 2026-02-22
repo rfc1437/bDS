@@ -33,6 +33,7 @@ export type AppMenuAction =
   | 'metadataDiff'
   | 'editMenu'
   | 'generateSitemap'
+  | 'regenerateCalendar'
   | 'validateSite'
   | 'openDocumentation'
   | 'about'
@@ -126,6 +127,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'menu.item.metadataDiff', action: 'metadataDiff' },
       { label: 'menu.item.editMenu', action: 'editMenu' },
       { label: 'menu.item.generateSitemap', action: 'generateSitemap', accelerator: 'CmdOrCtrl+R' },
+      { label: 'menu.item.regenerateCalendar', action: 'regenerateCalendar' },
       { label: 'menu.item.validateSite', action: 'validateSite', accelerator: 'CmdOrCtrl+Shift+L' },
     ],
   },
@@ -160,6 +162,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   metadataDiff: 'menu:metadataDiff',
   editMenu: 'menu:editMenu',
   generateSitemap: 'menu:generateSitemap',
+  regenerateCalendar: 'menu:regenerateCalendar',
   validateSite: 'menu:validateSite',
   openDocumentation: 'menu:openDocumentation',
   about: 'menu:about',

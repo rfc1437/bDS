@@ -362,6 +362,17 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:regenerateCalendar', async () => {
+        try {
+          await window.electronAPI?.blog.regenerateCalendar();
+        } catch (error) {
+          console.error('Calendar regeneration failed:', error);
+          showToast.error(tr('app.calendarRegenerationFailed'));
+        }
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:validateSite', () => {
         const validateAndOpen = async () => {
           try {

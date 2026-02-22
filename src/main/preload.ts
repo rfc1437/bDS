@@ -256,6 +256,7 @@ export const electronAPI: ElectronAPI = {
     generateSitemap: () => ipcRenderer.invoke('blog:generateSitemap'),
     validateSite: () => ipcRenderer.invoke('blog:validateSite'),
     applyValidation: (report: SiteValidationReport) => ipcRenderer.invoke('blog:applyValidation', report),
+    regenerateCalendar: () => ipcRenderer.invoke('blog:regenerateCalendar'),
   },
 
   menu: {

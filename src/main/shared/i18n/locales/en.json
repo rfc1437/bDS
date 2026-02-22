@@ -38,6 +38,7 @@
   "menu.item.metadataDiff": "Metadata Diff Tool",
   "menu.item.editMenu": "Edit Blog Menu",
   "menu.item.generateSitemap": "Render Site",
+  "menu.item.regenerateCalendar": "Regenerate Calendar",
   "menu.item.validateSite": "Validate Site",
   "menu.item.about": "About Blogging Desktop Server",
   "menu.item.openDocumentation": "Open Documentation",
