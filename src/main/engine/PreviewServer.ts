@@ -14,7 +14,6 @@ import {
   buildTemplateMenuItems,
   buildCanonicalPostPath,
   clampMaxPostsPerPage,
-  parseRoutePagination,
   resolvePageTitle,
   type CategoryRenderSettings,
   type HtmlRewriteContext,
@@ -23,6 +22,12 @@ import {
 } from './PageRenderer';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
+import {
+  findSinglePostBySlug,
+  loadPostsForDayPage,
+  loadPublishedSnapshots,
+  loadPublishedSnapshotsPage,
+} from './SharedSnapshotService';
 
 interface ActiveProjectContext {
   projectId: string;
@@ -179,10 +184,10 @@ export class PreviewServer {
       buildHtmlRewriteContext: () => this.buildHtmlRewriteContext(),
       pageRenderer: this.pageRenderer,
       postEngineForMacros: this.postEngine,
-      loadPublishedSnapshotsPage: (filter, pagination) => this.loadPublishedSnapshotsPage(filter, pagination),
-      loadPublishedSnapshots: (filter, pagination) => this.loadPublishedSnapshots(filter, pagination),
-      loadPostsForDayPage: (year, month, day, pagination) => this.loadPostsForDayPage(year, month, day, pagination),
-      findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => this.findSinglePostBySlug(slug, singlePostOptions, dateFilter),
+      loadPublishedSnapshotsPage: (filter, pagination) => loadPublishedSnapshotsPage(this.postEngine, filter, pagination),
+      loadPublishedSnapshots: (filter, pagination) => loadPublishedSnapshots(this.postEngine, filter, pagination),
+      loadPostsForDayPage: (year, month, day, pagination) => loadPostsForDayPage(this.postEngine, year, month, day, pagination),
+      findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => findSinglePostBySlug(this.postEngine, slug, singlePostOptions, dateFilter),
     });
   }
 
@@ -294,190 +299,13 @@ export class PreviewServer {
     }
   }
 
-  private async resolveRoute(
-    pathname: string,
-    maxPostsPerPage: number,
-    rewriteContext: HtmlRewriteContext,
-    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
-    categorySettings: Record<string, CategoryRenderSettings>,
-    categoryMetadata: Record<string, CategoryMetadata>,
-    listExcludedCategories: string[],
-    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
-  ): Promise<string | null> {
-    const routePagination = parseRoutePagination(pathname);
-    if (!routePagination) {
-      return null;
-    }
-
-    const pagedPathname = routePagination.pathname;
-    const page = routePagination.page;
-    const pageOptions = {
-      maxPostsPerPage,
-      page,
-    };
-
-    if (pagedPathname === '/') {
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', excludeCategories: listExcludedCategories }, pageOptions);
-      return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'date',
-        archiveContext: { kind: 'root' },
-        basePathname: pagedPathname,
-        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
-        categorySettings,
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const tagMatch = pagedPathname.match(/^\/tag\/([^/]+)$/);
-    if (tagMatch) {
-      const tag = tagMatch[1];
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', tags: [tag], excludeCategories: listExcludedCategories }, pageOptions);
-      return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'non-date',
-        archiveContext: { kind: 'tag', name: tag },
-        basePathname: pagedPathname,
-        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
-        categorySettings,
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
-    if (categoryMatch) {
-      const category = categoryMatch[1];
-      const categoryDisplayTitle = categoryMetadata[category]?.title?.trim() || category;
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', categories: [category], excludeCategories: listExcludedCategories }, pageOptions);
-      return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'non-date',
-        archiveContext: { kind: 'category', name: categoryDisplayTitle },
-        basePathname: pagedPathname,
-        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
-        categorySettings,
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const daySlugMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/([^/]+)$/);
-    if (daySlugMatch) {
-      const year = Number(daySlugMatch[1]);
-      const month = Number(daySlugMatch[2]);
-      const day = Number(daySlugMatch[3]);
-      const slug = daySlugMatch[4];
-      const post = await this.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1, day });
-      if (!post) return null;
-      return this.pageRenderer.renderSinglePost(post, rewriteContext, {
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const dayMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-    if (dayMatch) {
-      const year = Number(dayMatch[1]);
-      const month = Number(dayMatch[2]);
-      const day = Number(dayMatch[3]);
-      const result = await this.loadPostsForDayPage(year, month, day, {
-        ...pageOptions,
-        excludeCategories: listExcludedCategories,
-      });
-      return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'date',
-        archiveContext: { kind: 'day', year, month, day },
-        basePathname: pagedPathname,
-        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
-        categorySettings,
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const monthMatch = pagedPathname.match(/^\/(\d{4})\/(\d{1,2})$/);
-    if (monthMatch) {
-      const year = Number(monthMatch[1]);
-      const month = Number(monthMatch[2]);
-      if (month < 1 || month > 12) return null;
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1, excludeCategories: listExcludedCategories }, pageOptions);
-      return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'date',
-        archiveContext: { kind: 'month', year, month },
-        basePathname: pagedPathname,
-        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
-        categorySettings,
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const yearMatch = pagedPathname.match(/^\/(\d{4})$/);
-    if (yearMatch) {
-      const year = Number(yearMatch[1]);
-      const result = await this.loadPublishedSnapshotsPage({ status: 'published', year, excludeCategories: listExcludedCategories }, pageOptions);
-      return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
-        archiveGrouping: true,
-        routeKind: 'date',
-        archiveContext: { kind: 'year', year },
-        basePathname: pagedPathname,
-        pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
-        categorySettings,
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
-    if (pageSlugMatch) {
-      const slug = pageSlugMatch[1];
-      const pages = await this.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
-      const pagePost = pages.find((candidate) => candidate.slug === slug) || null;
-      if (!pagePost) return null;
-      return this.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
-        page_title: pageContext.pageTitle,
-        language: pageContext.language,
-        menu_items: pageContext.menuItems,
-        pico_stylesheet_href: pageContext.picoStylesheetHref,
-        html_theme_attribute: pageContext.htmlThemeAttribute,
-      }, this.postEngine);
-    }
-
-    return null;
-  }
-
   private async renderStylePreview(
     rewriteContext: HtmlRewriteContext,
     pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
     listExcludedCategories: string[],
   ): Promise<string> {
-    const result = await this.loadPublishedSnapshotsPage({ status: 'published', excludeCategories: listExcludedCategories }, {
+    const result = await loadPublishedSnapshotsPage(this.postEngine, { status: 'published', excludeCategories: listExcludedCategories }, {
       maxPostsPerPage: 10,
       page: 1,
     });
@@ -507,190 +335,8 @@ export class PreviewServer {
     }, this.postEngine);
   }
 
-  private async findPublishedPostBySlug(slug: string, dateFilter?: { year: number; month: number }): Promise<PostData | null> {
-    if (!slug) return null;
-
-    if (this.postEngine.findPublishedBySlug) {
-      const directMatch = await this.postEngine.findPublishedBySlug(slug, dateFilter);
-      if (directMatch) {
-        return directMatch;
-      }
-    }
-
-    const filter: PostFilter = {
-      ...(dateFilter ? { year: dateFilter.year, month: dateFilter.month } : {}),
-    };
-
-    const candidates = await this.loadPublishedSnapshots(filter);
-    const match = candidates.find((candidate) => candidate.slug === slug);
-    if (!match) return null;
-
-    return match;
-  }
-
-  private async findSinglePostBySlug(
-    slug: string,
-    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
-    dateFilter?: { year: number; month: number; day?: number },
-  ): Promise<PostData | null> {
-    if (singlePostOptions?.useDraftContent && singlePostOptions.draftPostId) {
-      const draftCandidate = await this.postEngine.getPost(singlePostOptions.draftPostId);
-      if (draftCandidate && draftCandidate.status === 'draft' && draftCandidate.slug === slug) {
-        if (!dateFilter) {
-          return draftCandidate;
-        }
-
-        const sameYear = draftCandidate.createdAt.getFullYear() === dateFilter.year;
-        const sameMonth = draftCandidate.createdAt.getMonth() === dateFilter.month;
-        const sameDay = dateFilter.day === undefined || draftCandidate.createdAt.getDate() === dateFilter.day;
-        if (sameYear && sameMonth && sameDay) {
-          return draftCandidate;
-        }
-      }
-    }
-
-    const fallbackDateFilter = dateFilter ? { year: dateFilter.year, month: dateFilter.month } : undefined;
-    return this.findPublishedPostBySlug(slug, fallbackDateFilter);
-  }
-
-  private async loadPostsForDay(
-    year: number,
-    month: number,
-    day: number,
-    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
-  ): Promise<PostData[]> {
-    const result = await this.loadPostsForDayPage(year, month, day, pagination);
-    return result.posts;
-  }
-
-  private async loadPostsForDayPage(
-    year: number,
-    month: number,
-    day: number,
-    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
-  ): Promise<{ posts: PostData[]; totalPosts: number }> {
-    if (month < 1 || month > 12 || day < 1 || day > 31) {
-      return { posts: [], totalPosts: 0 };
-    }
-
-    const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
-    const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
-
-    const result = await this.loadPublishedSnapshotsPage({
-      status: 'published',
-      excludeCategories: pagination?.excludeCategories,
-      startDate,
-      endDate,
-    }, pagination);
-
-    const posts = result.posts.filter((post) => {
-      const createdAt = post.createdAt;
-      return createdAt.getFullYear() === year
-        && createdAt.getMonth() === month - 1
-        && createdAt.getDate() === day;
-    });
-
-    return {
-      posts,
-      totalPosts: result.totalPosts,
-    };
-  }
-
-  private buildSnapshotBaseFilter(filter: PostFilter): PostFilter {
-    const baseFilter: PostFilter = {};
-
-    if (filter.startDate) baseFilter.startDate = filter.startDate;
-    if (filter.endDate) baseFilter.endDate = filter.endDate;
-    if (filter.year !== undefined) baseFilter.year = filter.year;
-    if (filter.month !== undefined) baseFilter.month = filter.month;
-
-    return baseFilter;
-  }
-
-  private async toPublishedSnapshot(post: PostData): Promise<PostData | null> {
-    if (post.status === 'published') {
-      return post;
-    }
-
-    if (post.status === 'draft') {
-      return await this.postEngine.getPublishedVersion(post.id);
-    }
-
-    return null;
-  }
-
-  private async loadPublishedSnapshots(
-    filter: PostFilter,
-    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
-  ): Promise<PostData[]> {
-    const result = await this.loadPublishedSnapshotsPage(filter, pagination);
-    return result.posts;
-  }
-
-  private paginateSnapshots(
-    snapshots: PostData[],
-    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
-  ): { posts: PostData[]; totalPosts: number } {
-    const totalPosts = snapshots.length;
-
-    if (typeof pagination?.maxPostsPerPage !== 'number') {
-      return { posts: snapshots, totalPosts };
-    }
-
-    const maxPostsPerPage = pagination.maxPostsPerPage;
-    const page = Number.isInteger(pagination.page) && (pagination.page ?? 0) > 0
-      ? (pagination.page as number)
-      : 1;
-    const offset = (page - 1) * maxPostsPerPage;
-
-    return {
-      posts: snapshots.slice(offset, offset + maxPostsPerPage),
-      totalPosts,
-    };
-  }
-
-  private async loadPublishedSnapshotsPage(
-    filter: PostFilter,
-    pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
-  ): Promise<{ posts: PostData[]; totalPosts: number }> {
-    if (filter.status && filter.status !== 'published') {
-      return { posts: [], totalPosts: 0 };
-    }
-
-    const baseFilter = this.buildSnapshotBaseFilter(filter);
-    const publishedCandidates = await this.postEngine.getPostsFiltered({
-      ...baseFilter,
-      status: 'published',
-      excludeCategories: filter.excludeCategories,
-    });
-    const draftCandidates = await this.postEngine.getPostsFiltered({
-      ...baseFilter,
-      status: 'draft',
-      excludeCategories: filter.excludeCategories,
-    });
-
-    const snapshotCandidates = await Promise.all([
-      ...publishedCandidates.map((post) => this.toPublishedSnapshot(post)),
-      ...draftCandidates.map((post) => this.toPublishedSnapshot(post)),
-    ]);
-
-    let snapshots = snapshotCandidates.filter((post): post is PostData => post !== null);
-
-    if (filter.tags && filter.tags.length > 0) {
-      snapshots = snapshots.filter((post) => filter.tags!.every((tag) => post.tags.includes(tag)));
-    }
-
-    if (filter.categories && filter.categories.length > 0) {
-      snapshots = snapshots.filter((post) => filter.categories!.some((category) => post.categories.includes(category)));
-    }
-
-    snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    return this.paginateSnapshots(snapshots, pagination);
-  }
-
   private async buildHtmlRewriteContext(): Promise<HtmlRewriteContext> {
-    const publishedPosts = await this.loadPublishedSnapshots({ status: 'published' });
+    const publishedPosts = await loadPublishedSnapshots(this.postEngine, { status: 'published' });
     const canonicalPostPathBySlug = new Map<string, string>();
 
     for (const post of publishedPosts) {
