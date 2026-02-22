@@ -25,6 +25,14 @@ describe('blogmark deep-link payload', () => {
     expect(payload).toBeNull();
   });
 
+  it('rejects entity-obfuscated script URLs', () => {
+    const payload = extractBlogmarkPayloadFromDeepLink(
+      'bds://new-post?title=Unsafe&url=javascript%26%2397%3Balert(1)',
+    );
+
+    expect(payload).toBeNull();
+  });
+
   it('builds safe markdown source link', () => {
     const markdown = buildBlogmarkMarkdownLink('A [title] (test)', 'https://example.com/x?y=1');
     expect(markdown).toBe('[A \\[title\\] \\(test\\)](<https://example.com/x?y=1>)');

@@ -60,6 +60,7 @@
     "wait-on": "^9.0.3"
   },
   "dependencies": {
+    "@braintree/sanitize-url": "^7.1.2",
     "@floating-ui/dom": "^1.7.5",
     "@highlightjs/cdn-assets": "^11.11.1",
     "@libsql/client": "^0.17.0",

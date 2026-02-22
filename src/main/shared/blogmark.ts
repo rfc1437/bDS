@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sanitizeUrl } from '@braintree/sanitize-url';
 import { normalizeNonEmptyTaxonomyTerm } from '../engine/taxonomyUtils';
 
 const MAX_TITLE_LENGTH = 200;
@@ -42,9 +43,14 @@ function sanitizeHttpUrl(rawUrl: unknown): string | null {
     return null;
   }
 
+  const policySanitized = sanitizeUrl(trimmed);
+  if (policySanitized === 'about:blank') {
+    return null;
+  }
+
   let parsed: URL;
   try {
-    parsed = new URL(trimmed);
+    parsed = new URL(policySanitized);
   } catch {
     return null;
   }
