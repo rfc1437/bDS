@@ -120,9 +120,25 @@ npm run test:coverage
 # Generates drizzle artifacts, builds main process and renderer
 npm run build
 
-# Package distributables
-npx electron-builder
+# Package app directory only (no installer)
+npm run package
+
+# Package distributables for all supported systems
+npm run dist
+
+# Package by target platform
+npm run dist:mac
+npm run dist:win
+npm run dist:linux
 ```
+
+### Distribution Notes
+
+- Custom protocol `bds://` is declared in electron-builder metadata for packaged apps.
+- macOS signing/notarization is scaffolded via `scripts/notarize.mjs` and runs when these env vars are set:
+    - `APPLE_ID`
+    - `APPLE_APP_SPECIFIC_PASSWORD`
+    - `APPLE_TEAM_ID`
 
 ### Database Utilities
 
