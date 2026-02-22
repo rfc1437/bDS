@@ -750,7 +750,7 @@ describe('GitSidebar', () => {
       fireEvent.click(fetchButton);
     });
 
-    expect(await screen.findByText(/authentication required/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/authentication required/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/create a github personal access token/i)).toHaveLength(1);
     expect(screen.getByText(/retry with username \+ token/i)).toBeInTheDocument();
   });
@@ -872,8 +872,8 @@ describe('GitSidebar', () => {
         await Promise.resolve();
       });
 
+      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(1);
       expect((window as any).electronAPI.git.getRemoteState).toHaveBeenCalledTimes(1);
-      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(0);
 
       await act(async () => {
         vi.advanceTimersByTime(30000);
@@ -881,7 +881,7 @@ describe('GitSidebar', () => {
         await Promise.resolve();
       });
 
-      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(1);
+      expect((window as any).electronAPI.git.fetch).toHaveBeenCalledTimes(2);
       expect((window as any).electronAPI.git.getRemoteState).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();

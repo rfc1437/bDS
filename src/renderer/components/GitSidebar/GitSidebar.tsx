@@ -240,7 +240,7 @@ export const GitSidebar: React.FC = () => {
         }
 
         if (repoState.hasRemote) {
-          await refreshRemoteState(resolvedProjectPath);
+          await refreshRemoteState(resolvedProjectPath, { fetchFirst: true });
           if (!isCurrentRequest()) {
             return;
           }

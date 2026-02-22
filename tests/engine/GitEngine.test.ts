@@ -18,10 +18,11 @@ const mockPush = vi.fn();
 const mockGetRemotes = vi.fn();
 const mockAddRemote = vi.fn();
 const mockRemote = vi.fn();
-const { mockReadFile, mockStat, mockWriteFile } = vi.hoisted(() => ({
+const { mockReadFile, mockStat, mockWriteFile, mockExecFile } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockStat: vi.fn(),
   mockWriteFile: vi.fn(),
+  mockExecFile: vi.fn(),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -52,6 +53,13 @@ vi.mock('simple-git', () => ({
     addRemote: mockAddRemote,
     remote: mockRemote,
   })),
+}));
+
+vi.mock('node:child_process', () => ({
+  execFile: mockExecFile,
+  default: {
+    execFile: mockExecFile,
+  },
 }));
 
 import { GitEngine } from '../../src/main/engine/GitEngine';
@@ -85,6 +93,9 @@ describe('GitEngine', () => {
       addRemote: mockAddRemote,
       remote: mockRemote,
     }));
+    mockExecFile.mockImplementation((_command, _args, _options, callback) => {
+      callback(null, '', '');
+    });
     gitEngine = new GitEngine();
   });
 
@@ -170,6 +181,29 @@ describe('GitEngine', () => {
         { path: 'new.md', status: 'renamed', previousPath: 'old.md' },
         { path: 'staged.md', status: 'staged' },
       ]);
+    });
+
+    it('should recover status through CLI when status command fails with spawn EBADF', async () => {
+      mockStatus.mockRejectedValue(new Error('Error: spawn EBADF'));
+      mockExecFile.mockImplementation((command, args, _options, callback) => {
+        expect(command).toBe('git');
+        expect(args).toEqual(['status', '--porcelain=v1', '-z']);
+        callback(null, '?? new-file.md\0', '');
+      });
+
+      const result = await gitEngine.getStatus('/tmp/project');
+
+      expect(result).toEqual({
+        files: [{ path: 'new-file.md', status: 'untracked' }],
+        counts: {
+          untracked: 1,
+          modified: 0,
+          deleted: 0,
+          renamed: 0,
+          staged: 0,
+          total: 1,
+        },
+      });
     });
   });
 
@@ -464,6 +498,53 @@ describe('GitEngine', () => {
           syncStatus: 'local-only',
         },
       ]);
+    });
+
+    it('should recover with CLI history when local log fails with spawn EBADF', async () => {
+      mockStatus.mockResolvedValue({ current: 'main', tracking: 'origin/main' });
+      mockLog.mockRejectedValueOnce(new Error('Error: spawn EBADF'));
+
+      mockExecFile.mockImplementation((command, args, _options, callback) => {
+        expect(command).toBe('git');
+        const normalizedArgs = Array.isArray(args) ? args : [];
+
+        if (normalizedArgs[0] === 'log' && normalizedArgs.includes('--max-count') && normalizedArgs[normalizedArgs.length - 1] === '20') {
+          const local = 'abc123def456\x1f2026-02-16T10:00:00.000Z\x1ffeat: local via cli\x1fLocal Dev\x1e';
+          callback(null, local, '');
+          return;
+        }
+
+        if (normalizedArgs[0] === 'rev-parse') {
+          callback(null, 'origin/main\n', '');
+          return;
+        }
+
+        if (normalizedArgs[0] === 'rev-list') {
+          callback(null, '0\n', '');
+          return;
+        }
+
+        if (normalizedArgs[0] === 'log' && normalizedArgs[normalizedArgs.length - 1] === 'origin/main') {
+          callback(null, '', '');
+          return;
+        }
+
+        callback(new Error(`Unexpected git args: ${normalizedArgs.join(' ')}`), '', '');
+      });
+
+      const result = await gitEngine.getHistory('/tmp/project', 20);
+
+      expect(result).toEqual([
+        {
+          hash: 'abc123def456',
+          shortHash: 'abc123d',
+          date: '2026-02-16T10:00:00.000Z',
+          subject: 'feat: local via cli',
+          author: 'Local Dev',
+          syncStatus: 'local-only',
+        },
+      ]);
+      expect(mockExecFile).toHaveBeenCalled();
     });
   });
 

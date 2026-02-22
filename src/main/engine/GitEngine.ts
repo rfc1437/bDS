@@ -1,6 +1,7 @@
 import { simpleGit } from 'simple-git';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
+import { execFile } from 'node:child_process';
 
 export interface GitAvailability {
   gitFound: boolean;
@@ -155,7 +156,7 @@ export class GitEngine {
     'html/',
   ];
 
-  private createNonInteractiveGit(projectPath: string): ReturnType<typeof simpleGit> {
+  private createNonInteractiveGit(projectPath?: string): ReturnType<typeof simpleGit> {
     return simpleGit(projectPath)
       .env('GIT_TERMINAL_PROMPT', '0')
       .env('GCM_INTERACTIVE', 'never')
@@ -397,6 +398,279 @@ export class GitEngine {
     return normalized.includes('spawn ebadf');
   }
 
+  private runGitCli(projectPath: string, args: string[], allowRetry = true): Promise<string> {
+    return new Promise((resolve, reject) => {
+      execFile(
+        'git',
+        args,
+        {
+          cwd: projectPath,
+          env: {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+            GCM_INTERACTIVE: 'never',
+            GIT_SSH_COMMAND: 'ssh -oBatchMode=yes',
+          },
+          windowsHide: true,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+        (error, stdout, stderr) => {
+          if (!error) {
+            resolve(stdout);
+            return;
+          }
+
+          const composedMessage = [stderr?.toString().trim(), error.message]
+            .filter((part) => Boolean(part))
+            .join(' | ');
+
+          if (allowRetry && this.isSpawnBadFileDescriptorError(composedMessage)) {
+            this.runGitCli(projectPath, args, false).then(resolve).catch(reject);
+            return;
+          }
+
+          reject(new Error(composedMessage || 'Git command failed.'));
+        },
+      );
+    });
+  }
+
+  private parseGitLogCliOutput(raw: string): Array<{ hash: string; date: string; message: string; author_name: string }> {
+    return raw
+      .split('\x1e')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .map((entry) => {
+        const [hash, date, message, author] = entry.split('\x1f');
+        return {
+          hash: hash || '',
+          date: date || '',
+          message: message || '',
+          author_name: author || '',
+        };
+      })
+      .filter((entry) => entry.hash.length > 0);
+  }
+
+  private parsePorcelainStatus(raw: string): GitStatusDto {
+    const records = raw.split('\0').filter((record) => record.length > 0);
+    const files: GitStatusFile[] = [];
+
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      const x = record[0] ?? ' ';
+      const y = record[1] ?? ' ';
+      const pathValue = record.slice(3);
+
+      if (x === '?' && y === '?') {
+        files.push({ path: pathValue, status: 'untracked' });
+        continue;
+      }
+
+      if (x === 'R' || y === 'R') {
+        const previousPath = pathValue;
+        const renamedTo = records[index + 1] ?? pathValue;
+        files.push({ path: renamedTo, status: 'renamed', previousPath });
+        index += 1;
+        continue;
+      }
+
+      if (x === 'D' || y === 'D') {
+        files.push({ path: pathValue, status: 'deleted' });
+        continue;
+      }
+
+      if (y === 'M' || y === 'A' || y === 'T') {
+        files.push({ path: pathValue, status: 'modified' });
+        continue;
+      }
+
+      if (x !== ' ') {
+        files.push({ path: pathValue, status: 'staged' });
+      }
+    }
+
+    const counts: GitStatusCounts = {
+      untracked: files.filter((file) => file.status === 'untracked').length,
+      modified: files.filter((file) => file.status === 'modified').length,
+      deleted: files.filter((file) => file.status === 'deleted').length,
+      renamed: files.filter((file) => file.status === 'renamed').length,
+      staged: files.filter((file) => file.status === 'staged').length,
+      total: files.length,
+    };
+
+    return { files, counts };
+  }
+
+  private async getStatusViaCli(projectPath: string): Promise<GitStatusDto> {
+    const raw = await this.runGitCli(projectPath, ['status', '--porcelain=v1', '-z']);
+    return this.parsePorcelainStatus(raw);
+  }
+
+  private async getRepoStateViaCli(projectPath: string): Promise<RepoState> {
+    try {
+      const isInsideRaw = await this.runGitCli(projectPath, ['rev-parse', '--is-inside-work-tree']);
+      if (isInsideRaw.trim() !== 'true') {
+        return { isRepo: false, hasRemote: false };
+      }
+    } catch {
+      return { isRepo: false, hasRemote: false };
+    }
+
+    const rootPath = (await this.runGitCli(projectPath, ['rev-parse', '--show-toplevel'])).trim();
+
+    let currentBranch: string | undefined;
+    try {
+      const branch = (await this.runGitCli(projectPath, ['symbolic-ref', '--short', 'HEAD'])).trim();
+      currentBranch = branch || undefined;
+    } catch {
+      currentBranch = undefined;
+    }
+
+    let hasRemote = false;
+    try {
+      const upstream = (await this.runGitCli(projectPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])).trim();
+      hasRemote = upstream.length > 0;
+    } catch {
+      hasRemote = false;
+    }
+
+    return {
+      isRepo: true,
+      rootPath,
+      currentBranch,
+      hasRemote,
+    };
+  }
+
+  private async getRemoteStateViaCli(projectPath: string): Promise<GitRemoteStateDto> {
+    let localBranch: string | null = null;
+    try {
+      localBranch = (await this.runGitCli(projectPath, ['symbolic-ref', '--short', 'HEAD'])).trim() || null;
+    } catch {
+      localBranch = null;
+    }
+
+    let upstreamBranch: string | null = null;
+    try {
+      upstreamBranch = (await this.runGitCli(projectPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])).trim() || null;
+    } catch {
+      upstreamBranch = null;
+    }
+
+    if (!upstreamBranch) {
+      return {
+        localBranch,
+        upstreamBranch: null,
+        hasUpstream: false,
+        ahead: 0,
+        behind: 0,
+      };
+    }
+
+    let ahead = 0;
+    let behind = 0;
+
+    try {
+      ahead = Number((await this.runGitCli(projectPath, ['rev-list', '--count', `${upstreamBranch}..HEAD`])).trim() || 0);
+    } catch {
+      ahead = 0;
+    }
+
+    try {
+      behind = Number((await this.runGitCli(projectPath, ['rev-list', '--count', `HEAD..${upstreamBranch}`])).trim() || 0);
+    } catch {
+      behind = 0;
+    }
+
+    return {
+      localBranch,
+      upstreamBranch,
+      hasUpstream: true,
+      ahead,
+      behind,
+    };
+  }
+
+  private async getHistoryViaCli(projectPath: string, limit: number): Promise<GitHistoryEntry[]> {
+    const format = '%H%x1f%aI%x1f%s%x1f%aN%x1e';
+    const localRaw = await this.runGitCli(projectPath, ['log', `--pretty=format:${format}`, '--max-count', String(limit)]);
+    const localCommits = this.parseGitLogCliOutput(localRaw);
+
+    const mapLocalHistory = (): GitHistoryEntry[] => localCommits.map((entry) => ({
+      hash: entry.hash,
+      shortHash: entry.hash.slice(0, 7),
+      date: entry.date,
+      subject: entry.message,
+      author: entry.author_name,
+      syncStatus: 'local-only',
+    }));
+
+    let upstreamBranch: string | null = null;
+    try {
+      upstreamBranch = (await this.runGitCli(projectPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])).trim();
+    } catch {
+      return mapLocalHistory();
+    }
+
+    if (!upstreamBranch) {
+      return mapLocalHistory();
+    }
+
+    let behindCount = 0;
+    try {
+      behindCount = Number((await this.runGitCli(projectPath, ['rev-list', '--count', `HEAD..${upstreamBranch}`])).trim() || 0);
+    } catch {
+      behindCount = 0;
+    }
+
+    const remoteHistoryLimit = Math.max(limit, limit + Math.max(behindCount, 0));
+    let remoteCommits: Array<{ hash: string; date: string; message: string; author_name: string }> = [];
+
+    try {
+      const remoteRaw = await this.runGitCli(projectPath, ['log', `--pretty=format:${format}`, '--max-count', String(remoteHistoryLimit), upstreamBranch]);
+      remoteCommits = this.parseGitLogCliOutput(remoteRaw);
+    } catch {
+      return mapLocalHistory();
+    }
+
+    const localMap = new Map(localCommits.map((entry) => [entry.hash, entry]));
+    const remoteMap = new Map(remoteCommits.map((entry) => [entry.hash, entry]));
+
+    const combined = new Map<string, { hash: string; date: string; message: string; author_name: string }>();
+    for (const entry of localMap.values()) {
+      combined.set(entry.hash, entry);
+    }
+    for (const entry of remoteMap.values()) {
+      if (!combined.has(entry.hash)) {
+        combined.set(entry.hash, entry);
+      }
+    }
+
+    const classifiedEntries = Array.from(combined.values())
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+      .map((entry) => {
+        const inLocal = localMap.has(entry.hash);
+        const inRemote = remoteMap.has(entry.hash);
+        const syncStatus: GitHistorySyncStatus = inLocal && inRemote ? 'both' : inLocal ? 'local-only' : 'remote-only';
+
+        return {
+          hash: entry.hash,
+          shortHash: entry.hash.slice(0, 7),
+          date: entry.date,
+          subject: entry.message,
+          author: entry.author_name,
+          syncStatus,
+        };
+      });
+
+    const remoteOnlyEntries = classifiedEntries.filter((entry) => entry.syncStatus === 'remote-only');
+    const localAndSyncedEntries = classifiedEntries.filter((entry) => entry.syncStatus !== 'remote-only').slice(0, limit);
+
+    return [...localAndSyncedEntries, ...remoteOnlyEntries]
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime());
+  }
+
   private async getCurrentBranchName(git: ReturnType<typeof simpleGit>): Promise<string | null> {
     try {
       const status = await git.status();
@@ -508,7 +782,7 @@ export class GitEngine {
 
   async checkAvailability(): Promise<GitAvailability> {
     try {
-      const versionResult = await simpleGit().version();
+      const versionResult = await this.createNonInteractiveGit().version();
       return {
         gitFound: true,
         version: `${versionResult.major}.${versionResult.minor}.${versionResult.patch}`,
@@ -519,8 +793,17 @@ export class GitEngine {
   }
 
   async getRepoState(projectPath: string): Promise<RepoState> {
-    const git = simpleGit(projectPath);
-    const isRepo = await git.checkIsRepo();
+    const git = this.createNonInteractiveGit(projectPath);
+    let isRepo;
+    try {
+      isRepo = await git.checkIsRepo();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return this.getRepoStateViaCli(projectPath);
+      }
+      throw error;
+    }
 
     if (!isRepo) {
       return {
@@ -529,10 +812,20 @@ export class GitEngine {
       };
     }
 
-    const [rootPath, status] = await Promise.all([
-      git.revparse(['--show-toplevel']),
-      git.status(),
-    ]);
+    let rootPath;
+    let status;
+    try {
+      [rootPath, status] = await Promise.all([
+        git.revparse(['--show-toplevel']),
+        git.status(),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return this.getRepoStateViaCli(projectPath);
+      }
+      throw error;
+    }
 
     return {
       isRepo: true,
@@ -543,8 +836,17 @@ export class GitEngine {
   }
 
   async getStatus(projectPath: string): Promise<GitStatusDto> {
-    const git = simpleGit(projectPath);
-    const status = await git.status();
+    const git = this.createNonInteractiveGit(projectPath);
+    let status;
+    try {
+      status = await git.status();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return this.getStatusViaCli(projectPath);
+      }
+      throw error;
+    }
 
     const files: GitStatusFile[] = [
       ...status.not_added.map((filePath) => ({ path: filePath, status: 'untracked' as const })),
@@ -574,8 +876,18 @@ export class GitEngine {
   }
 
   async getDiff(projectPath: string, filePath: string): Promise<GitDiffDto> {
-    const git = simpleGit(projectPath);
-    const patch = await git.diff(['--', filePath]);
+    const git = this.createNonInteractiveGit(projectPath);
+    let patch;
+    try {
+      patch = await git.diff(['--', filePath]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        patch = await this.runGitCli(projectPath, ['diff', '--', filePath]);
+      } else {
+        throw error;
+      }
+    }
 
     return {
       filePath,
@@ -584,10 +896,20 @@ export class GitEngine {
   }
 
   async getDiffContent(projectPath: string, filePath: string): Promise<GitDiffContentDto> {
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
 
     const [original, modified] = await Promise.all([
-      git.show([`HEAD:${filePath}`]).catch(() => ''),
+      git.show([`HEAD:${filePath}`]).catch(async (error) => {
+        const message = error instanceof Error ? error.message : String(error ?? '');
+        if (this.isSpawnBadFileDescriptorError(message)) {
+          try {
+            return await this.runGitCli(projectPath, ['show', `HEAD:${filePath}`]);
+          } catch {
+            return '';
+          }
+        }
+        return '';
+      }),
       fsPromises.readFile(path.join(projectPath, filePath), 'utf8').catch(() => ''),
     ]);
 
@@ -599,8 +921,18 @@ export class GitEngine {
   }
 
   async getCommitDiffContent(projectPath: string, commitHash: string): Promise<GitCommitDiffContentDto> {
-    const git = simpleGit(projectPath);
-    const patch = await git.show(['--format=', '--patch', commitHash]);
+    const git = this.createNonInteractiveGit(projectPath);
+    let patch;
+    try {
+      patch = await git.show(['--format=', '--patch', commitHash]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        patch = await this.runGitCli(projectPath, ['show', '--format=', '--patch', commitHash]);
+      } else {
+        throw error;
+      }
+    }
     const files = this.parseUnifiedPatchFiles(patch);
 
     if (files.length === 0) {
@@ -723,8 +1055,27 @@ export class GitEngine {
 
   async getHistory(projectPath: string, limit = 20): Promise<GitHistoryEntry[]> {
     const git = this.createNonInteractiveGit(projectPath);
-    const status = await git.status();
-    const localHistory = await git.log({ maxCount: limit });
+    let status;
+    try {
+      status = await git.status();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return this.getHistoryViaCli(projectPath, limit);
+      }
+      throw error;
+    }
+
+    let localHistory;
+    try {
+      localHistory = await git.log({ maxCount: limit });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return this.getHistoryViaCli(projectPath, limit);
+      }
+      throw error;
+    }
 
     const mapLocalHistory = (): GitHistoryEntry[] => localHistory.all.map((entry) => ({
       hash: entry.hash,
@@ -806,8 +1157,26 @@ export class GitEngine {
   }
 
   async getFileHistory(projectPath: string, filePath: string, limit = 50): Promise<GitHistoryEntry[]> {
-    const git = simpleGit(projectPath);
-    const history = await git.log(['--max-count', String(limit), '--', filePath]);
+    const git = this.createNonInteractiveGit(projectPath);
+    let history;
+    try {
+      history = await git.log(['--max-count', String(limit), '--', filePath]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        const format = '%H%x1f%aI%x1f%s%x1f%aN%x1e';
+        const raw = await this.runGitCli(projectPath, ['log', `--pretty=format:${format}`, '--max-count', String(limit), '--', filePath]);
+        const cliEntries = this.parseGitLogCliOutput(raw);
+        return cliEntries.map((entry) => ({
+          hash: entry.hash,
+          shortHash: entry.hash.slice(0, 7),
+          date: entry.date,
+          subject: entry.message,
+          author: entry.author_name,
+        }));
+      }
+      throw error;
+    }
 
     return history.all.map((entry) => ({
       hash: entry.hash,
@@ -819,8 +1188,17 @@ export class GitEngine {
   }
 
   async getRemoteState(projectPath: string): Promise<GitRemoteStateDto> {
-    const git = simpleGit(projectPath);
-    const status = await git.status();
+    const git = this.createNonInteractiveGit(projectPath);
+    let status;
+    try {
+      status = await git.status();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return this.getRemoteStateViaCli(projectPath);
+      }
+      throw error;
+    }
 
     const localBranch = typeof status.current === 'string' && status.current.trim().length > 0
       ? status.current
@@ -844,6 +1222,15 @@ export class GitEngine {
       await git.fetch(['--prune']);
       return { success: true };
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          await this.runGitCli(projectPath, ['fetch', '--prune']);
+          return { success: true };
+        } catch {
+          // continue to action failure mapping below
+        }
+      }
       return this.toActionFailure(git, error, 'Failed to fetch remote updates.');
     }
   }
@@ -854,6 +1241,15 @@ export class GitEngine {
       await git.pull();
       return { success: true };
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          await this.runGitCli(projectPath, ['pull']);
+          return { success: true };
+        } catch {
+          // continue to action failure mapping below
+        }
+      }
       return this.toActionFailure(git, error, 'Failed to pull remote changes.');
     }
   }
@@ -865,6 +1261,14 @@ export class GitEngine {
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to push local commits.';
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          await this.runGitCli(projectPath, ['push']);
+          return { success: true };
+        } catch {
+          // continue with existing upstream handling below
+        }
+      }
       if (this.isNoUpstreamError(message)) {
         const currentBranch = await this.getCurrentBranchName(git);
         if (currentBranch) {
@@ -889,15 +1293,28 @@ export class GitEngine {
       };
     }
 
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     try {
       await git.add(['-A']);
       await git.commit(normalizedMessage);
       return { success: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create commit.';
+      if (this.isSpawnBadFileDescriptorError(errorMessage)) {
+        try {
+          await this.runGitCli(projectPath, ['add', '-A']);
+          await this.runGitCli(projectPath, ['commit', '-m', normalizedMessage]);
+          return { success: true };
+        } catch (cliError) {
+          return {
+            success: false,
+            error: cliError instanceof Error ? cliError.message : 'Failed to create commit.',
+          };
+        }
+      }
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create commit.',
+        error: errorMessage,
       };
     }
   }
@@ -949,7 +1366,7 @@ export class GitEngine {
   }
 
   async pruneLfsCache(projectPath: string, options: GitLfsPruneOptions = {}): Promise<GitLfsPruneResult> {
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     const verifyRemote = options.verifyRemote ?? true;
     const dryRun = options.dryRun ?? false;
     const recentCommitsToKeep = Math.max(0, options.recentCommitsToKeep ?? 2);
@@ -986,7 +1403,17 @@ export class GitEngine {
     }
 
     try {
-      const output = await git.raw(args);
+      let output;
+      try {
+        output = await git.raw(args);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? '');
+        if (this.isSpawnBadFileDescriptorError(message)) {
+          output = await this.runGitCli(projectPath, args);
+        } else {
+          throw error;
+        }
+      }
       return {
         success: true,
         dryRun,
@@ -1026,7 +1453,7 @@ export class GitEngine {
       };
     }
 
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     const isRepo = await git.checkIsRepo();
 
     if (isRepo) {
