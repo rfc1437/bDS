@@ -141,8 +141,8 @@ describe('SettingsView Diff Preferences', () => {
 
     expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
       expect.objectContaining({
-        categorySettings: expect.objectContaining({
-          page: expect.objectContaining({ renderInLists: true, showTitle: true }),
+        categoryMetadata: expect.objectContaining({
+          page: expect.objectContaining({ renderInLists: true, showTitle: true, title: 'page' }),
         }),
       })
     );

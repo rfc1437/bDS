@@ -254,6 +254,41 @@ describe('PreviewServer', () => {
     expect(tagHtml).toContain('class="blog-menu"');
   });
 
+  it('renders category menu link labels from category metadata title', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'news-post', title: 'News Post', categories: ['news'], createdAt: new Date('2025-01-03T10:00:00.000Z') }),
+    ];
+
+    server = new PreviewServer({
+      postEngine: makeEngine(posts),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            categoryMetadata: {
+              news: { renderInLists: true, showTitle: true, title: 'Newsroom' },
+            },
+          } as any;
+        },
+      } as any,
+      menuEngine: makeMenuEngine({
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+          { id: 'news', title: 'news', kind: 'category-archive', categoryName: 'news', children: [] },
+        ],
+      }),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const rootHtml = await (await fetch(`${server.getBaseUrl()}/`)).text();
+    expect(rootHtml).toContain('href="/category/news/"');
+    expect(rootHtml).toContain('>Newsroom</a>');
+    expect(rootHtml).not.toContain('>news</a>');
+  });
+
   it('uses local CSS/JS assets and serves them from the preview server', async () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),

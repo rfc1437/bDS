@@ -69,6 +69,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       language,
       pageTitle,
       picoTheme: metadata?.picoTheme,
+      categoryMetadata: (metadata as any)?.categoryMetadata,
       categorySettings: (metadata as any)?.categorySettings,
       menu,
     };

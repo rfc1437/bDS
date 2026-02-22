@@ -402,11 +402,15 @@ export function registerIpcHandlers(): void {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.getActiveProject();
     const engine = getPostEngine();
+    const metaEngine = getMetaEngine();
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
+      metaEngine.setProjectContext(project.id, dataDir);
     }
-    return engine.rebuildDatabaseFromFiles();
+    await engine.rebuildDatabaseFromFiles();
+    await metaEngine.syncOnStartup();
+    return true;
   });
 
   safeHandle('posts:search', async (_, query: string) => {
@@ -818,6 +822,24 @@ export function registerIpcHandlers(): void {
 
   // ============ Meta Handlers ============
 
+  const ensureMetaContext = async (engine: ReturnType<typeof getMetaEngine>) => {
+    const projectEngine = getProjectEngine();
+    const activeProject = await projectEngine.getActiveProject();
+    if (!activeProject) {
+      return;
+    }
+
+    const dataDir = projectEngine.getDataDir(activeProject.id, activeProject.dataPath);
+    engine.setProjectContext(activeProject.id, dataDir);
+  };
+
+  const ensureMetaReady = async (engine: ReturnType<typeof getMetaEngine>) => {
+    await ensureMetaContext(engine);
+    if (!engine.isInitialized()) {
+      await engine.syncOnStartup();
+    }
+  };
+
   safeHandle('menu:get', async () => {
     const projectEngine = getProjectEngine();
     const menuEngine = getMenuEngine();
@@ -848,40 +870,47 @@ export function registerIpcHandlers(): void {
 
   safeHandle('meta:getTags', async () => {
     const engine = getMetaEngine();
+    await ensureMetaReady(engine);
     return engine.getTags();
   });
 
   safeHandle('meta:getCategories', async () => {
     const engine = getMetaEngine();
+    await ensureMetaReady(engine);
     return engine.getCategories();
   });
 
   safeHandle('meta:addTag', async (_, tag: string) => {
     const engine = getMetaEngine();
+    await ensureMetaReady(engine);
     await engine.addTag(tag);
     return engine.getTags();
   });
 
   safeHandle('meta:removeTag', async (_, tag: string) => {
     const engine = getMetaEngine();
+    await ensureMetaReady(engine);
     await engine.removeTag(tag);
     return engine.getTags();
   });
 
   safeHandle('meta:addCategory', async (_, category: string) => {
     const engine = getMetaEngine();
+    await ensureMetaReady(engine);
     await engine.addCategory(category);
     return engine.getCategories();
   });
 
   safeHandle('meta:removeCategory', async (_, category: string) => {
     const engine = getMetaEngine();
+    await ensureMetaReady(engine);
     await engine.removeCategory(category);
     return engine.getCategories();
   });
 
   safeHandle('meta:syncOnStartup', async () => {
     const engine = getMetaEngine();
+    await ensureMetaContext(engine);
     await engine.syncOnStartup();
     return {
       tags: await engine.getTags(),
@@ -892,20 +921,20 @@ export function registerIpcHandlers(): void {
 
   safeHandle('meta:getProjectMetadata', async () => {
     const engine = getMetaEngine();
-    if (!engine.isInitialized()) {
-      await engine.syncOnStartup();
-    }
+    await ensureMetaReady(engine);
     return engine.getProjectMetadata();
   });
 
   safeHandle('meta:setProjectMetadata', async (_, metadata: { name: string; description?: string }) => {
     const engine = getMetaEngine();
+    await ensureMetaContext(engine);
     await engine.setProjectMetadata(metadata);
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('../shared/picoThemes').PicoThemeName; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => {
     const engine = getMetaEngine();
+    await ensureMetaContext(engine);
     await engine.updateProjectMetadata(updates);
     return engine.getProjectMetadata();
   });

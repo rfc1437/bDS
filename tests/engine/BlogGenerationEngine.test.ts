@@ -184,6 +184,7 @@ describe('BlogGenerationEngine', () => {
       language: string;
       pageTitle: string;
       categorySettings: Record<string, { renderInLists: boolean; showTitle: boolean }>;
+      categoryMetadata: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>;
       menu: MenuDocument;
     }>,
   ) {
@@ -200,6 +201,7 @@ describe('BlogGenerationEngine', () => {
       language: options?.language,
       pageTitle: options?.pageTitle,
       categorySettings: options?.categorySettings,
+      categoryMetadata: options?.categoryMetadata,
       menu: options?.menu,
     }, onProgress);
   }
@@ -292,6 +294,35 @@ describe('BlogGenerationEngine', () => {
     expect(tagHtml).toContain('class="blog-menu"');
   });
 
+  it('renders category menu links with category metadata title while keeping category URL', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'news-post',
+        title: 'News Post',
+        categories: ['news'],
+        createdAt: new Date('2025-03-15T10:00:00Z'),
+      }),
+    ];
+
+    await generate(posts, {
+      categoryMetadata: {
+        news: { renderInLists: true, showTitle: true, title: 'Newsroom' },
+      },
+      menu: {
+        items: [
+          { id: 'home', title: 'Home', kind: 'home', pageSlug: 'home', children: [] },
+          { id: 'news', title: 'news', kind: 'category-archive', categoryName: 'news', children: [] },
+        ],
+      },
+    });
+
+    const indexHtml = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
+    expect(indexHtml).toContain('href="/category/news/"');
+    expect(indexHtml).toContain('>Newsroom</a>');
+    expect(indexHtml).not.toContain('>news</a>');
+  });
+
   it('copies all required asset files to html/assets/ and html/images/', async () => {
     const result = await generate([]);
 
@@ -365,6 +396,25 @@ describe('BlogGenerationEngine', () => {
     const newsHtml = await readFile(newsPath, 'utf-8');
     expect(newsHtml).toContain('news');
     expect(newsHtml).toContain('data-template="post-list"');
+  });
+
+  it('uses category title in rendered archive heading while keeping category name in URL path', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'news-1', title: 'News 1', categories: ['news'] }),
+    ];
+
+    await generate(posts, {
+      categoryMetadata: {
+        news: { renderInLists: true, showTitle: true, title: 'Newsroom' },
+      },
+    });
+
+    const newsPath = path.join(tempDir, 'html', 'category', 'news', 'index.html');
+    expect(await fileExists(newsPath)).toBe(true);
+
+    const newsHtml = await readFile(newsPath, 'utf-8');
+    expect(newsHtml).toContain('<h1 class="archive-heading">Newsroom</h1>');
+    expect(newsHtml).not.toContain('<h1 class="archive-heading">news</h1>');
   });
 
   it('generates tag pages with correct archive context', async () => {

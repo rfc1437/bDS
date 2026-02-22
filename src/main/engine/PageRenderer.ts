@@ -294,23 +294,47 @@ function buildMenuItemHref(item: MenuItemData): string {
   return '#';
 }
 
-function toTemplateMenuItem(item: MenuItemData): TemplateMenuItem {
-  const children = (Array.isArray(item.children) ? item.children : []).map((child) => toTemplateMenuItem(child));
+function resolveMenuItemTitle(
+  item: MenuItemData,
+  categoryMetadata?: Record<string, { title?: string }>,
+): string {
+  if (item.kind === 'category-archive') {
+    const categoryName = (item.categoryName || '').trim();
+    const metadataTitle = categoryName.length > 0
+      ? (categoryMetadata?.[categoryName]?.title || '').trim()
+      : '';
+
+    if (metadataTitle.length > 0) {
+      return metadataTitle;
+    }
+  }
+
+  return item.title;
+}
+
+function toTemplateMenuItem(
+  item: MenuItemData,
+  categoryMetadata?: Record<string, { title?: string }>,
+): TemplateMenuItem {
+  const children = (Array.isArray(item.children) ? item.children : []).map((child) => toTemplateMenuItem(child, categoryMetadata));
   return {
-    title: item.title,
+    title: resolveMenuItemTitle(item, categoryMetadata),
     href: buildMenuItemHref(item),
     has_children: children.length > 0,
     children,
   };
 }
 
-export function buildTemplateMenuItems(menu: MenuDocument | null | undefined): TemplateMenuItem[] {
+export function buildTemplateMenuItems(
+  menu: MenuDocument | null | undefined,
+  categoryMetadata?: Record<string, { title?: string }>,
+): TemplateMenuItem[] {
   const items = menu?.items;
   if (!Array.isArray(items)) {
     return [];
   }
 
-  return items.map((item) => toTemplateMenuItem(item));
+  return items.map((item) => toTemplateMenuItem(item, categoryMetadata));
 }
 
 export function normalizeMacroName(name: string): string {

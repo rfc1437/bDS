@@ -33,9 +33,14 @@ export interface BlogGenerationOptions {
   language?: string;
   pageTitle?: string;
   picoTheme?: PicoThemeName;
+  categoryMetadata?: Record<string, CategoryMetadata>;
   categorySettings?: Record<string, CategoryRenderSettings>;
   menu?: MenuDocument;
   sections?: BlogGenerationSection[];
+}
+
+export interface CategoryMetadata extends CategoryRenderSettings {
+  title: string;
 }
 
 export type BlogGenerationSection = 'core' | 'single' | 'category' | 'tag' | 'date';
@@ -105,6 +110,7 @@ function clampMaxPostsPerPage(value: unknown): number {
 }
 
 function resolveCategorySettings(
+  categoryMetadata: Record<string, CategoryMetadata> | undefined,
   value: Record<string, CategoryRenderSettings> | undefined,
 ): Record<string, CategoryRenderSettings> {
   const defaults: Record<string, CategoryRenderSettings> = {
@@ -114,11 +120,20 @@ function resolveCategorySettings(
     page: { renderInLists: false, showTitle: true },
   };
 
-  if (!value) {
-    return defaults;
+  const merged = { ...defaults };
+  if (categoryMetadata) {
+    for (const [category, metadata] of Object.entries(categoryMetadata)) {
+      merged[category] = {
+        renderInLists: metadata?.renderInLists !== false,
+        showTitle: metadata?.showTitle !== false,
+      };
+    }
   }
 
-  const merged = { ...defaults };
+  if (!value) {
+    return merged;
+  }
+
   for (const [category, settings] of Object.entries(value)) {
     merged[category] = {
       renderInLists: settings?.renderInLists !== false,
@@ -126,6 +141,15 @@ function resolveCategorySettings(
     };
   }
   return merged;
+}
+
+function resolveCategoryDisplayTitle(
+  category: string,
+  categoryMetadata: Record<string, CategoryMetadata> | undefined,
+): string {
+  const title = categoryMetadata?.[category]?.title;
+  const trimmed = typeof title === 'string' ? title.trim() : '';
+  return trimmed.length > 0 ? trimmed : category;
 }
 
 function buildCanonicalPreviewPath(createdAt: Date, slug: string): string {
@@ -332,7 +356,7 @@ export class BlogGenerationEngine {
     const includeTag = selectedSections.has('tag');
     const includeDate = selectedSections.has('date');
 
-    const categorySettings = resolveCategorySettings(options.categorySettings);
+    const categorySettings = resolveCategorySettings(options.categoryMetadata, options.categorySettings);
     const listExcludedCategories = Object.entries(categorySettings)
       .filter(([, settings]) => settings.renderInLists === false)
       .map(([category]) => category);
@@ -658,7 +682,7 @@ export class BlogGenerationEngine {
     const pageContext = {
       page_title: pageTitle,
       language,
-      menu_items: buildTemplateMenuItems(options.menu),
+      menu_items: buildTemplateMenuItems(options.menu, options.categoryMetadata),
       pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
     };
 
@@ -680,7 +704,7 @@ export class BlogGenerationEngine {
 
     if (includeCategory) {
       onProgress(50, 'Generating category pages...');
-      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, reportUnitProgress);
+      pagesGenerated += await this.generateCategoryPages(options.projectId, publishedListPosts, allCategories, rewriteContext, maxPostsPerPage, htmlDir, pageContext, pageRenderer, categorySettings, options.categoryMetadata, reportUnitProgress);
     }
 
     if (includeTag) {
@@ -723,7 +747,7 @@ export class BlogGenerationEngine {
     onProgress(0, 'Collecting sitemap URLs...');
 
     const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
-    const categorySettings = resolveCategorySettings(options.categorySettings);
+    const categorySettings = resolveCategorySettings(options.categoryMetadata, options.categorySettings);
     const listExcludedCategories = Object.entries(categorySettings)
       .filter(([, settings]) => settings.renderInLists === false)
       .map(([category]) => category);
@@ -1117,7 +1141,7 @@ export class BlogGenerationEngine {
         renderedUrlCount += generationResult.pagesGenerated;
       }
     } else {
-      const categorySettings = resolveCategorySettings(options.categorySettings);
+      const categorySettings = resolveCategorySettings(options.categoryMetadata, options.categorySettings);
       const listExcludedCategories = Object.entries(categorySettings)
         .filter(([, settings]) => settings.renderInLists === false)
         .map(([category]) => category);
@@ -1274,7 +1298,7 @@ export class BlogGenerationEngine {
       const pageContext = {
         page_title: pageTitle,
         language,
-        menu_items: buildTemplateMenuItems(options.menu),
+        menu_items: buildTemplateMenuItems(options.menu, options.categoryMetadata),
         pico_stylesheet_href: getPicoStylesheetHref(sanitizePicoTheme(options.picoTheme)),
       };
       const pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
@@ -1367,6 +1391,7 @@ export class BlogGenerationEngine {
           pageContext,
           pageRenderer,
           categorySettings,
+          options.categoryMetadata,
           onPageGenerated,
         );
       }
@@ -1560,6 +1585,7 @@ export class BlogGenerationEngine {
     pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string },
     pageRenderer: PageRenderer,
     categorySettings: Record<string, CategoryRenderSettings>,
+    categoryMetadata: Record<string, CategoryMetadata> | undefined,
     onPageGenerated: (message: string) => void,
   ): Promise<number> {
     let count = 0;
@@ -1567,6 +1593,8 @@ export class BlogGenerationEngine {
     for (const category of Array.from(allCategories).sort()) {
       const categoryPosts = posts.filter((post) => (post.categories || []).includes(category));
       if (categoryPosts.length === 0) continue;
+
+      const categoryDisplayTitle = resolveCategoryDisplayTitle(category, categoryMetadata);
 
       const totalPages = Math.max(1, Math.ceil(categoryPosts.length / maxPostsPerPage));
       const encodedCategory = encodeURIComponent(category);
@@ -1580,7 +1608,7 @@ export class BlogGenerationEngine {
         const html = await pageRenderer.renderPostList(pagePosts, rewriteContext, {
           archiveGrouping: true,
           routeKind: 'non-date',
-          archiveContext: { kind: 'category', name: category },
+          archiveContext: { kind: 'category', name: categoryDisplayTitle },
           basePathname,
           pagination: { page, maxPostsPerPage, totalPosts: categoryPosts.length },
           categorySettings,

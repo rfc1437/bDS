@@ -33,9 +33,10 @@ interface Credentials {
   sshKeyPath: string;
 }
 
-interface CategoryRenderSettings {
+interface CategoryMetadata {
   renderInLists: boolean;
   showTitle: boolean;
+  title: string;
 }
 
 const RENDER_LANGUAGE_LABEL_KEY: Record<SupportedLanguage, string> = {
@@ -65,11 +66,11 @@ const SearchIcon = () => (
 // Default post categories based on VISION.md
 const DEFAULT_POST_CATEGORIES = ['article', 'picture', 'aside', 'page'];
 
-const DEFAULT_CATEGORY_SETTINGS: Record<string, CategoryRenderSettings> = {
-  article: { renderInLists: true, showTitle: true },
-  picture: { renderInLists: true, showTitle: true },
-  aside: { renderInLists: true, showTitle: false },
-  page: { renderInLists: false, showTitle: true },
+const DEFAULT_CATEGORY_METADATA: Record<string, CategoryMetadata> = {
+  article: { renderInLists: true, showTitle: true, title: 'article' },
+  picture: { renderInLists: true, showTitle: true, title: 'picture' },
+  aside: { renderInLists: true, showTitle: false, title: 'aside' },
+  page: { renderInLists: false, showTitle: true, title: 'page' },
 };
 
 // Standard categories that cannot be deleted
@@ -142,7 +143,7 @@ export const SettingsView: React.FC = () => {
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
-  const [categorySettings, setCategorySettings] = useState<Record<string, CategoryRenderSettings>>(DEFAULT_CATEGORY_SETTINGS);
+  const [categoryMetadata, setCategoryMetadata] = useState<Record<string, CategoryMetadata>>(DEFAULT_CATEGORY_METADATA);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
   // AI Assistant settings
@@ -194,14 +195,21 @@ export const SettingsView: React.FC = () => {
           : 50;
         setProjectMaxPostsPerPage(maxPostsPerPage);
 
-        const incomingCategorySettings = (metadata as any)?.categorySettings as Record<string, CategoryRenderSettings> | undefined;
-        setCategorySettings((current) => {
-          const merged = { ...DEFAULT_CATEGORY_SETTINGS, ...current };
-          if (incomingCategorySettings && typeof incomingCategorySettings === 'object') {
-            for (const [category, settings] of Object.entries(incomingCategorySettings)) {
+        const incomingCategoryMetadata = (metadata as any)?.categoryMetadata as Record<string, CategoryMetadata> | undefined;
+        const incomingLegacyCategorySettings = (metadata as any)?.categorySettings as Record<string, { renderInLists: boolean; showTitle: boolean }> | undefined;
+        setCategoryMetadata((current) => {
+          const merged = { ...DEFAULT_CATEGORY_METADATA, ...current };
+          const source = incomingCategoryMetadata && typeof incomingCategoryMetadata === 'object'
+            ? incomingCategoryMetadata
+            : incomingLegacyCategorySettings;
+          if (source && typeof source === 'object') {
+            for (const [category, settings] of Object.entries(source)) {
               merged[category] = {
                 renderInLists: settings?.renderInLists !== false,
                 showTitle: settings?.showTitle !== false,
+                title: typeof (settings as any)?.title === 'string' && (settings as any).title.trim().length > 0
+                  ? (settings as any).title.trim()
+                  : category,
               };
             }
           }
@@ -224,11 +232,11 @@ export const SettingsView: React.FC = () => {
         const categories = await window.electronAPI?.meta.getCategories();
         if (categories && categories.length > 0) {
           setPostCategories(categories);
-          setCategorySettings((current) => {
-            const next = { ...DEFAULT_CATEGORY_SETTINGS, ...current };
+          setCategoryMetadata((current) => {
+            const next = { ...DEFAULT_CATEGORY_METADATA, ...current };
             for (const category of categories) {
               if (!next[category]) {
-                next[category] = { renderInLists: true, showTitle: true };
+                next[category] = { renderInLists: true, showTitle: true, title: category };
               }
             }
             return next;
@@ -236,7 +244,7 @@ export const SettingsView: React.FC = () => {
         } else {
           // Initialize with defaults if no categories exist
           setPostCategories(DEFAULT_POST_CATEGORIES);
-          setCategorySettings(DEFAULT_CATEGORY_SETTINGS);
+          setCategoryMetadata(DEFAULT_CATEGORY_METADATA);
         }
 
         // Load AI settings
@@ -318,7 +326,7 @@ export const SettingsView: React.FC = () => {
           mainLanguage: resolveSupportedRenderLanguage(projectMainLanguage),
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
-          categorySettings,
+          categoryMetadata,
         });
       }
       showToast.success(t('settings.toast.projectSaved'));
@@ -573,12 +581,12 @@ export const SettingsView: React.FC = () => {
         if (updatedCategories) {
           setPostCategories(updatedCategories);
         }
-        const nextSettings = {
-          ...categorySettings,
-          [trimmed]: categorySettings[trimmed] || { renderInLists: true, showTitle: true },
+        const nextCategoryMetadata = {
+          ...categoryMetadata,
+          [trimmed]: categoryMetadata[trimmed] || { renderInLists: true, showTitle: true, title: trimmed },
         };
-        setCategorySettings(nextSettings);
-        await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
+        setCategoryMetadata(nextCategoryMetadata);
+        await window.electronAPI?.meta.updateProjectMetadata({ categoryMetadata: nextCategoryMetadata });
         setNewCategoryInput('');
         showToast.success(t('settings.toast.categoryAdded', { category: trimmed }));
       } catch (error) {
@@ -604,10 +612,10 @@ export const SettingsView: React.FC = () => {
       if (updatedCategories) {
         setPostCategories(updatedCategories);
       }
-      const nextSettings = { ...categorySettings };
-      delete nextSettings[categoryToRemove];
-      setCategorySettings(nextSettings);
-      await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
+      const nextCategoryMetadata = { ...categoryMetadata };
+      delete nextCategoryMetadata[categoryToRemove];
+      setCategoryMetadata(nextCategoryMetadata);
+      await window.electronAPI?.meta.updateProjectMetadata({ categoryMetadata: nextCategoryMetadata });
       showToast.success(t('settings.toast.categoryRemoved', { category: categoryToRemove }));
     } catch (error) {
       console.error('Failed to remove category:', error);
@@ -631,9 +639,9 @@ export const SettingsView: React.FC = () => {
       // Refresh the list
       const updatedCategories = await window.electronAPI?.meta.getCategories();
       setPostCategories(updatedCategories || DEFAULT_POST_CATEGORIES);
-      const defaults = { ...DEFAULT_CATEGORY_SETTINGS };
-      setCategorySettings(defaults);
-      await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: defaults });
+      const defaults = { ...DEFAULT_CATEGORY_METADATA };
+      setCategoryMetadata(defaults);
+      await window.electronAPI?.meta.updateProjectMetadata({ categoryMetadata: defaults });
       showToast.success(t('settings.toast.categoriesReset'));
     } catch (error) {
       console.error('Failed to reset categories:', error);
@@ -643,21 +651,51 @@ export const SettingsView: React.FC = () => {
 
   const handleCategorySettingToggle = async (
     category: string,
-    field: keyof CategoryRenderSettings,
+    field: keyof Pick<CategoryMetadata, 'renderInLists' | 'showTitle'>,
     value: boolean,
   ) => {
-    const nextSettings: Record<string, CategoryRenderSettings> = {
-      ...categorySettings,
+    const nextCategoryMetadata: Record<string, CategoryMetadata> = {
+      ...categoryMetadata,
       [category]: {
-        ...(categorySettings[category] || { renderInLists: true, showTitle: true }),
+        ...(categoryMetadata[category] || { renderInLists: true, showTitle: true, title: category }),
         [field]: value,
       },
     };
 
-    setCategorySettings(nextSettings);
+    setCategoryMetadata(nextCategoryMetadata);
 
     try {
-      await window.electronAPI?.meta.updateProjectMetadata({ categorySettings: nextSettings });
+      await window.electronAPI?.meta.updateProjectMetadata({ categoryMetadata: nextCategoryMetadata });
+    } catch (error) {
+      console.error('Failed to update category settings:', error);
+      showToast.error(t('settings.toast.categorySettingsUpdateFailed'));
+    }
+  };
+
+  const handleCategoryTitleChange = (category: string, value: string) => {
+    setCategoryMetadata((current) => ({
+      ...current,
+      [category]: {
+        ...(current[category] || { renderInLists: true, showTitle: true, title: category }),
+        title: value,
+      },
+    }));
+  };
+
+  const persistCategoryTitle = async (category: string) => {
+    const current = categoryMetadata[category] || { renderInLists: true, showTitle: true, title: category };
+    const nextCategoryMetadata = {
+      ...categoryMetadata,
+      [category]: {
+        ...current,
+        title: current.title.trim().length > 0 ? current.title.trim() : category,
+      },
+    };
+
+    setCategoryMetadata(nextCategoryMetadata);
+
+    try {
+      await window.electronAPI?.meta.updateProjectMetadata({ categoryMetadata: nextCategoryMetadata });
     } catch (error) {
       console.error('Failed to update category settings:', error);
       showToast.error(t('settings.toast.categorySettingsUpdateFailed'));
@@ -671,47 +709,67 @@ export const SettingsView: React.FC = () => {
       description={t('settings.content.description')}
       hidden={!sectionHasMatches(contentKeywords)}
     >
-        <div className="categories-list">
-          {postCategories.map((cat) => {
-            const isProtected = PROTECTED_CATEGORIES.includes(cat);
-            const setting = categorySettings[cat] || { renderInLists: true, showTitle: true };
-            return (
-            <div key={cat} className="category-item">
-              <span className="category-name">{cat}{isProtected && t('settings.content.standardSuffix')}</span>
-              <div className="category-settings-controls">
-                <label className="category-setting-toggle" htmlFor={`category-${cat}-render-in-lists`}>
-                  <input
-                    id={`category-${cat}-render-in-lists`}
-                    aria-label={t('settings.content.renderInListsAria', { category: cat })}
-                    type="checkbox"
-                    checked={setting.renderInLists}
-                    onChange={(event) => handleCategorySettingToggle(cat, 'renderInLists', event.target.checked)}
-                  />
-                  <span>{t('settings.content.renderInLists')}</span>
-                </label>
-                <label className="category-setting-toggle" htmlFor={`category-${cat}-show-title`}>
-                  <input
-                    id={`category-${cat}-show-title`}
-                    aria-label={t('settings.content.showTitlesAria', { category: cat })}
-                    type="checkbox"
-                    checked={setting.showTitle}
-                    onChange={(event) => handleCategorySettingToggle(cat, 'showTitle', event.target.checked)}
-                  />
-                  <span>{t('settings.content.showTitles')}</span>
-                </label>
-              </div>
-              {!isProtected && (
-              <button
-                className="category-remove"
-                onClick={() => handleRemoveCategory(cat)}
-                title={t('settings.content.removeCategoryTitle', { category: cat })}
-              >
-                ✕
-              </button>
-              )}
-            </div>
-            );
-          })}
+        <div className="categories-table-wrapper">
+          <table className="categories-table">
+            <thead>
+              <tr>
+                <th>{t('settings.content.categoryColumn')}</th>
+                <th>{t('settings.content.titleColumn')}</th>
+                <th>{t('settings.content.renderInLists')}</th>
+                <th>{t('settings.content.showTitles')}</th>
+                <th>{t('settings.content.actionsColumn')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {postCategories.map((cat) => {
+                const isProtected = PROTECTED_CATEGORIES.includes(cat);
+                const metadata = categoryMetadata[cat] || { renderInLists: true, showTitle: true, title: cat };
+                return (
+                  <tr key={cat}>
+                    <td className="category-name-cell">{cat}{isProtected && t('settings.content.standardSuffix')}</td>
+                    <td>
+                      <input
+                        type="text"
+                        value={metadata.title}
+                        onChange={(event) => handleCategoryTitleChange(cat, event.target.value)}
+                        onBlur={() => void persistCategoryTitle(cat)}
+                        aria-label={t('settings.content.categoryTitleAria', { category: cat })}
+                      />
+                    </td>
+                    <td className="category-checkbox-cell">
+                      <input
+                        id={`category-${cat}-render-in-lists`}
+                        aria-label={t('settings.content.renderInListsAria', { category: cat })}
+                        type="checkbox"
+                        checked={metadata.renderInLists}
+                        onChange={(event) => handleCategorySettingToggle(cat, 'renderInLists', event.target.checked)}
+                      />
+                    </td>
+                    <td className="category-checkbox-cell">
+                      <input
+                        id={`category-${cat}-show-title`}
+                        aria-label={t('settings.content.showTitlesAria', { category: cat })}
+                        type="checkbox"
+                        checked={metadata.showTitle}
+                        onChange={(event) => handleCategorySettingToggle(cat, 'showTitle', event.target.checked)}
+                      />
+                    </td>
+                    <td className="category-actions-cell">
+                      {!isProtected && (
+                        <button
+                          className="category-remove"
+                          onClick={() => handleRemoveCategory(cat)}
+                          title={t('settings.content.removeCategoryTitle', { category: cat })}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
         <div className="category-add-form">

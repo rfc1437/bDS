@@ -593,23 +593,23 @@ describe('MetaEngine', () => {
       expect(parsed.picoTheme).toBe('slate');
     });
 
-    it('should apply default category settings for standard categories', async () => {
+    it('should apply default category metadata for standard categories', async () => {
       await metaEngine.setProjectMetadata({
         name: 'Category Defaults Project',
       } as any);
 
       const metadata = await metaEngine.getProjectMetadata() as any;
-      expect(metadata.categorySettings).toEqual(
+      expect(metadata.categoryMetadata).toEqual(
         expect.objectContaining({
-          article: { renderInLists: true, showTitle: true },
-          picture: { renderInLists: true, showTitle: true },
-          aside: { renderInLists: true, showTitle: false },
-          page: { renderInLists: false, showTitle: true },
+          article: { renderInLists: true, showTitle: true, title: 'article' },
+          picture: { renderInLists: true, showTitle: true, title: 'picture' },
+          aside: { renderInLists: true, showTitle: false, title: 'aside' },
+          page: { renderInLists: false, showTitle: true, title: 'page' },
         })
       );
     });
 
-    it('should persist category settings to project.json', async () => {
+    it('should persist legacy categorySettings input to category-meta.json', async () => {
       await metaEngine.setProjectMetadata({
         name: 'Persisted Category Settings',
         categorySettings: {
@@ -621,20 +621,47 @@ describe('MetaEngine', () => {
       } as any);
 
       const metaDir = metaEngine.getMetaDir();
-      const projectPath = normalizePath(`${metaDir}/project.json`);
-      const content = mockFiles.get(projectPath);
+      const categoryMetaPath = normalizePath(`${metaDir}/category-meta.json`);
+      const content = mockFiles.get(categoryMetaPath);
       const parsed = JSON.parse(content!);
 
-      expect(parsed.categorySettings).toEqual(
+      expect(parsed).toEqual(
         expect.objectContaining({
-          custom: { renderInLists: false, showTitle: true },
-          aside: { renderInLists: true, showTitle: false },
-          page: { renderInLists: false, showTitle: true },
+          custom: { renderInLists: false, showTitle: true, title: 'custom' },
+          aside: { renderInLists: true, showTitle: false, title: 'aside' },
+          page: { renderInLists: false, showTitle: true, title: 'page' },
         })
       );
     });
 
-    it('should merge missing category settings with defaults when loading from filesystem', async () => {
+    it('should persist category metadata to category-meta.json and not to project.json', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Persisted Category Metadata',
+        categoryMetadata: {
+          article: { renderInLists: true, showTitle: true, title: 'Articles' },
+          updates: { renderInLists: false, showTitle: true, title: 'Project Updates' },
+        },
+      } as any);
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      const categoryMetaPath = normalizePath(`${metaDir}/category-meta.json`);
+
+      const projectContent = mockFiles.get(projectPath);
+      const categoryMetaContent = mockFiles.get(categoryMetaPath);
+
+      expect(projectContent).toBeDefined();
+      expect(categoryMetaContent).toBeDefined();
+
+      const parsedProject = JSON.parse(projectContent!);
+      const parsedCategoryMeta = JSON.parse(categoryMetaContent!);
+
+      expect(parsedProject.categorySettings).toBeUndefined();
+      expect(parsedProject.categoryMetadata).toBeUndefined();
+      expect(parsedCategoryMeta.updates).toEqual({ renderInLists: false, showTitle: true, title: 'Project Updates' });
+    });
+
+    it('should merge missing category settings with defaults when loading legacy project metadata', async () => {
       const metaDir = metaEngine.getMetaDir();
       const projectPath = normalizePath(`${metaDir}/project.json`);
       mockFiles.set(projectPath, JSON.stringify({
@@ -647,12 +674,12 @@ describe('MetaEngine', () => {
       await metaEngine.loadProjectMetadata();
 
       const metadata = await metaEngine.getProjectMetadata() as any;
-      expect(metadata.categorySettings).toEqual(
+      expect(metadata.categoryMetadata).toEqual(
         expect.objectContaining({
-          custom: { renderInLists: false, showTitle: false },
-          article: { renderInLists: true, showTitle: true },
-          aside: { renderInLists: true, showTitle: false },
-          page: { renderInLists: false, showTitle: true },
+          custom: { renderInLists: false, showTitle: false, title: 'custom' },
+          article: { renderInLists: true, showTitle: true, title: 'article' },
+          aside: { renderInLists: true, showTitle: false, title: 'aside' },
+          page: { renderInLists: false, showTitle: true, title: 'page' },
         })
       );
     });
@@ -792,6 +819,46 @@ describe('MetaEngine', () => {
       const metadata = await metaEngine.getProjectMetadata();
       expect(metadata?.name).toBe('Synced Project');
       expect(metadata?.description).toBe('Synced description');
+    });
+
+    it('should load category metadata from category-meta.json during syncOnStartup', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/categories.json`), JSON.stringify(['news']));
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Synced Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/category-meta.json`), JSON.stringify({
+        news: { renderInLists: true, showTitle: true, title: 'Newsroom' },
+      }));
+
+      await metaEngine.syncOnStartup();
+
+      const metadata = await metaEngine.getProjectMetadata() as any;
+      expect(metadata?.categoryMetadata?.news).toEqual({ renderInLists: true, showTitle: true, title: 'Newsroom' });
+    });
+
+    it('should preserve customized category titles from category-meta.json across syncOnStartup', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/categories.json`), JSON.stringify(['article', 'picture', 'aside', 'page', 'news']));
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Synced Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/category-meta.json`), JSON.stringify({
+        article: { renderInLists: true, showTitle: true, title: 'Articles' },
+        picture: { renderInLists: true, showTitle: true, title: 'Photos' },
+        aside: { renderInLists: true, showTitle: false, title: 'Asides' },
+        page: { renderInLists: false, showTitle: true, title: 'Pages' },
+        news: { renderInLists: true, showTitle: true, title: 'Newsroom' },
+      }));
+
+      await metaEngine.syncOnStartup();
+
+      const metadata = await metaEngine.getProjectMetadata() as any;
+      expect(metadata?.categoryMetadata?.article?.title).toBe('Articles');
+      expect(metadata?.categoryMetadata?.picture?.title).toBe('Photos');
+      expect(metadata?.categoryMetadata?.aside?.title).toBe('Asides');
+      expect(metadata?.categoryMetadata?.page?.title).toBe('Pages');
+      expect(metadata?.categoryMetadata?.news?.title).toBe('Newsroom');
     });
 
     it('should create project.json with data from database during syncOnStartup if file does not exist', async () => {

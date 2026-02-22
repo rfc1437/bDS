@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { getMetaEngine, type ProjectMetadata } from './MetaEngine';
+import { getMetaEngine, type CategoryMetadata, type ProjectMetadata } from './MetaEngine';
 import { getMediaEngine, type MediaData } from './MediaEngine';
 import { getMenuEngine, type MenuDocument } from './MenuEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
@@ -182,8 +182,9 @@ export class PreviewServer {
       }
 
       const metadata = await this.settingsEngine.getProjectMetadata();
+      const categoryMetadata = this.resolveCategoryMetadata(metadata);
       const menu = await this.menuEngine.getMenu().catch(() => ({ items: [] }));
-      const menuItems = buildTemplateMenuItems(menu);
+      const menuItems = buildTemplateMenuItems(menu, categoryMetadata);
       const categorySettings = this.resolveCategorySettings(metadata);
       const listExcludedCategories = this.resolveListExcludedCategories(categorySettings);
       const language = metadata?.mainLanguage?.trim() || 'en';
@@ -235,7 +236,7 @@ export class PreviewServer {
         menuItems,
         picoStylesheetHref,
         htmlThemeAttribute: undefined,
-      }, categorySettings, listExcludedCategories, {
+      }, categorySettings, categoryMetadata, listExcludedCategories, {
         useDraftContent,
         draftPostId,
       });
@@ -264,6 +265,7 @@ export class PreviewServer {
     rewriteContext: HtmlRewriteContext,
     pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
+    categoryMetadata: Record<string, CategoryMetadata>,
     listExcludedCategories: string[],
     singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
   ): Promise<string | null> {
@@ -380,11 +382,12 @@ export class PreviewServer {
     const categoryMatch = pagedPathname.match(/^\/category\/([^/]+)$/);
     if (categoryMatch) {
       const category = categoryMatch[1];
+      const categoryDisplayTitle = categoryMetadata[category]?.title?.trim() || category;
       const result = await this.loadPublishedSnapshotsPage({ status: 'published', categories: [category], excludeCategories: listExcludedCategories }, pageOptions);
       return this.pageRenderer.renderPostList(result.posts, rewriteContext, {
         archiveGrouping: true,
         routeKind: 'non-date',
-        archiveContext: { kind: 'category', name: category },
+        archiveContext: { kind: 'category', name: categoryDisplayTitle },
         basePathname: pagedPathname,
         pagination: { page, maxPostsPerPage, totalPosts: result.totalPosts },
         categorySettings,
@@ -840,32 +843,51 @@ export class PreviewServer {
     }
   }
 
-  private resolveCategorySettings(metadata: ProjectMetadata | null): Record<string, CategoryRenderSettings> {
-    const defaults: Record<string, CategoryRenderSettings> = {
-      article: { renderInLists: true, showTitle: true },
-      picture: { renderInLists: true, showTitle: true },
-      aside: { renderInLists: true, showTitle: false },
-      page: { renderInLists: false, showTitle: true },
+  private resolveCategoryMetadata(metadata: ProjectMetadata | null): Record<string, CategoryMetadata> {
+    const defaults: Record<string, CategoryMetadata> = {
+      article: { renderInLists: true, showTitle: true, title: 'article' },
+      picture: { renderInLists: true, showTitle: true, title: 'picture' },
+      aside: { renderInLists: true, showTitle: false, title: 'aside' },
+      page: { renderInLists: false, showTitle: true, title: 'page' },
     };
 
-    const rawSettings = (metadata as { categorySettings?: unknown } | null)?.categorySettings;
-    if (!rawSettings || typeof rawSettings !== 'object') {
+    const rawMetadata = (metadata as { categoryMetadata?: unknown } | null)?.categoryMetadata;
+    const rawLegacySettings = (metadata as { categorySettings?: unknown } | null)?.categorySettings;
+    const source = rawMetadata && typeof rawMetadata === 'object' ? rawMetadata : rawLegacySettings;
+
+    if (!source || typeof source !== 'object') {
       return defaults;
     }
 
-    const mergedSettings: Record<string, CategoryRenderSettings> = { ...defaults };
-    for (const [category, rawValue] of Object.entries(rawSettings as Record<string, unknown>)) {
+    const merged: Record<string, CategoryMetadata> = { ...defaults };
+    for (const [category, rawValue] of Object.entries(source as Record<string, unknown>)) {
       if (!rawValue || typeof rawValue !== 'object') {
         continue;
       }
 
       const typedRawValue = rawValue as Record<string, unknown>;
-      mergedSettings[category] = {
+      const title = typeof typedRawValue.title === 'string' && typedRawValue.title.trim().length > 0
+        ? typedRawValue.title.trim()
+        : category;
+      merged[category] = {
         renderInLists: typedRawValue.renderInLists !== false,
         showTitle: typedRawValue.showTitle !== false,
+        title,
       };
     }
 
+    return merged;
+  }
+
+  private resolveCategorySettings(metadata: ProjectMetadata | null): Record<string, CategoryRenderSettings> {
+    const categoryMetadata = this.resolveCategoryMetadata(metadata);
+    const mergedSettings: Record<string, CategoryRenderSettings> = {};
+    for (const [category, value] of Object.entries(categoryMetadata)) {
+      mergedSettings[category] = {
+        renderInLists: value.renderInLists,
+        showTitle: value.showTitle,
+      };
+    }
     return mergedSettings;
   }
 

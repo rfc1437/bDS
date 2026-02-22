@@ -118,6 +118,7 @@ const mockMetaEngine = {
   removeCategory: vi.fn(),
   getProjectMetadata: vi.fn(),
   setProjectMetadata: vi.fn(),
+  updateProjectMetadata: vi.fn(),
 };
 
 const mockTagEngine = {
@@ -1222,6 +1223,23 @@ describe('IPC Handlers', () => {
       });
     });
 
+    describe('meta:getCategories', () => {
+      it('should set context and sync before returning categories when uninitialized', async () => {
+        const activeProject = createMockProject({ id: 'project-cats', dataPath: '/cats/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/cats-data');
+        mockMetaEngine.isInitialized.mockReturnValue(false);
+        mockMetaEngine.syncOnStartup.mockResolvedValue(undefined);
+        mockMetaEngine.getCategories.mockResolvedValue(['article', 'news', 'travel']);
+
+        const result = await invokeHandler('meta:getCategories');
+
+        expect(mockMetaEngine.setProjectContext).toHaveBeenCalledWith('project-cats', '/resolved/cats-data');
+        expect(mockMetaEngine.syncOnStartup).toHaveBeenCalled();
+        expect(result).toEqual(['article', 'news', 'travel']);
+      });
+    });
+
     describe('meta:getProjectMetadata', () => {
       it('should return project metadata', async () => {
         const metadata = { name: 'Test Blog', description: 'A test blog', mainLanguage: 'de' };
@@ -1231,6 +1249,20 @@ describe('IPC Handlers', () => {
         const result = await invokeHandler('meta:getProjectMetadata');
 
         expect(mockMetaEngine.getProjectMetadata).toHaveBeenCalled();
+        expect(result).toEqual(metadata);
+      });
+
+      it('should set meta engine context from active project before reading metadata', async () => {
+        const activeProject = createMockProject({ id: 'project-ctx', dataPath: '/ctx/data' });
+        const metadata = { name: 'Ctx Blog' };
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/ctx-data');
+        mockMetaEngine.isInitialized.mockReturnValue(true);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue(metadata);
+
+        const result = await invokeHandler('meta:getProjectMetadata');
+
+        expect(mockMetaEngine.setProjectContext).toHaveBeenCalledWith('project-ctx', '/resolved/ctx-data');
         expect(result).toEqual(metadata);
       });
 
@@ -1258,6 +1290,24 @@ describe('IPC Handlers', () => {
 
         expect(mockMetaEngine.setProjectMetadata).toHaveBeenCalledWith(newMetadata);
         expect(result).toEqual(newMetadata);
+      });
+    });
+
+    describe('meta:updateProjectMetadata', () => {
+      it('should set meta engine context from active project before updating metadata', async () => {
+        const activeProject = createMockProject({ id: 'project-update', dataPath: '/update/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/update-data');
+        mockMetaEngine.updateProjectMetadata.mockResolvedValue(undefined);
+        const updatedMetadata = { name: 'Updated' };
+        mockMetaEngine.getProjectMetadata.mockResolvedValue(updatedMetadata);
+
+        const updates = { defaultAuthor: 'Author Name' };
+        const result = await invokeHandler('meta:updateProjectMetadata', updates);
+
+        expect(mockMetaEngine.setProjectContext).toHaveBeenCalledWith('project-update', '/resolved/update-data');
+        expect(mockMetaEngine.updateProjectMetadata).toHaveBeenCalledWith(updates);
+        expect(result).toEqual(updatedMetadata);
       });
     });
   });

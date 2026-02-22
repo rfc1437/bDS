@@ -24,12 +24,17 @@ export interface ProjectMetadata {
   defaultAuthor?: string; // Default author for new posts and media
   maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
   picoTheme?: PicoThemeName; // Selected Pico CSS theme for preview/rendering
+  categoryMetadata?: Record<string, CategoryMetadata>; // Per-category metadata for UI/rendering
   categorySettings?: Record<string, CategoryRenderSettings>; // Per-category list rendering preferences
 }
 
 export interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
+}
+
+export interface CategoryMetadata extends CategoryRenderSettings {
+  title: string;
 }
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
@@ -66,17 +71,25 @@ function sanitizePublicUrl(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function sanitizeCategoryTitle(value: unknown, fallback: string): string {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+type RawCategoryMetadataInput = Record<string, CategoryMetadata | CategoryRenderSettings>;
+
 function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
   const publicUrl = sanitizePublicUrl(metadata.publicUrl);
   const picoTheme = sanitizePicoTheme(metadata.picoTheme);
-  const categorySettings = normalizeCategorySettings(metadata.categorySettings);
+  const categoryMetadata = normalizeCategoryMetadata(metadata.categoryMetadata ?? metadata.categorySettings);
   return {
     ...metadata,
     publicUrl,
     maxPostsPerPage,
     picoTheme,
-    categorySettings,
+    categoryMetadata,
+    categorySettings: undefined,
   };
 }
 
@@ -86,35 +99,60 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
 export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
 
 export function getDefaultCategorySettings(): Record<string, CategoryRenderSettings> {
+  const defaults = getDefaultCategoryMetadata();
+  return Object.fromEntries(
+    Object.entries(defaults).map(([category, value]) => [
+      category,
+      { renderInLists: value.renderInLists, showTitle: value.showTitle },
+    ]),
+  );
+}
+
+export function getDefaultCategoryMetadata(): Record<string, CategoryMetadata> {
   return {
-    article: { renderInLists: true, showTitle: true },
-    picture: { renderInLists: true, showTitle: true },
-    aside: { renderInLists: true, showTitle: false },
-    page: { renderInLists: false, showTitle: true },
+    article: { renderInLists: true, showTitle: true, title: 'article' },
+    picture: { renderInLists: true, showTitle: true, title: 'picture' },
+    aside: { renderInLists: true, showTitle: false, title: 'aside' },
+    page: { renderInLists: false, showTitle: true, title: 'page' },
   };
 }
 
-function normalizeCategorySettings(value: unknown): Record<string, CategoryRenderSettings> {
-  const defaults = getDefaultCategorySettings();
+function normalizeCategoryMetadata(value: unknown): Record<string, CategoryMetadata> {
+  const defaults = getDefaultCategoryMetadata();
   if (!value || typeof value !== 'object') {
     return defaults;
   }
 
-  const normalized: Record<string, CategoryRenderSettings> = { ...defaults };
-  for (const [rawCategory, rawSettings] of Object.entries(value as Record<string, unknown>)) {
+  const normalized: Record<string, CategoryMetadata> = { ...defaults };
+  for (const [rawCategory, rawSettings] of Object.entries(value as RawCategoryMetadataInput)) {
     const category = normalizeTaxonomyTerm(rawCategory);
     if (!category || !rawSettings || typeof rawSettings !== 'object') {
       continue;
     }
 
-    const settings = rawSettings as Record<string, unknown>;
+    const settings = rawSettings as unknown as {
+      renderInLists?: unknown;
+      showTitle?: unknown;
+      title?: unknown;
+    };
     normalized[category] = {
       renderInLists: settings.renderInLists !== false,
       showTitle: settings.showTitle !== false,
+      title: sanitizeCategoryTitle(settings.title, category),
     };
   }
 
   return normalized;
+}
+
+function normalizeCategorySettings(value: unknown): Record<string, CategoryRenderSettings> {
+  const metadata = normalizeCategoryMetadata(value);
+  return Object.fromEntries(
+    Object.entries(metadata).map(([category, data]) => [
+      category,
+      { renderInLists: data.renderInLists, showTitle: data.showTitle },
+    ]),
+  );
 }
 
 /**
@@ -171,6 +209,10 @@ export class MetaEngine extends EventEmitter {
     return path.join(this.getMetaDir(), 'project.json');
   }
 
+  private getCategoryMetadataFilePath(): string {
+    return path.join(this.getMetaDir(), 'category-meta.json');
+  }
+
   setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
     this.dataDir = dataDir || null;
@@ -211,7 +253,11 @@ export class MetaEngine extends EventEmitter {
    */
   async setProjectMetadata(metadata: ProjectMetadata): Promise<void> {
     this.projectMetadata = normalizeProjectMetadata({ ...metadata });
+    this.projectMetadata.categoryMetadata = this.ensureCategoryMetadataForKnownCategories(
+      this.projectMetadata.categoryMetadata,
+    );
     await this.saveProjectMetadata();
+    await this.saveCategoryMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
   }
 
@@ -227,6 +273,13 @@ export class MetaEngine extends EventEmitter {
       normalizedUpdates.picoTheme = sanitizePicoTheme(updates.picoTheme);
     }
 
+    if (updates.categoryMetadata !== undefined || updates.categorySettings !== undefined) {
+      normalizedUpdates.categoryMetadata = normalizeCategoryMetadata(
+        updates.categoryMetadata ?? updates.categorySettings,
+      );
+      normalizedUpdates.categorySettings = undefined;
+    }
+
     if (!this.projectMetadata) {
       this.projectMetadata = normalizeProjectMetadata({
         name: normalizedUpdates.name || '',
@@ -237,6 +290,7 @@ export class MetaEngine extends EventEmitter {
         defaultAuthor: normalizedUpdates.defaultAuthor,
         maxPostsPerPage: normalizedUpdates.maxPostsPerPage,
         picoTheme: normalizedUpdates.picoTheme,
+        categoryMetadata: normalizedUpdates.categoryMetadata,
       });
     } else {
       this.projectMetadata = normalizeProjectMetadata({
@@ -244,7 +298,11 @@ export class MetaEngine extends EventEmitter {
         ...normalizedUpdates,
       });
     }
+    this.projectMetadata.categoryMetadata = this.ensureCategoryMetadataForKnownCategories(
+      this.projectMetadata.categoryMetadata,
+    );
     await this.saveProjectMetadata();
+    await this.saveCategoryMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
   }
 
@@ -280,17 +338,19 @@ export class MetaEngine extends EventEmitter {
       this.categories.add(normalizedCategory);
       const currentMetadata = this.projectMetadata;
       if (currentMetadata) {
-        const currentSettings = normalizeCategorySettings(currentMetadata.categorySettings);
-        if (!currentSettings[normalizedCategory]) {
-          currentSettings[normalizedCategory] = {
+        const currentCategoryMetadata = normalizeCategoryMetadata(currentMetadata.categoryMetadata ?? currentMetadata.categorySettings);
+        if (!currentCategoryMetadata[normalizedCategory]) {
+          currentCategoryMetadata[normalizedCategory] = {
             renderInLists: true,
             showTitle: true,
+            title: normalizedCategory,
           };
           this.projectMetadata = normalizeProjectMetadata({
             ...currentMetadata,
-            categorySettings: currentSettings,
+            categoryMetadata: currentCategoryMetadata,
           });
           await this.saveProjectMetadata();
+          await this.saveCategoryMetadata();
         }
       }
       this.emit('categoriesChanged', await this.getCategories());
@@ -305,14 +365,18 @@ export class MetaEngine extends EventEmitter {
     const normalizedCategory = normalizeTaxonomyTerm(category);
     if (this.categories.delete(normalizedCategory)) {
       const currentMetadata = this.projectMetadata;
-      if (currentMetadata?.categorySettings?.[normalizedCategory]) {
-        const nextSettings = { ...currentMetadata.categorySettings };
-        delete nextSettings[normalizedCategory];
+      const currentCategoryMetadata = currentMetadata
+        ? normalizeCategoryMetadata(currentMetadata.categoryMetadata ?? currentMetadata.categorySettings)
+        : null;
+      if (currentMetadata && currentCategoryMetadata?.[normalizedCategory]) {
+        const nextCategoryMetadata = { ...currentCategoryMetadata };
+        delete nextCategoryMetadata[normalizedCategory];
         this.projectMetadata = normalizeProjectMetadata({
           ...currentMetadata,
-          categorySettings: nextSettings,
+          categoryMetadata: nextCategoryMetadata,
         });
         await this.saveProjectMetadata();
+        await this.saveCategoryMetadata();
       }
       this.emit('categoriesChanged', await this.getCategories());
       await this.saveCategories();
@@ -341,11 +405,34 @@ export class MetaEngine extends EventEmitter {
     try {
       await this.ensureMetaDirExists();
       const filePath = this.getProjectMetadataFilePath();
-      const { dataPath: _dataPath, ...persistedMetadata } = this.projectMetadata || {};
+      const {
+        dataPath: _dataPath,
+        categoryMetadata: _categoryMetadata,
+        categorySettings: _categorySettings,
+        ...persistedMetadata
+      } = this.projectMetadata || {};
       const content = JSON.stringify(persistedMetadata, null, 2);
       await fs.writeFile(filePath, content, 'utf-8');
     } catch (error) {
       console.error('[MetaEngine] Failed to save project metadata:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save category metadata to the filesystem.
+   */
+  async saveCategoryMetadata(): Promise<void> {
+    try {
+      await this.ensureMetaDirExists();
+      const filePath = this.getCategoryMetadataFilePath();
+      const metadata = this.ensureCategoryMetadataForKnownCategories(
+        this.projectMetadata?.categoryMetadata,
+      );
+      const content = JSON.stringify(metadata, null, 2);
+      await fs.writeFile(filePath, content, 'utf-8');
+    } catch (error) {
+      console.error('[MetaEngine] Failed to save category metadata:', error);
       throw error;
     }
   }
@@ -366,6 +453,24 @@ export class MetaEngine extends EventEmitter {
       }
       // File doesn't exist, that's OK
       this.projectMetadata = null;
+    }
+  }
+
+  /**
+   * Load category metadata from the filesystem.
+   */
+  async loadCategoryMetadata(): Promise<Record<string, CategoryMetadata> | null> {
+    try {
+      const filePath = this.getCategoryMetadataFilePath();
+      const content = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      return normalizeCategoryMetadata(parsed);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[MetaEngine] Failed to load category metadata:', error);
+        throw error;
+      }
+      return null;
     }
   }
 
@@ -459,6 +564,26 @@ export class MetaEngine extends EventEmitter {
     }
   }
 
+  private ensureCategoryMetadataForKnownCategories(
+    categoryMetadata: Record<string, CategoryMetadata> | undefined,
+  ): Record<string, CategoryMetadata> {
+    const merged = normalizeCategoryMetadata(categoryMetadata);
+
+    for (const category of this.categories) {
+      if (!merged[category]) {
+        merged[category] = {
+          renderInLists: true,
+          showTitle: true,
+          title: category,
+        };
+      } else if (!merged[category].title || merged[category].title.trim().length === 0) {
+        merged[category].title = category;
+      }
+    }
+
+    return merged;
+  }
+
   /**
    * Sync tags and categories on startup.
    * 
@@ -474,9 +599,11 @@ export class MetaEngine extends EventEmitter {
     
     const categoriesFilePath = this.getCategoriesFilePath();
     const projectMetadataFilePath = this.getProjectMetadataFilePath();
+    const categoryMetadataFilePath = this.getCategoryMetadataFilePath();
     
     const categoriesFileExists = await this.fileExists(categoriesFilePath);
     const projectMetadataFileExists = await this.fileExists(projectMetadataFilePath);
+    const categoryMetadataFileExists = await this.fileExists(categoryMetadataFilePath);
     
     // Collect tags/categories from database (posts)
     const dbTags = await this.collectTagsFromPosts();
@@ -542,29 +669,28 @@ export class MetaEngine extends EventEmitter {
         name: projectData.name,
         description: projectData.description || undefined,
         maxPostsPerPage: DEFAULT_MAX_POSTS_PER_PAGE,
-        categorySettings: getDefaultCategorySettings(),
       };
       await this.saveProjectMetadata();
     }
 
     if (this.projectMetadata) {
-      const mergedSettings = normalizeCategorySettings(this.projectMetadata.categorySettings);
-      let metadataChanged = false;
+      const legacyCategoryMetadata = normalizeCategoryMetadata(
+        this.projectMetadata.categoryMetadata ?? this.projectMetadata.categorySettings,
+      );
+      const fileCategoryMetadata = categoryMetadataFileExists
+        ? await this.loadCategoryMetadata()
+        : null;
+      const mergedCategoryMetadata = this.ensureCategoryMetadataForKnownCategories(
+        fileCategoryMetadata ?? legacyCategoryMetadata,
+      );
 
-      for (const category of this.categories) {
-        if (!mergedSettings[category]) {
-          mergedSettings[category] = { renderInLists: true, showTitle: true };
-          metadataChanged = true;
-        }
-      }
+      this.projectMetadata = normalizeProjectMetadata({
+        ...this.projectMetadata,
+        categoryMetadata: mergedCategoryMetadata,
+      });
 
-      if (metadataChanged) {
-        this.projectMetadata = normalizeProjectMetadata({
-          ...this.projectMetadata,
-          categorySettings: mergedSettings,
-        });
-        await this.saveProjectMetadata();
-      }
+      await this.saveProjectMetadata();
+      await this.saveCategoryMetadata();
     }
     
     this.initialized = true;

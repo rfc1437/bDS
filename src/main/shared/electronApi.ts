@@ -43,12 +43,17 @@ export interface ProjectMetadata {
   defaultAuthor?: string;
   maxPostsPerPage?: number;
   picoTheme?: import('./picoThemes').PicoThemeName;
+  categoryMetadata?: Record<string, CategoryMetadata>;
   categorySettings?: Record<string, CategoryRenderSettings>;
 }
 
 export interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
+}
+
+export interface CategoryMetadata extends CategoryRenderSettings {
+  title: string;
 }
 
 export interface ProjectData {
@@ -567,7 +572,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('./picoThemes').PicoThemeName; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;
