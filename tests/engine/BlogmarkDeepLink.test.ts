@@ -35,7 +35,7 @@ describe('blogmark deep-link payload', () => {
 
   it('builds safe markdown source link', () => {
     const markdown = buildBlogmarkMarkdownLink('A [title] (test)', 'https://example.com/x?y=1');
-    expect(markdown).toBe('[A \\[title\\] \\(test\\)](<https://example.com/x?y=1>)');
+    expect(markdown).toBe('[A \\[title\\] \\(test\\)](https://example.com/x?y=1)');
   });
 
   it('generates bookmarklet that targets bds protocol', () => {

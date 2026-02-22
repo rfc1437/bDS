@@ -719,7 +719,7 @@ describe('main bootstrap preview behavior', () => {
     const createPost = vi.fn().mockResolvedValue({
       id: 'new-post-id',
       title: 'Example title',
-      content: '[Example title](<https://example.com/>)',
+      content: '[Example title](https://example.com/)',
       categories: ['article'],
     });
 
@@ -792,7 +792,7 @@ describe('main bootstrap preview behavior', () => {
     expect(createPost).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Example title',
-        content: '[Example title](<https://example.com/>)',
+        content: '[Example title](https://example.com/)',
         categories: ['article'],
       }),
     );
@@ -882,7 +882,7 @@ describe('main bootstrap preview behavior', () => {
     const createPost = vi.fn().mockResolvedValue({
       id: 'queued-post-id',
       title: 'Queued title',
-      content: '[Queued title](<https://example.com/>)',
+      content: '[Queued title](https://example.com/)',
       categories: ['article'],
     });
 
@@ -973,5 +973,162 @@ describe('main bootstrap preview behavior', () => {
       'blogmark:created',
       expect.objectContaining({ id: 'queued-post-id' }),
     );
+  });
+
+  it('uses active project blogmark category during cold-start deep-link processing', async () => {
+    const originalArgv = process.argv;
+    process.argv = [
+      'bds',
+      'bds://new-post?title=Cold%20start&url=https%3A%2F%2Fexample.com%2Fcold',
+    ];
+
+    const mockApp = {
+      name: 'bDS',
+      whenReady: vi.fn(() => Promise.resolve()),
+      on: vi.fn(),
+      quit: vi.fn(),
+      requestSingleInstanceLock: vi.fn(() => true),
+      setAsDefaultProtocolClient: vi.fn(() => true),
+    };
+
+    class MockBrowserWindow {
+      static getAllWindows = vi.fn(() => [{ id: 1 }]);
+
+      loadURL = vi.fn();
+      loadFile = vi.fn();
+      on = vi.fn();
+      isDestroyed = vi.fn(() => false);
+      webContents = {
+        on: vi.fn(),
+        send: vi.fn(),
+        openDevTools: vi.fn(),
+        toggleDevTools: vi.fn(),
+      };
+    }
+
+    vi.doMock('electron', () => ({
+      app: mockApp,
+      BrowserWindow: MockBrowserWindow,
+      Menu: {
+        buildFromTemplate: vi.fn(() => ({})),
+        setApplicationMenu: vi.fn(),
+      },
+      ipcMain: {
+        on: vi.fn(),
+        handle: vi.fn(),
+        removeHandler: vi.fn(),
+      },
+      protocol: {
+        registerSchemesAsPrivileged: vi.fn(),
+        handle: vi.fn(),
+      },
+      net: {
+        fetch: vi.fn(),
+      },
+      shell: {
+        openExternal: vi.fn(),
+        openPath: vi.fn(),
+      },
+    }));
+
+    class MockPreviewServer {
+      start = vi.fn().mockResolvedValue(4123);
+      stop = vi.fn().mockResolvedValue(undefined);
+      getBaseUrl = vi.fn(() => 'http://127.0.0.1:4123');
+    }
+
+    const createPost = vi.fn().mockResolvedValue({
+      id: 'cold-start-id',
+      title: 'Cold start',
+      content: '[Cold start](https://example.com/cold)',
+      categories: ['aside'],
+    });
+
+    vi.doMock('../../src/main/engine/PreviewServer', () => ({
+      PreviewServer: MockPreviewServer,
+    }));
+
+    vi.doMock('../../src/main/engine/PostEngine', () => ({
+      getPostEngine: vi.fn(() => ({
+        getPost: vi.fn().mockResolvedValue(null),
+        createPost,
+        setProjectContext: vi.fn(),
+        setSearchLanguage: vi.fn(),
+      })),
+    }));
+
+    let currentProjectId = 'default';
+    vi.doMock('../../src/main/engine/MetaEngine', () => ({
+      getMetaEngine: vi.fn(() => ({
+        setProjectContext: vi.fn((projectId: string) => {
+          currentProjectId = projectId;
+        }),
+        syncOnStartup: vi.fn().mockResolvedValue(undefined),
+        getProjectMetadata: vi.fn(async () => ({
+          blogmarkCategory: currentProjectId === 'project-2' ? 'aside' : 'article',
+        })),
+      })),
+    }));
+
+    vi.doMock('../../src/main/engine/ProjectEngine', () => ({
+      getProjectEngine: vi.fn(() => ({
+        getActiveProject: vi.fn().mockResolvedValue({
+          id: 'project-2',
+          dataPath: '/tmp/project-2',
+        }),
+        getDataDir: vi.fn(() => '/tmp/project-2'),
+      })),
+    }));
+
+    vi.doMock('../../src/main/database', () => ({
+      getDatabase: vi.fn(() => ({
+        initializeLocal: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        getLocal: vi.fn(() => ({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue(null),
+              })),
+            })),
+          })),
+        })),
+        getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
+      })),
+    }));
+
+    vi.doMock('../../src/main/ipc', () => ({
+      registerIpcHandlers: vi.fn(),
+      registerChatHandlers: vi.fn(),
+      initializeChatHandlers: vi.fn(),
+      cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    vi.doMock('../../src/main/database/schema', () => ({
+      media: {},
+    }));
+
+    vi.doMock('drizzle-orm', () => ({
+      eq: vi.fn(),
+    }));
+
+    vi.doMock('../../src/main/engine/MediaEngine', () => ({
+      getMediaEngine: vi.fn(() => ({
+        getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
+        setProjectContext: vi.fn(),
+        setSearchLanguage: vi.fn(),
+      })),
+    }));
+
+    await import('../../src/main/main');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(createPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categories: ['aside'],
+      }),
+    );
+
+    process.argv = originalArgv;
   });
 });

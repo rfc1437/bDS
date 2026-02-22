@@ -428,6 +428,49 @@ function registerBlogmarkProtocolClient(): void {
   }
 }
 
+async function initializeActiveProjectContext(): Promise<void> {
+  try {
+    const { getProjectEngine } = await import('./engine/ProjectEngine');
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+
+    if (!project) {
+      return;
+    }
+
+    const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+    const postEngine = getPostEngine() as {
+      setProjectContext?: (projectId: string, dataDir?: string) => void;
+      setSearchLanguage?: (language: string) => void;
+    };
+    const mediaEngine = getMediaEngine() as {
+      setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
+      setSearchLanguage?: (language: string) => void;
+    };
+    const metaEngine = getMetaEngine() as {
+      setProjectContext?: (projectId: string, dataDir?: string) => void;
+      syncOnStartup?: () => Promise<void>;
+      getProjectMetadata?: () => Promise<{ mainLanguage?: string } | null>;
+    };
+
+    postEngine.setProjectContext?.(project.id, dataDir);
+    mediaEngine.setProjectContext?.(project.id, dataDir, dataDir);
+    metaEngine.setProjectContext?.(project.id, dataDir);
+
+    await metaEngine.syncOnStartup?.();
+
+    const metadata = await metaEngine.getProjectMetadata?.();
+    if (metadata?.mainLanguage) {
+      const { isoToStemmerLanguage } = await import('./engine/stemmer');
+      const stemmerLang = isoToStemmerLanguage(metadata.mainLanguage);
+      postEngine.setSearchLanguage?.(stemmerLang);
+      mediaEngine.setSearchLanguage?.(stemmerLang);
+    }
+  } catch (error) {
+    console.error('Failed to initialize active project context:', error);
+  }
+}
+
 function createApplicationMenu(): Menu {
   const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
   const uiLanguage = resolveUiLanguageFromSystemLocale(systemLocale);
@@ -764,7 +807,7 @@ app.on('open-url', (event, deepLink) => {
 // App lifecycle
 app.whenReady().then(async () => {
   await initialize();
-  appInitialized = true;
+  const activeProjectContextReady = initializeActiveProjectContext();
   registerBlogmarkProtocolClient();
   try {
     await startPreviewServerOnAppStart();
@@ -772,6 +815,9 @@ app.whenReady().then(async () => {
     console.error('Failed to start preview server on app startup:', error);
   }
   createWindow();
+
+  await activeProjectContextReady;
+  appInitialized = true;
 
   const startupDeepLinks = extractBlogmarkDeepLinks(process.argv);
   for (const deepLink of startupDeepLinks) {

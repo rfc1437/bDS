@@ -123,7 +123,7 @@ export function extractBlogmarkPayloadFromDeepLink(rawDeepLink: string): Blogmar
 
 export function buildBlogmarkMarkdownLink(title: string, url: string): string {
   const safeTitle = escapeMarkdownLinkText(title.trim());
-  return `[${safeTitle}](<${url}>)`;
+  return `[${safeTitle}](${url})`;
 }
 
 export function generateBlogmarkBookmarkletSource(): string {
