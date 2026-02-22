@@ -392,6 +392,11 @@ export class GitEngine {
     return normalized.includes('no upstream branch') || normalized.includes('has no upstream branch');
   }
 
+  private isSpawnBadFileDescriptorError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('spawn ebadf');
+  }
+
   private async getCurrentBranchName(git: ReturnType<typeof simpleGit>): Promise<string | null> {
     try {
       const status = await git.status();
@@ -717,24 +722,36 @@ export class GitEngine {
   }
 
   async getHistory(projectPath: string, limit = 20): Promise<GitHistoryEntry[]> {
-    const git = simpleGit(projectPath);
+    const git = this.createNonInteractiveGit(projectPath);
     const status = await git.status();
     const localHistory = await git.log({ maxCount: limit });
 
+    const mapLocalHistory = (): GitHistoryEntry[] => localHistory.all.map((entry) => ({
+      hash: entry.hash,
+      shortHash: entry.hash.slice(0, 7),
+      date: entry.date,
+      subject: entry.message,
+      author: entry.author_name,
+      syncStatus: 'local-only',
+    }));
+
     if (!status.tracking) {
-      return localHistory.all.map((entry) => ({
-        hash: entry.hash,
-        shortHash: entry.hash.slice(0, 7),
-        date: entry.date,
-        subject: entry.message,
-        author: entry.author_name,
-        syncStatus: 'local-only',
-      }));
+      return mapLocalHistory();
     }
 
     const behindCount = typeof status.behind === 'number' ? status.behind : Number(status.behind ?? 0);
     const remoteHistoryLimit = Math.max(limit, limit + Math.max(behindCount, 0));
-    const remoteHistory = await git.log([status.tracking, '--max-count', String(remoteHistoryLimit)]);
+    let remoteHistory;
+
+    try {
+      remoteHistory = await git.log([status.tracking, '--max-count', String(remoteHistoryLimit)]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        return mapLocalHistory();
+      }
+      throw error;
+    }
 
     type CommitLike = {
       hash: string;

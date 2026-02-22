@@ -434,6 +434,37 @@ describe('GitEngine', () => {
         },
       ]);
     });
+
+    it('should fall back to local history when remote history lookup fails with spawn EBADF', async () => {
+      mockStatus.mockResolvedValue({ current: 'main', tracking: 'origin/main' });
+      mockLog
+        .mockResolvedValueOnce({
+          all: [
+            {
+              hash: 'abc123def456',
+              date: '2026-02-16T10:00:00.000Z',
+              message: 'feat: local commit',
+              author_name: 'Local Dev',
+            },
+          ],
+        })
+        .mockRejectedValueOnce(new Error('Error: spawn EBADF'));
+
+      const result = await gitEngine.getHistory('/tmp/project', 20);
+
+      expect(mockLog).toHaveBeenNthCalledWith(1, { maxCount: 20 });
+      expect(mockLog).toHaveBeenNthCalledWith(2, ['origin/main', '--max-count', '20']);
+      expect(result).toEqual([
+        {
+          hash: 'abc123def456',
+          shortHash: 'abc123d',
+          date: '2026-02-16T10:00:00.000Z',
+          subject: 'feat: local commit',
+          author: 'Local Dev',
+          syncStatus: 'local-only',
+        },
+      ]);
+    });
   });
 
   describe('getFileHistory', () => {
