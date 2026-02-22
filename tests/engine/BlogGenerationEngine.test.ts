@@ -586,6 +586,33 @@ describe('BlogGenerationEngine', () => {
     expect(result.pagesGenerated).toBe(7);
   });
 
+  it('reuses shared render snapshot and media lookups across full-site routes', async () => {
+    const posts = [
+      makePost({ id: '1', slug: 'post-1', categories: ['news'], tags: ['t1'], createdAt: new Date('2025-01-15T10:00:00Z') }),
+      makePost({ id: '2', slug: 'post-2', categories: ['news'], tags: ['t2'], createdAt: new Date('2025-01-14T10:00:00Z') }),
+      makePost({ id: '3', slug: 'page-1', categories: ['page'], tags: [], createdAt: new Date('2025-01-13T10:00:00Z') }),
+    ];
+
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      maxPostsPerPage: 1,
+    }, vi.fn());
+
+    const filteredCallCount = mockPostEngine.getPostsFiltered.mock.calls.length;
+    const publishedVersionCallCount = mockPostEngine.getPublishedVersion.mock.calls.length;
+
+    expect(filteredCallCount).toBeLessThanOrEqual(20);
+    expect(publishedVersionCallCount).toBeLessThanOrEqual(10);
+    expect(mockMediaEngine.getAllMedia).toHaveBeenCalledTimes(1);
+  });
+
   it('validates sitemap against html folder without rendering missing pages', async () => {
     const posts = [
       makePost({

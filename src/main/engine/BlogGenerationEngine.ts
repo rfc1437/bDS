@@ -1459,9 +1459,80 @@ export class BlogGenerationEngine {
       projectDescription: options.projectDescription,
     };
 
+    const routeHtmlCache = new Map<string, Promise<string | null>>();
+    const mediaItemsPromiseCache = new Map<string, Promise<Awaited<ReturnType<typeof this.mediaEngine.getAllMedia>>>>();
+    const postsByFilterPromiseCache = new Map<string, Promise<PostData[]>>();
+    const publishedSnapshotByIdPromiseCache = new Map<string, Promise<PostData | null>>();
+    type PostFilterInput = Parameters<typeof this.postEngine.getPostsFiltered>[0];
+
+    const serializeFilter = (filter: PostFilterInput): string => {
+      const normalizeValue = (value: unknown): unknown => {
+        if (Array.isArray(value)) {
+          return value.map((entry) => normalizeValue(entry));
+        }
+
+        if (value && typeof value === 'object') {
+          const sortedEntries = Object.entries(value as Record<string, unknown>)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, nestedValue]) => [key, normalizeValue(nestedValue)] as const);
+          return Object.fromEntries(sortedEntries);
+        }
+
+        return value;
+      };
+
+      return JSON.stringify(normalizeValue(filter));
+    };
+
+    const cachedPostEngine = {
+      getPostsFiltered: (filter: PostFilterInput) => {
+        const cacheKey = serializeFilter(filter);
+        const cached = postsByFilterPromiseCache.get(cacheKey);
+        if (cached) {
+          return cached;
+        }
+
+        const promise = this.postEngine.getPostsFiltered(filter);
+        postsByFilterPromiseCache.set(cacheKey, promise);
+        return promise;
+      },
+      getPublishedVersion: (postId: string) => {
+        const cached = publishedSnapshotByIdPromiseCache.get(postId);
+        if (cached) {
+          return cached;
+        }
+
+        const promise = this.postEngine.getPublishedVersion(postId);
+        publishedSnapshotByIdPromiseCache.set(postId, promise);
+        return promise;
+      },
+      getPost: (postId: string) => this.postEngine.getPost(postId),
+      hasPublishedVersion: (postId: string) => this.postEngine.hasPublishedVersion(postId),
+      setProjectContext: (projectId: string, dataDir?: string) => {
+        this.postEngine.setProjectContext(projectId, dataDir);
+      },
+    };
+
+    const cachedMediaEngine = {
+      getAllMedia: () => {
+        const cacheKey = `${options.projectId}:${options.dataDir ?? ''}`;
+        const cached = mediaItemsPromiseCache.get(cacheKey);
+        if (cached) {
+          return cached;
+        }
+
+        const promise = this.mediaEngine.getAllMedia();
+        mediaItemsPromiseCache.set(cacheKey, promise);
+        return promise;
+      },
+      setProjectContext: (projectId: string, dataDir?: string, internalDir?: string) => {
+        this.mediaEngine.setProjectContext?.(projectId, dataDir, internalDir);
+      },
+    };
+
     const previewServer = new PreviewServer({
-      postEngine: this.postEngine,
-      mediaEngine: this.mediaEngine,
+      postEngine: cachedPostEngine,
+      mediaEngine: cachedMediaEngine,
       postMediaEngine: this.postMediaEngine,
       settingsEngine: {
         setProjectContext: () => {},
@@ -1475,12 +1546,21 @@ export class BlogGenerationEngine {
     });
 
     return async (pathname: string): Promise<string | null> => {
-      return previewServer.renderRouteForContext(pathname, {
+      const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
+      const cached = routeHtmlCache.get(normalizedPathname);
+      if (cached) {
+        return cached;
+      }
+
+      const promise = previewServer.renderRouteForContext(normalizedPathname, {
         projectContext,
         metadata,
         menu,
         maxPostsPerPage,
       });
+
+      routeHtmlCache.set(normalizedPathname, promise);
+      return promise;
     };
   }
 
