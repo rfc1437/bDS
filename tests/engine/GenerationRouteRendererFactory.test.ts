@@ -136,4 +136,51 @@ describe('GenerationRouteRendererFactory', () => {
     expect(dayTwoHtml).toContain('Post On Day Two');
     expect(dayTwoHtml).not.toContain('Post On Day One');
   });
+
+  it('includes youtube macro spacing styles in preview-backed generated html routes', async () => {
+    const post = makePost({
+      id: 'youtube-1',
+      slug: 'youtube-spacing',
+      title: 'YouTube Spacing',
+      content: ['Intro paragraph.', '[[youtube id="dQw4w9WgXcQ"]]', 'Paragraph after video.'].join('\n\n'),
+      createdAt: new Date('2025-01-15T10:00:00.000Z'),
+    });
+
+    const postEngine = {
+      getPostsFiltered: vi.fn(async () => [post]),
+      getPublishedVersion: vi.fn(async () => null),
+      findPublishedBySlug: vi.fn(async (slug: string) => (slug === post.slug ? post : null)),
+      getPost: vi.fn(async (id: string) => (id === post.id ? post : null)),
+      hasPublishedVersion: vi.fn(async () => false),
+      setProjectContext: vi.fn(),
+    };
+
+    const renderRoute = createPreviewBackedGenerationRouteRenderer({
+      options: {
+        projectId: 'project',
+        dataDir: '/tmp',
+        projectName: 'Project',
+      },
+      maxPostsPerPage: 50,
+      publishedPostsForLookup: [post],
+      engines: {
+        postEngine,
+        mediaEngine: {
+          getAllMedia: vi.fn(async () => []),
+          setProjectContext: vi.fn(),
+        },
+        postMediaEngine: {
+          setProjectContext: vi.fn(),
+          getLinkedMediaForPost: vi.fn(async () => []),
+          getLinkedMediaDataForPost: vi.fn(async () => []),
+        },
+      },
+    });
+
+    const html = await renderRoute('/2025/01/15/youtube-spacing');
+
+    expect(html).toContain('class="macro-youtube"');
+    expect(html).toContain('youtube.com/embed/dQw4w9WgXcQ?rel=0');
+    expect(html).toContain('.macro-youtube, .macro-vimeo { margin-bottom: 1rem; }');
+  });
 });

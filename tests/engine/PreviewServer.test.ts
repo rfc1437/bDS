@@ -1570,6 +1570,37 @@ describe('PreviewServer', () => {
     expect(html).toContain('/media/2025/02/archive.jpg');
   });
 
+  it('adds paragraph-like spacing after youtube macro embeds in generated HTML', async () => {
+    const post = makePost({
+      id: 'macro-youtube-spacing-1',
+      slug: 'macro-youtube-spacing',
+      title: 'Macro YouTube Spacing',
+      content: [
+        'Intro paragraph before video.',
+        '',
+        '[[youtube id="dQw4w9WgXcQ"]]',
+        '',
+        'Paragraph after video.',
+      ].join('\n'),
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('class="macro-youtube"');
+    expect(html).toContain('youtube.com/embed/dQw4w9WgXcQ?rel=0');
+    expect(html).toContain('.macro-youtube, .macro-vimeo { margin-bottom: 1rem; }');
+  });
+
   it('resolves gallery linked images via post-media links even when media.linkedPostIds is empty', async () => {
     const post = makePost({
       id: 'macro-junction-1',
