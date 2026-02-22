@@ -35,6 +35,16 @@ describe('package.json packaging configuration', () => {
     expect(build.linux.target).toBeTruthy();
   });
 
+  it('excludes macOS metadata from packaged app files', () => {
+    const build = packageJson.build as Record<string, any>;
+    const files = build.files as string[];
+
+    expect(Array.isArray(files)).toBe(true);
+    expect(files).toContain('!**/.DS_Store');
+    expect(files).toContain('!**/__MACOSX/**');
+    expect(files).toContain('!**/._*');
+  });
+
   it('keeps runtime modules in dependencies (not devDependencies)', () => {
     const dependencies = packageJson.dependencies as Record<string, string>;
     const devDependencies = packageJson.devDependencies as Record<string, string>;

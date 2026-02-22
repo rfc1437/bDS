@@ -122,7 +122,10 @@
     "files": [
       "dist/**/*",
       "drizzle/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!**/.DS_Store",
+      "!**/__MACOSX/**",
+      "!**/._*"
     ],
     "extraResources": [
       {
