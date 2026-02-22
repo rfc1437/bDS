@@ -27,7 +27,7 @@
         {% endif %}
       {% endif %}
 
-      {% render 'partials/menu', menu_items: menu_items, language: language %}
+      {% render 'partials/menu', menu_items: menu_items, language: language, calendar_initial_year: calendar_initial_year, calendar_initial_month: calendar_initial_month %}
 
       <section class="post-list" data-template="post-list" data-list-page="{{ is_list_page }}" data-first-page="{{ is_first_page }}" data-last-page="{{ is_last_page }}">
         {% for day_block in day_blocks %}

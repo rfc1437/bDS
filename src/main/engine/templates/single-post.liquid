@@ -4,7 +4,7 @@
   <body>
     <main>
       <h1>{{ post.title }}</h1>
-      {% render 'partials/menu', menu_items: menu_items, language: language %}
+      {% render 'partials/menu', menu_items: menu_items, language: language, calendar_initial_year: calendar_initial_year, calendar_initial_month: calendar_initial_month %}
       {% if post_categories.size > 0 or post_tags.size > 0 %}
       <div class="single-post-taxonomy" aria-label="{{ 'render.taxonomy.ariaLabel' | i18n: language }}">
         {% for category in post_categories %}

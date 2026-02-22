@@ -20,6 +20,8 @@
         type="button"
         class="blog-menu-calendar-button"
         data-blog-calendar-toggle
+        {% if calendar_initial_year %}data-blog-calendar-year="{{ calendar_initial_year }}"{% endif %}
+        {% if calendar_initial_month %}data-blog-calendar-month="{{ calendar_initial_month }}"{% endif %}
         aria-label="{{ 'render.calendar.open' | i18n: language }}"
         title="{{ 'render.calendar.open' | i18n: language }}"
       >

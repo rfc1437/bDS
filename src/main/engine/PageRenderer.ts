@@ -68,6 +68,8 @@ export interface PostListTemplateContext {
   } | null;
   min_date: { day: number; month: number; year: number } | null;
   max_date: { day: number; month: number; year: number } | null;
+  calendar_initial_year: number | null;
+  calendar_initial_month: number | null;
   is_list_page: boolean;
   is_first_page: boolean;
   is_last_page: boolean;
@@ -90,6 +92,8 @@ export interface SinglePostTemplateContext {
   post_categories: string[];
   post_tags: string[];
   tag_color_by_name: Record<string, string>;
+  calendar_initial_year: number | null;
+  calendar_initial_month: number | null;
   canonical_post_path_by_slug: Record<string, string>;
   canonical_media_path_by_source_path: Record<string, string>;
 }
@@ -1005,6 +1009,8 @@ export class PageRenderer {
 
     let minDateParts: { day: number; month: number; year: number } | null = null;
     let maxDateParts: { day: number; month: number; year: number } | null = null;
+    const calendarInitialDate = posts.length > 0 ? posts[0].createdAt : null;
+    const calendarInitialParts = calendarInitialDate ? toDateParts(calendarInitialDate) : null;
 
     const hasRangeHeading = Boolean(
       !isFirstPage
@@ -1060,6 +1066,8 @@ export class PageRenderer {
           : null,
       min_date: minDateParts,
       max_date: maxDateParts,
+      calendar_initial_year: calendarInitialParts?.year ?? null,
+      calendar_initial_month: calendarInitialParts?.month ?? null,
       is_list_page: isListPage,
       is_first_page: isFirstPage,
       is_last_page: isLastPage,
@@ -1146,6 +1154,8 @@ export class PageRenderer {
       post_categories: postCategories,
       post_tags: postTags,
       tag_color_by_name: pageContext.tag_color_by_name ?? {},
+      calendar_initial_year: renderablePost.createdAt.getFullYear(),
+      calendar_initial_month: renderablePost.createdAt.getMonth() + 1,
       canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
       canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
     };

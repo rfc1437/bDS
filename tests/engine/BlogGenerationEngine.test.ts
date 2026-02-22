@@ -355,6 +355,7 @@ describe('BlogGenerationEngine', () => {
         slug: 'one',
         title: 'One',
         categories: ['news'],
+        tags: ['updates'],
         createdAt: new Date('2025-03-15T10:00:00Z'),
       }),
       makePost({
@@ -362,6 +363,7 @@ describe('BlogGenerationEngine', () => {
         slug: 'two',
         title: 'Two',
         categories: ['news'],
+        tags: ['updates'],
         createdAt: new Date('2025-03-15T12:00:00Z'),
       }),
       makePost({
@@ -369,6 +371,7 @@ describe('BlogGenerationEngine', () => {
         slug: 'three',
         title: 'Three',
         categories: ['news'],
+        tags: ['updates'],
         createdAt: new Date('2025-04-01T10:00:00Z'),
       }),
     ];
@@ -396,16 +399,31 @@ describe('BlogGenerationEngine', () => {
 
     const indexHtml = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
     expect(indexHtml).toContain('class="blog-menu-calendar-button"');
+    expect(indexHtml).toContain('data-blog-calendar-year="2025"');
+    expect(indexHtml).toContain('data-blog-calendar-month="4"');
     expect(indexHtml).toContain('id="blog-calendar"');
     expect(indexHtml).toContain('href="/assets/vanilla-calendar.min.css"');
     expect(indexHtml).toContain('src="/assets/vanilla-calendar.min.js"');
     expect(indexHtml).toContain('src="/assets/calendar-runtime.js"');
+
+    const singleHtml = await readFile(path.join(tempDir, 'html', '2025', '03', '15', 'one', 'index.html'), 'utf-8');
+    expect(singleHtml).toContain('data-blog-calendar-year="2025"');
+    expect(singleHtml).toContain('data-blog-calendar-month="3"');
+
+    const tagArchiveHtml = await readFile(path.join(tempDir, 'html', 'tag', 'updates', 'index.html'), 'utf-8');
+    expect(tagArchiveHtml).toContain('data-blog-calendar-year="2025"');
+    expect(tagArchiveHtml).toContain('data-blog-calendar-month="4"');
 
     const calendarRuntime = await readFile(path.join(tempDir, 'html', 'assets', 'calendar-runtime.js'), 'utf-8');
     expect(calendarRuntime).toContain('--blog-calendar-heat-hue');
     expect(calendarRuntime).toContain('--blog-calendar-heat-alpha');
     expect(calendarRuntime).toContain('onCreateMonthEls');
     expect(calendarRuntime).toContain('onCreateYearEls');
+    expect(calendarRuntime).toContain('data-blog-calendar-year');
+    expect(calendarRuntime).toContain('data-blog-calendar-month');
+    expect(calendarRuntime).toContain('window.location.pathname');
+    expect(calendarRuntime).toContain('selectedYear');
+    expect(calendarRuntime).toContain('selectedMonth');
     expect(calendarRuntime).not.toContain('blog-calendar-post-count');
   });
 

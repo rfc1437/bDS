@@ -73,6 +73,36 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
     window.location.assign(pathname);
   }
 
+  function parseInitialYearMonth() {
+    const initialYearRaw = button.getAttribute('data-blog-calendar-year');
+    const initialMonthRaw = button.getAttribute('data-blog-calendar-month');
+
+    const initialYear = Number(initialYearRaw);
+    const initialMonth = Number(initialMonthRaw);
+
+    let selectedYear = Number.isInteger(initialYear) && initialYear > 0 ? initialYear : null;
+    let selectedMonth = Number.isInteger(initialMonth) && initialMonth >= 1 && initialMonth <= 12
+      ? (initialMonth - 1)
+      : null;
+
+    if (!Number.isInteger(selectedYear) || !Number.isInteger(selectedMonth)) {
+      const pathname = window.location.pathname || '';
+      const parts = pathname.split('/').filter(Boolean);
+      const pathYear = Number(parts[0]);
+      const pathMonth = Number(parts[1]);
+
+      if (!Number.isInteger(selectedYear) && Number.isInteger(pathYear) && pathYear > 0 && String(parts[0]).length === 4) {
+        selectedYear = pathYear;
+      }
+
+      if (!Number.isInteger(selectedMonth) && Number.isInteger(pathMonth) && pathMonth >= 1 && pathMonth <= 12) {
+        selectedMonth = pathMonth - 1;
+      }
+    }
+
+    return { selectedYear, selectedMonth };
+  }
+
   async function loadCalendarData() {
     const response = await fetch('/calendar.json', { cache: 'no-store' });
     if (!response.ok) {
@@ -116,7 +146,10 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
         throw new Error('Vanilla Calendar Pro is unavailable');
       }
 
-      const calendar = new Calendar('[data-blog-calendar-root]', {
+      const initialYearMonth = parseInitialYearMonth();
+      const calendarOptions = {
+        ...(Number.isInteger(initialYearMonth.selectedYear) ? { selectedYear: initialYearMonth.selectedYear } : {}),
+        ...(Number.isInteger(initialYearMonth.selectedMonth) ? { selectedMonth: initialYearMonth.selectedMonth } : {}),
         onCreateDateEls(_self, dateEl) {
           const dateKey = dateEl.dataset.vcDate || '';
           const count = Number(days[dateKey] || 0);
@@ -224,7 +257,9 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
 
           navigateTo('/' + String(selectedYear) + '/');
         },
-      });
+      };
+
+      const calendar = new Calendar('[data-blog-calendar-root]', calendarOptions);
 
       calendar.init();
       status.textContent = '';

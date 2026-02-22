@@ -1,7 +1,7 @@
 <nav class="blog-menu">
   {% if menu_items and menu_items.size > 0 %}
-    {% render 'partials/menu-items', items: menu_items, include_calendar: true, language: language %}
+    {% render 'partials/menu-items', items: menu_items, include_calendar: true, language: language, calendar_initial_year: calendar_initial_year, calendar_initial_month: calendar_initial_month %}
   {% else %}
-    {% render 'partials/menu-items', items: menu_items, include_calendar: true, language: language %}
+    {% render 'partials/menu-items', items: menu_items, include_calendar: true, language: language, calendar_initial_year: calendar_initial_year, calendar_initial_month: calendar_initial_month %}
   {% endif %}
 </nav>
