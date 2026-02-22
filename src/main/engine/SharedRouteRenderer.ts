@@ -57,6 +57,7 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
   resolveCategorySettings: (metadata: ProjectMetadata | null) => Record<string, CategoryRenderSettings>;
   resolveListExcludedCategories: (settings: Record<string, CategoryRenderSettings>) => string[];
   buildHtmlRewriteContext: () => Promise<HtmlRewriteContext>;
+  resolveTagColorByName: (projectContext: SharedActiveProjectContext) => Promise<Record<string, string>>;
   pageRenderer: Pick<PageRenderer, 'renderPostList' | 'renderSinglePost'>;
   postEngineForMacros?: PostEngineContract;
   loadPublishedSnapshotsPage: (
@@ -93,6 +94,7 @@ async function resolveRouteWithSharedServices(
   },
   categorySettings: Record<string, CategoryRenderSettings>,
   categoryMetadata: Record<string, CategoryMetadata>,
+  tagColorByName: Record<string, string>,
   listExcludedCategories: string[],
   services: SharedRouteRenderServices<CategoryMetadata>,
   singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
@@ -179,6 +181,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      tag_color_by_name: tagColorByName,
     }, services.postEngineForMacros);
   }
 
@@ -258,6 +261,7 @@ async function resolveRouteWithSharedServices(
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
+      tag_color_by_name: tagColorByName,
     }, services.postEngineForMacros);
   }
 
@@ -297,6 +301,7 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
     ?? sanitizePicoTheme((metadata as { picoTheme?: unknown } | null)?.picoTheme);
   const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
   const htmlRewriteContext = options.htmlRewriteContext ?? await services.buildHtmlRewriteContext();
+  const tagColorByName = await services.resolveTagColorByName(options.projectContext);
   const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
 
   return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {
@@ -305,5 +310,5 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
     menuItems,
     picoStylesheetHref,
     htmlThemeAttribute: options.htmlThemeAttribute,
-  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.singlePostOptions);
+  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, tagColorByName, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.singlePostOptions);
 }

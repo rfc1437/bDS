@@ -725,6 +725,51 @@ describe('PreviewServer', () => {
     expect(h1Index).toBeLessThan(articleIndex);
   });
 
+  it('renders categories and tags as small bubbles on single post pages with category-first order and tag color override', async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), 'bds-preview-taxonomy-'));
+    await mkdir(path.join(tempDir, 'meta'), { recursive: true });
+    await writeFile(path.join(tempDir, 'meta', 'tags.json'), JSON.stringify([
+      { name: 'css-only', color: '#22aa88' },
+      { name: 'default-color' },
+    ]), 'utf-8');
+
+    const post = makePost({
+      id: 'taxonomy-post',
+      title: 'Taxonomy Post',
+      slug: 'taxonomy-post',
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+      categories: ['article', 'news'],
+      tags: ['css-only', 'default-color'],
+      content: 'Body',
+    });
+
+    server = new PreviewServer({
+      postEngine: makeEngine([post]),
+      settingsEngine: makeSettings(50),
+      getActiveProjectContext: async () => ({ projectId: 'default', dataDir: tempDir || undefined }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/2025/2/14/taxonomy-post/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('class="single-post-taxonomy"');
+    expect(html).toContain('aria-label="Taxonomy"');
+    expect(html).toContain('class="single-post-taxonomy-bubble single-post-taxonomy-bubble-category"');
+    expect(html).toContain('class="single-post-taxonomy-bubble single-post-taxonomy-bubble-tag"');
+    expect(html).toContain('href="/category/article/"');
+    expect(html).toContain('href="/tag/css-only/"');
+    expect(html).toContain('style="--bubble-accent: #22aa88;"');
+
+    const categoryIndex = html.indexOf('single-post-taxonomy-bubble-category');
+    const tagIndex = html.indexOf('single-post-taxonomy-bubble-tag');
+    expect(categoryIndex).toBeGreaterThan(-1);
+    expect(tagIndex).toBeGreaterThan(-1);
+    expect(categoryIndex).toBeLessThan(tagIndex);
+  });
+
   it('uses blog description as h1 on first date archive page and date range h1 on later pages', async () => {
     const posts = [
       makePost({

@@ -66,6 +66,11 @@ interface PreviewServerDependencies {
   getActiveProjectContext: () => Promise<ActiveProjectContext>;
 }
 
+interface SerializedTag {
+  name?: unknown;
+  color?: unknown;
+}
+
 export class PreviewServer {
   private readonly postEngine: PostEngineContract;
   private readonly mediaEngine: MediaEngineContract;
@@ -74,6 +79,7 @@ export class PreviewServer {
   private readonly menuEngine: MenuEngineContract;
   private readonly getActiveProjectContext: () => Promise<ActiveProjectContext>;
   private readonly pageRenderer: PageRenderer;
+  private readonly tagColorByNameCache = new Map<string, Promise<Record<string, string>>>();
   private server: Server | null = null;
   private port: number | null = null;
 
@@ -184,6 +190,7 @@ export class PreviewServer {
       resolveCategorySettings: (metadata) => this.resolveCategorySettings(metadata),
       resolveListExcludedCategories: (settings) => this.resolveListExcludedCategories(settings),
       buildHtmlRewriteContext: () => this.buildHtmlRewriteContext(),
+      resolveTagColorByName: (projectContext) => this.resolveTagColorByName(projectContext),
       pageRenderer: this.pageRenderer,
       postEngineForMacros: this.postEngine,
       loadPublishedSnapshotsPage: (filter, pagination) => loadPublishedSnapshotsPage(this.postEngine, filter, pagination),
@@ -368,6 +375,49 @@ export class PreviewServer {
       canonicalPostPathBySlug,
       canonicalMediaPathBySourcePath,
     };
+  }
+
+  private async resolveTagColorByName(projectContext: ActiveProjectContext): Promise<Record<string, string>> {
+    const cacheKey = `${projectContext.projectId}:${projectContext.dataDir ?? ''}`;
+    const cached = this.tagColorByNameCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const promise = this.loadTagColorByName(projectContext.dataDir);
+    this.tagColorByNameCache.set(cacheKey, promise);
+    return promise;
+  }
+
+  private async loadTagColorByName(dataDir?: string): Promise<Record<string, string>> {
+    if (!dataDir) {
+      return {};
+    }
+
+    const tagsPath = path.join(dataDir, 'meta', 'tags.json');
+
+    try {
+      const source = await readFile(tagsPath, 'utf-8');
+      const parsed = JSON.parse(source);
+      if (!Array.isArray(parsed)) {
+        return {};
+      }
+
+      const colors: Record<string, string> = {};
+      for (const rawEntry of parsed as SerializedTag[]) {
+        const name = typeof rawEntry?.name === 'string' ? rawEntry.name.trim() : '';
+        const color = typeof rawEntry?.color === 'string' ? rawEntry.color.trim() : '';
+        if (!name || !color) {
+          continue;
+        }
+
+        colors[name] = color;
+      }
+
+      return colors;
+    } catch {
+      return {};
+    }
   }
 
   private async resolveAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {

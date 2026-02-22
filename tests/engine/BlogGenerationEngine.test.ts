@@ -385,6 +385,45 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('data-template="single-post"');
   });
 
+  it('renders taxonomy bubbles on generated single-post pages with category-first order and tag color override', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'hello-world',
+        title: 'Hello World',
+        createdAt: new Date('2025-03-15T10:00:00Z'),
+        categories: ['article', 'news'],
+        tags: ['css-only', 'default-color'],
+      }),
+    ];
+
+    await mkdir(path.join(tempDir, 'meta'), { recursive: true });
+    await writeFile(path.join(tempDir, 'meta', 'tags.json'), JSON.stringify([
+      { name: 'css-only', color: '#22aa88' },
+      { name: 'default-color' },
+    ]), 'utf-8');
+
+    await generate(posts);
+
+    const postPath = path.join(tempDir, 'html', '2025', '03', '15', 'hello-world', 'index.html');
+    expect(await fileExists(postPath)).toBe(true);
+
+    const html = await readFile(postPath, 'utf-8');
+    expect(html).toContain('class="single-post-taxonomy"');
+    expect(html).toContain('aria-label="Taxonomy"');
+    expect(html).toContain('class="single-post-taxonomy-bubble single-post-taxonomy-bubble-category"');
+    expect(html).toContain('class="single-post-taxonomy-bubble single-post-taxonomy-bubble-tag"');
+    expect(html).toContain('href="/category/article/"');
+    expect(html).toContain('href="/tag/css-only/"');
+    expect(html).toContain('style="--bubble-accent: #22aa88;"');
+
+    const categoryIndex = html.indexOf('single-post-taxonomy-bubble-category');
+    const tagIndex = html.indexOf('single-post-taxonomy-bubble-tag');
+    expect(categoryIndex).toBeGreaterThan(-1);
+    expect(tagIndex).toBeGreaterThan(-1);
+    expect(categoryIndex).toBeLessThan(tagIndex);
+  });
+
   it('generates category pages with correct archive context', async () => {
     const posts = [
       makePost({ id: '1', slug: 'news-1', title: 'News 1', categories: ['news'] }),

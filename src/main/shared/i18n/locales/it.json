@@ -53,6 +53,7 @@
   "render.gallery.empty": "Nessuna immagine collegata trovata.",
   "render.tagCloud.empty": "Nessun tag trovato.",
   "render.tagCloud.ariaLabel": "Nuvola di tag",
+  "render.taxonomy.ariaLabel": "Tassonomia",
   "render.video.youtubeTitle": "Video YouTube",
   "render.video.vimeoTitle": "Video Vimeo",
   "render.month.1": "gennaio",

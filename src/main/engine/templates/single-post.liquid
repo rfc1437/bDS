@@ -5,6 +5,17 @@
     <main>
       <h1>{{ post.title }}</h1>
       {% render 'partials/menu', menu_items: menu_items, language: language %}
+      {% if post_categories.size > 0 or post_tags.size > 0 %}
+      <div class="single-post-taxonomy" aria-label="{{ 'render.taxonomy.ariaLabel' | i18n: language }}">
+        {% for category in post_categories %}
+        <a class="single-post-taxonomy-bubble single-post-taxonomy-bubble-category" href="/category/{{ category | url_encode }}/">{{ category | escape }}</a>
+        {% endfor %}
+        {% for tag in post_tags %}
+        {% assign tag_color = tag_color_by_name[tag] %}
+        <a class="single-post-taxonomy-bubble single-post-taxonomy-bubble-tag" href="/tag/{{ tag | url_encode }}/"{% if tag_color %} style="--bubble-accent: {{ tag_color | escape }};"{% endif %}>{{ tag | escape }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
       <article class="single-post" data-template="single-post">
         <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}</div>
       </article>

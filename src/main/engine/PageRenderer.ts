@@ -85,6 +85,9 @@ export interface SinglePostTemplateContext {
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
   post: TemplatePostEntry;
+  post_categories: string[];
+  post_tags: string[];
+  tag_color_by_name: Record<string, string>;
   canonical_post_path_by_slug: Record<string, string>;
   canonical_media_path_by_source_path: Record<string, string>;
 }
@@ -1066,12 +1069,20 @@ export class PageRenderer {
   async renderSinglePost(
     post: PostData,
     rewriteContext: HtmlRewriteContext,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string; html_theme_attribute?: string },
+    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string; html_theme_attribute?: string; tag_color_by_name?: Record<string, string> },
     postEngine?: PostEngineContract,
   ): Promise<string> {
     const renderablePost = postEngine
       ? await this.resolveRenderablePost(post, postEngine)
       : post;
+
+    const postCategories = Array.isArray(renderablePost.categories)
+      ? Array.from(new Set(renderablePost.categories.map((category) => category.trim()).filter((category) => category.length > 0)))
+      : [];
+    const postTags = Array.isArray(renderablePost.tags)
+      ? Array.from(new Set(renderablePost.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)))
+      : [];
+
     const context: SinglePostTemplateContext = {
       ...pageContext,
       menu_items: pageContext.menu_items ?? [],
@@ -1082,6 +1093,9 @@ export class PageRenderer {
         content: renderablePost.content,
         show_title: false,
       },
+      post_categories: postCategories,
+      post_tags: postTags,
+      tag_color_by_name: pageContext.tag_color_by_name ?? {},
       canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
       canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
     };
