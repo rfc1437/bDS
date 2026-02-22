@@ -19,6 +19,8 @@ let activePreviewPostId: string | null = null;
 let appInitialized = false;
 let blogmarkQueue: string[] = [];
 let blogmarkQueueProcessing = false;
+let pendingBlogmarkCreatedEvents: unknown[] = [];
+let rendererReady = false;
 const PREVIEW_SERVER_PORT = 4123;
 const BLOG_PREVIEW_POST_MENU_ID = APP_MENU_ITEM_IDS.previewPost;
 const BLOGMARK_PROTOCOL = 'bds';
@@ -201,6 +203,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function createWindow(): void {
+  rendererReady = false;
   const isMac = process.platform === 'darwin';
   const initialWindowState = resolveInitialWindowState();
   mainWindow = new BrowserWindow({
@@ -376,8 +379,22 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
     categories: preferredCategory ? [preferredCategory] : [],
   });
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  if (mainWindow && !mainWindow.isDestroyed() && rendererReady) {
     mainWindow.webContents.send('blogmark:created', createdPost);
+  } else {
+    pendingBlogmarkCreatedEvents.push(createdPost);
+  }
+}
+
+function flushPendingBlogmarkCreatedEvents(): void {
+  if (!rendererReady || !mainWindow || mainWindow.isDestroyed() || pendingBlogmarkCreatedEvents.length === 0) {
+    return;
+  }
+
+  const queuedEvents = pendingBlogmarkCreatedEvents;
+  pendingBlogmarkCreatedEvents = [];
+  for (const payload of queuedEvents) {
+    mainWindow.webContents.send('blogmark:created', payload);
   }
 }
 
@@ -707,6 +724,12 @@ async function initialize(): Promise<void> {
   ipcMain.handle('app:setPreviewPostTarget', async (_, postId: string | null) => {
     activePreviewPostId = typeof postId === 'string' && postId.length > 0 ? postId : null;
     setPreviewPostMenuEnabled(Boolean(activePreviewPostId));
+  });
+
+  ipcMain.handle('app:rendererReady', async () => {
+    rendererReady = true;
+    flushPendingBlogmarkCreatedEvents();
+    return true;
   });
   
   // Initialize and register chat handlers

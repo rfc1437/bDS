@@ -147,6 +147,7 @@ export const electronAPI: ElectronAPI = {
     readProjectMetadata: (folderPath: string) => ipcRenderer.invoke('app:readProjectMetadata', folderPath),
     getBlogmarkBookmarklet: () => ipcRenderer.invoke('app:getBlogmarkBookmarklet'),
     copyToClipboard: (text: string) => ipcRenderer.invoke('app:copyToClipboard', text),
+    notifyRendererReady: () => ipcRenderer.invoke('app:rendererReady'),
     setPreviewPostTarget: (postId: string | null) => ipcRenderer.invoke('app:setPreviewPostTarget', postId),
     triggerMenuAction: (action: string) => ipcRenderer.invoke('app:triggerMenuAction', action),
   },

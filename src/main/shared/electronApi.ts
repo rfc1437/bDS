@@ -567,6 +567,7 @@ export interface ElectronAPI {
     readProjectMetadata: (folderPath: string) => Promise<{ name?: string; description?: string; publicUrl?: string; mainLanguage?: string } | null>;
     getBlogmarkBookmarklet: () => Promise<string>;
     copyToClipboard: (text: string) => Promise<boolean>;
+    notifyRendererReady: () => Promise<boolean>;
     setPreviewPostTarget: (postId: string | null) => Promise<void>;
     triggerMenuAction: (action: string) => Promise<void>;
   };

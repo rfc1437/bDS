@@ -130,6 +130,7 @@ Object.defineProperty(globalThis, 'window', {
         triggerMenuAction: vi.fn(),
         getBlogmarkBookmarklet: vi.fn(),
         copyToClipboard: vi.fn(),
+        notifyRendererReady: vi.fn(),
       },
       import: {
         selectAndAnalyze: vi.fn(),

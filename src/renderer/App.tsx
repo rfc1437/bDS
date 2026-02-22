@@ -1,10 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
-import { openEntityTab, openSingletonToolTab } from './navigation/tabPolicy';
+import { openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
 import { executeActivityClick } from './navigation/activityExecution';
+import { handleBlogmarkCreatedEvent } from './navigation/blogmarkHandling';
+import { createDeferredEventGate } from './navigation/deferredEventGate';
 import { createAndFocusPost } from './navigation/postCreation';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
 import { useI18n } from './i18n';
@@ -33,6 +35,25 @@ const App: React.FC = () => {
     openTab,
     restoreTabState,
   } = useAppStore();
+  const blogmarkEventGateRef = useRef(createDeferredEventGate<PostData>());
+
+  const processBlogmarkCreated = (created: PostData) => {
+    addPost(created);
+    const state = useAppStore.getState();
+    handleBlogmarkCreatedEvent(
+      {
+        activeView: state.activeView,
+        sidebarVisible: state.sidebarVisible,
+      },
+      created,
+      {
+        setActiveView: state.setActiveView,
+        toggleSidebar: state.toggleSidebar,
+        setSelectedPost: state.setSelectedPost,
+        openTab: state.openTab,
+      },
+    );
+  };
 
   // Load initial data
   useEffect(() => {
@@ -80,6 +101,9 @@ const App: React.FC = () => {
         console.error('Failed to load initial data:', error);
       } finally {
         setLoading(false);
+        setTimeout(() => {
+          blogmarkEventGateRef.current.markReady(processBlogmarkCreated);
+        }, 0);
       }
     };
 
@@ -216,28 +240,12 @@ const App: React.FC = () => {
 
     unsubscribers.push(
       window.electronAPI?.on('blogmark:created', (post: unknown) => {
-        const created = post as { id?: string } | null;
+        const created = post as PostData;
         if (!created?.id) {
           return;
         }
 
-        const state = useAppStore.getState();
-        executeActivityClick(
-          {
-            activeView: state.activeView,
-            sidebarVisible: state.sidebarVisible,
-            tabs: state.tabs,
-            activeTabId: state.activeTabId,
-          },
-          'posts',
-          {
-            setActiveView: state.setActiveView,
-            toggleSidebar: state.toggleSidebar,
-          },
-        );
-
-        state.setSelectedPost(created.id);
-        openEntityTab(state.openTab, 'post', created.id, 'preview');
+        blogmarkEventGateRef.current.push(created, processBlogmarkCreated);
       }) || (() => {})
     );
 
@@ -474,6 +482,10 @@ const App: React.FC = () => {
         }
       }) || (() => {})
     );
+
+    void window.electronAPI?.app.notifyRendererReady?.().catch((error) => {
+      console.error('Failed to notify renderer readiness:', error);
+    });
 
     return () => {
       unsubscribers.forEach(unsub => unsub());

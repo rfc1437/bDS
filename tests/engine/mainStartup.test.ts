@@ -650,6 +650,7 @@ describe('main bootstrap preview behavior', () => {
 
   it('handles bds deep-link by creating a blogmark post with preferred category', async () => {
     const listeners = new Map<string, (...args: any[]) => void>();
+    const ipcHandlers = new Map<string, (...args: any[]) => any>();
     const mockApp = {
       name: 'bDS',
       whenReady: vi.fn(() => Promise.resolve()),
@@ -691,7 +692,9 @@ describe('main bootstrap preview behavior', () => {
       },
       ipcMain: {
         on: vi.fn(),
-        handle: vi.fn(),
+        handle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
+          ipcHandlers.set(channel, handler);
+        }),
         removeHandler: vi.fn(),
       },
       protocol: {
@@ -794,9 +797,181 @@ describe('main bootstrap preview behavior', () => {
       }),
     );
 
+    const rendererReadyHandler = ipcHandlers.get('app:rendererReady');
+    await rendererReadyHandler?.();
+
     expect(windows[0]?.webContents.send).toHaveBeenCalledWith(
       'blogmark:created',
       expect.objectContaining({ id: 'new-post-id' }),
+    );
+  });
+
+  it('queues blogmark created event until renderer has finished loading', async () => {
+    const listeners = new Map<string, (...args: any[]) => void>();
+    const webContentsListeners = new Map<string, (...args: any[]) => void>();
+    const ipcHandlers = new Map<string, (...args: any[]) => any>();
+    const mockApp = {
+      name: 'bDS',
+      whenReady: vi.fn(() => Promise.resolve()),
+      on: vi.fn((event: string, callback: (...args: any[]) => void) => {
+        listeners.set(event, callback);
+      }),
+      quit: vi.fn(),
+      requestSingleInstanceLock: vi.fn(() => true),
+      setAsDefaultProtocolClient: vi.fn(() => true),
+    };
+
+    const windows: Array<{ webContents: { send: ReturnType<typeof vi.fn> } }> = [];
+    let rendererLoading = true;
+
+    class MockBrowserWindow {
+      static getAllWindows = vi.fn(() => windows as any);
+
+      loadURL = vi.fn();
+      loadFile = vi.fn();
+      on = vi.fn();
+      isDestroyed = vi.fn(() => false);
+      webContents = {
+        on: vi.fn((event: string, callback: (...args: any[]) => void) => {
+          webContentsListeners.set(event, callback);
+        }),
+        isLoadingMainFrame: vi.fn(() => rendererLoading),
+        send: vi.fn(),
+        openDevTools: vi.fn(),
+        toggleDevTools: vi.fn(),
+      };
+
+      constructor() {
+        windows.push(this as any);
+      }
+    }
+
+    vi.doMock('electron', () => ({
+      app: mockApp,
+      BrowserWindow: MockBrowserWindow,
+      Menu: {
+        buildFromTemplate: vi.fn(() => ({})),
+        setApplicationMenu: vi.fn(),
+      },
+      ipcMain: {
+        on: vi.fn(),
+        handle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
+          ipcHandlers.set(channel, handler);
+        }),
+        removeHandler: vi.fn(),
+      },
+      protocol: {
+        registerSchemesAsPrivileged: vi.fn(),
+        handle: vi.fn(),
+      },
+      net: {
+        fetch: vi.fn(),
+      },
+      shell: {
+        openExternal: vi.fn(),
+        openPath: vi.fn(),
+      },
+    }));
+
+    class MockPreviewServer {
+      start = vi.fn().mockResolvedValue(4123);
+      stop = vi.fn().mockResolvedValue(undefined);
+      getBaseUrl = vi.fn(() => 'http://127.0.0.1:4123');
+    }
+
+    const createPost = vi.fn().mockResolvedValue({
+      id: 'queued-post-id',
+      title: 'Queued title',
+      content: '[Queued title](<https://example.com/>)',
+      categories: ['article'],
+    });
+
+    vi.doMock('../../src/main/engine/PreviewServer', () => ({
+      PreviewServer: MockPreviewServer,
+    }));
+
+    vi.doMock('../../src/main/engine/PostEngine', () => ({
+      getPostEngine: vi.fn(() => ({
+        getPost: vi.fn().mockResolvedValue(null),
+        createPost,
+      })),
+    }));
+
+    vi.doMock('../../src/main/engine/MetaEngine', () => ({
+      getMetaEngine: vi.fn(() => ({
+        getProjectMetadata: vi.fn().mockResolvedValue({ blogmarkCategory: 'article' }),
+      })),
+    }));
+
+    vi.doMock('../../src/main/database', () => ({
+      getDatabase: vi.fn(() => ({
+        initializeLocal: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        getLocal: vi.fn(() => ({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue(null),
+              })),
+            })),
+          })),
+        })),
+        getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
+      })),
+    }));
+
+    vi.doMock('../../src/main/ipc', () => ({
+      registerIpcHandlers: vi.fn(),
+      registerChatHandlers: vi.fn(),
+      initializeChatHandlers: vi.fn(),
+      cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    vi.doMock('../../src/main/database/schema', () => ({
+      media: {},
+    }));
+
+    vi.doMock('drizzle-orm', () => ({
+      eq: vi.fn(),
+    }));
+
+    vi.doMock('../../src/main/engine/MediaEngine', () => ({
+      getMediaEngine: vi.fn(() => ({
+        getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
+      })),
+    }));
+
+    await import('../../src/main/main');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const openUrl = listeners.get('open-url');
+    expect(openUrl).toBeTruthy();
+
+    const preventDefault = vi.fn();
+    openUrl?.({ preventDefault } as any, 'bds://new-post?title=Queued%20title&url=https%3A%2F%2Fexample.com%2F');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(createPost).toHaveBeenCalledTimes(1);
+    expect(windows[0]?.webContents.send).not.toHaveBeenCalledWith(
+      'blogmark:created',
+      expect.anything(),
+    );
+
+    rendererLoading = false;
+    const didFinishLoad = webContentsListeners.get('did-finish-load');
+    didFinishLoad?.();
+
+    expect(windows[0]?.webContents.send).not.toHaveBeenCalledWith(
+      'blogmark:created',
+      expect.anything(),
+    );
+
+    const rendererReadyHandler = ipcHandlers.get('app:rendererReady');
+    await rendererReadyHandler?.();
+
+    expect(windows[0]?.webContents.send).toHaveBeenCalledWith(
+      'blogmark:created',
+      expect.objectContaining({ id: 'queued-post-id' }),
     );
   });
 });
