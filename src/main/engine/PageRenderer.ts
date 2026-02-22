@@ -815,6 +815,28 @@ export function recordToMap(record: unknown): Map<string, string> {
   );
 }
 
+export function resolvePageRendererTemplateRoots(options?: {
+  moduleDir?: string;
+  cwd?: string;
+  resourcesPath?: string;
+}): string[] {
+  const moduleDir = options?.moduleDir ?? __dirname;
+  const cwd = options?.cwd ?? process.cwd();
+  const resourcesPath = options?.resourcesPath ?? process.resourcesPath;
+
+  const roots = [
+    path.resolve(moduleDir, 'templates'),
+    path.resolve(cwd, 'dist', 'main', 'engine', 'templates'),
+    path.resolve(cwd, 'src', 'main', 'engine', 'templates'),
+  ];
+
+  if (typeof resourcesPath === 'string' && resourcesPath.length > 0) {
+    roots.unshift(path.resolve(resourcesPath, 'templates'));
+  }
+
+  return Array.from(new Set(roots));
+}
+
 export class PageRenderer {
   private readonly mediaEngine: MediaEngineContract;
   private readonly postMediaEngine: PostMediaEngineContract;
@@ -826,11 +848,7 @@ export class PageRenderer {
     this.postMediaEngine = postMediaEngine;
     this.postEngineForMacros = postEngineForMacros;
 
-    const templateRoots = [
-      path.resolve(__dirname, 'templates'),
-      path.resolve(process.cwd(), 'dist', 'main', 'engine', 'templates'),
-      path.resolve(process.cwd(), 'src', 'main', 'engine', 'templates'),
-    ];
+    const templateRoots = resolvePageRendererTemplateRoots();
 
     this.liquid = new Liquid({
       root: templateRoots,

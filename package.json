@@ -131,6 +131,10 @@
       {
         "from": "drizzle",
         "to": "drizzle"
+      },
+      {
+        "from": "src/main/engine/templates",
+        "to": "templates"
       }
     ],
     "protocols": [
