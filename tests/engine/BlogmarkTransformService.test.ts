@@ -247,67 +247,53 @@ describe('BlogmarkTransformService', () => {
     expect(result.toasts).toEqual(['Step finished', 'Step finished']);
   });
 
-  it('invokes python transform entrypoint with post payload shape', async () => {
-    const globalsStore = new Map<string, unknown>();
-    const runPythonAsync = vi.fn(async (code: string) => {
-      if (code.includes('json.dumps(_result)')) {
-        const payload = JSON.parse(String(globalsStore.get('__bds_transform_payload_json')));
-
-        if (code.includes('_transform_fn(_payload)')) {
-          return JSON.stringify(payload);
-        }
-
-        return JSON.stringify({
-          ...payload.post,
-          title: 'Normalized',
-          categories: ['spielelog', 'asides'],
-          tags: ['inbox', 'spielen'],
-        });
-      }
-
-      return null;
-    });
-
-    vi.doMock('pyodide', () => ({
-      loadPyodide: vi.fn(async () => ({
-        globals: {
-          set: (key: string, value: unknown) => {
-            globalsStore.set(key, value);
-          },
-        },
-        runPythonAsync,
-      })),
-    }));
-
-    const provider: BlogmarkTransformScriptProvider = {
-      getScripts: vi.fn(async () => [
-        createScript({
-          id: 'pyodide-transform',
-          slug: 'pyodide-transform',
-          title: 'Pyodide Transform',
-          kind: 'transform',
-          entrypoint: 'normalize_blogmark',
-          content: 'def normalize_blogmark(post):\n    return post',
-        }),
-      ]),
+  it('uses webworker executor when runtime mode resolves to webworker', async () => {
+    const webworkerExecutor: BlogmarkTransformExecutor = {
+      runTransform: vi.fn(async (_script, input) => ({ output: input.post, toasts: [] })),
+    };
+    const mainThreadExecutor: BlogmarkTransformExecutor = {
+      runTransform: vi.fn(async (_script, input) => ({ output: input.post, toasts: [] })),
     };
 
-    const service = new BlogmarkTransformService({ provider });
+    const service = new BlogmarkTransformService({
+      provider: {
+        getScripts: async () => [createScript({ id: 'worker-script', slug: 'worker-script' })],
+      },
+      resolvePythonRuntimeMode: async () => 'webworker',
+      executors: {
+        webworker: webworkerExecutor,
+        'main-thread': mainThreadExecutor,
+      },
+    });
 
-    const result = await service.applyTransforms(createInput());
+    await service.applyTransforms(createInput());
 
-    const transformInvocationCode = runPythonAsync.mock.calls
-      .map((call) => call[0])
-      .find((code) => typeof code === 'string' && String(code).includes('json.dumps(_result)'));
+    expect(webworkerExecutor.runTransform).toHaveBeenCalledTimes(1);
+    expect(mainThreadExecutor.runTransform).not.toHaveBeenCalled();
+  });
 
-    expect(result.post.title).toBe('Normalized');
-    expect(result.post.categories).toEqual(['spielelog', 'asides']);
-    expect(result.post.tags).toEqual(['inbox', 'spielen']);
-    expect(transformInvocationCode).toBeDefined();
-    expect(String(transformInvocationCode)).not.toContain('import inspect');
-    expect(String(transformInvocationCode)).toContain('\ntry:\n');
-    expect(String(transformInvocationCode)).toContain('\nexcept TypeError:\n');
-    expect(String(transformInvocationCode)).not.toContain('\n  try:\n');
-    expect(String(transformInvocationCode)).not.toContain('\n  except TypeError:\n');
+  it('uses main-thread executor when runtime mode resolves to main-thread', async () => {
+    const webworkerExecutor: BlogmarkTransformExecutor = {
+      runTransform: vi.fn(async (_script, input) => ({ output: input.post, toasts: [] })),
+    };
+    const mainThreadExecutor: BlogmarkTransformExecutor = {
+      runTransform: vi.fn(async (_script, input) => ({ output: input.post, toasts: [] })),
+    };
+
+    const service = new BlogmarkTransformService({
+      provider: {
+        getScripts: async () => [createScript({ id: 'main-script', slug: 'main-script' })],
+      },
+      resolvePythonRuntimeMode: async () => 'main-thread',
+      executors: {
+        webworker: webworkerExecutor,
+        'main-thread': mainThreadExecutor,
+      },
+    });
+
+    await service.applyTransforms(createInput());
+
+    expect(mainThreadExecutor.runTransform).toHaveBeenCalledTimes(1);
+    expect(webworkerExecutor.runTransform).not.toHaveBeenCalled();
   });
 });

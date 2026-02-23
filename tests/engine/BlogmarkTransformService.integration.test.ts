@@ -63,7 +63,10 @@ describe('BlogmarkTransformService (Pyodide integration)', () => {
       getScripts: async () => [createTransformScript()],
     };
 
-    const service = new BlogmarkTransformService({ provider });
+    const service = new BlogmarkTransformService({
+      provider,
+      resolvePythonRuntimeMode: async () => 'main-thread',
+    });
 
     const result = await service.applyTransforms(createInput());
 

@@ -24,6 +24,7 @@ export interface ProjectMetadata {
   defaultAuthor?: string; // Default author for new posts and media
   maxPostsPerPage?: number; // Preview/server maximum posts per page (default 50)
   blogmarkCategory?: string; // Category used for externally captured bookmark posts
+  pythonRuntimeMode?: 'webworker' | 'main-thread'; // Runtime mode for Python script execution
   picoTheme?: PicoThemeName; // Selected Pico CSS theme for preview/rendering
   categoryMetadata?: Record<string, CategoryMetadata>; // Per-category metadata for UI/rendering
   categorySettings?: Record<string, CategoryRenderSettings>; // Per-category list rendering preferences
@@ -85,6 +86,7 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const blogmarkCategory = typeof metadata.blogmarkCategory === 'string'
     ? normalizeNonEmptyTaxonomyTerm(metadata.blogmarkCategory) ?? undefined
     : undefined;
+  const pythonRuntimeMode = metadata.pythonRuntimeMode === 'main-thread' ? 'main-thread' : 'webworker';
   const picoTheme = sanitizePicoTheme(metadata.picoTheme);
   const categoryMetadata = normalizeCategoryMetadata(metadata.categoryMetadata ?? metadata.categorySettings);
   return {
@@ -92,6 +94,7 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
     publicUrl,
     maxPostsPerPage,
     blogmarkCategory,
+    pythonRuntimeMode,
     picoTheme,
     categoryMetadata,
     categorySettings: undefined,
@@ -306,6 +309,7 @@ export class MetaEngine extends EventEmitter {
         defaultAuthor: normalizedUpdates.defaultAuthor,
         maxPostsPerPage: normalizedUpdates.maxPostsPerPage,
         blogmarkCategory: normalizedUpdates.blogmarkCategory,
+        pythonRuntimeMode: normalizedUpdates.pythonRuntimeMode,
         picoTheme: normalizedUpdates.picoTheme,
         categoryMetadata: normalizedUpdates.categoryMetadata,
       });

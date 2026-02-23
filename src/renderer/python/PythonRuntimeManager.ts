@@ -54,6 +54,8 @@ export class PythonRuntimeManager {
   private initializeDeferred: InitializeDeferred | null = null;
   private ready = false;
   private pendingRuns = new Map<string, PendingRun>();
+  private requestQueue: PythonWorkerRequest[] = [];
+  private activeRequestId: string | null = null;
   private requestCounter = 0;
 
   constructor(private readonly workerFactory: WorkerFactory = createPythonRuntimeWorker) {}
@@ -123,7 +125,7 @@ export class PythonRuntimeManager {
         entrypoint: options?.entrypoint,
       };
 
-      this.worker!.postMessage(message);
+      this.enqueueRequest(message);
     });
   }
 
@@ -162,7 +164,7 @@ export class PythonRuntimeManager {
         cacheKey: options?.cacheKey,
       };
 
-      this.worker!.postMessage(message);
+      this.enqueueRequest(message);
     });
   }
 
@@ -198,7 +200,7 @@ export class PythonRuntimeManager {
         cacheKey: options?.cacheKey,
       };
 
-      this.worker!.postMessage(message);
+      this.enqueueRequest(message);
     });
   }
 
@@ -234,7 +236,7 @@ export class PythonRuntimeManager {
         cacheKey: options?.cacheKey,
       };
 
-      this.worker!.postMessage(message);
+      this.enqueueRequest(message);
     });
   }
 
@@ -262,6 +264,10 @@ export class PythonRuntimeManager {
 
     const pendingRun = this.pendingRuns.get(payload.requestId);
     if (!pendingRun) {
+      if (this.activeRequestId === payload.requestId && payload.type !== 'stdout') {
+        this.activeRequestId = null;
+        this.dispatchNextRequest();
+      }
       return;
     }
 
@@ -278,33 +284,40 @@ export class PythonRuntimeManager {
     if (payload.type === 'runResult') {
       if (pendingRun.kind !== 'run') {
         pendingRun.reject(new Error('Invalid response type for pending macro request'));
+        this.finishRequest(payload.requestId);
         return;
       }
       pendingRun.resolve({ result: payload.result, stdout: pendingRun.stdout });
+      this.finishRequest(payload.requestId);
       return;
     }
 
     if (payload.type === 'entrypoints') {
       if (pendingRun.kind !== 'inspect-entrypoints') {
         pendingRun.reject(new Error('Invalid response type for pending run request'));
+        this.finishRequest(payload.requestId);
         return;
       }
       pendingRun.resolve(payload.entrypoints);
+      this.finishRequest(payload.requestId);
       return;
     }
 
     if (payload.type === 'syntaxResult') {
       if (pendingRun.kind !== 'syntax-check') {
         pendingRun.reject(new Error('Invalid response type for pending syntax check request'));
+        this.finishRequest(payload.requestId);
         return;
       }
       pendingRun.resolve({ errors: payload.errors });
+      this.finishRequest(payload.requestId);
       return;
     }
 
     if (payload.type === 'macroResult') {
       if (pendingRun.kind !== 'macro-v1') {
         pendingRun.reject(new Error('Invalid response type for pending run request'));
+        this.finishRequest(payload.requestId);
         return;
       }
 
@@ -314,10 +327,12 @@ export class PythonRuntimeManager {
       } catch (error) {
         pendingRun.reject(error instanceof Error ? error : new Error(String(error)));
       }
+      this.finishRequest(payload.requestId);
       return;
     }
 
     pendingRun.reject(new Error(payload.error));
+    this.finishRequest(payload.requestId);
   }
 
   private handleWorkerError(error: Error): void {
@@ -334,6 +349,8 @@ export class PythonRuntimeManager {
     }
 
     this.pendingRuns.clear();
+    this.requestQueue = [];
+    this.activeRequestId = null;
     this.worker?.terminate();
     this.worker = null;
     this.initializingPromise = null;
@@ -356,10 +373,48 @@ export class PythonRuntimeManager {
     }
 
     this.pendingRuns.clear();
+    this.requestQueue = [];
+    this.activeRequestId = null;
     this.worker?.terminate();
     this.worker = null;
     this.initializingPromise = null;
     this.ready = false;
+  }
+
+  private enqueueRequest(request: PythonWorkerRequest): void {
+    if (!this.worker || !this.ready) {
+      this.requestQueue.push(request);
+      return;
+    }
+
+    if (this.activeRequestId !== null) {
+      this.requestQueue.push(request);
+      return;
+    }
+
+    this.activeRequestId = request.requestId;
+    this.worker.postMessage(request);
+  }
+
+  private dispatchNextRequest(): void {
+    if (!this.worker || !this.ready || this.activeRequestId !== null || this.requestQueue.length === 0) {
+      return;
+    }
+
+    const nextRequest = this.requestQueue.shift();
+    if (!nextRequest) {
+      return;
+    }
+
+    this.activeRequestId = nextRequest.requestId;
+    this.worker.postMessage(nextRequest);
+  }
+
+  private finishRequest(requestId: string): void {
+    if (this.activeRequestId === requestId) {
+      this.activeRequestId = null;
+    }
+    this.dispatchNextRequest();
   }
 
   private nextRequestId(): string {

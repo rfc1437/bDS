@@ -166,12 +166,15 @@ const mockScriptEngine = {
   deleteScript: vi.fn(),
   getScript: vi.fn(),
   getAllScripts: vi.fn(),
+  rebuildDatabaseFromFiles: vi.fn(),
+  reconcileScriptsFromGitChanges: vi.fn(),
 };
 
 const mockGitEngine = {
   checkAvailability: vi.fn(),
   getHeadCommit: vi.fn(),
   getChangedPostFilesBetween: vi.fn(),
+  getChangedScriptFilesBetween: vi.fn(),
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
   getDiff: vi.fn(),
@@ -575,11 +578,20 @@ describe('IPC Handlers', () => {
           { status: 'modified', path: 'posts/2026/02/existing.md' },
           { status: 'added', path: 'posts/2026/02/new-post.md' },
         ]);
+        mockGitEngine.getChangedScriptFilesBetween.mockResolvedValue([
+          { status: 'modified', path: 'scripts/transform.py' },
+        ]);
         mockPostEngine.reconcilePublishedPostsFromGitChanges.mockResolvedValue({
           created: 1,
           updated: 1,
           deleted: 0,
           processedFiles: 2,
+        });
+        mockScriptEngine.reconcileScriptsFromGitChanges.mockResolvedValue({
+          created: 0,
+          updated: 1,
+          deleted: 0,
+          processedFiles: 1,
         });
 
         const result = await invokeHandler('git:pull', '/repo');
@@ -588,9 +600,13 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getHeadCommit).toHaveBeenNthCalledWith(2, '/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
+        expect(mockGitEngine.getChangedScriptFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).toHaveBeenCalledWith('/repo', [
           { status: 'modified', path: 'posts/2026/02/existing.md' },
           { status: 'added', path: 'posts/2026/02/new-post.md' },
+        ]);
+        expect(mockScriptEngine.reconcileScriptsFromGitChanges).toHaveBeenCalledWith('/repo', [
+          { status: 'modified', path: 'scripts/transform.py' },
         ]);
         expect(result).toEqual({ success: true });
       });
@@ -603,7 +619,9 @@ describe('IPC Handlers', () => {
 
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
+        expect(mockGitEngine.getChangedScriptFilesBetween).not.toHaveBeenCalled();
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
+        expect(mockScriptEngine.reconcileScriptsFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: false, code: 'conflict' });
       });
 
@@ -617,7 +635,9 @@ describe('IPC Handlers', () => {
 
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
+        expect(mockGitEngine.getChangedScriptFilesBetween).not.toHaveBeenCalled();
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
+        expect(mockScriptEngine.reconcileScriptsFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true });
       });
     });
@@ -2710,6 +2730,23 @@ describe('IPC Handlers', () => {
 
         expect(mockScriptEngine.getAllScripts).toHaveBeenCalled();
         expect(result).toEqual(expected);
+      });
+    });
+
+    describe('scripts:rebuildFromFiles', () => {
+      it('should set project context and trigger ScriptEngine rebuild', async () => {
+        mockProjectEngine.getActiveProject.mockResolvedValue({
+          id: 'project-1',
+          dataPath: '/external/data',
+        });
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/project-data');
+        mockScriptEngine.rebuildDatabaseFromFiles.mockResolvedValue(undefined);
+
+        const result = await invokeHandler('scripts:rebuildFromFiles');
+
+        expect(mockScriptEngine.setProjectContext).toHaveBeenCalledWith('project-1', '/resolved/project-data');
+        expect(mockScriptEngine.rebuildDatabaseFromFiles).toHaveBeenCalled();
+        expect(result).toBe(true);
       });
     });
   });

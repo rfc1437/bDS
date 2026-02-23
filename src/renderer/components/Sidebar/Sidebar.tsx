@@ -1261,7 +1261,7 @@ const SettingsNav: React.FC = () => {
   const { tabs, activeTabId, openTab } = useAppStore();
   const [activeSection, setActiveSection] = useState<SettingsCategory | null>(() => {
     const persisted = getPersistedSidebarSection('settings');
-    if (persisted === 'project' || persisted === 'editor' || persisted === 'content' || persisted === 'ai' || persisted === 'publishing' || persisted === 'data') {
+    if (persisted === 'project' || persisted === 'editor' || persisted === 'content' || persisted === 'ai' || persisted === 'technology' || persisted === 'publishing' || persisted === 'data') {
       return persisted;
     }
     return null;
@@ -1321,6 +1321,13 @@ const SettingsNav: React.FC = () => {
         >
           <span className="settings-nav-entry-icon">🤖</span>
           <span>{t('sidebar.nav.ai')}</span>
+        </button>
+        <button
+          className={`settings-nav-entry ${activeSection === 'technology' ? 'active' : ''}`}
+          onClick={() => handleNavClick('technology')}
+        >
+          <span className="settings-nav-entry-icon">⚙️</span>
+          <span>{t('sidebar.nav.technology')}</span>
         </button>
         <button 
           className={`settings-nav-entry ${activeSection === 'publishing' ? 'active' : ''}`}

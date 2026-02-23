@@ -10,6 +10,7 @@ When plan and code differ, code is the source of truth.
 - [x] Pyodide dependency integrated.
 - [x] Renderer worker runtime exists (`pythonRuntime.worker.ts`) with ready/error/stdout/run protocol.
 - [x] Runtime timeout watchdog + reset/recovery implemented in `PythonRuntimeManager`.
+- [x] Renderer runtime request queueing implemented (concurrent calls are serialized in manager).
 - [x] ABI v1 schemas and validation for macro context/result implemented (`abiV1.ts`).
 - [x] Benchmark harness implemented (`npm run bench:python-runtime -- <iterations>`).
 - [x] Script persistence model implemented (`scripts` DB table + `scripts/*.py` files).
@@ -18,15 +19,16 @@ When plan and code differ, code is the source of truth.
 - [x] Preload + shared API typings for scripts implemented.
 - [x] Renderer scripts UX implemented (sidebar list, editor, save, run, delete).
 - [x] Script syntax check + entrypoint discovery integrated in editor UX.
-- [x] Blogmark transform pipeline executes Python transform scripts (`kind='transform'`).
+- [x] Blogmark transform pipeline executes Python transform scripts (`kind='transform'`) via a queued worker runtime by default.
+- [x] Project preference `pythonRuntimeMode` added with Settings → Technology section.
 
 ## Confirmed Deviations from Original Plan
 
 These are current realities and should be treated as authoritative unless we explicitly decide to change them.
 
-1. **Transform script runtime location differs**
-   - Original plan: untrusted Python runs in renderer worker only.
-   - Actual implementation: Blogmark transform scripts run in **main process** Pyodide (`BlogmarkTransformService`).
+1. **Transform runtime is now configurable (project-level)**
+   - Default: `webworker` (worker-thread based Python runtime with queued requests).
+   - Optional fallback: `main-thread` legacy execution mode.
 
 2. **Render-time macro migration has not happened yet**
    - Original plan: all render-time macros become Python-backed.
@@ -36,24 +38,31 @@ These are current realities and should be treated as authoritative unless we exp
    - ABI v1 + runtime manager support exist.
    - Main page generation path still uses existing JS macro rendering.
 
-4. **Scripts rebuild/meta-diff sync is still missing**
-   - Script CRUD works via app APIs.
-   - No implemented project-wide “rebuild from files” parity for `scripts/` equivalent to posts/media rebuild flows.
+4. **Scripts rebuild/sync parity is implemented (simple policy)**
+   - `ScriptEngine.rebuildDatabaseFromFiles()` now rebuilds DB metadata from `scripts/*.py`.
+   - `ScriptEngine.reconcileScriptsFromGitChanges()` now handles added/modified/deleted/renamed script files after git pull.
+   - Settings → Data now includes **Rebuild Scripts** button (`scripts:rebuildFromFiles`) for manual parity with posts/media rebuild.
 
 ## Remaining Work Only
 
-## 1) Decide and enforce Python runtime boundary (P0)
+## 1) Python runtime boundary (P0) — Implemented
 
-- [ ] Decide if `transform` scripts should stay in main process or move to renderer worker.
-- [ ] If staying in main process: add explicit timeout/kill/recovery safeguards equivalent to worker watchdog behavior.
-- [ ] If moving to worker: route transform execution through typed IPC/worker bridge and remove main-process execution path.
-- [ ] Document final security model in this file after decision.
+- [x] Worker model introduced for Blogmark transform execution with queued communication.
+- [x] Runtime mode made project-configurable via Settings → Technology (`pythonRuntimeMode`).
+- [x] Legacy main-thread mode retained as explicit fallback option.
 
-## 2) Add scripts file-system rebuild/sync (P1)
+## 2) Add scripts file-system rebuild/sync (P1) — Implemented
 
-- [ ] Implement rebuild/meta-diff style synchronization for `scripts/` so external file edits are detected.
-- [ ] Define conflict handling policy between DB metadata and script file frontmatter/body.
-- [ ] Add tests for create/edit/delete performed outside app while app is closed/open.
+- [x] Implement rebuild/meta-diff style synchronization for `scripts/` so external file edits are detected.
+- [x] Define conflict handling policy between DB metadata and script file frontmatter/body.
+- [x] Add tests for create/edit/delete performed outside app while app is closed/open.
+
+### Implemented policy (simple)
+
+- Source of truth: script file + docstring frontmatter when present/valid.
+- Rebuild path: delete current `scripts` rows for active project and re-import from `scripts/*.py`.
+- Reconcile path (git pull): apply file deltas (`added|modified|deleted|renamed`) and upsert/delete rows.
+- Conflict behavior: prefer file metadata/body; fall back to safe defaults when values are missing/invalid.
 
 ## 3) Wire Python macros into render pipeline (P1)
 
@@ -88,7 +97,7 @@ These are current realities and should be treated as authoritative unless we exp
 ## Acceptance Gate Before Marking Python Scripting “Complete”
 
 - [ ] Render-time macros run through Python script path in production generation flow.
-- [ ] Scripts directory external changes are synchronized reliably.
-- [ ] Runtime boundary decision implemented and protected by tests.
+- [x] Scripts directory external changes are synchronized reliably.
+- [x] Runtime boundary decision implemented and protected by tests.
 - [ ] Legacy JS macro path removed (or explicitly retained with documented rationale).
-- [ ] `npm test` and `npm run build` pass.
+- [x] `npm test` and `npm run build` pass.
