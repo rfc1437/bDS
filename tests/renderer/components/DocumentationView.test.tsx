@@ -80,9 +80,6 @@ describe('DocumentationView', () => {
     fireEvent.click(tocLink as HTMLAnchorElement);
 
     expect((scrollContainer as HTMLElement).scrollTop).toBe(238);
-    const article = container.querySelector('.documentation-article') as HTMLElement;
-    expect(article.dataset.lastJumpTarget).toBe('who-this-guide-is-for');
-    expect(article.dataset.lastJumpTop).toBe('238');
     expect(window.location.hash).toBe('#who-this-guide-is-for');
     expect(window.open).not.toHaveBeenCalled();
   });
@@ -190,7 +187,6 @@ describe('DocumentationView', () => {
 
     expect(firstScroll.scrollTop).toBe(7);
     expect(secondScroll.scrollTop).toBe(299);
-    expect(secondArticle.dataset.lastJumpTarget).toBe('using-macros');
   });
 
   it('falls back to heading text slug when heading id does not match hash', async () => {

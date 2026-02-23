@@ -103,27 +103,46 @@
 
 .documentation-code-copy-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: .4rem;
+  right: .4rem;
   border: 1px solid var(--doc-border);
-  border-radius: 6px;
+  border-radius: .25rem;
   background: var(--doc-surface);
-  color: var(--doc-text);
-  width: 30px;
-  height: 30px;
+  color: var(--doc-muted);
+  width: 1.8rem;
+  height: 1.8rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   cursor: pointer;
   z-index: 1;
+  opacity: .88;
 }
 
-.documentation-code-copy-button:hover {
-  background: var(--doc-code-bg);
+.documentation-code-copy-button:hover,
+.documentation-code-copy-button:focus-visible {
+  opacity: 1;
+  color: var(--doc-text);
 }
 
 .documentation-code-block pre {
   margin-top: 0;
+}
+
+.documentation-code-block .code-copy-icon {
+  font-size: .95rem;
+  line-height: 1;
+}
+
+.documentation-code-block.code-copy-success .documentation-code-copy-button {
+  color: var(--pico-ins-color, rgb(53, 117, 56));
+  border-color: var(--pico-ins-color, rgb(53, 117, 56));
+}
+
+.documentation-code-block.code-copy-failed .documentation-code-copy-button {
+  color: var(--pico-del-color, rgb(183, 72, 72));
+  border-color: var(--pico-del-color, rgb(183, 72, 72));
 }
 
 .documentation-content.markdown-body blockquote {

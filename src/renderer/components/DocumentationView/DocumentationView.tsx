@@ -103,24 +103,19 @@ export const DocumentationView: React.FC = () => {
     const preferredScrollContainer = scrollContainerRef.current;
 
     if (!articleElement) {
-      console.info('[DocumentationView] hash jump skipped', { href, targetId, reason: 'article-not-available' });
       return false;
     }
 
     const targetHeading = resolveTargetHeadingInArticle(articleElement, targetId);
 
     if (!targetHeading) {
-      console.info('[DocumentationView] hash jump skipped', { href, targetId, reason: 'target-not-found-or-outside-article' });
       return false;
     }
 
     const scrollContainer = resolveScrollContainer(targetHeading, preferredScrollContainer);
     if (!scrollContainer) {
-      console.info('[DocumentationView] hash jump skipped', { href, targetId, reason: 'no-scroll-container' });
       return false;
     }
-
-    const beforeTop = scrollContainer.scrollTop;
 
     const containerRect = scrollContainer.getBoundingClientRect();
     const headingRect = targetHeading.getBoundingClientRect();
@@ -129,19 +124,6 @@ export const DocumentationView: React.FC = () => {
     scrollContainer.scrollTop = 0;
     scrollContainer.scrollTop = targetTop;
     window.location.hash = href;
-
-    articleElement.dataset.lastJumpTarget = targetId;
-    articleElement.dataset.lastJumpTop = String(targetTop);
-    articleElement.dataset.lastJumpContainer = scrollContainer.className || scrollContainer.tagName;
-
-    console.info('[DocumentationView] hash jump applied', {
-      href,
-      targetId,
-      beforeTop,
-      targetTop,
-      afterTop: scrollContainer.scrollTop,
-      container: scrollContainer.className || scrollContainer.tagName,
-    });
 
     return true;
   };
@@ -203,10 +185,14 @@ export const DocumentationView: React.FC = () => {
         <div className="documentation-code-block" key={codeBlockKey}>
           <button
             type="button"
-            className="documentation-code-copy-button"
+            className="code-copy-button documentation-code-copy-button"
             aria-label={tr('docs.copyCode')}
             title={tr('docs.copyCode')}
-            onClick={() => {
+            onClick={(event) => {
+              const button = event.currentTarget;
+              const wrapper = button.closest('.documentation-code-block');
+              const icon = button.querySelector('.code-copy-icon');
+
               const copyToClipboard = async () => {
                 if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
                   await navigator.clipboard.writeText(sourceCode);
@@ -225,13 +211,30 @@ export const DocumentationView: React.FC = () => {
               };
 
               copyToClipboard()
-                .then(() => undefined)
+                .then(() => {
+                  wrapper?.classList.remove('code-copy-failed');
+                  wrapper?.classList.remove('code-copy-success');
+                  wrapper?.classList.add('code-copy-success');
+
+                  if (icon) {
+                    icon.textContent = '✓';
+                    setTimeout(() => {
+                      icon.textContent = '⧉';
+                      wrapper?.classList.remove('code-copy-success');
+                    }, 1200);
+                  }
+                })
                 .catch((error) => {
+                  wrapper?.classList.remove('code-copy-success');
+                  wrapper?.classList.add('code-copy-failed');
+                  setTimeout(() => {
+                    wrapper?.classList.remove('code-copy-failed');
+                  }, 1200);
                   console.error('Failed to copy documentation code block:', error);
                 });
             }}
           >
-            📋
+            <span className="code-copy-icon">⧉</span>
           </button>
           <pre>
             <code
