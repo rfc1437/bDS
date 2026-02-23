@@ -10,9 +10,9 @@ interface InitializeDeferred {
 }
 
 interface PendingRun {
-  kind: 'run' | 'macro-v1';
+  kind: 'run' | 'macro-v1' | 'inspect-entrypoints';
   stdout: string;
-  resolve: (value: PythonRunResult | PythonMacroV1Result) => void;
+  resolve: (value: PythonRunResult | PythonMacroV1Result | string[]) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout> | null;
 }
@@ -24,6 +24,18 @@ export interface PythonRunResult {
 
 export interface PythonExecuteOptions {
   timeoutMs?: number;
+  cacheKey?: string;
+  entrypoint?: string;
+}
+
+export interface PythonMacroSourceOptions {
+  kind: string;
+  id?: string;
+}
+
+export interface PythonMacroRenderOptions extends PythonExecuteOptions {
+  macroHook?: string;
+  macroSource?: PythonMacroSourceOptions;
 }
 
 export interface PythonMacroV1Result {
@@ -102,14 +114,17 @@ export class PythonRuntimeManager {
         type: 'run',
         requestId,
         code,
+        cacheKey: options?.cacheKey,
+        entrypoint: options?.entrypoint,
       };
 
       this.worker!.postMessage(message);
     });
   }
 
-  async renderMacroV1(code: string, context: unknown, options?: PythonExecuteOptions): Promise<PythonMacroV1Result> {
-    const validatedContext = parseMacroContextV1(context);
+  async renderMacroV1(code: string, context: unknown, options?: PythonMacroRenderOptions): Promise<PythonMacroV1Result> {
+    const contextWithMetadata = this.withMacroEnvMetadata(context, options);
+    const validatedContext = parseMacroContextV1(contextWithMetadata);
     await this.initialize();
 
     if (!this.worker || !this.ready) {
@@ -139,6 +154,43 @@ export class PythonRuntimeManager {
         requestId,
         code,
         context: validatedContext,
+        cacheKey: options?.cacheKey,
+      };
+
+      this.worker!.postMessage(message);
+    });
+  }
+
+  async inspectEntrypoints(code: string, options?: PythonExecuteOptions): Promise<string[]> {
+    await this.initialize();
+
+    if (!this.worker || !this.ready) {
+      throw new Error('Python runtime is not ready');
+    }
+
+    const requestId = this.nextRequestId();
+    const timeoutMs = options?.timeoutMs ?? 5000;
+
+    return new Promise<string[]>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingRuns.delete(requestId);
+        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
+        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      this.pendingRuns.set(requestId, {
+        kind: 'inspect-entrypoints',
+        stdout: '',
+        resolve: (value) => resolve(value as string[]),
+        reject,
+        timeoutId,
+      });
+
+      const message: PythonWorkerRequest = {
+        type: 'inspectEntrypoints',
+        requestId,
+        code,
+        cacheKey: options?.cacheKey,
       };
 
       this.worker!.postMessage(message);
@@ -188,6 +240,15 @@ export class PythonRuntimeManager {
         return;
       }
       pendingRun.resolve({ result: payload.result, stdout: pendingRun.stdout });
+      return;
+    }
+
+    if (payload.type === 'entrypoints') {
+      if (pendingRun.kind !== 'inspect-entrypoints') {
+        pendingRun.reject(new Error('Invalid response type for pending run request'));
+        return;
+      }
+      pendingRun.resolve(payload.entrypoints);
       return;
     }
 
@@ -254,5 +315,37 @@ export class PythonRuntimeManager {
   private nextRequestId(): string {
     this.requestCounter += 1;
     return `req-${this.requestCounter}`;
+  }
+
+  private withMacroEnvMetadata(context: unknown, options?: PythonMacroRenderOptions): unknown {
+    if (!options?.macroHook && !options?.macroSource) {
+      return context;
+    }
+
+    if (!context || typeof context !== 'object' || Array.isArray(context)) {
+      return context;
+    }
+
+    const contextRecord = context as Record<string, unknown>;
+    const envValue = contextRecord.env;
+    if (!envValue || typeof envValue !== 'object' || Array.isArray(envValue)) {
+      return context;
+    }
+
+    const envRecord = envValue as Record<string, unknown>;
+    const nextEnv: Record<string, unknown> = { ...envRecord };
+
+    if (nextEnv.hook === undefined && options.macroHook !== undefined) {
+      nextEnv.hook = options.macroHook;
+    }
+
+    if (nextEnv.source === undefined && options.macroSource !== undefined) {
+      nextEnv.source = options.macroSource;
+    }
+
+    return {
+      ...contextRecord,
+      env: nextEnv,
+    };
   }
 }

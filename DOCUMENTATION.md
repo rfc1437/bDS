@@ -10,6 +10,7 @@
 - [Working with pages](#working-with-pages)
 - [Working with media](#working-with-media)
 - [Using macros](#using-macros)
+- [Using scripting (early access)](#using-scripting-early-access)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
@@ -191,6 +192,24 @@ Use macros when you need reusable rich blocks (for example embedded videos, medi
 - Macros are inserted directly in Markdown and expanded during preview/publish rendering.
 - Use macro parameters to control behavior without leaving the editor.
 - `tag_cloud` is data-driven and links directly into tag archive navigation.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Using scripting (early access)
+
+The scripting feature is an incremental capability and should currently be treated as early access. Scripts are stored as Python files in the project filesystem, while script metadata is tracked in the project database and embedded in the file metadata docstring block. This keeps scripts portable and inspectable while still allowing reliable indexing in the app.
+
+Each script exposes an **Entrypoint** selector. bDS always provides a synthetic `main` entrypoint. Selecting `main` runs the full script body as before. In addition, bDS inspects your script to list top-level Python function names, which can be selected as entrypoints for upcoming execution modes and integrations.
+
+At this stage, scripting is intended for controlled project workflows where scripts interact with application-provided tools. Keep scripts versioned through your normal Git workflow, review changes carefully, and prefer small, explicit scripts over monolithic utility files.
+
+### Key takeaways
+
+- Scripting is available and intentionally evolving in small steps.
+- `main` is always available and preserves whole-script execution behavior.
+- Script files and metadata remain filesystem-friendly and Git-reviewable.
 
 [↑ Back to In this article](#in-this-article)
 

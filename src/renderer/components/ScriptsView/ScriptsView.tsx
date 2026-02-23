@@ -28,11 +28,25 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
   const [slug, setSlug] = useState('');
   const [kind, setKind] = useState<ScriptData['kind']>('utility');
   const [entrypoint, setEntrypoint] = useState('render');
+  const [availableEntrypoints, setAvailableEntrypoints] = useState<string[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [scriptContent, setScriptContent] = useState('');
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const buildCacheKey = (scriptMeta: Pick<ScriptData, 'id' | 'version'>, content: string): string => {
+    let hash = 0;
+    for (let index = 0; index < content.length; index += 1) {
+      hash = ((hash << 5) - hash + content.charCodeAt(index)) | 0;
+    }
+    return `${scriptMeta.id}:${scriptMeta.version}:${Math.abs(hash).toString(36)}`;
+  };
+
+  const withMainEntrypoint = (entrypoints: string[]): string[] => {
+    const filtered = entrypoints.filter((name) => name !== 'main');
+    return ['main', ...filtered];
+  };
 
   const toFunctionSlug = (value: string) => {
     const normalized = value
@@ -45,6 +59,33 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
   useEffect(() => {
     let cancelled = false;
 
+    const refreshEntrypoints = async (content: string, scriptMeta: ScriptData) => {
+      try {
+        const runtimeManager = getPythonRuntimeManager();
+        const discoveredEntrypoints = await runtimeManager.inspectEntrypoints(content, {
+          cacheKey: buildCacheKey(scriptMeta, content),
+        });
+        const available = withMainEntrypoint(discoveredEntrypoints);
+
+        if (cancelled) {
+          return;
+        }
+
+        setAvailableEntrypoints(available);
+
+        const preferredEntrypoint = available.includes(scriptMeta.entrypoint)
+          ? scriptMeta.entrypoint
+          : 'main';
+        setEntrypoint(preferredEntrypoint);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setAvailableEntrypoints(['main']);
+        setEntrypoint('main');
+      }
+    };
+
     const loadScript = async () => {
       if (!scriptId) {
         setScript(null);
@@ -52,6 +93,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         setSlug('');
         setKind('utility');
         setEntrypoint('render');
+        setAvailableEntrypoints(['main']);
         setEnabled(true);
         setScriptContent('');
         setIsSlugManuallyEdited(false);
@@ -65,6 +107,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         setSlug('');
         setKind('utility');
         setEntrypoint('render');
+        setAvailableEntrypoints(['main']);
         setEnabled(true);
         setScriptContent('');
         setIsSlugManuallyEdited(false);
@@ -80,6 +123,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
       setScriptContent(item.content || '');
       const normalizedExisting = toFunctionSlug(item.slug || item.title || '');
       setIsSlugManuallyEdited(normalizedExisting !== toFunctionSlug(item.title || ''));
+      await refreshEntrypoints(item.content || '', item);
     };
 
     void loadScript();
@@ -117,11 +161,24 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
 
     setIsSaving(true);
     try {
+      const runtimeManager = getPythonRuntimeManager();
+      const discoveredEntrypoints = await runtimeManager.inspectEntrypoints(scriptContent, {
+        cacheKey: buildCacheKey(script, scriptContent),
+      });
+      const available = withMainEntrypoint(discoveredEntrypoints);
+
+      const normalizedEntrypoint = available.includes(entrypoint)
+        ? entrypoint
+        : 'main';
+
+      setAvailableEntrypoints(available);
+      setEntrypoint(normalizedEntrypoint);
+
       const updated = await window.electronAPI?.scripts.update(script.id, {
         title,
         slug,
         kind,
-        entrypoint,
+        entrypoint: normalizedEntrypoint,
         enabled,
         content: scriptContent,
       });
@@ -135,6 +192,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
       setSlug(toFunctionSlug(updated.slug || updated.title || ''));
       setKind(updated.kind || 'utility');
       setEntrypoint(updated.entrypoint || 'render');
+      setAvailableEntrypoints(available);
       setEnabled(updated.enabled ?? true);
       setScriptContent(updated.content || '');
       const normalizedExisting = toFunctionSlug(updated.slug || updated.title || '');
@@ -193,7 +251,10 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
 
     try {
       const runtimeManager = getPythonRuntimeManager();
-      const result = await runtimeManager.execute(scriptContent);
+      const result = await runtimeManager.execute(scriptContent, {
+        cacheKey: buildCacheKey(script, scriptContent),
+        entrypoint,
+      });
 
       const now = new Date().toISOString();
       if (result.result.trim().length > 0) {
@@ -307,13 +368,16 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
             </div>
             <div className="editor-field">
               <label htmlFor="script-entrypoint">{t('scripts.field.entrypoint')}</label>
-              <input
+              <select
                 id="script-entrypoint"
-                type="text"
                 value={entrypoint}
                 onChange={(event) => setEntrypoint(event.target.value)}
                 disabled={!script}
-              />
+              >
+                {availableEntrypoints.map((name) => (
+                  <option key={name} value={name}>{name === 'main' ? t('scripts.entrypoint.main') : name}</option>
+                ))}
+              </select>
             </div>
             <div className="editor-field scripts-enabled-field">
               <label htmlFor="script-enabled">

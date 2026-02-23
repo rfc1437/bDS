@@ -425,6 +425,8 @@
   "scripts.content": "Skriptinhalt",
   "scripts.field.kind": "Typ",
   "scripts.field.entrypoint": "Einstiegspunkt",
+  "scripts.entrypoint.main": "main",
+  "scripts.entrypoint.none": "Keine Funktionen gefunden",
   "scripts.field.enabled": "Aktiviert",
   "scripts.kind.utility": "utility",
   "scripts.kind.macro": "macro",

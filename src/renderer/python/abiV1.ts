@@ -17,6 +17,14 @@ export const macroContextV1Schema = z
       .object({
         isPreview: z.boolean(),
         mainLanguage: z.string().min(1).optional(),
+        hook: z.string().min(1).optional(),
+        source: z
+          .object({
+            kind: z.string().min(1),
+            id: z.string().min(1).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict(),
     params: z.record(z.string(), jsonValueSchema).optional(),

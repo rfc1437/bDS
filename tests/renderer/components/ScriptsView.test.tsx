@@ -5,6 +5,7 @@ import { ScriptsView } from '../../../src/renderer/components/ScriptsView/Script
 import { useAppStore } from '../../../src/renderer/store';
 
 const executeMock = vi.fn();
+const inspectEntrypointsMock = vi.fn();
 const monacoPropsSpy = vi.fn();
 
 vi.mock('@monaco-editor/react', () => ({
@@ -27,6 +28,7 @@ vi.mock('@monaco-editor/react', () => ({
 vi.mock('../../../src/renderer/python/runtimeManagerInstance', () => ({
   getPythonRuntimeManager: () => ({
     execute: executeMock,
+    inspectEntrypoints: inspectEntrypointsMock,
   }),
 }));
 
@@ -35,6 +37,7 @@ describe('ScriptsView', () => {
     vi.clearAllMocks();
 
     executeMock.mockResolvedValue({ result: '2', stdout: 'hello\n' });
+    inspectEntrypointsMock.mockResolvedValue(['render', 'helper']);
 
     (window as any).electronAPI = {
       ...(window as any).electronAPI,
@@ -106,6 +109,59 @@ describe('ScriptsView', () => {
     expect(screen.getByText(/Updated:/)).toBeInTheDocument();
   });
 
+  it('loads available entrypoints from script functions', async () => {
+    render(<ScriptsView scriptId="script-1" />);
+
+    const entrypointSelect = await screen.findByLabelText('Entrypoint') as HTMLSelectElement;
+
+    await vi.waitFor(() => {
+      expect(inspectEntrypointsMock).toHaveBeenCalledWith('print("hello")', {
+        cacheKey: expect.stringMatching(/^script-1:1:/),
+      });
+    });
+
+    expect(Array.from(entrypointSelect.options).map((option) => option.value)).toEqual(['main', 'render', 'helper']);
+    expect(entrypointSelect.value).toBe('render');
+  });
+
+  it('always exposes main entrypoint and falls back to it when no functions are discovered', async () => {
+    inspectEntrypointsMock.mockResolvedValueOnce([]);
+
+    const updateMock = vi.fn().mockResolvedValue({
+      id: 'script-1',
+      projectId: 'default',
+      slug: 'hello_script',
+      title: 'Hello Script',
+      kind: 'utility',
+      entrypoint: 'main',
+      enabled: true,
+      version: 2,
+      filePath: '/tmp/hello-script.py',
+      content: 'print("hello")',
+      createdAt: '2026-02-22T00:00:00.000Z',
+      updatedAt: '2026-02-22T00:01:00.000Z',
+    });
+    (window as any).electronAPI.scripts.update = updateMock;
+
+    render(<ScriptsView scriptId="script-1" />);
+
+    const entrypointSelect = await screen.findByLabelText('Entrypoint') as HTMLSelectElement;
+    await vi.waitFor(() => {
+      expect(Array.from(entrypointSelect.options).map((option) => option.value)).toEqual(['main']);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Script' }));
+
+    await vi.waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        'script-1',
+        expect.objectContaining({
+          entrypoint: 'main',
+        }),
+      );
+    });
+  });
+
   it('saves renamed script metadata and content', async () => {
     const updateMock = vi.fn().mockResolvedValue({
       id: 'script-1',
@@ -169,7 +225,10 @@ describe('ScriptsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
 
     await vi.waitFor(() => {
-      expect(executeMock).toHaveBeenCalledWith('print("hello")');
+      expect(executeMock).toHaveBeenCalledWith('print("hello")', {
+        cacheKey: expect.stringMatching(/^script-1:1:/),
+        entrypoint: 'render',
+      });
     });
 
     const state = useAppStore.getState();
@@ -177,6 +236,20 @@ describe('ScriptsView', () => {
     expect(state.panelActiveTab).toBe('output');
     expect(state.panelOutputEntries.length).toBeGreaterThan(0);
     expect(state.panelOutputEntries[state.panelOutputEntries.length - 1].message).toContain('hello');
+  });
+
+  it('runs selected non-main entrypoint function', async () => {
+    render(<ScriptsView scriptId="script-1" />);
+
+    const entrypointSelect = await screen.findByLabelText('Entrypoint');
+    fireEvent.change(entrypointSelect, { target: { value: 'helper' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
+
+    await vi.waitFor(() => {
+      expect(executeMock).toHaveBeenCalledWith('print("hello")', expect.objectContaining({
+        entrypoint: 'helper',
+      }));
+    });
   });
 
   it('deletes script from editor action', async () => {

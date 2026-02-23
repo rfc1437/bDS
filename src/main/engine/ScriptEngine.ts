@@ -63,9 +63,6 @@ export class ScriptEngine extends EventEmitter {
     const scriptId = uuidv4();
     const filePath = this.getScriptFilePath(uniqueSlug);
 
-    await fs.mkdir(this.getScriptsDir(), { recursive: true });
-    await fs.writeFile(filePath, input.content, 'utf-8');
-
     const row: NewScript = {
       id: scriptId,
       projectId: this.currentProjectId,
@@ -79,6 +76,9 @@ export class ScriptEngine extends EventEmitter {
       createdAt: now,
       updatedAt: now,
     };
+
+    await fs.mkdir(this.getScriptsDir(), { recursive: true });
+    await fs.writeFile(filePath, this.serializeScriptFile(row as Script, input.content), 'utf-8');
 
     await getDatabase().getLocal().insert(scripts).values(row);
 
@@ -108,20 +108,39 @@ export class ScriptEngine extends EventEmitter {
       await fs.rename(existing.filePath, nextFilePath);
     }
 
-    if (typeof updates.content === 'string') {
-      await fs.writeFile(nextFilePath, updates.content, 'utf-8');
-    }
+    const nextTitle = updates.title ?? existing.title;
+    const nextKind = updates.kind ?? existing.kind;
+    const nextEntrypoint = updates.entrypoint ?? existing.entrypoint;
+    const nextEnabled = updates.enabled ?? existing.enabled;
+    const nextVersion = existing.version + 1;
+    const nextContent = typeof updates.content === 'string'
+      ? updates.content
+      : await this.readScriptBody(nextFilePath);
+
+    const nextRow = {
+      ...existing,
+      title: nextTitle,
+      slug: nextSlug,
+      kind: nextKind,
+      entrypoint: nextEntrypoint,
+      enabled: nextEnabled,
+      filePath: nextFilePath,
+      version: nextVersion,
+      updatedAt: now,
+    };
+
+    await fs.writeFile(nextFilePath, this.serializeScriptFile(nextRow, nextContent), 'utf-8');
 
     await getDatabase().getLocal()
       .update(scripts)
       .set({
-        title: updates.title ?? existing.title,
+        title: nextTitle,
         slug: nextSlug,
-        kind: updates.kind ?? existing.kind,
-        entrypoint: updates.entrypoint ?? existing.entrypoint,
-        enabled: updates.enabled ?? existing.enabled,
+        kind: nextKind,
+        entrypoint: nextEntrypoint,
+        enabled: nextEnabled,
         filePath: nextFilePath,
-        version: existing.version + 1,
+        version: nextVersion,
         updatedAt: now,
       })
       .where(and(eq(scripts.id, existing.id), eq(scripts.projectId, this.currentProjectId)));
@@ -187,15 +206,7 @@ export class ScriptEngine extends EventEmitter {
   }
 
   private async toScriptData(row: Script): Promise<ScriptData> {
-    let content = '';
-    try {
-      content = await fs.readFile(row.filePath, 'utf-8');
-    } catch (error) {
-      const fsError = error as NodeJS.ErrnoException;
-      if (fsError.code !== 'ENOENT') {
-        throw error;
-      }
-    }
+    const content = await this.readScriptBody(row.filePath);
 
     return {
       id: row.id,
@@ -255,6 +266,57 @@ export class ScriptEngine extends EventEmitter {
     }
 
     return `${baseSlug}_${suffix}`;
+  }
+
+  private serializeScriptFile(row: Pick<Script, 'id' | 'projectId' | 'slug' | 'title' | 'kind' | 'entrypoint' | 'enabled' | 'version' | 'createdAt' | 'updatedAt'>, content: string): string {
+    const lines = [
+      '"""',
+      '---',
+      `id: ${this.toYamlString(row.id)}`,
+      `projectId: ${this.toYamlString(row.projectId)}`,
+      `slug: ${this.toYamlString(row.slug)}`,
+      `title: ${this.toYamlString(row.title)}`,
+      `kind: ${this.toYamlString(row.kind)}`,
+      `entrypoint: ${this.toYamlString(row.entrypoint)}`,
+      `enabled: ${row.enabled ? 'true' : 'false'}`,
+      `version: ${row.version}`,
+      `createdAt: ${this.toYamlString(row.createdAt.toISOString())}`,
+      `updatedAt: ${this.toYamlString(row.updatedAt.toISOString())}`,
+      '---',
+      '"""',
+      content,
+    ];
+
+    return lines.join('\n');
+  }
+
+  private toYamlString(value: string): string {
+    const escaped = value
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+    return `"${escaped}"`;
+  }
+
+  private parseScriptBody(rawContent: string): string {
+    const frontmatterDocstringPattern = /^(?:"""|''')\r?\n---\r?\n[\s\S]*?\r?\n---\r?\n(?:"""|''')\r?\n?/;
+    if (!frontmatterDocstringPattern.test(rawContent)) {
+      return rawContent;
+    }
+
+    return rawContent.replace(frontmatterDocstringPattern, '');
+  }
+
+  private async readScriptBody(filePath: string): Promise<string> {
+    try {
+      const rawContent = await fs.readFile(filePath, 'utf-8');
+      return this.parseScriptBody(rawContent);
+    } catch (error) {
+      const fsError = error as NodeJS.ErrnoException;
+      if (fsError.code !== 'ENOENT') {
+        throw error;
+      }
+      return '';
+    }
   }
 }
 

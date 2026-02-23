@@ -102,7 +102,13 @@ describe('ScriptEngine', () => {
 
     expect(created.slug).toBe('render_hero');
     expect(mockScripts.has(created.id)).toBe(true);
-    expect(mockFiles.get('/mock/userData/projects/default/scripts/render_hero.py')).toContain('def render');
+    const persistedFile = mockFiles.get('/mock/userData/projects/default/scripts/render_hero.py') || '';
+    expect(persistedFile).toContain('---');
+    expect(persistedFile).toContain('title: "Render Hero"');
+    expect(persistedFile).toContain('kind: "macro"');
+    expect(persistedFile).toContain('entrypoint: "render"');
+    expect(persistedFile).toContain('def render');
+    expect(created.content).toBe('def render(context):\n    return {"html": "<h1>Hi</h1>"}');
   });
 
   it('updates script metadata and file content', async () => {
@@ -154,5 +160,19 @@ describe('ScriptEngine', () => {
     expect(deleted).toBe(true);
     expect(mockScripts.has(created.id)).toBe(false);
     expect(mockFiles.has('/mock/userData/projects/default/scripts/delete_me.py')).toBe(false);
+  });
+
+  it('keeps script content clean when file contains metadata docstring frontmatter', async () => {
+    const created = await scriptEngine.createScript({
+      title: 'Metadata Test',
+      kind: 'utility',
+      content: 'print("hello")',
+    });
+
+    const loaded = await scriptEngine.getScript(created.id);
+
+    expect(loaded?.content).toBe('print("hello")');
+    expect(loaded?.title).toBe('Metadata Test');
+    expect(loaded?.entrypoint).toBe('render');
   });
 });
