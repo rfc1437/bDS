@@ -181,7 +181,16 @@ _entrypoint = __bds_transform_entrypoint
 _transform_fn = globals().get(_entrypoint)
 if _transform_fn is None or not callable(_transform_fn):
     raise RuntimeError(f"Transform entrypoint '{_entrypoint}' is not callable")
-_result = _transform_fn(_payload)
+_post = _payload.get("post")
+if not isinstance(_post, dict):
+    raise RuntimeError("Transform payload is missing a valid 'post' object")
+_context = _payload.get("context")
+try:
+    _result = _transform_fn(_post, _context)
+except TypeError:
+    _result = _transform_fn(_post)
+if _result is None:
+    _result = _post
 json.dumps(_result)
 `);
 

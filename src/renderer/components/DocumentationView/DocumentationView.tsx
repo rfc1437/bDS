@@ -88,6 +88,8 @@ export const DocumentationView: React.FC = () => {
   const { t: tr } = useI18n();
   const { picoTheme } = useAppStore();
   const resolvedTheme = getRendererPicoTheme(picoTheme);
+  const CODE_COPY_DEFAULT_ICON = '\u29c9';
+  const CODE_COPY_SUCCESS_ICON = '\u2713';
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const articleRef = useRef<HTMLElement | null>(null);
   const headingSlugCounts = new Map<string, number>();
@@ -217,9 +219,9 @@ export const DocumentationView: React.FC = () => {
                   wrapper?.classList.add('code-copy-success');
 
                   if (icon) {
-                    icon.textContent = '✓';
+                    icon.textContent = CODE_COPY_SUCCESS_ICON;
                     setTimeout(() => {
-                      icon.textContent = '⧉';
+                      icon.textContent = CODE_COPY_DEFAULT_ICON;
                       wrapper?.classList.remove('code-copy-success');
                     }, 1200);
                   }
@@ -234,7 +236,7 @@ export const DocumentationView: React.FC = () => {
                 });
             }}
           >
-            <span className="code-copy-icon">⧉</span>
+            <span className="code-copy-icon">{CODE_COPY_DEFAULT_ICON}</span>
           </button>
           <pre>
             <code

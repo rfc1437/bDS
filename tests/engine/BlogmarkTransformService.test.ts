@@ -246,4 +246,68 @@ describe('BlogmarkTransformService', () => {
 
     expect(result.toasts).toEqual(['Step finished', 'Step finished']);
   });
+
+  it('invokes python transform entrypoint with post payload shape', async () => {
+    const globalsStore = new Map<string, unknown>();
+    const runPythonAsync = vi.fn(async (code: string) => {
+      if (code.includes('json.dumps(_result)')) {
+        const payload = JSON.parse(String(globalsStore.get('__bds_transform_payload_json')));
+
+        if (code.includes('_transform_fn(_payload)')) {
+          return JSON.stringify(payload);
+        }
+
+        return JSON.stringify({
+          ...payload.post,
+          title: 'Normalized',
+          categories: ['spielelog', 'asides'],
+          tags: ['inbox', 'spielen'],
+        });
+      }
+
+      return null;
+    });
+
+    vi.doMock('pyodide', () => ({
+      loadPyodide: vi.fn(async () => ({
+        globals: {
+          set: (key: string, value: unknown) => {
+            globalsStore.set(key, value);
+          },
+        },
+        runPythonAsync,
+      })),
+    }));
+
+    const provider: BlogmarkTransformScriptProvider = {
+      getScripts: vi.fn(async () => [
+        createScript({
+          id: 'pyodide-transform',
+          slug: 'pyodide-transform',
+          title: 'Pyodide Transform',
+          kind: 'transform',
+          entrypoint: 'normalize_blogmark',
+          content: 'def normalize_blogmark(post):\n    return post',
+        }),
+      ]),
+    };
+
+    const service = new BlogmarkTransformService({ provider });
+
+    const result = await service.applyTransforms(createInput());
+
+    const transformInvocationCode = runPythonAsync.mock.calls
+      .map((call) => call[0])
+      .find((code) => typeof code === 'string' && String(code).includes('json.dumps(_result)'));
+
+    expect(result.post.title).toBe('Normalized');
+    expect(result.post.categories).toEqual(['spielelog', 'asides']);
+    expect(result.post.tags).toEqual(['inbox', 'spielen']);
+    expect(transformInvocationCode).toBeDefined();
+    expect(String(transformInvocationCode)).not.toContain('import inspect');
+    expect(String(transformInvocationCode)).toContain('\ntry:\n');
+    expect(String(transformInvocationCode)).toContain('\nexcept TypeError:\n');
+    expect(String(transformInvocationCode)).not.toContain('\n  try:\n');
+    expect(String(transformInvocationCode)).not.toContain('\n  except TypeError:\n');
+  });
 });
