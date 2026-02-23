@@ -10,7 +10,7 @@ import {
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
-export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'publishing' | 'data';
+export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'technology' | 'publishing' | 'data';
 
 // Scroll to a settings section by category ID
 export const scrollToSettingsSection = (category: SettingsCategory) => {
@@ -150,6 +150,7 @@ export const SettingsView: React.FC = () => {
   const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
   const [projectMaxPostsPerPage, setProjectMaxPostsPerPage] = useState(50);
   const [projectBlogmarkCategory, setProjectBlogmarkCategory] = useState('article');
+  const [projectPythonRuntimeMode, setProjectPythonRuntimeMode] = useState<'webworker' | 'main-thread'>('webworker');
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -207,6 +208,9 @@ export const SettingsView: React.FC = () => {
 
         const incomingBlogmarkCategory = normalizeBlogmarkCategory((metadata as { blogmarkCategory?: unknown } | null)?.blogmarkCategory);
         setProjectBlogmarkCategory(incomingBlogmarkCategory || 'article');
+
+        const incomingPythonRuntimeMode = (metadata as { pythonRuntimeMode?: unknown } | null)?.pythonRuntimeMode;
+        setProjectPythonRuntimeMode(incomingPythonRuntimeMode === 'main-thread' ? 'main-thread' : 'webworker');
 
         const incomingCategoryMetadata = (metadata as any)?.categoryMetadata as Record<string, CategoryMetadata> | undefined;
         const incomingLegacyCategorySettings = (metadata as any)?.categorySettings as Record<string, { renderInLists: boolean; showTitle: boolean }> | undefined;
@@ -342,6 +346,7 @@ export const SettingsView: React.FC = () => {
           defaultAuthor: projectDefaultAuthor.trim() || undefined,
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
           blogmarkCategory: normalizeBlogmarkCategory(projectBlogmarkCategory) || undefined,
+          pythonRuntimeMode: projectPythonRuntimeMode,
           categoryMetadata,
         });
       }
@@ -389,6 +394,7 @@ export const SettingsView: React.FC = () => {
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
+  const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
   const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
 
@@ -1023,6 +1029,30 @@ export const SettingsView: React.FC = () => {
     </SettingSection>
   );
 
+  const renderTechnologySettings = () => (
+    <SettingSection
+      id="settings-section-technology"
+      title={t('settings.technology.title')}
+      description={t('settings.technology.description')}
+      hidden={!sectionHasMatches(technologyKeywords)}
+    >
+      <SettingRow
+        id="project-python-runtime-mode"
+        label={t('settings.technology.pythonRuntimeModeLabel')}
+        description={t('settings.technology.pythonRuntimeModeDescription')}
+      >
+        <select
+          id="project-python-runtime-mode"
+          value={projectPythonRuntimeMode}
+          onChange={(event) => setProjectPythonRuntimeMode(event.target.value as 'webworker' | 'main-thread')}
+        >
+          <option value="webworker">{t('settings.technology.pythonRuntimeMode.webworker')}</option>
+          <option value="main-thread">{t('settings.technology.pythonRuntimeMode.mainThread')}</option>
+        </select>
+      </SettingRow>
+    </SettingSection>
+  );
+
   const renderPublishingSettings = () => (
     <>
       <SettingSection
@@ -1290,6 +1320,7 @@ export const SettingsView: React.FC = () => {
     sectionHasMatches(editorKeywords) ||
     sectionHasMatches(contentKeywords) ||
     sectionHasMatches(aiKeywords) ||
+    sectionHasMatches(technologyKeywords) ||
     sectionHasMatches(publishingKeywords) ||
     sectionHasMatches(dataKeywords);
 
@@ -1325,6 +1356,7 @@ export const SettingsView: React.FC = () => {
             {renderEditorSettings()}
             {renderContentSettings()}
             {renderAISettings()}
+            {renderTechnologySettings()}
             {renderPublishingSettings()}
             {renderDataSettings()}
           </>

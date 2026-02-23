@@ -43,6 +43,7 @@ export interface ProjectMetadata {
   defaultAuthor?: string;
   maxPostsPerPage?: number;
   blogmarkCategory?: string;
+  pythonRuntimeMode?: 'webworker' | 'main-thread';
   picoTheme?: import('./picoThemes').PicoThemeName;
   categoryMetadata?: Record<string, CategoryMetadata>;
   categorySettings?: Record<string, CategoryRenderSettings>;
@@ -619,7 +620,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;

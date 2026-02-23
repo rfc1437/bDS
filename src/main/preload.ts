@@ -172,7 +172,7 @@ export const electronAPI: ElectronAPI = {
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
     getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
     setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; picoTheme?: import('./shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
   },
 
   // Tag Management (advanced tag operations)

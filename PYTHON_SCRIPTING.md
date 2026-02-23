@@ -10,6 +10,7 @@ When plan and code differ, code is the source of truth.
 - [x] Pyodide dependency integrated.
 - [x] Renderer worker runtime exists (`pythonRuntime.worker.ts`) with ready/error/stdout/run protocol.
 - [x] Runtime timeout watchdog + reset/recovery implemented in `PythonRuntimeManager`.
+- [x] Renderer runtime request queueing implemented (concurrent calls are serialized in manager).
 - [x] ABI v1 schemas and validation for macro context/result implemented (`abiV1.ts`).
 - [x] Benchmark harness implemented (`npm run bench:python-runtime -- <iterations>`).
 - [x] Script persistence model implemented (`scripts` DB table + `scripts/*.py` files).
@@ -18,15 +19,16 @@ When plan and code differ, code is the source of truth.
 - [x] Preload + shared API typings for scripts implemented.
 - [x] Renderer scripts UX implemented (sidebar list, editor, save, run, delete).
 - [x] Script syntax check + entrypoint discovery integrated in editor UX.
-- [x] Blogmark transform pipeline executes Python transform scripts (`kind='transform'`).
+- [x] Blogmark transform pipeline executes Python transform scripts (`kind='transform'`) via a queued worker runtime by default.
+- [x] Project preference `pythonRuntimeMode` added with Settings → Technology section.
 
 ## Confirmed Deviations from Original Plan
 
 These are current realities and should be treated as authoritative unless we explicitly decide to change them.
 
-1. **Transform script runtime location differs**
-   - Original plan: untrusted Python runs in renderer worker only.
-   - Actual implementation: Blogmark transform scripts run in **main process** Pyodide (`BlogmarkTransformService`).
+1. **Transform runtime is now configurable (project-level)**
+   - Default: `webworker` (worker-thread based Python runtime with queued requests).
+   - Optional fallback: `main-thread` legacy execution mode.
 
 2. **Render-time macro migration has not happened yet**
    - Original plan: all render-time macros become Python-backed.
@@ -42,12 +44,11 @@ These are current realities and should be treated as authoritative unless we exp
 
 ## Remaining Work Only
 
-## 1) Decide and enforce Python runtime boundary (P0)
+## 1) Python runtime boundary (P0) — Implemented
 
-- [ ] Decide if `transform` scripts should stay in main process or move to renderer worker.
-- [ ] If staying in main process: add explicit timeout/kill/recovery safeguards equivalent to worker watchdog behavior.
-- [ ] If moving to worker: route transform execution through typed IPC/worker bridge and remove main-process execution path.
-- [ ] Document final security model in this file after decision.
+- [x] Worker model introduced for Blogmark transform execution with queued communication.
+- [x] Runtime mode made project-configurable via Settings → Technology (`pythonRuntimeMode`).
+- [x] Legacy main-thread mode retained as explicit fallback option.
 
 ## 2) Add scripts file-system rebuild/sync (P1)
 
@@ -89,6 +90,6 @@ These are current realities and should be treated as authoritative unless we exp
 
 - [ ] Render-time macros run through Python script path in production generation flow.
 - [ ] Scripts directory external changes are synchronized reliably.
-- [ ] Runtime boundary decision implemented and protected by tests.
+- [x] Runtime boundary decision implemented and protected by tests.
 - [ ] Legacy JS macro path removed (or explicitly retained with documented rationale).
 - [ ] `npm test` and `npm run build` pass.

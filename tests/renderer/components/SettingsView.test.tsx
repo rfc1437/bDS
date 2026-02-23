@@ -117,6 +117,33 @@ describe('SettingsView Diff Preferences', () => {
     );
   });
 
+  it('includes python runtime mode in metadata save payload', async () => {
+    (window as any).electronAPI.meta.getProjectMetadata = vi.fn().mockResolvedValue({
+      maxPostsPerPage: 75,
+      publicUrl: 'https://example.com',
+      pythonRuntimeMode: 'main-thread',
+      categorySettings: {
+        article: { renderInLists: true, showTitle: true },
+        picture: { renderInLists: true, showTitle: true },
+        aside: { renderInLists: true, showTitle: false },
+        page: { renderInLists: false, showTitle: true },
+      },
+    });
+
+    render(<SettingsView />);
+
+    await screen.findByDisplayValue('Main Thread (Legacy)');
+
+    const saveButton = screen.getByRole('button', { name: /save project settings/i });
+    fireEvent.click(saveButton);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ pythonRuntimeMode: 'main-thread' })
+    );
+  });
+
   it('renders category settings checkboxes with required defaults', async () => {
     render(<SettingsView />);
 

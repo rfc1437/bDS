@@ -739,6 +739,30 @@ describe('MetaEngine', () => {
       expect((metadata as any)?.blogmarkCategory).toBe('article');
     });
 
+    it('should set and get pythonRuntimeMode in project metadata', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'My Blog',
+        pythonRuntimeMode: 'main-thread',
+      } as any);
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect((metadata as any)?.pythonRuntimeMode).toBe('main-thread');
+    });
+
+    it('should persist pythonRuntimeMode to filesystem', async () => {
+      await metaEngine.setProjectMetadata({
+        name: 'Runtime Mode Project',
+        pythonRuntimeMode: 'webworker',
+      } as any);
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      const content = mockFiles.get(projectPath);
+      const parsed = JSON.parse(content!);
+
+      expect(parsed.pythonRuntimeMode).toBe('webworker');
+    });
+
     it('should persist blogmarkCategory to filesystem', async () => {
       await metaEngine.setProjectMetadata({
         name: 'Test Project',

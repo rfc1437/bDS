@@ -191,6 +191,32 @@ describe('PythonRuntimeManager', () => {
     await expect(runPromise).rejects.toThrow('boom');
   });
 
+  it('queues concurrent execute calls and sends the next request only after completion', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const firstRun = manager.execute('1 + 1');
+    const secondRun = manager.execute('2 + 2');
+    await Promise.resolve();
+
+    expect(worker.postedMessages).toHaveLength(1);
+
+    const firstRequest = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'runResult', requestId: firstRequest.requestId, result: '2' });
+    await expect(firstRun).resolves.toEqual({ result: '2', stdout: '' });
+
+    await Promise.resolve();
+    expect(worker.postedMessages).toHaveLength(2);
+
+    const secondRequest = worker.postedMessages[1] as { requestId: string };
+    worker.emitMessage({ type: 'runResult', requestId: secondRequest.requestId, result: '4' });
+    await expect(secondRun).resolves.toEqual({ result: '4', stdout: '' });
+  });
+
   it('terminates timed out worker and recovers with a new worker', async () => {
     const workers: MockWorker[] = [];
     const manager = new PythonRuntimeManager(() => {

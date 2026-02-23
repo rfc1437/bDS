@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { getScriptEngine } from './ScriptEngine';
+import { getMetaEngine } from './MetaEngine';
+import { getBlogmarkPythonWorkerRuntime } from './BlogmarkPythonWorkerRuntime';
 
 const transformPostSchema = z.object({
   title: z.string().trim().min(1),
@@ -54,6 +56,8 @@ export interface BlogmarkTransformResult {
   errors: BlogmarkTransformError[];
   toasts: string[];
 }
+
+export type PythonRuntimeMode = 'webworker' | 'main-thread';
 
 const MAX_TOASTS_PER_SCRIPT = 5;
 const MAX_TOASTS_TOTAL = 20;
@@ -142,6 +146,28 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function resolveTransformEntrypoint(value: string): string {
+  const nextEntrypoint = typeof value === 'string' ? value.trim() : '';
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(nextEntrypoint) && nextEntrypoint !== 'main') {
+    return nextEntrypoint;
+  }
+
+  return 'transform';
+}
+
+function resolvePythonRuntimeMode(value: unknown): PythonRuntimeMode {
+  if (value === 'main-thread') {
+    return 'main-thread';
+  }
+
+  return 'webworker';
+}
+
+async function getConfiguredPythonRuntimeMode(): Promise<PythonRuntimeMode> {
+  const metadata = await getMetaEngine().getProjectMetadata();
+  return resolvePythonRuntimeMode((metadata as { pythonRuntimeMode?: unknown } | null)?.pythonRuntimeMode);
+}
+
 class PythonBlogmarkTransformExecutor implements BlogmarkTransformExecutor {
   private runtimePromise: Promise<any> | null = null;
 
@@ -169,7 +195,7 @@ def toast(message):
 
     await runtime.runPythonAsync(script.content);
 
-    const requestedEntrypoint = this.resolveEntrypoint(script.entrypoint);
+    const requestedEntrypoint = resolveTransformEntrypoint(script.entrypoint);
     const payload = JSON.stringify(input);
     runtime.globals.set('__bds_transform_payload_json', payload);
     runtime.globals.set('__bds_transform_entrypoint', requestedEntrypoint);
@@ -200,15 +226,6 @@ json.dumps(_result)
     };
   }
 
-  private resolveEntrypoint(value: string): string {
-    const nextEntrypoint = typeof value === 'string' ? value.trim() : '';
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(nextEntrypoint) && nextEntrypoint !== 'main') {
-      return nextEntrypoint;
-    }
-
-    return 'transform';
-  }
-
   private async getRuntime(): Promise<any> {
     if (!this.runtimePromise) {
       this.runtimePromise = (async () => {
@@ -221,11 +238,26 @@ json.dumps(_result)
   }
 }
 
+class PythonWorkerBlogmarkTransformExecutor implements BlogmarkTransformExecutor {
+  async runTransform(script: BlogmarkTransformScriptRecord, input: BlogmarkTransformInput): Promise<unknown> {
+    return getBlogmarkPythonWorkerRuntime().executeTransform({
+      scriptContent: script.content,
+      entrypoint: resolveTransformEntrypoint(script.entrypoint),
+      payloadJson: JSON.stringify(input),
+    });
+  }
+}
+
+const mainThreadExecutor = new PythonBlogmarkTransformExecutor();
+const workerExecutor = new PythonWorkerBlogmarkTransformExecutor();
+
 export class BlogmarkTransformService {
   constructor(
     private readonly dependencies: {
       provider?: BlogmarkTransformScriptProvider;
       executor?: BlogmarkTransformExecutor;
+      resolvePythonRuntimeMode?: () => Promise<PythonRuntimeMode>;
+      executors?: Partial<Record<PythonRuntimeMode, BlogmarkTransformExecutor>>;
     } = {},
   ) {}
 
@@ -237,7 +269,7 @@ export class BlogmarkTransformService {
     };
 
     const provider = this.dependencies.provider ?? scriptEngineBackedProvider;
-    const executor = this.dependencies.executor ?? new PythonBlogmarkTransformExecutor();
+    const executor = this.dependencies.executor ?? await this.resolveExecutorForConfiguredRuntime();
 
     const scripts = await provider.getScripts();
     const activeTransforms = scripts
@@ -302,6 +334,18 @@ export class BlogmarkTransformService {
       errors,
       toasts,
     };
+  }
+
+  private async resolveExecutorForConfiguredRuntime(): Promise<BlogmarkTransformExecutor> {
+    const resolveMode = this.dependencies.resolvePythonRuntimeMode ?? getConfiguredPythonRuntimeMode;
+    const mode = await resolveMode();
+    const executors = this.dependencies.executors ?? {};
+
+    if (mode === 'main-thread') {
+      return executors['main-thread'] ?? mainThreadExecutor;
+    }
+
+    return executors.webworker ?? workerExecutor;
   }
 }
 
