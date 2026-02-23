@@ -6,6 +6,11 @@ import { openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
 import { executeActivityClick } from './navigation/activityExecution';
 import { handleBlogmarkCreatedEvent } from './navigation/blogmarkHandling';
+import {
+  buildBlogmarkTransformOutputEntries,
+  buildBlogmarkTransformToastNotifications,
+  parseBlogmarkCreatedEventPayload,
+} from './navigation/blogmarkTransformOutput';
 import { createDeferredEventGate } from './navigation/deferredEventGate';
 import { createAndFocusPost } from './navigation/postCreation';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
@@ -34,6 +39,7 @@ const App: React.FC = () => {
     setPicoTheme,
     openTab,
     restoreTabState,
+    appendPanelOutputEntry,
   } = useAppStore();
   const blogmarkEventGateRef = useRef(createDeferredEventGate<PostData>());
 
@@ -239,10 +245,44 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
-      window.electronAPI?.on('blogmark:created', (post: unknown) => {
-        const created = post as PostData;
+      window.electronAPI?.on('blogmark:created', (payload: unknown) => {
+        const parsedPayload = parseBlogmarkCreatedEventPayload(payload);
+        if (!parsedPayload) {
+          return;
+        }
+
+        const created = parsedPayload.post as PostData;
         if (!created?.id) {
           return;
+        }
+
+        const outputEntries = buildBlogmarkTransformOutputEntries(parsedPayload.transform, tr);
+        const toastNotifications = buildBlogmarkTransformToastNotifications(parsedPayload.transform, tr);
+
+        toastNotifications.forEach((notification) => {
+          if (notification.kind === 'error') {
+            showToast.error(notification.message);
+            return;
+          }
+
+          showToast.success(notification.message);
+        });
+
+        if (outputEntries.length > 0) {
+          const createdAt = new Date().toISOString();
+          outputEntries.forEach((entry, index) => {
+            appendPanelOutputEntry({
+              id: `blogmark-transform-${Date.now()}-${index}`,
+              createdAt,
+              message: entry.message,
+              kind: entry.kind,
+            });
+          });
+
+          useAppStore.setState({
+            panelVisible: true,
+            panelActiveTab: 'output',
+          });
         }
 
         blogmarkEventGateRef.current.push(created, processBlogmarkCreated);

@@ -740,6 +740,17 @@ describe('main bootstrap preview behavior', () => {
       })),
     }));
 
+    vi.doMock('../../src/main/engine/BlogmarkTransformService', () => ({
+      getBlogmarkTransformService: vi.fn(() => ({
+        applyTransforms: vi.fn(async (input: { post: { title: string; content: string; categories: string[] } }) => ({
+          post: input.post,
+          appliedScriptIds: [],
+          errors: [],
+          toasts: [],
+        })),
+      })),
+    }));
+
     vi.doMock('../../src/main/database', () => ({
       getDatabase: vi.fn(() => ({
         initializeLocal: vi.fn().mockResolvedValue(undefined),
@@ -802,7 +813,14 @@ describe('main bootstrap preview behavior', () => {
 
     expect(windows[0]?.webContents.send).toHaveBeenCalledWith(
       'blogmark:created',
-      expect.objectContaining({ id: 'new-post-id' }),
+      expect.objectContaining({
+        post: expect.objectContaining({ id: 'new-post-id' }),
+        transform: expect.objectContaining({
+          appliedScriptIds: [],
+          errors: [],
+          toasts: [],
+        }),
+      }),
     );
   });
 
@@ -903,6 +921,17 @@ describe('main bootstrap preview behavior', () => {
       })),
     }));
 
+    vi.doMock('../../src/main/engine/BlogmarkTransformService', () => ({
+      getBlogmarkTransformService: vi.fn(() => ({
+        applyTransforms: vi.fn(async (input: { post: { title: string; content: string; categories: string[] } }) => ({
+          post: input.post,
+          appliedScriptIds: [],
+          errors: [],
+          toasts: [],
+        })),
+      })),
+    }));
+
     vi.doMock('../../src/main/database', () => ({
       getDatabase: vi.fn(() => ({
         initializeLocal: vi.fn().mockResolvedValue(undefined),
@@ -971,7 +1000,14 @@ describe('main bootstrap preview behavior', () => {
 
     expect(windows[0]?.webContents.send).toHaveBeenCalledWith(
       'blogmark:created',
-      expect.objectContaining({ id: 'queued-post-id' }),
+      expect.objectContaining({
+        post: expect.objectContaining({ id: 'queued-post-id' }),
+        transform: expect.objectContaining({
+          appliedScriptIds: [],
+          errors: [],
+          toasts: [],
+        }),
+      }),
     );
   });
 

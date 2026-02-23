@@ -205,11 +205,55 @@ Each script exposes an **Entrypoint** selector. bDS always provides a synthetic 
 
 At this stage, scripting is intended for controlled project workflows where scripts interact with application-provided tools. Keep scripts versioned through your normal Git workflow, review changes carefully, and prefer small, explicit scripts over monolithic utility files.
 
+For transform scripts, bDS provides a built-in Python helper named `toast(message)`. It accepts a single string and emits a UI intent that the app handles on the renderer side. This keeps script ergonomics simple while preserving a controlled bridge between script runtime and user interface.
+
+When transform scripts fail during a pipeline run, bDS automatically surfaces an error toast so users are notified immediately. Detailed transform diagnostics (applied scripts and per-script errors) are also written to the Output panel.
+
+### Example transform script
+
+Use a transform function to modify incoming bookmark/blogmark content before bDS creates the post. The function receives a mutable `post` dictionary and should return that dictionary.
+
+```python
+def normalize_blogmark(post):
+	# 1) Manipulate title
+	title = (post.get("title") or "").strip()
+	if title and not title.startswith("[Clipped]"):
+		post["title"] = f"[Clipped] {title}"
+
+	# 2) Manipulate text/content
+	content = (post.get("content") or "").strip()
+	prefix = "Imported from blogmark\n\n"
+	if content and not content.startswith(prefix):
+		post["content"] = prefix + content
+
+	# 3) Set or replace categories
+	post["categories"] = ["Inbox", "Research"]
+
+	# 4) Add and normalize tags
+	tags = post.get("tags") or []
+	tags.append("blogmark")
+	tags.append("clipped")
+	post["tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
+
+	# 5) Optional user notification
+	toast(f"Transform applied: {post.get('title')}")
+	return post
+```
+
+Notes:
+- `title` and `content` are strings.
+- `categories` and `tags` are string lists (e.g., `['News', 'AI']`).
+- Return the mutated `post` dict from your transform function.
+- Keep transforms small and deterministic, especially when multiple active transforms run in sequence.
+
 ### Key takeaways
 
 - Scripting is available and intentionally evolving in small steps.
 - `main` is always available and preserves whole-script execution behavior.
 - Script files and metadata remain filesystem-friendly and Git-reviewable.
+- Transform scripts can call `toast("...")` to send user-facing UI notifications.
+- Transform scripts can directly manipulate `title`, `content`, `categories`, and `tags`.
+- Transform pipeline failures always trigger automatic error toasts.
 
 [↑ Back to In this article](#in-this-article)
 
