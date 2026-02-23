@@ -1,6 +1,7 @@
 import { loadPyodide, type PyodideInterface } from 'pyodide';
 import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol';
 import { parseMacroContextV1, parseMacroResultV1 } from './abiV1';
+import { resolvePyodideIndexURL } from './pyodideAssetUrl';
 
 let runtime: PyodideInterface | null = null;
 let activeRequestId: string | null = null;
@@ -183,6 +184,7 @@ json.dumps(__bds_entrypoints)
 async function bootstrapRuntime(): Promise<void> {
   try {
     runtime = await loadPyodide({
+      indexURL: resolvePyodideIndexURL(import.meta.url),
       stdout: (chunk) => {
         if (!activeRequestId) {
           return;

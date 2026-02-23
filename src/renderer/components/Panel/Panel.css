@@ -92,6 +92,31 @@
   gap: 6px;
 }
 
+.output-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.output-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.output-copy-button {
+  font-size: 11px;
+  padding: 3px 10px;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.output-copy-button:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
 .output-item {
   background-color: var(--vscode-sideBar-background);
   border-radius: 4px;

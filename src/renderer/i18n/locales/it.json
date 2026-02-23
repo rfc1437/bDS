@@ -629,6 +629,7 @@
   "panel.closeTitle": "Chiudi pannello",
   "panel.noRecentTasks": "Nessuna attività recente",
   "panel.noOutput": "Nessun output",
+  "panel.copyOutput": "Copia output",
   "panel.openPostEditor": "Apri un editor post per visualizzare i collegamenti",
   "panel.loadingPostLinks": "Caricamento collegamenti post...",
   "panel.noPostLinks": "Nessun collegamento per questo post",

@@ -629,6 +629,7 @@
   "panel.closeTitle": "Panel schließen",
   "panel.noRecentTasks": "Keine aktuellen Aufgaben",
   "panel.noOutput": "Keine Ausgabe",
+  "panel.copyOutput": "Ausgabe kopieren",
   "panel.openPostEditor": "Öffne einen Beitragseditor, um Beitragslinks zu sehen",
   "panel.loadingPostLinks": "Beitragslinks werden geladen...",
   "panel.noPostLinks": "Keine Beitragslinks für diesen Beitrag",

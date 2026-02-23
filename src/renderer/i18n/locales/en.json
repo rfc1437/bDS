@@ -629,6 +629,7 @@
   "panel.closeTitle": "Close panel",
   "panel.noRecentTasks": "No recent tasks",
   "panel.noOutput": "No output",
+  "panel.copyOutput": "Copy Output",
   "panel.openPostEditor": "Open a post editor to view post links",
   "panel.loadingPostLinks": "Loading post links...",
   "panel.noPostLinks": "No post links for this post",

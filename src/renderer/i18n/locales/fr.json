@@ -629,6 +629,7 @@
   "panel.closeTitle": "Fermer le panneau",
   "panel.noRecentTasks": "Aucune tâche récente",
   "panel.noOutput": "Aucune sortie",
+  "panel.copyOutput": "Copier la sortie",
   "panel.openPostEditor": "Ouvrez un éditeur d'article pour voir les liens",
   "panel.loadingPostLinks": "Chargement des liens d'articles...",
   "panel.noPostLinks": "Aucun lien pour cet article",
