@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { addWindowEventListener, type BdsWindowEventName } from '../../utils';
 
 interface ProjectScopedSidebarDataOptions<TItem> {
   load: () => Promise<TItem[] | null | undefined>;
   activeProjectId?: string;
-  refreshEventName?: string;
+  refreshEventName?: BdsWindowEventName;
 }
 
 interface ProjectScopedSidebarDataResult<TItem> {
@@ -53,18 +54,11 @@ export function useProjectScopedSidebarData<TItem>(options: ProjectScopedSidebar
       return;
     }
 
-    if (typeof window.addEventListener !== 'function' || typeof window.removeEventListener !== 'function') {
-      return;
-    }
-
-    const handleRefreshEvent = () => {
+    const unsubscribe = addWindowEventListener(refreshEventName, () => {
       void reload();
-    };
+    });
 
-    window.addEventListener(refreshEventName, handleRefreshEvent);
-    return () => {
-      window.removeEventListener(refreshEventName, handleRefreshEvent);
-    };
+    return unsubscribe;
   }, [refreshEventName, reload]);
 
   return {

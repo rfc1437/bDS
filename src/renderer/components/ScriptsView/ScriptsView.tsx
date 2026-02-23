@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type { ScriptData } from '../../../main/shared/electronApi';
 import { useAppStore } from '../../store';
+import { BDS_EVENT_SCRIPTS_CHANGED, dispatchWindowEvent } from '../../utils';
 import { getPythonRuntimeManager } from '../../python/runtimeManagerInstance';
 import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
@@ -197,9 +198,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
       setScriptContent(updated.content || '');
       const normalizedExisting = toFunctionSlug(updated.slug || updated.title || '');
       setIsSlugManuallyEdited(normalizedExisting !== toFunctionSlug(updated.title || ''));
-      if (typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
-      }
+      dispatchWindowEvent(BDS_EVENT_SCRIPTS_CHANGED);
     } finally {
       setIsSaving(false);
     }
@@ -217,9 +216,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         return;
       }
       closeTab(script.id);
-      if (typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
-      }
+      dispatchWindowEvent(BDS_EVENT_SCRIPTS_CHANGED);
     } catch (error) {
       console.error('Failed to delete script:', error);
       showToast.error(t('sidebar.scripts.deleteFailed'));

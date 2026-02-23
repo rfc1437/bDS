@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
-import { getContrastColor, groupPostsByStatus, loadTagColorMap } from '../../utils';
+import { BDS_EVENT_SCRIPTS_CHANGED, dispatchWindowEvent, getContrastColor, groupPostsByStatus, loadTagColorMap } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import { GitSidebar } from '../GitSidebar/GitSidebar';
 import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
@@ -1598,7 +1598,7 @@ const ScriptsList: React.FC = () => {
   } = useProjectScopedSidebarData<Array<{ id: string; title: string; updatedAt: string }>[number]>({
     load: loadScripts,
     activeProjectId,
-    refreshEventName: 'bds:scripts-changed',
+    refreshEventName: BDS_EVENT_SCRIPTS_CHANGED,
   });
 
   const handleCreateScript = async () => {
@@ -1619,9 +1619,7 @@ const ScriptsList: React.FC = () => {
         { id: created.id, title: created.title, updatedAt: created.updatedAt },
         ...prev.filter((script) => script.id !== created.id),
       ]);
-      if (typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
-      }
+      dispatchWindowEvent(BDS_EVENT_SCRIPTS_CHANGED);
       openScriptTab(openTab, created.id, 'pin');
       void reloadScripts();
     } catch (error) {
@@ -1640,9 +1638,7 @@ const ScriptsList: React.FC = () => {
       }
       setScripts((prev) => prev.filter((script) => script.id !== scriptId));
       closeTab(scriptId);
-      if (typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
-      }
+      dispatchWindowEvent(BDS_EVENT_SCRIPTS_CHANGED);
     } catch (error) {
       console.error('Failed to delete script:', error);
       showToast.error(t('sidebar.scripts.deleteFailed'));
