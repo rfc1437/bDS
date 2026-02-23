@@ -9,8 +9,13 @@ describe('resolvePyodideIndexURL', () => {
     );
   });
 
-  it('resolves to vite node_modules path for dev worker urls', () => {
+  it('returns undefined for dev worker urls to let pyodide use module-relative defaults', () => {
     const workerUrl = 'http://localhost:5173/src/renderer/python/pythonRuntime.worker.ts';
-    expect(resolvePyodideIndexURL(workerUrl)).toBe('http://localhost:5173/node_modules/pyodide/');
+    expect(resolvePyodideIndexURL(workerUrl)).toBeUndefined();
+  });
+
+  it('returns undefined for vite worker_file urls with query parameters', () => {
+    const workerUrl = 'http://localhost:5173/python/pythonRuntime.worker.ts?worker_file&type=module';
+    expect(resolvePyodideIndexURL(workerUrl)).toBeUndefined();
   });
 });

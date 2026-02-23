@@ -183,8 +183,9 @@ json.dumps(__bds_entrypoints)
 
 async function bootstrapRuntime(): Promise<void> {
   try {
+    const indexURL = resolvePyodideIndexURL(import.meta.url);
     runtime = await loadPyodide({
-      indexURL: resolvePyodideIndexURL(import.meta.url),
+      ...(indexURL ? { indexURL } : {}),
       stdout: (chunk) => {
         if (!activeRequestId) {
           return;
