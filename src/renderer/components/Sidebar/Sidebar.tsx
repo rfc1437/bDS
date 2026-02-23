@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
-import { getContrastColor, groupPostsByStatus } from '../../utils';
+import { getContrastColor, groupPostsByStatus, loadTagColorMap } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import { GitSidebar } from '../GitSidebar/GitSidebar';
 import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
@@ -25,13 +25,6 @@ function getMediaDisplayName(media: MediaData): string {
       : media.title;
   }
   return media.originalName;
-}
-
-// Tag data with color information
-interface TagData {
-  id: string;
-  name: string;
-  color?: string;
 }
 
 const UI_DATE_LOCALE: Record<string, string> = {
@@ -537,10 +530,10 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
   // Load available tags with colors and categories
   useEffect(() => {
     const loadFilters = async () => {
-      const [tags, categories, allTagsData] = await Promise.all([
+      const [tags, categories, colorMap] = await Promise.all([
         window.electronAPI?.posts.getTags(),
         window.electronAPI?.posts.getCategories(),
-        window.electronAPI?.tags?.getAll?.(),
+        loadTagColorMap(),
       ]);
       if (tags) setAvailableTags(tags as string[]);
       if (categories) {
@@ -551,15 +544,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
             : allCategories
         );
       }
-      if (allTagsData) {
-        const colorMap = new Map<string, string>();
-        for (const tag of allTagsData as TagData[]) {
-          if (tag.color) {
-            colorMap.set(tag.name, tag.color);
-          }
-        }
-        setTagColors(colorMap);
-      }
+      setTagColors(colorMap);
     };
     loadFilters();
   }, [posts]);
@@ -1005,20 +990,12 @@ const MediaList: React.FC = () => {
   // Load available tags with colors
   useEffect(() => {
     const loadTags = async () => {
-      const [tags, allTagsData] = await Promise.all([
+      const [tags, colorMap] = await Promise.all([
         window.electronAPI?.media.getTags(),
-        window.electronAPI?.tags?.getAll?.(),
+        loadTagColorMap(),
       ]);
       if (tags) setAvailableTags(tags as string[]);
-      if (allTagsData) {
-        const colorMap = new Map<string, string>();
-        for (const tag of allTagsData as TagData[]) {
-          if (tag.color) {
-            colorMap.set(tag.name, tag.color);
-          }
-        }
-        setTagColors(colorMap);
-      }
+      setTagColors(colorMap);
     };
     loadTags();
   }, [media]);

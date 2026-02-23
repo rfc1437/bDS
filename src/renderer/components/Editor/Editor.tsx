@@ -20,7 +20,7 @@ import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { SiteValidationView } from '../SiteValidationView';
 import { ScriptsView } from '../ScriptsView/ScriptsView';
-import { AutoSaveManager, getContrastColor } from '../../utils';
+import { AutoSaveManager, getContrastColor, loadTagColorMap } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
 import { openEntityTab } from '../../navigation/tabPolicy';
@@ -1476,12 +1476,6 @@ interface CategoryCount {
   count: number;
 }
 
-interface TagDataWithColor {
-  id: string;
-  name: string;
-  color?: string;
-}
-
 const Dashboard: React.FC = () => {
   const { t: tr, language } = useI18n();
   const { posts, media } = useAppStore();
@@ -1500,26 +1494,18 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [ds, ym, tc, cc, allTagsData] = await Promise.all([
+        const [ds, ym, tc, cc, colorMap] = await Promise.all([
           window.electronAPI?.posts.getDashboardStats(),
           window.electronAPI?.posts.getByYearMonth(),
           window.electronAPI?.posts.getTagsWithCounts(),
           window.electronAPI?.posts.getCategoriesWithCounts(),
-          window.electronAPI?.tags.getAll(),
+          loadTagColorMap(),
         ]);
         if (ds) setStats(ds);
         if (ym) setYearMonthData(ym);
         if (tc) setTagCounts(tc);
         if (cc) setCategoryCounts(cc);
-        if (allTagsData) {
-          const colorMap = new Map<string, string>();
-          for (const tag of allTagsData as TagDataWithColor[]) {
-            if (tag.color) {
-              colorMap.set(tag.name, tag.color);
-            }
-          }
-          setTagColors(colorMap);
-        }
+        setTagColors(colorMap);
       } catch (e) {
         console.error('Failed to load dashboard stats:', e);
       }
