@@ -2,6 +2,7 @@ import { loadPyodide, type PyodideInterface } from 'pyodide';
 import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol';
 import { parseMacroContextV1, parseMacroResultV1 } from './abiV1';
 import { resolvePyodideIndexURL } from './pyodideAssetUrl';
+import { runPythonSyntaxCheck } from './pythonSyntaxCheck';
 
 let runtime: PyodideInterface | null = null;
 let activeRequestId: string | null = null;
@@ -181,6 +182,39 @@ json.dumps(__bds_entrypoints)
   }
 }
 
+async function syntaxCheck(request: PythonWorkerRequest): Promise<void> {
+  if (request.type !== 'syntaxCheck') {
+    return;
+  }
+
+  if (!runtime) {
+    postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: 'Python runtime is not ready' });
+    return;
+  }
+
+  if (activeRequestId) {
+    postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: 'Python runtime is busy' });
+    return;
+  }
+
+  activeRequestId = request.requestId;
+
+  try {
+    const errors = await runPythonSyntaxCheck(runtime, request.code);
+
+    postRuntimeMessage({
+      type: 'syntaxResult',
+      requestId: request.requestId,
+      errors,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: message });
+  } finally {
+    activeRequestId = null;
+  }
+}
+
 async function bootstrapRuntime(): Promise<void> {
   try {
     const indexURL = resolvePyodideIndexURL(import.meta.url);
@@ -217,6 +251,11 @@ self.onmessage = (event: MessageEvent<PythonWorkerRequest>) => {
 
   if (request.type === 'inspectEntrypoints') {
     void inspectEntrypoints(request);
+    return;
+  }
+
+  if (request.type === 'syntaxCheck') {
+    void syntaxCheck(request);
   }
 };
 

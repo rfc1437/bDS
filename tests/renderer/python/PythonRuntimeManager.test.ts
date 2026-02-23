@@ -134,6 +134,47 @@ describe('PythonRuntimeManager', () => {
     await expect(inspectPromise).resolves.toEqual(['render', 'helper']);
   });
 
+  it('checks syntax and returns structured syntax errors', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const syntaxPromise = manager.syntaxCheck('def broken(:\n  pass');
+    await Promise.resolve();
+
+    const request = worker.postedMessages[0] as { type: string; requestId: string; code: string };
+    expect(request.type).toBe('syntaxCheck');
+
+    worker.emitMessage({
+      type: 'syntaxResult',
+      requestId: request.requestId,
+      errors: [
+        {
+          line: 1,
+          column: 11,
+          endLine: 1,
+          endColumn: 12,
+          message: 'invalid syntax',
+        },
+      ],
+    });
+
+    await expect(syntaxPromise).resolves.toEqual({
+      errors: [
+        {
+          line: 1,
+          column: 11,
+          endLine: 1,
+          endColumn: 12,
+          message: 'invalid syntax',
+        },
+      ],
+    });
+  });
+
   it('rejects when runtime returns run error', async () => {
     const worker = new MockWorker();
     const manager = new PythonRuntimeManager(() => worker as unknown as Worker);

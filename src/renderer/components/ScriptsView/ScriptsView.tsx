@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import MonacoEditor from '@monaco-editor/react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import MonacoEditor, { type Monaco } from '@monaco-editor/react';
 import type { ScriptData } from '../../../main/shared/electronApi';
 import { useAppStore } from '../../store';
 import { BDS_EVENT_SCRIPTS_CHANGED, dispatchWindowEvent } from '../../utils';
@@ -7,6 +7,28 @@ import { getPythonRuntimeManager } from '../../python/runtimeManagerInstance';
 import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
 import './ScriptsView.css';
+
+type ScriptMonacoEditor = {
+  getModel: () => unknown;
+};
+
+type ScriptMonacoRuntime = {
+  editor: {
+    setModelMarkers: (model: unknown, owner: string, markers: Array<{
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+      message: string;
+      severity: number;
+    }>) => void;
+  };
+  MarkerSeverity: {
+    Error: number;
+  };
+};
+
+const SCRIPT_SYNTAX_MARKER_OWNER = 'scripts-python-syntax';
 
 const UI_DATE_LOCALE: Record<string, string> = {
   en: 'en-US',
@@ -35,6 +57,9 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingSyntax, setIsCheckingSyntax] = useState(false);
+  const editorRef = useRef<ScriptMonacoEditor | null>(null);
+  const monacoRef = useRef<ScriptMonacoRuntime | null>(null);
 
   const buildCacheKey = (scriptMeta: Pick<ScriptData, 'id' | 'version'>, content: string): string => {
     let hash = 0;
@@ -56,6 +81,87 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
       .replace(/^_+|_+$/g, '');
     return normalized || 'script';
   };
+
+  const applySyntaxMarkers = useCallback((errors: Array<{
+    line: number;
+    column: number;
+    endLine: number;
+    endColumn: number;
+    message: string;
+  }>) => {
+    const model = editorRef.current?.getModel?.();
+    const monacoRuntime = monacoRef.current;
+
+    if (!model || !monacoRuntime) {
+      return;
+    }
+
+    const markers = errors.map((error) => {
+      const startLineNumber = Math.max(1, Math.floor(error.line || 1));
+      const startColumn = Math.max(1, Math.floor(error.column || 1));
+      const endLineNumber = Math.max(startLineNumber, Math.floor(error.endLine || startLineNumber));
+      const fallbackEndColumn = startColumn + 1;
+      const endColumn = Math.max(startColumn, Math.floor(error.endColumn || fallbackEndColumn));
+
+      return {
+        startLineNumber,
+        startColumn,
+        endLineNumber,
+        endColumn,
+        message: error.message,
+        severity: monacoRuntime.MarkerSeverity.Error,
+      };
+    });
+
+    monacoRuntime.editor.setModelMarkers(model, SCRIPT_SYNTAX_MARKER_OWNER, markers);
+  }, []);
+
+  const handleEditorDidMount = useCallback((editor: unknown, monaco: Monaco) => {
+    editorRef.current = editor as ScriptMonacoEditor;
+    monacoRef.current = monaco as unknown as ScriptMonacoRuntime;
+  }, []);
+
+  const handleCheckSyntax = useCallback(async (options: { notify: boolean } = { notify: true }): Promise<boolean> => {
+    if (!script || isCheckingSyntax) {
+      return false;
+    }
+
+    setIsCheckingSyntax(true);
+    try {
+      const runtimeManager = getPythonRuntimeManager();
+      const syntax = await runtimeManager.syntaxCheck(scriptContent, {
+        cacheKey: buildCacheKey(script, scriptContent),
+      });
+
+      applySyntaxMarkers(syntax.errors);
+
+      if (syntax.errors.length > 0) {
+        if (options.notify) {
+          showToast.error(t('scripts.syntax.invalid', { count: syntax.errors.length }));
+        }
+        return false;
+      }
+
+      if (options.notify) {
+        showToast.success(t('scripts.syntax.valid'));
+      }
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      appendPanelOutputEntry({
+        id: `output-${Date.now()}-syntax-error`,
+        message,
+        createdAt: new Date().toISOString(),
+        kind: 'error',
+      });
+      if (options.notify) {
+        showToast.error(t('scripts.syntax.checkFailed'));
+      }
+      return false;
+    } finally {
+      setIsCheckingSyntax(false);
+    }
+  }, [appendPanelOutputEntry, applySyntaxMarkers, isCheckingSyntax, script, scriptContent, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +268,11 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
 
     setIsSaving(true);
     try {
+      const isSyntaxValid = await handleCheckSyntax({ notify: true });
+      if (!isSyntaxValid) {
+        return;
+      }
+
       const runtimeManager = getPythonRuntimeManager();
       const discoveredEntrypoints = await runtimeManager.inspectEntrypoints(scriptContent, {
         cacheKey: buildCacheKey(script, scriptContent),
@@ -279,10 +390,6 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         kind: 'error',
       });
     } finally {
-      useAppStore.setState({
-        panelVisible: true,
-        panelActiveTab: 'output',
-      });
       setIsRunning(false);
     }
   };
@@ -311,6 +418,16 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
             disabled={!script || isRunning}
           >
             {t('scripts.run')}
+          </button>
+          <button
+            type="button"
+            className="scripts-check-button"
+            onClick={() => {
+              void handleCheckSyntax({ notify: true });
+            }}
+            disabled={!script || isCheckingSyntax || isSaving}
+          >
+            {isCheckingSyntax ? t('scripts.syntax.checking') : t('scripts.syntax.check')}
           </button>
           <button
             type="button"
@@ -408,6 +525,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
             theme="vs-dark"
             value={scriptContent}
             onChange={(value) => setScriptContent(value || '')}
+            onMount={handleEditorDidMount}
             options={{
               minimap: { enabled: false },
               wordWrap: 'on',

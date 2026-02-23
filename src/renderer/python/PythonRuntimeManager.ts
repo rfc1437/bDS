@@ -1,5 +1,6 @@
 import { createPythonRuntimeWorker } from './createPythonRuntimeWorker';
 import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol';
+import type { PythonSyntaxError } from './runtimeProtocol';
 import { parseMacroContextV1, parseMacroResultV1, type MacroContextV1, type MacroResultV1 } from './abiV1';
 
 type WorkerFactory = () => Worker;
@@ -10,9 +11,9 @@ interface InitializeDeferred {
 }
 
 interface PendingRun {
-  kind: 'run' | 'macro-v1' | 'inspect-entrypoints';
+  kind: 'run' | 'macro-v1' | 'inspect-entrypoints' | 'syntax-check';
   stdout: string;
-  resolve: (value: PythonRunResult | PythonMacroV1Result | string[]) => void;
+  resolve: (value: PythonRunResult | PythonMacroV1Result | string[] | PythonSyntaxCheckResult) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout> | null;
 }
@@ -41,6 +42,10 @@ export interface PythonMacroRenderOptions extends PythonExecuteOptions {
 export interface PythonMacroV1Result {
   result: MacroResultV1;
   stdout: string;
+}
+
+export interface PythonSyntaxCheckResult {
+  errors: PythonSyntaxError[];
 }
 
 export class PythonRuntimeManager {
@@ -197,6 +202,42 @@ export class PythonRuntimeManager {
     });
   }
 
+  async syntaxCheck(code: string, options?: PythonExecuteOptions): Promise<PythonSyntaxCheckResult> {
+    await this.initialize();
+
+    if (!this.worker || !this.ready) {
+      throw new Error('Python runtime is not ready');
+    }
+
+    const requestId = this.nextRequestId();
+    const timeoutMs = options?.timeoutMs ?? 5000;
+
+    return new Promise<PythonSyntaxCheckResult>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingRuns.delete(requestId);
+        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
+        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      this.pendingRuns.set(requestId, {
+        kind: 'syntax-check',
+        stdout: '',
+        resolve: (value) => resolve(value as PythonSyntaxCheckResult),
+        reject,
+        timeoutId,
+      });
+
+      const message: PythonWorkerRequest = {
+        type: 'syntaxCheck',
+        requestId,
+        code,
+        cacheKey: options?.cacheKey,
+      };
+
+      this.worker!.postMessage(message);
+    });
+  }
+
   isReady(): boolean {
     return this.ready;
   }
@@ -249,6 +290,15 @@ export class PythonRuntimeManager {
         return;
       }
       pendingRun.resolve(payload.entrypoints);
+      return;
+    }
+
+    if (payload.type === 'syntaxResult') {
+      if (pendingRun.kind !== 'syntax-check') {
+        pendingRun.reject(new Error('Invalid response type for pending syntax check request'));
+        return;
+      }
+      pendingRun.resolve({ errors: payload.errors });
       return;
     }
 

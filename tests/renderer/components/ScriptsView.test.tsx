@@ -6,15 +6,31 @@ import { useAppStore } from '../../../src/renderer/store';
 
 const executeMock = vi.fn();
 const inspectEntrypointsMock = vi.fn();
+const syntaxCheckMock = vi.fn();
 const monacoPropsSpy = vi.fn();
+const setModelMarkersMock = vi.fn();
 
 vi.mock('@monaco-editor/react', () => ({
   default: (props: {
     value?: string;
     onChange?: (value?: string) => void;
     language?: string;
+    onMount?: (editor: unknown, monaco: unknown) => void;
   }) => {
     monacoPropsSpy(props);
+    props.onMount?.(
+      {
+        getModel: () => ({ uri: 'inmemory://script.py' }),
+      },
+      {
+        editor: {
+          setModelMarkers: setModelMarkersMock,
+        },
+        MarkerSeverity: {
+          Error: 8,
+        },
+      },
+    );
     return (
       <textarea
         aria-label="Script Content"
@@ -29,6 +45,7 @@ vi.mock('../../../src/renderer/python/runtimeManagerInstance', () => ({
   getPythonRuntimeManager: () => ({
     execute: executeMock,
     inspectEntrypoints: inspectEntrypointsMock,
+    syntaxCheck: syntaxCheckMock,
   }),
 }));
 
@@ -38,6 +55,7 @@ describe('ScriptsView', () => {
 
     executeMock.mockResolvedValue({ result: '2', stdout: 'hello\n' });
     inspectEntrypointsMock.mockResolvedValue(['render', 'helper']);
+    syntaxCheckMock.mockResolvedValue({ errors: [] });
 
     (window as any).electronAPI = {
       ...(window as any).electronAPI,
@@ -232,10 +250,79 @@ describe('ScriptsView', () => {
     });
 
     const state = useAppStore.getState();
-    expect(state.panelVisible).toBe(true);
-    expect(state.panelActiveTab).toBe('output');
+    expect(state.panelVisible).toBe(false);
+    expect(state.panelActiveTab).toBe('tasks');
     expect(state.panelOutputEntries.length).toBeGreaterThan(0);
     expect(state.panelOutputEntries[state.panelOutputEntries.length - 1].message).toContain('hello');
+  });
+
+  it('checks syntax manually and writes editor markers for syntax errors', async () => {
+    syntaxCheckMock.mockResolvedValueOnce({
+      errors: [
+        {
+          line: 3,
+          column: 5,
+          endLine: 3,
+          endColumn: 10,
+          message: 'invalid syntax',
+        },
+      ],
+    });
+
+    render(<ScriptsView scriptId="script-1" />);
+
+    await screen.findByLabelText('Script Content');
+    fireEvent.click(screen.getByRole('button', { name: 'Check Syntax' }));
+
+    await vi.waitFor(() => {
+      expect(syntaxCheckMock).toHaveBeenCalledWith('print("hello")', {
+        cacheKey: expect.stringMatching(/^script-1:1:/),
+      });
+      expect(setModelMarkersMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'scripts-python-syntax',
+        [
+          expect.objectContaining({
+            startLineNumber: 3,
+            startColumn: 5,
+            endLineNumber: 3,
+            endColumn: 10,
+            message: 'invalid syntax',
+          }),
+        ],
+      );
+    });
+  });
+
+  it('runs syntax check automatically on save before updating script', async () => {
+    const updateMock = vi.fn().mockResolvedValue({
+      id: 'script-1',
+      projectId: 'default',
+      slug: 'hello_script',
+      title: 'Hello Script',
+      kind: 'utility',
+      entrypoint: 'render',
+      enabled: true,
+      version: 2,
+      filePath: '/tmp/hello-script.py',
+      content: 'print("hello")',
+      createdAt: '2026-02-22T00:00:00.000Z',
+      updatedAt: '2026-02-22T00:01:00.000Z',
+    });
+    (window as any).electronAPI.scripts.update = updateMock;
+
+    render(<ScriptsView scriptId="script-1" />);
+
+    const titleInput = await screen.findByLabelText('Title');
+    fireEvent.change(titleInput, { target: { value: 'Hello Script Updated' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Script' }));
+
+    await vi.waitFor(() => {
+      expect(syntaxCheckMock).toHaveBeenCalledWith('print("hello")', {
+        cacheKey: expect.stringMatching(/^script-1:1:/),
+      });
+      expect(updateMock).toHaveBeenCalled();
+    });
   });
 
   it('runs selected non-main entrypoint function', async () => {
