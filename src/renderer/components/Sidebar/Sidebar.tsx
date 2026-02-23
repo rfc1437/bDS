@@ -12,6 +12,9 @@ import { openChatTab, openEntityTab, openImportTab, openScriptTab, openSingleton
 import { createAndFocusPost } from '../../navigation/postCreation';
 import type { SidebarView } from '../../navigation/sidebarViewRegistry';
 import { useI18n } from '../../i18n';
+import { useProjectScopedSidebarData } from './useProjectScopedSidebarData';
+import { SidebarEntityList } from './SidebarEntityList';
+import { formatSidebarRelativeDate } from './sidebarDateFormatting';
 import './Sidebar.css';
 
 /** Get display name for media: title (truncated to 60 chars) or fallback to filename */
@@ -1371,22 +1374,28 @@ const SettingsNav: React.FC = () => {
 // Chat conversations list
 const ChatList: React.FC = () => {
   const { t, language } = useI18n();
-  const { openTab, closeTab } = useAppStore();
-  const [conversations, setConversations] = useState<ChatConversation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { openTab, closeTab, activeProject } = useAppStore();
+  const activeProjectId = activeProject?.id;
   const [isReady, setIsReady] = useState(false);
 
-  // Load conversations
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (): Promise<ChatConversation[]> => {
     try {
       const convs = await window.electronAPI?.chat.getConversations();
-      if (convs) {
-        setConversations(convs);
-      }
+      return convs ?? [];
     } catch (error) {
       console.error('Failed to load conversations:', error);
+      return [];
     }
   }, []);
+
+  const {
+    items: conversations,
+    setItems: setConversations,
+    isLoading,
+  } = useProjectScopedSidebarData<ChatConversation>({
+    load: loadConversations,
+    activeProjectId,
+  });
 
   // Check if service is ready
   const checkReady = useCallback(async () => {
@@ -1399,13 +1408,7 @@ const ChatList: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const init = async () => {
-      setIsLoading(true);
-      await checkReady();
-      await loadConversations();
-      setIsLoading(false);
-    };
-    init();
+    void checkReady();
 
     // Subscribe to title updates
     const unsubTitle = window.electronAPI?.chat.onTitleUpdated((data) => {
@@ -1417,7 +1420,7 @@ const ChatList: React.FC = () => {
     return () => {
       unsubTitle?.();
     };
-  }, [loadConversations, checkReady]);
+  }, [checkReady, setConversations]);
 
   const handleNewChat = async () => {
     try {
@@ -1448,109 +1451,75 @@ const ChatList: React.FC = () => {
     }
   };
 
-  const formatChatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
-    
-    if (diffDays === 0) {
-      return date.toLocaleTimeString(uiDateLocale, { hour: 'numeric', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return t('sidebar.chat.yesterday');
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString(uiDateLocale, { weekday: 'short' });
-    }
-    return date.toLocaleDateString(uiDateLocale, { month: 'short', day: 'numeric' });
-  };
-
-  if (isLoading) {
-    return (
-      <div className="chat-list">
-        <div className="chat-list-header">
-          <span>{t('sidebar.chat.header')}</span>
-        </div>
-        <div className="chat-loading">{t('sidebar.loading')}</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="chat-list">
-      <div className="chat-list-header">
-        <span>{t('sidebar.chat.header')}</span>
-        <button className="chat-new-button" onClick={handleNewChat} title={t('sidebar.chat.newChat')}>
-          +
-        </button>
-      </div>
-      {!isReady && (
-        <div className="chat-auth-prompt">
-          <p>{t('sidebar.chat.apiKeyNeeded')}</p>
+    <SidebarEntityList
+      header={t('sidebar.chat.header')}
+      createTitle={t('sidebar.chat.newChat')}
+      onCreate={handleNewChat}
+      isLoading={isLoading}
+      loadingLabel={t('sidebar.loading')}
+      emptyMessage={t('sidebar.chat.noConversations')}
+      emptyActionLabel={t('sidebar.chat.startNew')}
+      onEmptyAction={handleNewChat}
+      items={conversations}
+      getItemKey={(conversation) => conversation.id}
+      topContent={
+        !isReady ? (
+          <div className="chat-auth-prompt">
+            <p>{t('sidebar.chat.apiKeyNeeded')}</p>
+          </div>
+        ) : null
+      }
+      renderItem={(conversation) => (
+        <div
+          className="chat-list-item"
+          onClick={() => handleOpenChat(conversation.id)}
+        >
+          <div className="chat-item-content">
+            <div className="chat-item-title">{conversation.title}</div>
+            <div className="chat-item-date">
+              {formatSidebarRelativeDate({ dateString: conversation.updatedAt, language, t })}
+            </div>
+          </div>
+          <button
+            className="chat-item-delete"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleDeleteChat(conversation.id);
+            }}
+            title={t('sidebar.chat.deleteConversation')}
+          >
+            ×
+          </button>
         </div>
       )}
-      <div className="chat-list-items">
-        {conversations.length === 0 ? (
-          <div className="chat-empty">
-            <p>{t('sidebar.chat.noConversations')}</p>
-            <button className="chat-start-button" onClick={handleNewChat}>
-              {t('sidebar.chat.startNew')}
-            </button>
-          </div>
-        ) : (
-          conversations.map(conv => (
-            <div
-              key={conv.id}
-              className="chat-list-item"
-              onClick={() => handleOpenChat(conv.id)}
-            >
-              <div className="chat-item-content">
-                <div className="chat-item-title">{conv.title}</div>
-                <div className="chat-item-date">{formatChatDate(conv.updatedAt)}</div>
-              </div>
-              <button
-                className="chat-item-delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteChat(conv.id);
-                }}
-                title={t('sidebar.chat.deleteConversation')}
-              >
-                ×
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+    />
   );
 };
 
 const ImportList: React.FC = () => {
   const { t, language } = useI18n();
   const { openTab, closeTab, activeProject } = useAppStore();
-  const [definitions, setDefinitions] = useState<ImportDefinitionData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const activeProjectId = activeProject?.id;
 
-  const loadDefinitions = useCallback(async () => {
+  const loadDefinitions = useCallback(async (): Promise<ImportDefinitionData[]> => {
     try {
       const defs = await window.electronAPI?.importDefinitions.getAll();
-      if (defs) {
-        setDefinitions(defs);
-      }
+      return defs ?? [];
     } catch (error) {
       console.error('Failed to load import definitions:', error);
+      return [];
     }
   }, []);
 
-  // Reload definitions when project changes
-  useEffect(() => {
-    const init = async () => {
-      setIsLoading(true);
-      await loadDefinitions();
-      setIsLoading(false);
-    };
-    init();
-  }, [loadDefinitions, activeProject?.id]);
+  const {
+    items: definitions,
+    setItems: setDefinitions,
+    isLoading,
+  } = useProjectScopedSidebarData<ImportDefinitionData>({
+    load: loadDefinitions,
+    activeProjectId,
+  });
 
   // Listen for import definition name updates
   useEffect(() => {
@@ -1598,126 +1567,62 @@ const ImportList: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
-    if (diffDays === 0) {
-      return date.toLocaleTimeString(uiDateLocale, { hour: 'numeric', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return t('sidebar.chat.yesterday');
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString(uiDateLocale, { weekday: 'short' });
-    }
-    return date.toLocaleDateString(uiDateLocale, { month: 'short', day: 'numeric' });
-  };
-
-  if (isLoading) {
-    return (
-      <div className="chat-list">
-        <div className="chat-list-header">
-          <span>{t('sidebar.import.header')}</span>
-        </div>
-        <div className="chat-loading">{t('sidebar.loading')}</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="chat-list">
-      <div className="chat-list-header">
-        <span>{t('sidebar.import.header')}</span>
-        <button className="chat-new-button" onClick={handleNewDefinition} title={t('sidebar.import.newDefinition')}>
-          +
-        </button>
-      </div>
-      <div className="chat-list-items">
-        {definitions.length === 0 ? (
-          <div className="chat-empty">
-            <p>{t('sidebar.import.none')}</p>
-            <button className="chat-start-button" onClick={handleNewDefinition}>
-              {t('sidebar.import.createDefinition')}
-            </button>
-          </div>
-        ) : (
-          definitions.map(def => (
-            <div
-              key={def.id}
-              className="chat-list-item"
-              onClick={() => handleOpenDefinition(def.id)}
-            >
-              <div className="chat-item-content">
-                <div className="chat-item-title">{def.name}</div>
-                <div className="chat-item-date">{formatDate(def.updatedAt)}</div>
-              </div>
-              <button
-                className="chat-item-delete"
-                onClick={(e) => handleDeleteDefinition(e, def.id)}
-                title={t('sidebar.import.deleteDefinition')}
-              >
-                ×
-              </button>
+    <SidebarEntityList
+      header={t('sidebar.import.header')}
+      createTitle={t('sidebar.import.newDefinition')}
+      onCreate={handleNewDefinition}
+      isLoading={isLoading}
+      loadingLabel={t('sidebar.loading')}
+      emptyMessage={t('sidebar.import.none')}
+      emptyActionLabel={t('sidebar.import.createDefinition')}
+      onEmptyAction={handleNewDefinition}
+      items={definitions}
+      getItemKey={(definition) => definition.id}
+      renderItem={(definition) => (
+        <div
+          className="chat-list-item"
+          onClick={() => handleOpenDefinition(definition.id)}
+        >
+          <div className="chat-item-content">
+            <div className="chat-item-title">{definition.name}</div>
+            <div className="chat-item-date">
+              {formatSidebarRelativeDate({ dateString: definition.updatedAt, language, t })}
             </div>
-          ))
-        )}
-      </div>
-    </div>
+          </div>
+          <button
+            className="chat-item-delete"
+            onClick={(event) => handleDeleteDefinition(event, definition.id)}
+            title={t('sidebar.import.deleteDefinition')}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    />
   );
 };
 
 const ScriptsList: React.FC = () => {
   const { t, language } = useI18n();
   const { openTab, activeTabId, closeTab } = useAppStore();
-  const [scripts, setScripts] = useState<Array<{ id: string; title: string; updatedAt: string }>>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const activeProjectId = useAppStore((state) => state.activeProject?.id);
 
-  const loadScripts = useCallback(async () => {
+  const loadScripts = useCallback(async (): Promise<Array<{ id: string; title: string; updatedAt: string }>> => {
     const items = await window.electronAPI?.scripts.getAll();
-    if (!items) {
-      return;
-    }
-
-    setScripts(items.map((item) => ({ id: item.id, title: item.title, updatedAt: item.updatedAt })));
+    return (items ?? []).map((item) => ({ id: item.id, title: item.title, updatedAt: item.updatedAt }));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadInitialScripts = async () => {
-      setIsLoading(true);
-      try {
-        const items = await window.electronAPI?.scripts.getAll();
-        if (cancelled) {
-          return;
-        }
-
-        setScripts((items ?? []).map((item) => ({ id: item.id, title: item.title, updatedAt: item.updatedAt })));
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadInitialScripts();
-
-    const canListen = typeof window.addEventListener === 'function' && typeof window.removeEventListener === 'function';
-    const handleScriptsChanged = () => {
-      void loadScripts();
-    };
-
-    if (canListen) {
-      window.addEventListener('bds:scripts-changed', handleScriptsChanged);
-    }
-
-    return () => {
-      cancelled = true;
-      if (canListen) {
-        window.removeEventListener('bds:scripts-changed', handleScriptsChanged);
-      }
-    };
-  }, [loadScripts]);
+  const {
+    items: scripts,
+    setItems: setScripts,
+    isLoading,
+    reload: reloadScripts,
+  } = useProjectScopedSidebarData<Array<{ id: string; title: string; updatedAt: string }>[number]>({
+    load: loadScripts,
+    activeProjectId,
+    refreshEventName: 'bds:scripts-changed',
+  });
 
   const handleCreateScript = async () => {
     try {
@@ -1741,26 +1646,11 @@ const ScriptsList: React.FC = () => {
         window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
       }
       openScriptTab(openTab, created.id, 'pin');
-      void loadScripts();
+      void reloadScripts();
     } catch (error) {
       console.error('Failed to create script:', error);
       showToast.error(t('sidebar.scripts.createFailed'));
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
-    if (diffDays === 0) {
-      return date.toLocaleTimeString(uiDateLocale, { hour: 'numeric', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return t('sidebar.chat.yesterday');
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString(uiDateLocale, { weekday: 'short' });
-    }
-    return date.toLocaleDateString(uiDateLocale, { month: 'short', day: 'numeric' });
   };
 
   const handleDeleteScript = async (event: React.MouseEvent, scriptId: string) => {
@@ -1782,75 +1672,53 @@ const ScriptsList: React.FC = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="chat-list">
-        <div className="chat-list-header">
-          <span>{t('sidebar.scripts.header')}</span>
-        </div>
-        <div className="chat-loading">{t('sidebar.loading')}</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="chat-list">
-      <div className="chat-list-header">
-        <span>{t('sidebar.scripts.header')}</span>
-        <button
-          className="chat-new-button"
-          onClick={handleCreateScript}
-          aria-label={t('sidebar.scripts.newScript')}
-          title={t('sidebar.scripts.newScript')}
+    <SidebarEntityList
+      header={t('sidebar.scripts.header')}
+      createTitle={t('sidebar.scripts.newScript')}
+      onCreate={handleCreateScript}
+      isLoading={isLoading}
+      loadingLabel={t('sidebar.loading')}
+      emptyMessage={t('sidebar.scripts.none')}
+      emptyActionLabel={t('sidebar.scripts.createScript')}
+      onEmptyAction={handleCreateScript}
+      items={scripts}
+      getItemKey={(script) => script.id}
+      renderItem={(script) => (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={script.title}
+          className={`chat-list-item ${activeTabId === script.id ? 'active' : ''}`}
+          onClick={() => openScriptTab(openTab, script.id, 'preview')}
+          onDoubleClick={() => openScriptTab(openTab, script.id, 'pin')}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              openScriptTab(openTab, script.id, 'pin');
+              return;
+            }
+            if (event.key === ' ') {
+              event.preventDefault();
+              openScriptTab(openTab, script.id, 'preview');
+            }
+          }}
         >
-          +
-        </button>
-      </div>
-      <div className="chat-list-items">
-        {scripts.length === 0 ? (
-          <div className="chat-empty">
-            <p>{t('sidebar.scripts.none')}</p>
-            <button className="chat-start-button" onClick={handleCreateScript}>
-              {t('sidebar.scripts.createScript')}
-            </button>
-          </div>
-        ) : (
-          scripts.map((script) => (
-            <div
-              key={script.id}
-              role="button"
-              tabIndex={0}
-              aria-label={script.title}
-              className={`chat-list-item ${activeTabId === script.id ? 'active' : ''}`}
-              onClick={() => openScriptTab(openTab, script.id, 'preview')}
-              onDoubleClick={() => openScriptTab(openTab, script.id, 'pin')}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  openScriptTab(openTab, script.id, 'pin');
-                  return;
-                }
-                if (event.key === ' ') {
-                  event.preventDefault();
-                  openScriptTab(openTab, script.id, 'preview');
-                }
-              }}
-            >
-              <div className="chat-item-content">
-                <div className="chat-item-title">{script.title}</div>
-                <div className="chat-item-date">{formatDate(script.updatedAt)}</div>
-              </div>
-              <button
-                className="chat-item-delete"
-                onClick={(event) => handleDeleteScript(event, script.id)}
-                title={t('sidebar.scripts.deleteScript')}
-              >
-                ×
-              </button>
+          <div className="chat-item-content">
+            <div className="chat-item-title">{script.title}</div>
+            <div className="chat-item-date">
+              {formatSidebarRelativeDate({ dateString: script.updatedAt, language, t })}
             </div>
-          ))
-        )}
-      </div>
-    </div>
+          </div>
+          <button
+            className="chat-item-delete"
+            onClick={(event) => handleDeleteScript(event, script.id)}
+            title={t('sidebar.scripts.deleteScript')}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    />
   );
 };
 

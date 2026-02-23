@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { Sidebar } from '../../../src/renderer/components/Sidebar/Sidebar';
 import { useAppStore } from '../../../src/renderer/store';
 
@@ -226,5 +226,58 @@ describe('Sidebar scripts list behavior', () => {
     window.dispatchEvent(new CustomEvent('bds:scripts-changed'));
 
     expect(await screen.findByRole('button', { name: 'Renamed Script' })).toBeInTheDocument();
+  });
+
+  it('reloads scripts when active project context becomes available after mount', async () => {
+    const getAllMock = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'script-1',
+          projectId: 'project-1',
+          slug: 'hello_script',
+          title: 'Hello Script',
+          kind: 'utility',
+          entrypoint: 'render',
+          enabled: true,
+          version: 1,
+          filePath: '/tmp/hello-script.py',
+          content: 'print("hello")',
+          createdAt: '2026-02-22T00:00:00.000Z',
+          updatedAt: '2026-02-22T00:00:00.000Z',
+        },
+      ]);
+
+    (window as any).electronAPI.scripts.getAll = getAllMock;
+
+    useAppStore.setState({
+      activeProject: null,
+      activeView: 'scripts',
+      sidebarVisible: true,
+      tabs: [],
+      activeTabId: null,
+    });
+
+    render(<Sidebar />);
+
+    expect(await screen.findByText('No scripts yet')).toBeInTheDocument();
+
+    act(() => {
+      useAppStore.setState({
+        activeProject: {
+          id: 'project-1',
+          name: 'Project 1',
+          slug: 'project-1',
+          dataPath: '/tmp/project-1',
+          isActive: true,
+          createdAt: '2026-02-22T00:00:00.000Z',
+          updatedAt: '2026-02-22T00:00:00.000Z',
+        },
+      });
+    });
+
+    expect(await screen.findByRole('button', { name: 'Hello Script' })).toBeInTheDocument();
+    expect(getAllMock).toHaveBeenCalledTimes(2);
   });
 });
