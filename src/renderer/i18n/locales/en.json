@@ -244,6 +244,7 @@
   "postLinks.openTitle": "Open: {title}",
   "docs.title": "Documentation",
   "docs.subtitle": "User guide for this installed bDS version.",
+  "docs.copyCode": "Copy code",
   "gitDiff.header": "Diff: {target}",
   "gitDiff.noProject": "No active project selected.",
   "gitDiff.noProjectPath": "Unable to resolve project path.",

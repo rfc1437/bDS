@@ -1,3 +1,6 @@
+@import '@highlightjs/cdn-assets/styles/github.min.css' screen and (prefers-color-scheme: light);
+@import '@highlightjs/cdn-assets/styles/github-dark.min.css' screen and (prefers-color-scheme: dark);
+
 .documentation-view {
   --doc-bg: var(--pico-background-color);
   --doc-surface: var(--pico-card-background-color);
@@ -92,6 +95,35 @@
   border-radius: 6px;
   padding: 12px;
   overflow: auto;
+}
+
+.documentation-code-block {
+  position: relative;
+}
+
+.documentation-code-copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 1px solid var(--doc-border);
+  border-radius: 6px;
+  background: var(--doc-surface);
+  color: var(--doc-text);
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.documentation-code-copy-button:hover {
+  background: var(--doc-code-bg);
+}
+
+.documentation-code-block pre {
+  margin-top: 0;
 }
 
 .documentation-content.markdown-body blockquote {

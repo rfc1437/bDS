@@ -21,6 +21,11 @@ describe('documentation structure and presentation', () => {
     const markdown = readFileSync(docPath, 'utf8');
 
     expect(markdown).toContain('## Using macros');
+    expect(markdown).toContain('### YouTube macro');
+    expect(markdown).toContain('### Vimeo macro');
+    expect(markdown).toContain('### Gallery macro');
+    expect(markdown).toContain('### Photo archive macro');
+    expect(markdown).toContain('### Tag cloud macro');
     expect(markdown).toContain('[[youtube');
     expect(markdown).toContain('[[vimeo');
     expect(markdown).toContain('[[gallery');

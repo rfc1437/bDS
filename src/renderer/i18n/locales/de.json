@@ -244,6 +244,7 @@
   "postLinks.openTitle": "Öffnen: {title}",
   "docs.title": "Dokumentation",
   "docs.subtitle": "Benutzerhandbuch für diese installierte bDS-Version.",
+  "docs.copyCode": "Code kopieren",
   "gitDiff.header": "Unterschied: {target}",
   "gitDiff.noProject": "Kein aktives Projekt ausgewählt.",
   "gitDiff.noProjectPath": "Projektpfad konnte nicht ermittelt werden.",
