@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { getMetaEngine } from './engine/MetaEngine';
+import { getBlogmarkTransformService } from './engine/BlogmarkTransformService';
 import { PreviewServer } from './engine/PreviewServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from './shared/i18n';
@@ -373,16 +374,40 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
   const metadata = await getMetaEngine().getProjectMetadata();
   const preferredCategory = normalizeBlogmarkCategory((metadata as { blogmarkCategory?: unknown } | null)?.blogmarkCategory);
 
-  const createdPost = await getPostEngine().createPost({
-    title: payload.title,
-    content: buildBlogmarkMarkdownLink(payload.title, payload.url),
-    categories: preferredCategory ? [preferredCategory] : [],
+  const transformService = getBlogmarkTransformService();
+  const transformResult = await transformService.applyTransforms({
+    post: {
+      title: payload.title,
+      content: buildBlogmarkMarkdownLink(payload.title, payload.url),
+      tags: [],
+      categories: preferredCategory ? [preferredCategory] : [],
+    },
+    context: {
+      source: 'blogmark',
+      url: payload.url,
+    },
   });
 
+  const createdPost = await getPostEngine().createPost({
+    title: transformResult.post.title,
+    content: transformResult.post.content,
+    tags: transformResult.post.tags,
+    categories: transformResult.post.categories,
+  });
+
+  const blogmarkCreatedPayload = {
+    post: createdPost,
+    transform: {
+      appliedScriptIds: transformResult.appliedScriptIds,
+      errors: transformResult.errors,
+      toasts: transformResult.toasts,
+    },
+  };
+
   if (mainWindow && !mainWindow.isDestroyed() && rendererReady) {
-    mainWindow.webContents.send('blogmark:created', createdPost);
+    mainWindow.webContents.send('blogmark:created', blogmarkCreatedPayload);
   } else {
-    pendingBlogmarkCreatedEvents.push(createdPost);
+    pendingBlogmarkCreatedEvents.push(blogmarkCreatedPayload);
   }
 }
 

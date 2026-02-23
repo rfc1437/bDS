@@ -14,7 +14,8 @@ export type EditorRoute =
   | 'metadata-diff'
   | 'git-diff'
   | 'documentation'
-  | 'site-validation';
+  | 'site-validation'
+  | 'scripts';
 
 export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'dashboard'>> = {
   post: 'post',
@@ -29,6 +30,7 @@ export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'da
   'git-diff': 'git-diff',
   documentation: 'documentation',
   'site-validation': 'site-validation',
+  scripts: 'scripts',
 };
 
 export interface EditorRouteResolution {

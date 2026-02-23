@@ -69,6 +69,10 @@ describe('TabBar', () => {
         get: vi.fn(),
         onNameUpdated: vi.fn(() => () => {}),
       },
+      scripts: {
+        ...(window as any).electronAPI?.scripts,
+        get: vi.fn(),
+      },
     };
   });
 
@@ -135,5 +139,25 @@ describe('TabBar', () => {
     });
 
     expect(await screen.findByText('Updated Title')).toBeInTheDocument();
+  });
+
+  it('renders script title for script tab', async () => {
+    useAppStore.setState({
+      tabs: [{ type: 'scripts', id: 'script-1', isTransient: false }],
+      activeTabId: 'script-1',
+      posts: [],
+      media: [],
+      dirtyPosts: new Set<string>(),
+    });
+
+    (window as any).electronAPI.scripts.get = vi.fn().mockResolvedValue({
+      id: 'script-1',
+      title: 'Publish Macro',
+    });
+
+    render(<TabBar />);
+
+    expect(await screen.findByText('Publish Macro')).toBeInTheDocument();
+    expect((window as any).electronAPI.scripts.get).toHaveBeenCalledWith('script-1');
   });
 });

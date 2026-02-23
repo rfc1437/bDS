@@ -1,3 +1,6 @@
+@import '@highlightjs/cdn-assets/styles/github.min.css' screen and (prefers-color-scheme: light);
+@import '@highlightjs/cdn-assets/styles/github-dark.min.css' screen and (prefers-color-scheme: dark);
+
 .documentation-view {
   --doc-bg: var(--pico-background-color);
   --doc-surface: var(--pico-card-background-color);
@@ -92,6 +95,54 @@
   border-radius: 6px;
   padding: 12px;
   overflow: auto;
+}
+
+.documentation-code-block {
+  position: relative;
+}
+
+.documentation-code-copy-button {
+  position: absolute;
+  top: .4rem;
+  right: .4rem;
+  border: 1px solid var(--doc-border);
+  border-radius: .25rem;
+  background: var(--doc-surface);
+  color: var(--doc-muted);
+  width: 1.8rem;
+  height: 1.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  z-index: 1;
+  opacity: .88;
+}
+
+.documentation-code-copy-button:hover,
+.documentation-code-copy-button:focus-visible {
+  opacity: 1;
+  color: var(--doc-text);
+}
+
+.documentation-code-block pre {
+  margin-top: 0;
+}
+
+.documentation-code-block .code-copy-icon {
+  font-size: .95rem;
+  line-height: 1;
+}
+
+.documentation-code-block.code-copy-success .documentation-code-copy-button {
+  color: var(--pico-ins-color, rgb(53, 117, 56));
+  border-color: var(--pico-ins-color, rgb(53, 117, 56));
+}
+
+.documentation-code-block.code-copy-failed .documentation-code-copy-button {
+  color: var(--pico-del-color, rgb(183, 72, 72));
+  border-color: var(--pico-del-color, rgb(183, 72, 72));
 }
 
 .documentation-content.markdown-body blockquote {

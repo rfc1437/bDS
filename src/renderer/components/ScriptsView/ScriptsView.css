@@ -1,0 +1,60 @@
+.scripts-view-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scripts-view {
+  flex: 1;
+  min-height: 0;
+}
+
+.scripts-meta-row {
+  margin-bottom: 8px;
+}
+
+.scripts-enabled-field {
+  align-self: flex-end;
+}
+
+.scripts-enabled-field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scripts-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.scripts-toolbar {
+  margin-bottom: 8px;
+}
+
+.scripts-monaco {
+  flex: 1;
+  min-height: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--vscode-input-background);
+}
+
+.scripts-run-button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.scripts-save-button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.scripts-check-button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}

@@ -10,6 +10,7 @@
 - [Working with pages](#working-with-pages)
 - [Working with media](#working-with-media)
 - [Using macros](#using-macros)
+- [Using scripting (early access)](#using-scripting-early-access)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
@@ -150,47 +151,105 @@ Macros let you insert dynamic content blocks directly inside post/page Markdown 
 
 Use macros when you need reusable rich blocks (for example embedded videos, media galleries, archive grids, or computed tag clouds) without writing raw HTML.
 
-### Supported macros
+### YouTube macro
 
-- `[[youtube id="VIDEO_ID" title="Optional title"]]`
-	- Embeds a YouTube video.
-	- `id` is required.
-	- `title` is optional (used for accessibility label).
+Use `[[youtube id="VIDEO_ID" title="Optional title"]]` when you want to embed a YouTube clip directly in a post or page. This macro is best for video references, walkthroughs, and embedded talks that should stay in the editorial flow instead of linking out to another tab.
 
-- `[[vimeo id="VIDEO_ID" title="Optional title"]]`
-	- Embeds a Vimeo video.
-	- `id` is required.
-	- `title` is optional.
+The `id` parameter is required and should contain the YouTube video ID. The `title` parameter is optional, but recommended for accessibility because it becomes the reader-facing label for the embedded frame.
 
-- `[[gallery columns="3" caption="Optional caption"]]`
-	- Renders a lightbox-enabled gallery using media linked to the current post.
-	- `columns` is optional (`1` to `6`, default `3`).
-	- `caption` is optional.
+### Vimeo macro
 
-- `[[photo_archive year="2025" month="2"]]`
-	- Renders a photo archive grid from media dates.
-	- `year` is optional (when omitted, recent months are shown).
-	- `month` is optional (used with `year` for a single month view).
-	- Legacy alias `[[photo_album ...]]` is also supported.
+Use `[[vimeo id="VIDEO_ID" title="Optional title"]]` for Vimeo-hosted video content. It behaves similarly to the YouTube macro, but targets Vimeo as the video source.
 
-- `[[tag_cloud orientation="mixed_diagonal" width="900" height="420"]]`
-	- Builds a word cloud from published tag usage counts.
-	- Word size scales by usage quantity.
-	- Word color is theme-aware and uses Pico CSS semantic colors.
-	- Colors are distributed by quantity quantiles with easing, so dense datasets still show visible variation.
-	- Visual order remains least-to-most: blue → green → yellow → orange → red.
-	- Clicking a word opens that tag archive route.
-	- `orientation` is optional and supports:
-		- `horizontal` (all words horizontal)
-		- `mixed_hv` (mix of horizontal and vertical)
-		- `mixed_diagonal` (mix of horizontal/vertical/diagonal angles)
-	- `width` and `height` are optional (defaults `900` and `420`).
+As with YouTube, `id` is required and `title` is optional. Use `title` whenever possible so screen-reader and assistive-technology users receive useful context.
+
+### Gallery macro
+
+Use `[[gallery columns="3" caption="Optional caption"]]` to render a lightbox-enabled media gallery from assets linked to the current post. This macro is appropriate when several related images belong together and should be browsed as one visual group.
+
+The `columns` parameter controls layout density and accepts values from `1` to `6` (default is `3`). The optional `caption` parameter adds context above or below the gallery depending on theme presentation.
+
+### Photo archive macro
+
+Use `[[photo_archive year="2025" month="2"]]` when you want an archive-style grid based on media dates. This is useful for timeline-oriented projects where readers should navigate image collections by month or year.
+
+Both `year` and `month` are optional. If `year` is omitted, bDS shows recent months. If `year` is provided without `month`, bDS presents the year scope. The legacy alias `[[photo_album ...]]` is still supported for compatibility.
+
+### Tag cloud macro
+
+Use `[[tag_cloud orientation="mixed_diagonal" width="900" height="420"]]` to visualize published tag usage as a weighted cloud. This macro is best for discovery pages, thematic overviews, and archive entry points where content density matters.
+
+Word size scales with usage counts. Colors are theme-aware and distributed by quantity quantiles using eased interpolation so high-volume datasets stay readable. The color progression remains least-to-most (blue → green → yellow → orange → red), and clicking a word opens that tag archive route.
+
+The optional `orientation` parameter supports `horizontal`, `mixed_hv`, and `mixed_diagonal`. The optional `width` and `height` parameters control canvas size and default to `900` and `420`.
 
 ### Key takeaways
 
 - Macros are inserted directly in Markdown and expanded during preview/publish rendering.
 - Use macro parameters to control behavior without leaving the editor.
 - `tag_cloud` is data-driven and links directly into tag archive navigation.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Using scripting (early access)
+
+The scripting feature is an incremental capability and should currently be treated as early access. Scripts are stored as Python files in the project filesystem, while script metadata is tracked in the project database and embedded in the file metadata docstring block. This keeps scripts portable and inspectable while still allowing reliable indexing in the app.
+
+Each script exposes an **Entrypoint** selector. bDS always provides a synthetic `main` entrypoint. Selecting `main` runs the full script body as before. In addition, bDS inspects your script to list top-level Python function names, which can be selected as entrypoints for upcoming execution modes and integrations.
+
+At this stage, scripting is intended for controlled project workflows where scripts interact with application-provided tools. Keep scripts versioned through your normal Git workflow, review changes carefully, and prefer small, explicit scripts over monolithic utility files.
+
+For transform scripts, bDS provides a built-in Python helper named `toast(message)`. It accepts a single string and emits a UI intent that the app handles on the renderer side. This keeps script ergonomics simple while preserving a controlled bridge between script runtime and user interface.
+
+When transform scripts fail during a pipeline run, bDS automatically surfaces an error toast so users are notified immediately. Detailed transform diagnostics (applied scripts and per-script errors) are also written to the Output panel.
+
+### Example transform script
+
+Use a transform function to modify incoming bookmark/blogmark content before bDS creates the post. The function receives a mutable `post` dictionary and should return that dictionary.
+
+```python
+def normalize_blogmark(post):
+	# 1) Manipulate title
+	title = (post.get("title") or "").strip()
+	if title and not title.startswith("[Clipped]"):
+		post["title"] = f"[Clipped] {title}"
+
+	# 2) Manipulate text/content
+	content = (post.get("content") or "").strip()
+	prefix = "Imported from blogmark\n\n"
+	if content and not content.startswith(prefix):
+		post["content"] = prefix + content
+
+	# 3) Set or replace categories
+	post["categories"] = ["Inbox", "Research"]
+
+	# 4) Add and normalize tags
+	tags = post.get("tags") or []
+	tags.append("blogmark")
+	tags.append("clipped")
+	post["tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
+
+	# 5) Optional user notification
+	toast(f"Transform applied: {post.get('title')}")
+	return post
+```
+
+Notes:
+- `title` and `content` are strings.
+- `categories` and `tags` are string lists (e.g., `['News', 'AI']`).
+- Return the mutated `post` dict from your transform function.
+- Keep transforms small and deterministic, especially when multiple active transforms run in sequence.
+
+### Key takeaways
+
+- Scripting is available and intentionally evolving in small steps.
+- `main` is always available and preserves whole-script execution behavior.
+- Script files and metadata remain filesystem-friendly and Git-reviewable.
+- Transform scripts can call `toast("...")` to send user-facing UI notifications.
+- Transform scripts can directly manipulate `title`, `content`, `categories`, and `tags`.
+- Transform pipeline failures always trigger automatic error toasts.
 
 [↑ Back to In this article](#in-this-article)
 

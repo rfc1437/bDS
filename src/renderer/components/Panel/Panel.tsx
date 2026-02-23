@@ -43,6 +43,7 @@ export const Panel: React.FC = () => {
     panelVisible,
     panelActiveTab,
     setPanelActiveTab,
+    panelOutputEntries,
     tasks,
     tabs,
     activeTabId,
@@ -249,6 +250,35 @@ export const Panel: React.FC = () => {
     });
   };
 
+  const handleCopyOutput = async () => {
+    if (panelOutputEntries.length === 0) {
+      return;
+    }
+
+    const outputText = panelOutputEntries.map((entry) => entry.message).join('\n\n');
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(outputText);
+      return;
+    }
+
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+      return;
+    }
+
+    const textArea = document.createElement('textarea');
+    textArea.value = outputText;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'absolute';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    if (typeof document.execCommand === 'function') {
+      document.execCommand('copy');
+    }
+    document.body.removeChild(textArea);
+  };
+
   const renderTaskRow = (task: TaskProgress, isChild = false) => (
     <div key={task.taskId} className={`task-item status-${task.status} ${isChild ? 'task-child-row' : ''}`.trim()}>
       <div className="task-status">
@@ -383,7 +413,30 @@ export const Panel: React.FC = () => {
         )}
 
         {effectiveActivePanelTab === 'output' && (
-          <div className="panel-empty">{t('panel.noOutput')}</div>
+          panelOutputEntries.length === 0 ? (
+            <div className="panel-empty">{t('panel.noOutput')}</div>
+          ) : (
+            <div className="output-content">
+              <div className="output-toolbar">
+                <button
+                  type="button"
+                  className="output-copy-button"
+                  onClick={() => {
+                    void handleCopyOutput();
+                  }}
+                >
+                  {t('panel.copyOutput')}
+                </button>
+              </div>
+              <div className="output-list">
+                {panelOutputEntries.map((entry) => (
+                  <div key={entry.id} className={`output-item output-${entry.kind}`}>
+                    {entry.message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
         )}
 
         {effectiveActivePanelTab === 'post-links' && (

@@ -2,6 +2,7 @@ export const SIDEBAR_VIEW_REGISTRY = [
   'posts',
   'pages',
   'media',
+  'scripts',
   'settings',
   'tags',
   'chat',

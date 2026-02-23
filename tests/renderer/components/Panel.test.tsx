@@ -235,6 +235,58 @@ describe('Panel', () => {
     expect(screen.getByRole('tab', { name: 'Output' })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('renders output entries when output tab is active', () => {
+    useAppStore.setState({
+      panelActiveTab: 'output',
+      panelOutputEntries: [
+        {
+          id: 'output-1',
+          message: 'hello from script',
+          createdAt: '2026-02-22T00:00:00.000Z',
+          kind: 'stdout',
+        },
+      ],
+    });
+
+    render(<Panel />);
+
+    expect(screen.getByText('hello from script')).toBeInTheDocument();
+  });
+
+  it('copies output entries from output tab with copy button', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { clipboard: { writeText } },
+      configurable: true,
+    });
+
+    useAppStore.setState({
+      panelActiveTab: 'output',
+      panelOutputEntries: [
+        {
+          id: 'output-1',
+          message: 'pyodide.asm.js missing',
+          createdAt: '2026-02-22T00:00:00.000Z',
+          kind: 'error',
+        },
+        {
+          id: 'output-2',
+          message: 'second line',
+          createdAt: '2026-02-22T00:00:01.000Z',
+          kind: 'stdout',
+        },
+      ],
+    });
+
+    render(<Panel />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Output' }));
+
+    await vi.waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('pyodide.asm.js missing\n\nsecond line');
+    });
+  });
+
   it('renders grouped tasks as expandable parent rows with child task names in tasks tab', async () => {
     useAppStore.setState({
       tasks: [

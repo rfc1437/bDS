@@ -151,6 +151,24 @@ export const importDefinitions = sqliteTable('import_definitions', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Scripts table - stores metadata for Python scripts persisted in scripts/*.py
+export const scripts = sqliteTable('scripts', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  slug: text('slug').notNull(),
+  title: text('title').notNull(),
+  kind: text('kind', { enum: ['macro', 'utility', 'transform'] }).notNull().default('utility'),
+  entrypoint: text('entrypoint').notNull().default('render'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  version: integer('version').notNull().default(1),
+  filePath: text('file_path').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  // Composite unique index: slug must be unique within each project
+  projectSlugIdx: uniqueIndex('scripts_project_slug_idx').on(table.projectId, table.slug),
+}));
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -174,3 +192,5 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type ImportDefinition = typeof importDefinitions.$inferSelect;
 export type NewImportDefinition = typeof importDefinitions.$inferInsert;
+export type Script = typeof scripts.$inferSelect;
+export type NewScript = typeof scripts.$inferInsert;
