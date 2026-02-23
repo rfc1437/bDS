@@ -185,8 +185,11 @@ export function registerIpcHandlers(): void {
       return pullResult;
     }
 
-    const changedPostFiles = await engine.getChangedPostFilesBetween(projectPath, beforeHead, afterHead);
-    if (changedPostFiles.length === 0) {
+    const [changedPostFiles, changedScriptFiles] = await Promise.all([
+      engine.getChangedPostFilesBetween(projectPath, beforeHead, afterHead),
+      engine.getChangedScriptFilesBetween(projectPath, beforeHead, afterHead),
+    ]);
+    if (changedPostFiles.length === 0 && changedScriptFiles.length === 0) {
       return pullResult;
     }
 
@@ -194,15 +197,24 @@ export function registerIpcHandlers(): void {
       const projectEngine = getProjectEngine();
       const project = await projectEngine.getActiveProject();
       const postEngine = getPostEngine();
+      const scriptEngine = getScriptEngine();
 
       if (project) {
         const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
         postEngine.setProjectContext(project.id, dataDir);
+        scriptEngine.setProjectContext(project.id, dataDir);
       }
 
-      await postEngine.reconcilePublishedPostsFromGitChanges(projectPath, changedPostFiles);
+      await Promise.all([
+        changedPostFiles.length > 0
+          ? postEngine.reconcilePublishedPostsFromGitChanges(projectPath, changedPostFiles)
+          : Promise.resolve(),
+        changedScriptFiles.length > 0
+          ? scriptEngine.reconcileScriptsFromGitChanges(projectPath, changedScriptFiles)
+          : Promise.resolve(),
+      ]);
     } catch (error) {
-      console.error('Failed to reconcile published posts after git pull:', error);
+      console.error('Failed to reconcile published posts/scripts after git pull:', error);
     }
 
     return pullResult;
@@ -753,6 +765,18 @@ export function registerIpcHandlers(): void {
   safeHandle('scripts:getAll', async () => {
     const engine = getScriptEngine();
     return engine.getAllScripts();
+  });
+
+  safeHandle('scripts:rebuildFromFiles', async () => {
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+    const engine = getScriptEngine();
+    if (project) {
+      const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+      engine.setProjectContext(project.id, dataDir);
+    }
+    await engine.rebuildDatabaseFromFiles();
+    return true;
   });
 
   // ============ Task Handlers ============

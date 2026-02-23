@@ -108,6 +108,7 @@ export const electronAPI: ElectronAPI = {
     delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
     get: (id: string) => ipcRenderer.invoke('scripts:get', id),
     getAll: () => ipcRenderer.invoke('scripts:getAll'),
+    rebuildFromFiles: () => ipcRenderer.invoke('scripts:rebuildFromFiles'),
   },
 
   // Post-Media Links

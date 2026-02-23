@@ -566,6 +566,7 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<ScriptData | null>;
     getAll: () => Promise<ScriptData[]>;
+    rebuildFromFiles: () => Promise<void>;
   };
   postMedia: {
     link: (postId: string, mediaId: string) => Promise<MediaLinkData>;

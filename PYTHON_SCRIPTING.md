@@ -38,9 +38,10 @@ These are current realities and should be treated as authoritative unless we exp
    - ABI v1 + runtime manager support exist.
    - Main page generation path still uses existing JS macro rendering.
 
-4. **Scripts rebuild/meta-diff sync is still missing**
-   - Script CRUD works via app APIs.
-   - No implemented project-wide “rebuild from files” parity for `scripts/` equivalent to posts/media rebuild flows.
+4. **Scripts rebuild/sync parity is implemented (simple policy)**
+   - `ScriptEngine.rebuildDatabaseFromFiles()` now rebuilds DB metadata from `scripts/*.py`.
+   - `ScriptEngine.reconcileScriptsFromGitChanges()` now handles added/modified/deleted/renamed script files after git pull.
+   - Settings → Data now includes **Rebuild Scripts** button (`scripts:rebuildFromFiles`) for manual parity with posts/media rebuild.
 
 ## Remaining Work Only
 
@@ -50,11 +51,18 @@ These are current realities and should be treated as authoritative unless we exp
 - [x] Runtime mode made project-configurable via Settings → Technology (`pythonRuntimeMode`).
 - [x] Legacy main-thread mode retained as explicit fallback option.
 
-## 2) Add scripts file-system rebuild/sync (P1)
+## 2) Add scripts file-system rebuild/sync (P1) — Implemented
 
-- [ ] Implement rebuild/meta-diff style synchronization for `scripts/` so external file edits are detected.
-- [ ] Define conflict handling policy between DB metadata and script file frontmatter/body.
-- [ ] Add tests for create/edit/delete performed outside app while app is closed/open.
+- [x] Implement rebuild/meta-diff style synchronization for `scripts/` so external file edits are detected.
+- [x] Define conflict handling policy between DB metadata and script file frontmatter/body.
+- [x] Add tests for create/edit/delete performed outside app while app is closed/open.
+
+### Implemented policy (simple)
+
+- Source of truth: script file + docstring frontmatter when present/valid.
+- Rebuild path: delete current `scripts` rows for active project and re-import from `scripts/*.py`.
+- Reconcile path (git pull): apply file deltas (`added|modified|deleted|renamed`) and upsert/delete rows.
+- Conflict behavior: prefer file metadata/body; fall back to safe defaults when values are missing/invalid.
 
 ## 3) Wire Python macros into render pipeline (P1)
 
@@ -89,7 +97,7 @@ These are current realities and should be treated as authoritative unless we exp
 ## Acceptance Gate Before Marking Python Scripting “Complete”
 
 - [ ] Render-time macros run through Python script path in production generation flow.
-- [ ] Scripts directory external changes are synchronized reliably.
+- [x] Scripts directory external changes are synchronized reliably.
 - [x] Runtime boundary decision implemented and protected by tests.
 - [ ] Legacy JS macro path removed (or explicitly retained with documented rationale).
-- [ ] `npm test` and `npm run build` pass.
+- [x] `npm test` and `npm run build` pass.

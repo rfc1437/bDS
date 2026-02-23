@@ -237,6 +237,42 @@ describe('GitEngine', () => {
     });
   });
 
+  describe('getChangedScriptFilesBetween', () => {
+    it('returns added, modified, deleted and renamed script file changes from name-status output', async () => {
+      mockRaw.mockResolvedValue([
+        'M', 'scripts/existing.py',
+        'A', 'scripts/new_script.py',
+        'D', 'scripts/removed.py',
+        'R100', 'scripts/old_name.py', 'scripts/new_name.py',
+        'M', 'posts/2026/02/ignored.md',
+      ].join('\0'));
+
+      const result = await gitEngine.getChangedScriptFilesBetween('/tmp/project', 'before', 'after');
+
+      expect(mockRaw).toHaveBeenCalledWith([
+        'diff',
+        '--name-status',
+        '--find-renames',
+        '-z',
+        'before..after',
+        '--',
+        'scripts',
+      ]);
+
+      expect(result).toEqual([
+        { status: 'modified', path: 'scripts/existing.py' },
+        { status: 'added', path: 'scripts/new_script.py' },
+        { status: 'deleted', path: 'scripts/removed.py' },
+        { status: 'renamed', path: 'scripts/new_name.py', previousPath: 'scripts/old_name.py' },
+      ]);
+    });
+
+    it('returns empty changes when refs are empty or identical', async () => {
+      expect(await gitEngine.getChangedScriptFilesBetween('/tmp/project', 'same', 'same')).toEqual([]);
+      expect(await gitEngine.getChangedScriptFilesBetween('/tmp/project', ' ', 'after')).toEqual([]);
+    });
+  });
+
   describe('getCommitDiffContent', () => {
     it('should return commit patch text in diff content shape', async () => {
       mockShow.mockResolvedValue([

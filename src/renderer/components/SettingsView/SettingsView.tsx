@@ -396,7 +396,7 @@ export const SettingsView: React.FC = () => {
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
   const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
   const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
-  const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'links', 'folder', 'filesystem'];
+  const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
 
   const renderProjectSettings = () => (
     <SettingSection
@@ -1232,6 +1232,29 @@ export const SettingsView: React.FC = () => {
             }}
           >
             {t('settings.data.rebuildMediaAction')}
+          </button>
+        </SettingRow>
+
+        <SettingRow
+          id="rebuild-scripts"
+          label={t('settings.data.rebuildScriptsLabel')}
+          description={t('settings.data.rebuildScriptsDescription')}
+        >
+          <button
+            className="secondary"
+            onClick={async () => {
+              showToast.loading(t('settings.toast.rebuildScriptsLoading'));
+              try {
+                await window.electronAPI?.scripts.rebuildFromFiles();
+                showToast.dismiss();
+                showToast.success(t('settings.toast.rebuildScriptsSuccess'));
+              } catch {
+                showToast.dismiss();
+                showToast.error(t('settings.toast.rebuildScriptsFailed'));
+              }
+            }}
+          >
+            {t('settings.data.rebuildScriptsAction')}
           </button>
         </SettingRow>
 

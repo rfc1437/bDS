@@ -55,6 +55,23 @@ vi.mock('uuid', () => ({
 }));
 
 vi.mock('fs/promises', () => ({
+  readdir: vi.fn(async (dirPath: string, options?: { withFileTypes?: boolean }) => {
+    if (options?.withFileTypes) {
+      const files = Array.from((globalThis as any).__mockScriptFiles.keys()) as string[];
+      const names = files
+        .filter((filePath) => filePath.startsWith(`${dirPath}/`))
+        .map((filePath) => filePath.slice(dirPath.length + 1))
+        .filter((name) => !name.includes('/'));
+
+      return names.map((name) => ({
+        name,
+        isDirectory: () => false,
+        isFile: () => true,
+      }));
+    }
+
+    return [];
+  }),
   readFile: vi.fn(async (filePath: string) => {
     const value = (globalThis as any).__mockScriptFiles.get(filePath);
     if (typeof value !== 'string') {
@@ -174,5 +191,99 @@ describe('ScriptEngine', () => {
     expect(loaded?.content).toBe('print("hello")');
     expect(loaded?.title).toBe('Metadata Test');
     expect(loaded?.entrypoint).toBe('render');
+  });
+
+  it('rebuilds scripts from filesystem and applies external file metadata/content', async () => {
+    const scriptPath = '/mock/userData/projects/default/scripts/external_transform.py';
+    mockFiles.set(scriptPath, [
+      '"""',
+      '---',
+      'id: "external-script-id"',
+      'projectId: "default"',
+      'slug: "external_transform"',
+      'title: "External Transform"',
+      'kind: "transform"',
+      'entrypoint: "transform"',
+      'enabled: false',
+      'version: 3',
+      'createdAt: "2026-02-20T10:00:00.000Z"',
+      'updatedAt: "2026-02-21T11:00:00.000Z"',
+      '---',
+      '"""',
+      'def transform(context):',
+      '    return context',
+    ].join('\n'));
+
+    await scriptEngine.rebuildDatabaseFromFiles();
+
+    const all = await scriptEngine.getAllScripts();
+    expect(all).toHaveLength(1);
+    expect(all[0].id).toBe('external-script-id');
+    expect(all[0].slug).toBe('external_transform');
+    expect(all[0].kind).toBe('transform');
+    expect(all[0].entrypoint).toBe('transform');
+    expect(all[0].enabled).toBe(false);
+    expect(all[0].version).toBe(3);
+    expect(all[0].title).toBe('External Transform');
+    expect(all[0].content).toContain('def transform(context):');
+  });
+
+  it('reconciles git changes for scripts (modify/add/delete)', async () => {
+    const created = await scriptEngine.createScript({
+      title: 'Render Hero',
+      kind: 'macro',
+      content: 'def render(context):\n    return {"html": "<h1>Hi</h1>"}',
+    });
+
+    const existingPath = '/repo/scripts/render_hero.py';
+    mockFiles.set(existingPath, [
+      '"""',
+      '---',
+      `id: "${created.id}"`,
+      'projectId: "default"',
+      'slug: "render_hero"',
+      'title: "Render Hero Updated Outside"',
+      'kind: "macro"',
+      'entrypoint: "render"',
+      'enabled: true',
+      'version: 8',
+      'createdAt: "2026-02-20T10:00:00.000Z"',
+      'updatedAt: "2026-02-21T11:00:00.000Z"',
+      '---',
+      '"""',
+      'def render(context):',
+      '    return {"html": "<h1>Outside</h1>"}',
+    ].join('\n'));
+
+    const addedPath = '/repo/scripts/new_transform.py';
+    mockFiles.set(addedPath, [
+      '"""',
+      '---',
+      'id: "added-script-id"',
+      'projectId: "default"',
+      'slug: "new_transform"',
+      'title: "New Transform"',
+      'kind: "transform"',
+      'entrypoint: "transform"',
+      'enabled: true',
+      'version: 1',
+      'createdAt: "2026-02-22T10:00:00.000Z"',
+      'updatedAt: "2026-02-22T11:00:00.000Z"',
+      '---',
+      '"""',
+      'def transform(context):',
+      '    return context',
+    ].join('\n'));
+
+    const result = await scriptEngine.reconcileScriptsFromGitChanges('/repo', [
+      { status: 'modified', path: 'scripts/render_hero.py' },
+      { status: 'added', path: 'scripts/new_transform.py' },
+      { status: 'deleted', path: 'scripts/render_hero.py' },
+    ]);
+
+    expect(result.updated).toBe(1);
+    expect(result.created).toBe(1);
+    expect(result.deleted).toBe(1);
+    expect(result.processedFiles).toBe(3);
   });
 });

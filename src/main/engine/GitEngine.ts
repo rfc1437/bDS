@@ -140,6 +140,14 @@ export interface GitPostFileChange {
   previousPath?: string;
 }
 
+export type GitScriptFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+
+export interface GitScriptFileChange {
+  status: GitScriptFileChangeStatus;
+  path: string;
+  previousPath?: string;
+}
+
 type GitProvider = 'unknown' | 'github' | 'gitlab' | 'gitea-forgejo';
 
 let gitEngineInstance: GitEngine | null = null;
@@ -526,7 +534,12 @@ export class GitEngine {
     return this.markdownExtensions.has(extension);
   }
 
-  private parseNameStatusOutput(raw: string): GitPostFileChange[] {
+  private isScriptsPythonPath(value: string): boolean {
+    const normalized = this.normalizeRepoRelativePath(value);
+    return normalized.startsWith('scripts/') && path.extname(normalized).toLowerCase() === '.py';
+  }
+
+  private parseNameStatusOutput(raw: string, pathMatcher: (value: string) => boolean): GitPostFileChange[] {
     const tokens = raw.split('\0').filter((token) => token.length > 0);
     const changes: GitPostFileChange[] = [];
 
@@ -543,7 +556,7 @@ export class GitEngine {
         const previousPath = this.normalizeRepoRelativePath(previousPathRaw);
         const pathValue = this.normalizeRepoRelativePath(nextPathRaw);
 
-        if (this.isPostsMarkdownPath(previousPath) || this.isPostsMarkdownPath(pathValue)) {
+        if (pathMatcher(previousPath) || pathMatcher(pathValue)) {
           changes.push({
             status: 'renamed',
             path: pathValue,
@@ -555,7 +568,7 @@ export class GitEngine {
 
       const filePathRaw = tokens[index++] ?? '';
       const filePath = this.normalizeRepoRelativePath(filePathRaw);
-      if (!this.isPostsMarkdownPath(filePath)) {
+      if (!pathMatcher(filePath)) {
         continue;
       }
 
@@ -1338,13 +1351,40 @@ export class GitEngine {
 
     try {
       const output = await git.raw(args);
-      return this.parseNameStatusOutput(output);
+      return this.parseNameStatusOutput(output, (value) => this.isPostsMarkdownPath(value));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error ?? '');
       if (this.isSpawnBadFileDescriptorError(message)) {
         try {
           const output = await this.runGitCli(projectPath, args);
-          return this.parseNameStatusOutput(output);
+          return this.parseNameStatusOutput(output, (value) => this.isPostsMarkdownPath(value));
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+  }
+
+  async getChangedScriptFilesBetween(projectPath: string, fromCommit: string, toCommit: string): Promise<GitScriptFileChange[]> {
+    const fromRef = fromCommit.trim();
+    const toRef = toCommit.trim();
+    if (!fromRef || !toRef || fromRef === toRef) {
+      return [];
+    }
+
+    const git = this.createNonInteractiveGit(projectPath);
+    const args = ['diff', '--name-status', '--find-renames', '-z', `${fromRef}..${toRef}`, '--', 'scripts'];
+
+    try {
+      const output = await git.raw(args);
+      return this.parseNameStatusOutput(output, (value) => this.isScriptsPythonPath(value));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          const output = await this.runGitCli(projectPath, args);
+          return this.parseNameStatusOutput(output, (value) => this.isScriptsPythonPath(value));
         } catch {
           return [];
         }

@@ -158,6 +158,26 @@ describe('SettingsView Diff Preferences', () => {
     expect((articleShowTitle as HTMLInputElement).checked).toBe(true);
   });
 
+  it('triggers scripts rebuild from data maintenance section', async () => {
+    const rebuildScriptsMock = vi.fn().mockResolvedValue(undefined);
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      scripts: {
+        ...(window as any).electronAPI?.scripts,
+        rebuildFromFiles: rebuildScriptsMock,
+      },
+    };
+
+    render(<SettingsView />);
+
+    const rebuildScriptsButton = await screen.findByRole('button', { name: /rebuild scripts/i });
+    fireEvent.click(rebuildScriptsButton);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rebuildScriptsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('persists category settings changes via project metadata update', async () => {
     render(<SettingsView />);
 
