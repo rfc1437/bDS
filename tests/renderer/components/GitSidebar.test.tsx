@@ -661,6 +661,63 @@ describe('GitSidebar', () => {
     });
   });
 
+  it('renders repo actions as icon-only buttons with hover tooltips', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    render(<GitSidebar />);
+
+    const repoActions = await screen.findByRole('group', { name: /repository actions/i });
+    const fetchButton = within(repoActions).getByRole('button', { name: /^fetch$/i });
+    const pullButton = within(repoActions).getByRole('button', { name: /^pull$/i });
+    const pushButton = within(repoActions).getByRole('button', { name: /^push$/i });
+    const pruneButton = within(repoActions).getByRole('button', { name: /^prune lfs$/i });
+
+    expect(fetchButton).toHaveAttribute('title', 'Fetch');
+    expect(pullButton).toHaveAttribute('title', 'Pull');
+    expect(pushButton).toHaveAttribute('title', 'Push');
+    expect(pruneButton).toHaveAttribute('title', 'Prune LFS');
+
+    expect(within(repoActions).queryByText('Fetch')).not.toBeInTheDocument();
+    expect(within(repoActions).queryByText('Pull')).not.toBeInTheDocument();
+    expect(within(repoActions).queryByText('Push')).not.toBeInTheDocument();
+    expect(within(repoActions).queryByText('Prune LFS')).not.toBeInTheDocument();
+  });
+
+  it('uses unified branch baseline icons with action-specific arrow direction styles', async () => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+
+    render(<GitSidebar />);
+
+    const repoActions = await screen.findByRole('group', { name: /repository actions/i });
+    const fetchButton = within(repoActions).getByRole('button', { name: /^fetch$/i });
+    const pullButton = within(repoActions).getByRole('button', { name: /^pull$/i });
+    const pushButton = within(repoActions).getByRole('button', { name: /^push$/i });
+
+    const fetchIcon = within(fetchButton).getByTestId('git-action-icon-fetch');
+    expect(within(fetchIcon).getByTestId('git-action-branch-line')).toBeInTheDocument();
+    expect(within(fetchIcon).getByTestId('git-action-branch-dot')).toBeInTheDocument();
+    expect(within(fetchIcon).getByTestId('git-action-stem-fetch')).toHaveClass('git-action-stem--dotted');
+    expect(within(fetchIcon).getByTestId('git-action-arrow-fetch')).toHaveClass('git-action-arrow--towards-branch');
+
+    const pullIcon = within(pullButton).getByTestId('git-action-icon-pull');
+    expect(within(pullIcon).getByTestId('git-action-stem-pull')).toHaveClass('git-action-stem--solid');
+    expect(within(pullIcon).getByTestId('git-action-arrow-pull')).toHaveClass('git-action-arrow--towards-branch');
+
+    const pushIcon = within(pushButton).getByTestId('git-action-icon-push');
+    expect(within(pushIcon).getByTestId('git-action-stem-push')).toHaveClass('git-action-stem--solid');
+    expect(within(pushIcon).getByTestId('git-action-arrow-push')).toHaveClass('git-action-arrow--away-branch');
+  });
+
   it('shows in-progress feedback while prune lfs is running', async () => {
     let resolvePrune: ((value: { success: boolean; dryRun: boolean; verifyRemote: boolean; recentCommitsToKeep: number }) => void) | null = null;
     (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
@@ -684,7 +741,7 @@ describe('GitSidebar', () => {
     });
 
     expect(screen.getByRole('status')).toHaveTextContent(/pruning local git lfs cache/i);
-    expect(screen.getByRole('button', { name: /pruning/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /prune lfs/i })).toBeDisabled();
 
     await act(async () => {
       resolvePrune?.({ success: true, dryRun: false, verifyRemote: true, recentCommitsToKeep: 2 });
@@ -818,7 +875,7 @@ describe('GitSidebar', () => {
     });
 
     expect(screen.getByRole('status')).toHaveTextContent(/pushing commits to remote/i);
-    expect(screen.getByRole('button', { name: /pushing/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^push$/i })).toBeDisabled();
 
     await act(async () => {
       resolvePush?.({ success: true });

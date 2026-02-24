@@ -491,35 +491,93 @@ export const GitSidebar: React.FC = () => {
           <div className="git-sidebar-actions" role="group" aria-label={tr('gitSidebar.aria.repoActions')}>
             <button
               type="button"
-              className="git-sidebar-button"
+              className="sidebar-action git-sidebar-icon-button"
               onClick={() => handleRepoAction('fetch')}
               disabled={actionLoading !== null}
+              aria-label={tr('gitSidebar.action.fetch')}
+              title={tr('gitSidebar.action.fetch')}
             >
-              {actionLoading === 'fetch' ? tr('gitSidebar.action.fetching') : tr('gitSidebar.action.fetch')}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                focusable="false"
+                data-testid="git-action-icon-fetch"
+              >
+                <line x1="2" y1="13" x2="14" y2="13" className="git-action-branch-line" data-testid="git-action-branch-line" />
+                <circle cx="8" cy="13" r="1.6" className="git-action-branch-dot" data-testid="git-action-branch-dot" />
+                <line x1="8" y1="4.5" x2="8" y2="10.2" className="git-action-stem git-action-stem--dotted" data-testid="git-action-stem-fetch" />
+                <path d="M8 10.2l-2-2" className="git-action-arrow git-action-arrow--towards-branch" data-testid="git-action-arrow-fetch" />
+                <path d="M8 10.2l2-2" className="git-action-arrow git-action-arrow--towards-branch" />
+              </svg>
             </button>
             <button
               type="button"
-              className="git-sidebar-button"
+              className="sidebar-action git-sidebar-icon-button"
               onClick={() => handleRepoAction('pull')}
               disabled={actionLoading !== null}
+              aria-label={tr('gitSidebar.action.pull')}
+              title={tr('gitSidebar.action.pull')}
             >
-              {actionLoading === 'pull' ? tr('gitSidebar.action.pulling') : tr('gitSidebar.action.pull')}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                focusable="false"
+                data-testid="git-action-icon-pull"
+              >
+                <line x1="2" y1="13" x2="14" y2="13" className="git-action-branch-line" data-testid="git-action-branch-line" />
+                <circle cx="8" cy="13" r="1.6" className="git-action-branch-dot" data-testid="git-action-branch-dot" />
+                <line x1="8" y1="4.5" x2="8" y2="10.2" className="git-action-stem git-action-stem--solid" data-testid="git-action-stem-pull" />
+                <path d="M8 10.2l-2-2" className="git-action-arrow git-action-arrow--towards-branch" data-testid="git-action-arrow-pull" />
+                <path d="M8 10.2l2-2" className="git-action-arrow git-action-arrow--towards-branch" />
+              </svg>
             </button>
             <button
               type="button"
-              className="git-sidebar-button"
+              className="sidebar-action git-sidebar-icon-button"
               onClick={() => handleRepoAction('push')}
               disabled={actionLoading !== null}
+              aria-label={tr('gitSidebar.action.push')}
+              title={tr('gitSidebar.action.push')}
             >
-              {actionLoading === 'push' ? tr('gitSidebar.action.pushing') : tr('gitSidebar.action.push')}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                focusable="false"
+                data-testid="git-action-icon-push"
+              >
+                <line x1="2" y1="13" x2="14" y2="13" className="git-action-branch-line" data-testid="git-action-branch-line" />
+                <circle cx="8" cy="13" r="1.6" className="git-action-branch-dot" data-testid="git-action-branch-dot" />
+                <line x1="8" y1="10.2" x2="8" y2="4.5" className="git-action-stem git-action-stem--solid" data-testid="git-action-stem-push" />
+                <path d="M8 4.5l-2 2" className="git-action-arrow git-action-arrow--away-branch" data-testid="git-action-arrow-push" />
+                <path d="M8 4.5l2 2" className="git-action-arrow git-action-arrow--away-branch" />
+              </svg>
             </button>
             <button
               type="button"
-              className="git-sidebar-button"
+              className="sidebar-action git-sidebar-icon-button"
               onClick={() => handleRepoAction('prune-lfs')}
               disabled={actionLoading !== null}
+              aria-label={tr('gitSidebar.action.pruneLfs')}
+              title={tr('gitSidebar.action.pruneLfs')}
             >
-              {actionLoading === 'prune-lfs' ? tr('gitSidebar.action.pruning') : tr('gitSidebar.action.pruneLfs')}
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+                <line x1="2" y1="13" x2="14" y2="13" className="git-action-branch-line" />
+                <circle cx="8" cy="13" r="1.6" className="git-action-branch-dot" />
+                <line x1="8" y1="4.5" x2="8" y2="9.8" className="git-action-stem git-action-stem--solid" />
+                <path d="M8 9.8l-2-2" className="git-action-arrow git-action-arrow--towards-branch" />
+                <path d="M8 9.8l2-2" className="git-action-arrow git-action-arrow--towards-branch" />
+                <path d="M10.8 4.2l2 2" className="git-action-prune-mark" />
+                <path d="M12.8 4.2l-2 2" className="git-action-prune-mark" />
+              </svg>
             </button>
           </div>
           {actionLoading && (
