@@ -45,11 +45,6 @@
 .git-sidebar-icon-button svg {
   width: 16px;
   height: 16px;
-  pointer-events: none;
-}
-
-.git-sidebar-icon-button svg * {
-  pointer-events: none;
 }
 
 .git-action-branch-line,

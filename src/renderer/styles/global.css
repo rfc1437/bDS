@@ -205,6 +205,11 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button svg,
+button svg * {
+  pointer-events: none;
+}
+
 /* Icon button */
 .icon-button {
   background: transparent;
