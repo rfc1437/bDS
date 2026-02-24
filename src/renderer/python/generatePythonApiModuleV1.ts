@@ -1,5 +1,45 @@
 import { BDS_PYTHON_API_CONTRACT_V1 } from './pythonApiContractV1';
 
+const PYTHON_RESERVED_KEYWORDS = new Set([
+  'false',
+  'none',
+  'true',
+  'and',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'del',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'nonlocal',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield',
+  'match',
+  'case',
+]);
+
 function toSnakeCase(value: string): string {
   return value
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
@@ -12,6 +52,23 @@ function quotePython(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function toPythonIdentifier(value: string): string {
+  let identifier = toSnakeCase(value);
+  if (!identifier) {
+    identifier = '_';
+  }
+
+  if (/^[0-9]/.test(identifier)) {
+    identifier = `_${identifier}`;
+  }
+
+  if (PYTHON_RESERVED_KEYWORDS.has(identifier)) {
+    identifier = `${identifier}_`;
+  }
+
+  return identifier;
+}
+
 function buildPythonMethod(method: {
   method: string;
   description: string;
@@ -22,10 +79,10 @@ function buildPythonMethod(method: {
     return '';
   }
 
-  const pythonMethodName = toSnakeCase(member);
+  const pythonMethodName = toPythonIdentifier(member);
   const pythonParams = method.params.map((param) => ({
     sourceName: param.name,
-    pythonName: toSnakeCase(param.name),
+    pythonName: toPythonIdentifier(param.name),
     required: param.required,
   }));
 
@@ -90,7 +147,7 @@ export function generatePythonApiModuleV1(): string {
 
   const namespaceAssignments = Array.from(namespaceMap.keys())
     .sort((left, right) => left.localeCompare(right))
-    .map((namespace) => `        self.${toSnakeCase(namespace)} = ${namespace[0].toUpperCase()}${namespace.slice(1)}Api(transport)`)
+    .map((namespace) => `        self.${toPythonIdentifier(namespace)} = ${namespace[0].toUpperCase()}${namespace.slice(1)}Api(transport)`)
     .join('\n');
 
   return [

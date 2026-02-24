@@ -78,4 +78,12 @@ describe('generatePythonApiModuleV1', () => {
     expect(moduleCode).toContain('class BdsApi:');
     expect(moduleCode).toContain('bds = BdsApi(_transport)');
   });
+
+  it('escapes python keyword method names to valid identifiers', () => {
+    const moduleCode = generatePythonApiModuleV1();
+
+    expect(moduleCode).toContain('return await self._transport.call("media.import", { "sourcePath": source_path, "metadata": metadata })');
+    expect(moduleCode).toContain('async def import_(self, source_path, metadata=None):');
+    expect(moduleCode).not.toContain('async def import(self, source_path, metadata=None):');
+  });
 });
