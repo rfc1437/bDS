@@ -1,6 +1,6 @@
 # Python Scripting — Remaining Work (Implementation-First)
 
-Last verified: 23 Feb 2026
+Last verified: 24 Feb 2026
 
 This document is intentionally reduced to **what is still left to implement**.
 When plan and code differ, code is the source of truth.
@@ -30,11 +30,11 @@ These are current realities and should be treated as authoritative unless we exp
    - Default: `webworker` (worker-thread based Python runtime with queued requests).
    - Optional fallback: `main-thread` legacy execution mode.
 
-2. **Render-time macro migration has not happened yet**
-   - Original plan: all render-time macros become Python-backed.
-   - Actual implementation: render-time macros are still JS-based (`PageRenderer.renderMacro` and renderer macro registry/definitions).
+2. **Built-in render-time macros remain JS-based by design**
+   - Existing JS macro path remains valid (`PageRenderer.renderMacro` and renderer macro registry/definitions).
+   - Python macro support is additive for new macros, not a migration requirement.
 
-3. **Macro ABI exists but is not the production render path**
+3. **Macro ABI exists but is not yet wired for additive Python macro creation in the production render path**
    - ABI v1 + runtime manager support exist.
    - Main page generation path still uses existing JS macro rendering.
 
@@ -64,18 +64,20 @@ These are current realities and should be treated as authoritative unless we exp
 - Reconcile path (git pull): apply file deltas (`added|modified|deleted|renamed`) and upsert/delete rows.
 - Conflict behavior: prefer file metadata/body; fall back to safe defaults when values are missing/invalid.
 
-## 3) Wire Python macros into render pipeline (P1)
+## 3) Additive Python macro support in render pipeline (P1)
 
-- [ ] Add macro-to-script resolution (token/hook -> script id/slug).
-- [ ] Execute Python macro scripts from the active render path.
-- [ ] Reuse runtime cache keys across repeated macro invocations in generation loops.
+- [ ] Add macro-to-script resolution (token/hook -> script id/slug) for Python-backed macros.
+- [ ] Execute Python macro scripts from the active render path when a macro resolves to a Python script.
+- [ ] Preserve existing JS macro behavior for built-in/current macros.
+- [ ] Add explicit fallback rules so unresolved/failed Python macros do not break JS macro rendering.
+- [ ] Reuse runtime cache keys across repeated Python macro invocations in generation loops.
 - [ ] Add guardrails for timeout/error fallback during render.
 
-## 4) Macro parity migration + cleanup (P2)
+## 4) Coexistence hardening + tests (P2)
 
-- [ ] Port built-in macros to Python scripts with parity fixtures.
-- [ ] Keep fixtures/golden tests for parity verification.
-- [ ] Remove legacy JS macro path only after parity is proven.
+- [ ] Add integration tests proving Python-based and JS-based macros can be used together in one post/page.
+- [ ] Add fixtures/golden tests for mixed macro rendering stability.
+- [ ] Document precedence/dispatch behavior when macro names overlap (Python script vs JS built-in).
 
 ## 5) Default script seeding/versioning (P2)
 
@@ -96,8 +98,9 @@ These are current realities and should be treated as authoritative unless we exp
 
 ## Acceptance Gate Before Marking Python Scripting “Complete”
 
-- [ ] Render-time macros run through Python script path in production generation flow.
+- [ ] Users can create new Python macros that execute in production generation flow.
+- [ ] Python-based and JS-based macros coexist in production generation flow.
 - [x] Scripts directory external changes are synchronized reliably.
 - [x] Runtime boundary decision implemented and protected by tests.
-- [ ] Legacy JS macro path removed (or explicitly retained with documented rationale).
+- [ ] Coexistence/dispatch behavior is documented and covered by tests.
 - [x] `npm test` and `npm run build` pass.
