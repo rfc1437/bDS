@@ -42,6 +42,7 @@
   "menu.item.validateSite": "Website validieren",
   "menu.item.about": "Über Blogging Desktop Server",
   "menu.item.openDocumentation": "Dokumentation öffnen",
+  "menu.item.openApiDocumentation": "API-Dokumentation",
   "menu.item.viewOnGitHub": "Auf GitHub ansehen",
   "menu.item.reportIssue": "Problem melden",
   "render.archive": "Archiv",

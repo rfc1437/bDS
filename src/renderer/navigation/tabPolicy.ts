@@ -7,6 +7,7 @@ export type SingletonToolTabKey =
   | 'scripts'
   | 'menu-editor'
   | 'documentation'
+  | 'api-documentation'
   | 'metadata-diff'
   | 'site-validation';
 
@@ -28,6 +29,7 @@ const SINGLETON_TOOL_TAB_REGISTRY: Record<SingletonToolTabKey, CanonicalTabSpec>
   scripts: { type: 'scripts', id: 'scripts', isTransient: false },
   'menu-editor': { type: 'menu-editor', id: 'menu-editor', isTransient: false },
   documentation: { type: 'documentation', id: 'documentation', isTransient: false },
+  'api-documentation': { type: 'api-documentation', id: 'api-documentation', isTransient: false },
   'metadata-diff': { type: 'metadata-diff', id: 'metadata-diff', isTransient: false },
   'site-validation': { type: 'site-validation', id: 'site-validation', isTransient: false },
 };

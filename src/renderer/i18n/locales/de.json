@@ -253,6 +253,8 @@
   "postLinks.openTitle": "Öffnen: {title}",
   "docs.title": "Dokumentation",
   "docs.subtitle": "Benutzerhandbuch für diese installierte bDS-Version.",
+  "docs.apiTitle": "API-Dokumentation",
+  "docs.apiSubtitle": "Vollständige Referenz aller Python-Runtime-API-Aufrufe.",
   "docs.copyCode": "Code kopieren",
   "gitDiff.header": "Unterschied: {target}",
   "gitDiff.noProject": "Kein aktives Projekt ausgewählt.",

@@ -3,9 +3,19 @@ import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol
 import { parseMacroContextV1, parseMacroResultV1 } from './abiV1';
 import { resolvePyodideIndexURL } from './pyodideAssetUrl';
 import { runPythonSyntaxCheck } from './pythonSyntaxCheck';
+import { generatePythonApiModuleV1 } from './generatePythonApiModuleV1';
 
 let runtime: PyodideInterface | null = null;
 let activeRequestId: string | null = null;
+let apiCallCounter = 0;
+
+interface PendingApiCall {
+  requestId: string;
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+}
+
+const pendingApiCalls = new Map<string, PendingApiCall>();
 
 function postRuntimeMessage(message: PythonWorkerMessage): void {
   self.postMessage(message);
@@ -19,6 +29,64 @@ function toResultString(result: unknown): string {
     return result;
   }
   return String(result);
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function rejectPendingApiCallsForRequest(requestId: string, message: string): void {
+  for (const [callId, pendingCall] of pendingApiCalls.entries()) {
+    if (pendingCall.requestId !== requestId) {
+      continue;
+    }
+    pendingApiCalls.delete(callId);
+    pendingCall.reject(new Error(message));
+  }
+}
+
+function requestHostApi(requestId: string, method: string, args: Record<string, unknown>): Promise<unknown> {
+  apiCallCounter += 1;
+  const callId = `api-${apiCallCounter}`;
+
+  return new Promise((resolve, reject) => {
+    pendingApiCalls.set(callId, {
+      requestId,
+      resolve,
+      reject,
+    });
+
+    postRuntimeMessage({
+      type: 'apiCall',
+      requestId,
+      callId,
+      method,
+      args,
+    });
+  });
+}
+
+function handleApiResultMessage(request: PythonWorkerRequest): void {
+  if (request.type !== 'apiResult') {
+    return;
+  }
+
+  const pendingCall = pendingApiCalls.get(request.callId);
+  if (!pendingCall) {
+    return;
+  }
+
+  pendingApiCalls.delete(request.callId);
+
+  if (request.ok) {
+    pendingCall.resolve(request.result);
+    return;
+  }
+
+  pendingCall.reject(new Error(request.error ?? 'Host API call failed'));
 }
 
 async function runPythonCode(code: string, cacheKey?: string): Promise<unknown> {
@@ -83,9 +151,11 @@ __bds_target()
       result: toResultString(result),
     });
   } catch (error) {
+    rejectPendingApiCallsForRequest(request.requestId, 'Python script execution failed');
     const message = error instanceof Error ? error.message : String(error);
     postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: message });
   } finally {
+    rejectPendingApiCallsForRequest(request.requestId, 'Python script execution finished');
     activeRequestId = null;
   }
 }
@@ -125,9 +195,11 @@ json.dumps(render(__bds_context_v1))
       result: parsedResult,
     });
   } catch (error) {
+    rejectPendingApiCallsForRequest(request.requestId, 'Python macro execution failed');
     const message = error instanceof Error ? error.message : String(error);
     postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: message });
   } finally {
+    rejectPendingApiCallsForRequest(request.requestId, 'Python macro execution finished');
     activeRequestId = null;
   }
 }
@@ -175,9 +247,11 @@ json.dumps(__bds_entrypoints)
       entrypoints,
     });
   } catch (error) {
+    rejectPendingApiCallsForRequest(request.requestId, 'Entrypoint inspection failed');
     const message = error instanceof Error ? error.message : String(error);
     postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: message });
   } finally {
+    rejectPendingApiCallsForRequest(request.requestId, 'Entrypoint inspection finished');
     activeRequestId = null;
   }
 }
@@ -208,9 +282,11 @@ async function syntaxCheck(request: PythonWorkerRequest): Promise<void> {
       errors,
     });
   } catch (error) {
+    rejectPendingApiCallsForRequest(request.requestId, 'Syntax check failed');
     const message = error instanceof Error ? error.message : String(error);
     postRuntimeMessage({ type: 'runError', requestId: request.requestId, error: message });
   } finally {
+    rejectPendingApiCallsForRequest(request.requestId, 'Syntax check finished');
     activeRequestId = null;
   }
 }
@@ -230,6 +306,41 @@ async function bootstrapRuntime(): Promise<void> {
     if (!runtime) {
       throw new Error('Pyodide initialization returned no runtime');
     }
+
+    runtime.registerJsModule('__bds_transport', {
+      call_host_api: async (method: unknown, argsJson: unknown) => {
+        if (!activeRequestId) {
+          throw new Error('No active Python request for host API bridge');
+        }
+
+        if (typeof method !== 'string' || method.length === 0) {
+          throw new Error('Host API method must be a non-empty string');
+        }
+
+        let parsedArgs: Record<string, unknown> = {};
+        if (typeof argsJson === 'string' && argsJson.length > 0) {
+          const decoded = JSON.parse(argsJson);
+          parsedArgs = toRecord(decoded);
+        }
+
+        const result = await requestHostApi(activeRequestId, method, parsedArgs);
+        return JSON.stringify(result ?? null);
+      },
+    });
+
+    runtime.globals.set('__bds_api_module_source', generatePythonApiModuleV1());
+    await runtime.runPythonAsync(`
+import sys
+import types
+
+__bds_api_module = types.ModuleType("bds_api")
+exec(__bds_api_module_source, __bds_api_module.__dict__)
+
+from __bds_transport import call_host_api as __bds_call_host_api
+__bds_api_module.bds = __bds_api_module.install_bds_api(__bds_call_host_api)
+sys.modules["bds_api"] = __bds_api_module
+`);
+
     postRuntimeMessage({ type: 'ready' });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -239,6 +350,11 @@ async function bootstrapRuntime(): Promise<void> {
 
 self.onmessage = (event: MessageEvent<PythonWorkerRequest>) => {
   const request = event.data;
+  if (request.type === 'apiResult') {
+    handleApiResultMessage(request);
+    return;
+  }
+
   if (request.type === 'run') {
     void runScript(request);
     return;

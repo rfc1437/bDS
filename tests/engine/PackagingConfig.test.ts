@@ -52,4 +52,28 @@ describe('package.json packaging configuration', () => {
     expect(dependencies.uuid).toBeTypeOf('string');
     expect(devDependencies.uuid).toBeUndefined();
   });
+
+  it('copies API documentation into packaged app resources', () => {
+    const build = packageJson.build as Record<string, any>;
+    const extraResources = build.extraResources as Array<{ from: string; to: string }>;
+
+    expect(Array.isArray(extraResources)).toBe(true);
+    expect(extraResources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 'API.md',
+      }),
+    ]));
+  });
+
+  it('copies user documentation into packaged app resources', () => {
+    const build = packageJson.build as Record<string, any>;
+    const extraResources = build.extraResources as Array<{ from: string; to: string }>;
+
+    expect(Array.isArray(extraResources)).toBe(true);
+    expect(extraResources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 'DOCUMENTATION.md',
+      }),
+    ]));
+  });
 });

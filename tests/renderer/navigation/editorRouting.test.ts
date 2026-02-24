@@ -19,6 +19,7 @@ describe('editorRouting', () => {
       'metadata-diff': 'metadata-diff',
       'git-diff': 'git-diff',
       documentation: 'documentation',
+      'api-documentation': 'api-documentation',
       'site-validation': 'site-validation',
       scripts: 'scripts',
     });

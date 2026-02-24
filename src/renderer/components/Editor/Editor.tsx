@@ -26,6 +26,8 @@ import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISugge
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { EditorRoute, resolveEditorRoute } from '../../navigation/editorRouting';
 import { useI18n } from '../../i18n';
+import documentationContent from '../../../../DOCUMENTATION.md?raw';
+import apiDocumentationContent from '../../../../API.md?raw';
 import './Editor.css';
 
 const UI_DATE_LOCALE: Record<string, string> = {
@@ -1781,7 +1783,20 @@ export const Editor: React.FC = () => {
       editorRoute.tabId && editorRoute.gitDiffResource
         ? <GitDiffView key={editorRoute.tabId} filePath={editorRoute.gitDiffResource} />
         : <Dashboard />,
-    documentation: () => <DocumentationView />,
+    documentation: () => (
+      <DocumentationView
+        content={documentationContent}
+        titleKey="docs.title"
+        subtitleKey="docs.subtitle"
+      />
+    ),
+    'api-documentation': () => (
+      <DocumentationView
+        content={apiDocumentationContent}
+        titleKey="docs.apiTitle"
+        subtitleKey="docs.apiSubtitle"
+      />
+    ),
     'site-validation': () => <SiteValidationView />,
     scripts: () => <ScriptsView scriptId={editorRoute.tabId} />,
     post: () => (editorRoute.tabId ? <PostEditor key={editorRoute.tabId} postId={editorRoute.tabId} /> : <Dashboard />),

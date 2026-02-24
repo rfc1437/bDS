@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Markdown from 'marked-react';
 import hljs from '@highlightjs/cdn-assets/es/highlight.min.js';
 import type { ReactNode } from 'react';
-import documentationContent from '../../../../DOCUMENTATION.md?raw';
+import defaultDocumentationContent from '../../../../DOCUMENTATION.md?raw';
 import { useAppStore } from '../../store';
 import { useI18n } from '../../i18n';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from '../../utils/picoTheme';
@@ -84,7 +84,17 @@ function resolveTargetHeadingInArticle(articleElement: HTMLElement, targetId: st
   return null;
 }
 
-export const DocumentationView: React.FC = () => {
+interface DocumentationViewProps {
+  content?: string;
+  titleKey?: string;
+  subtitleKey?: string;
+}
+
+export const DocumentationView: React.FC<DocumentationViewProps> = ({
+  content = defaultDocumentationContent,
+  titleKey = 'docs.title',
+  subtitleKey = 'docs.subtitle',
+}) => {
   const { t: tr } = useI18n();
   const { picoTheme } = useAppStore();
   const resolvedTheme = getRendererPicoTheme(picoTheme);
@@ -258,8 +268,8 @@ export const DocumentationView: React.FC = () => {
   return (
     <div className="documentation-view">
       <div className="documentation-header">
-        <h1>{tr('docs.title')}</h1>
-        <p>{tr('docs.subtitle')}</p>
+        <h1>{tr(titleKey)}</h1>
+        <p>{tr(subtitleKey)}</p>
       </div>
       <main
         className="documentation-scroll"
@@ -267,7 +277,7 @@ export const DocumentationView: React.FC = () => {
       >
         <div className="documentation-content markdown-body pico" data-theme="auto" data-pico-theme={resolvedTheme}>
           <article className="documentation-article" ref={articleRef}>
-            <Markdown renderer={markdownRenderer}>{documentationContent}</Markdown>
+            <Markdown renderer={markdownRenderer}>{content}</Markdown>
           </article>
         </div>
       </main>

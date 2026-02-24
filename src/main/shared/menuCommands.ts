@@ -36,6 +36,7 @@ export type AppMenuAction =
   | 'regenerateCalendar'
   | 'validateSite'
   | 'openDocumentation'
+  | 'openApiDocumentation'
   | 'about'
   | 'viewOnGitHub'
   | 'reportIssue';
@@ -136,6 +137,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
     items: [
       { label: 'menu.item.about', action: 'about' },
       { label: 'menu.item.openDocumentation', action: 'openDocumentation' },
+      { label: 'menu.item.openApiDocumentation', action: 'openApiDocumentation' },
       { label: '', action: 'help-separator-1', separator: true },
       { label: 'menu.item.viewOnGitHub', action: 'viewOnGitHub' },
       { label: 'menu.item.reportIssue', action: 'reportIssue' },
@@ -165,6 +167,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   regenerateCalendar: 'menu:regenerateCalendar',
   validateSite: 'menu:validateSite',
   openDocumentation: 'menu:openDocumentation',
+  openApiDocumentation: 'menu:openApiDocumentation',
   about: 'menu:about',
 };
 

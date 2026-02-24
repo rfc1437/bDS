@@ -13,6 +13,17 @@ describe('Help menu documentation entry', () => {
     expect(APP_MENU_ACTION_EVENT_MAP.openDocumentation).toBe('menu:openDocumentation');
   });
 
+  it('includes an API documentation action in Help menu', () => {
+    const helpGroup = APP_MENU_GROUPS.find((group) => group.label === 'Help');
+
+    expect(helpGroup).toBeDefined();
+    expect(helpGroup?.items.some((item) => item.action === 'openApiDocumentation')).toBe(true);
+  });
+
+  it('maps API documentation to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.openApiDocumentation).toBe('menu:openApiDocumentation');
+  });
+
   it('includes Open in Browser and Open Data Folder actions in File menu', () => {
     const fileGroup = APP_MENU_GROUPS.find((group) => group.label === 'File');
 

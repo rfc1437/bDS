@@ -27,6 +27,7 @@
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "bench:python-runtime": "node ./node_modules/tsx/dist/cli.mjs scripts/python-runtime-benchmark.ts",
+    "docs:api": "node ./node_modules/tsx/dist/cli.mjs scripts/generate-api-docs.ts",
     "lint": "eslint \"src/renderer/**/*.{ts,tsx}\" --max-warnings 0",
     "lint:i18n": "eslint \"src/renderer/**/*.{ts,tsx}\" --max-warnings 0",
     "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
@@ -135,6 +136,14 @@
       {
         "from": "drizzle",
         "to": "drizzle"
+      },
+      {
+        "from": "API.md",
+        "to": "docs/API.md"
+      },
+      {
+        "from": "DOCUMENTATION.md",
+        "to": "docs/DOCUMENTATION.md"
       },
       {
         "from": "src/main/engine/templates",

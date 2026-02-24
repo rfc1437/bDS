@@ -102,6 +102,23 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
+## ⚠️ MANDATORY: Keep Python API Bindings and API Docs in Sync
+
+**Whenever any app API is added, removed, or changed, you MUST update the Python API bridge and API documentation in the same change set.**
+
+- Update the Python API contract/bindings used by embedded Pyodide (`bds_api`)
+- Regenerate and commit `API.md`
+- Ensure every API entry documents:
+  - Parameter names, types, and required/optional status
+  - Return type/response specification
+  - At least one sample Python call
+- Maintain a shared **Data Structures** section in `API.md` for canonical objects (for example `PostData`, `MediaData`) so users can see expected attributes in one place
+- Keep docs sync tests passing (documentation and generator output must match)
+
+> **No API contract drift between app APIs, Python bindings, and API.md. No exceptions.**
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns

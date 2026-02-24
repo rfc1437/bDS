@@ -9,6 +9,14 @@ export type PythonWorkerRequest =
       entrypoint?: string;
     }
   | {
+      type: 'apiResult';
+      requestId: string;
+      callId: string;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+    }
+  | {
       type: 'renderMacroV1';
       requestId: string;
       code: string;
@@ -40,6 +48,7 @@ export type PythonWorkerMessage =
   | { type: 'ready' }
   | { type: 'error'; error: string }
   | { type: 'stdout'; requestId: string; chunk: string }
+  | { type: 'apiCall'; requestId: string; callId: string; method: string; args: Record<string, unknown> }
   | { type: 'runResult'; requestId: string; result: string }
   | { type: 'entrypoints'; requestId: string; entrypoints: string[] }
   | { type: 'syntaxResult'; requestId: string; errors: PythonSyntaxError[] }

@@ -14,6 +14,7 @@ export type EditorRoute =
   | 'metadata-diff'
   | 'git-diff'
   | 'documentation'
+  | 'api-documentation'
   | 'site-validation'
   | 'scripts';
 
@@ -29,6 +30,7 @@ export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'da
   'metadata-diff': 'metadata-diff',
   'git-diff': 'git-diff',
   documentation: 'documentation',
+  'api-documentation': 'api-documentation',
   'site-validation': 'site-validation',
   scripts: 'scripts',
 };

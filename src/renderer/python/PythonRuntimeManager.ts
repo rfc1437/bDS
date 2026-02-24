@@ -2,8 +2,14 @@ import { createPythonRuntimeWorker } from './createPythonRuntimeWorker';
 import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol';
 import type { PythonSyntaxError } from './runtimeProtocol';
 import { parseMacroContextV1, parseMacroResultV1, type MacroContextV1, type MacroResultV1 } from './abiV1';
+import { invokePythonApiMethodV1 } from './pythonApiInvokerV1';
 
 type WorkerFactory = () => Worker;
+type PythonApiInvoker = (method: string, args: unknown) => Promise<unknown>;
+
+interface PythonRuntimeManagerOptions {
+  invokeApiCall?: PythonApiInvoker;
+}
 
 interface InitializeDeferred {
   resolve: () => void;
@@ -57,8 +63,14 @@ export class PythonRuntimeManager {
   private requestQueue: PythonWorkerRequest[] = [];
   private activeRequestId: string | null = null;
   private requestCounter = 0;
+  private readonly invokeApiCall: PythonApiInvoker;
 
-  constructor(private readonly workerFactory: WorkerFactory = createPythonRuntimeWorker) {}
+  constructor(
+    private readonly workerFactory: WorkerFactory = createPythonRuntimeWorker,
+    options: PythonRuntimeManagerOptions = {}
+  ) {
+    this.invokeApiCall = options.invokeApiCall ?? invokePythonApiMethodV1;
+  }
 
   initialize(): Promise<void> {
     if (this.ready) {
@@ -262,6 +274,11 @@ export class PythonRuntimeManager {
       return;
     }
 
+    if (payload.type === 'apiCall') {
+      void this.handleApiCall(payload);
+      return;
+    }
+
     const pendingRun = this.pendingRuns.get(payload.requestId);
     if (!pendingRun) {
       if (this.activeRequestId === payload.requestId && payload.type !== 'stdout') {
@@ -333,6 +350,33 @@ export class PythonRuntimeManager {
 
     pendingRun.reject(new Error(payload.error));
     this.finishRequest(payload.requestId);
+  }
+
+  private async handleApiCall(payload: Extract<PythonWorkerMessage, { type: 'apiCall' }>): Promise<void> {
+    if (!this.worker || !this.ready) {
+      return;
+    }
+
+    try {
+      const result = await this.invokeApiCall(payload.method, payload.args);
+      const response: PythonWorkerRequest = {
+        type: 'apiResult',
+        requestId: payload.requestId,
+        callId: payload.callId,
+        ok: true,
+        result,
+      };
+      this.worker.postMessage(response);
+    } catch (error) {
+      const response: PythonWorkerRequest = {
+        type: 'apiResult',
+        requestId: payload.requestId,
+        callId: payload.callId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      this.worker.postMessage(response);
+    }
   }
 
   private handleWorkerError(error: Error): void {

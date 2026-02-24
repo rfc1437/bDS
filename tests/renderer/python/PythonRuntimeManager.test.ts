@@ -421,4 +421,85 @@ describe('PythonRuntimeManager', () => {
 
     await expect(runPromise).rejects.toThrow('Invalid macro result');
   });
+
+  it('handles worker apiCall by invoking host bridge and returning apiResult', async () => {
+    const worker = new MockWorker();
+    const invokeApiCall = vi.fn().mockResolvedValue({ id: 'post-1', title: 'Hello' });
+    const manager = new PythonRuntimeManager(
+      () => worker as unknown as Worker,
+      {
+        invokeApiCall,
+      }
+    );
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const runPromise = manager.execute('print("hello")');
+    await Promise.resolve();
+
+    const runRequest = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({
+      type: 'apiCall',
+      requestId: runRequest.requestId,
+      callId: 'call-1',
+      method: 'posts.get',
+      args: { postId: 'post-1' },
+    });
+
+    await Promise.resolve();
+
+    expect(invokeApiCall).toHaveBeenCalledWith('posts.get', { postId: 'post-1' });
+    expect(worker.postedMessages[1]).toEqual({
+      type: 'apiResult',
+      requestId: runRequest.requestId,
+      callId: 'call-1',
+      ok: true,
+      result: { id: 'post-1', title: 'Hello' },
+    });
+
+    worker.emitMessage({ type: 'runResult', requestId: runRequest.requestId, result: 'done' });
+    await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
+  });
+
+  it('returns apiResult with error when host bridge invocation fails', async () => {
+    const worker = new MockWorker();
+    const invokeApiCall = vi.fn().mockRejectedValue(new Error('unknown api method'));
+    const manager = new PythonRuntimeManager(
+      () => worker as unknown as Worker,
+      {
+        invokeApiCall,
+      }
+    );
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const runPromise = manager.execute('print("hello")');
+    await Promise.resolve();
+
+    const runRequest = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({
+      type: 'apiCall',
+      requestId: runRequest.requestId,
+      callId: 'call-2',
+      method: 'posts.nonExisting',
+      args: {},
+    });
+
+    await Promise.resolve();
+
+    expect(worker.postedMessages[1]).toEqual({
+      type: 'apiResult',
+      requestId: runRequest.requestId,
+      callId: 'call-2',
+      ok: false,
+      error: 'unknown api method',
+    });
+
+    worker.emitMessage({ type: 'runResult', requestId: runRequest.requestId, result: 'done' });
+    await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
+  });
 });

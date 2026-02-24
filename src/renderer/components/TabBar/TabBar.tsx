@@ -77,6 +77,10 @@ const getTabTitle = (
     return tr('docs.title');
   }
 
+  if (tab.type === 'api-documentation') {
+    return tr('docs.apiTitle');
+  }
+
   if (tab.type === 'site-validation') {
     return tr('siteValidation.tabTitle');
   }
@@ -155,6 +159,13 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h7A1.5 1.5 0 0 1 13 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-11zm1.5-.5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7z"/>
           <path d="M5 4h6v1H5V4zm0 2h6v1H5V6zm0 2h6v1H5V8zm0 2h4v1H5v-1z"/>
+        </svg>
+      );
+    case 'api-documentation':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2h-11zm0 1h11a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5z"/>
+          <path d="M4 5h2v1H4V5zm3 0h5v1H7V5zM4 7.5h2v1H4v-1zm3 0h5v1H7v-1zM4 10h2v1H4v-1zm3 0h5v1H7v-1z"/>
         </svg>
       );
     case 'site-validation':

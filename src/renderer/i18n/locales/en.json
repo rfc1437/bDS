@@ -253,6 +253,8 @@
   "postLinks.openTitle": "Open: {title}",
   "docs.title": "Documentation",
   "docs.subtitle": "User guide for this installed bDS version.",
+  "docs.apiTitle": "API Documentation",
+  "docs.apiSubtitle": "Complete reference of Python runtime API calls.",
   "docs.copyCode": "Copy code",
   "gitDiff.header": "Diff: {target}",
   "gitDiff.noProject": "No active project selected.",

@@ -494,6 +494,12 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    unsubscribers.push(
+      window.electronAPI?.on('menu:openApiDocumentation', () => {
+        openSingletonToolTab(openTab, 'api-documentation');
+      }) || (() => {})
+    );
+
     // Import completion event - refresh posts and media stores
     unsubscribers.push(
       window.electronAPI?.import.onComplete(async (data) => {
