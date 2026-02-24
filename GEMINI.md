@@ -85,6 +85,40 @@ See the [TDD Requirements](#test-driven-development-tdd-requirements) section fo
 
 ---
 
+## ⚠️ MANDATORY: Proper I18N for UI and Rendering Text
+
+**All user-facing text MUST follow proper i18n patterns.**
+
+- Do not hardcode UI strings directly in React components, menu templates, dialogs, or toasts
+- Store UI copy in language resources and resolve text through i18n helpers/hooks
+- UI language MUST come from the operating system locale
+- Rendering/preview/generated-content language MUST come from project preferences (`mainLanguage`), not UI locale
+- Keep i18n usage consistent in both renderer UI and render/preview output
+- For supported locales, translations MUST come from that locale file only; do not copy English terms into supported locale files as fallback
+- English fallback is allowed only when the requested locale is unsupported by available locale files
+- The project `mainLanguage` selector must expose exactly all supported render languages and no unsupported extras
+
+> **No hardcoded user-facing text. No exceptions.**
+
+---
+
+## ⚠️ MANDATORY: Keep Python API Bindings and API Docs in Sync
+
+**Whenever any app API is added, removed, or changed, you MUST update the Python API bridge and API documentation in the same change set.**
+
+- Update the Python API contract/bindings used by embedded Pyodide (`bds_api`)
+- Regenerate and commit `API.md`
+- Ensure every API entry documents:
+  - Parameter names, types, and required/optional status
+  - Return type/response specification
+  - At least one sample Python call
+- Maintain a shared **Data Structures** section in `API.md` for canonical objects (for example `PostData`, `MediaData`) so users can see expected attributes in one place
+- Keep docs sync tests passing (documentation and generator output must match)
+
+> **No API contract drift between app APIs, Python bindings, and API.md. No exceptions.**
+
+---
+
 ## Architecture Principles
 
 ### Separation of Concerns
