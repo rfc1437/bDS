@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { marked } from 'marked';
 import { Liquid } from 'liquidjs';
 import type { MediaData } from './MediaEngine';
@@ -402,6 +403,41 @@ export function normalizeMacroName(name: string): string {
   return name;
 }
 
+export function resolveMacroTemplateRoots(options?: {
+  moduleDir?: string;
+  cwd?: string;
+  resourcesPath?: string;
+}): string[] {
+  return resolvePageRendererTemplateRoots(options).map((root) => path.resolve(root, 'macros'));
+}
+
+const macroTemplateCache = new Map<string, string>();
+const macroLiquid = new Liquid({ cache: true });
+
+function readMacroTemplateSource(templateName: string): string {
+  const cached = macroTemplateCache.get(templateName);
+  if (cached) {
+    return cached;
+  }
+
+  const candidatePaths = resolveMacroTemplateRoots().map((root) => path.join(root, `${templateName}.liquid`));
+  for (const candidatePath of candidatePaths) {
+    if (!fs.existsSync(candidatePath)) {
+      continue;
+    }
+
+    const source = fs.readFileSync(candidatePath, 'utf8');
+    macroTemplateCache.set(templateName, source);
+    return source;
+  }
+
+  throw new Error(`Macro template not found: ${templateName}`);
+}
+
+function renderMacroTemplate(templateName: string, context: Record<string, unknown>): string {
+  return macroLiquid.parseAndRenderSync(readMacroTemplateSource(templateName), context);
+}
+
 export function buildCanonicalMediaPath(media: MediaData): string {
   const year = media.createdAt.getFullYear();
   const month = String(media.createdAt.getMonth() + 1).padStart(2, '0');
@@ -478,7 +514,7 @@ export function renderGalleryMacro(
   const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
   const requestedColumns = parseIntegerParam(params.columns);
   const columns = requestedColumns && requestedColumns >= 1 && requestedColumns <= 6 ? requestedColumns : 3;
-  const caption = params.caption ? `<figcaption class="gallery-caption">${escapeHtml(params.caption)}</figcaption>` : '';
+  const caption = params.caption || '';
 
   const linkedImages = mediaItems
     .filter((media) => {
@@ -492,16 +528,21 @@ export function renderGalleryMacro(
     })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  const groupName = `gallery-${escapeHtml(postId || 'post')}`;
-  const galleryItems = linkedImages.map((media) => {
-    const mediaPath = escapeHtml(buildCanonicalMediaPath(media));
-    const title = escapeHtml(media.caption || media.title || media.originalName || media.filename);
-    const alt = escapeHtml(media.alt || media.title || media.originalName || media.filename);
-    return `<a class="gallery-item" href="${mediaPath}" data-lightbox="${groupName}" data-title="${title}"><img src="${mediaPath}" alt="${alt}" loading="lazy" /></a>`;
-  }).join('');
+  const groupName = `gallery-${postId || 'post'}`;
+  const items = linkedImages.map((media) => ({
+    media_path: buildCanonicalMediaPath(media),
+    group_name: groupName,
+    title: media.caption || media.title || media.originalName || media.filename,
+    alt: media.alt || media.title || media.originalName || media.filename,
+  }));
 
-  const content = galleryItems || `<div class="gallery-empty">${escapeHtml(translateRender(language, 'render.gallery.empty'))}</div>`;
-  return `<div class="macro-gallery gallery-cols-${columns}" data-post-id="${escapeHtml(postId)}" data-columns="${columns}" data-lightbox="true"><div class="gallery-container gallery-lightbox">${content}</div>${caption}</div>`;
+  return renderMacroTemplate('gallery', {
+    columns,
+    post_id: postId,
+    caption,
+    items,
+    empty_label: translateRender(language, 'render.gallery.empty'),
+  });
 }
 
 export function renderPhotoArchiveMacro(
@@ -522,40 +563,43 @@ export function renderPhotoArchiveMacro(
     rootClasses.push('photo-archive-full-year');
   }
 
-  const dataAttrs: string[] = [];
+  const dataAttrs: Array<{ name: string; value: string }> = [];
   if (yearParam === null) {
-    dataAttrs.push('data-recent="10"');
+    dataAttrs.push({ name: 'data-recent', value: '10' });
   } else {
-    dataAttrs.push(`data-year="${escapeHtml(String(yearParam))}"`);
+    dataAttrs.push({ name: 'data-year', value: String(yearParam) });
     if (monthParam !== null) {
-      dataAttrs.push(`data-month="${escapeHtml(String(monthParam))}"`);
+      dataAttrs.push({ name: 'data-month', value: String(monthParam) });
     }
   }
 
   const renderableMedia = mediaItems.filter((media) => isRenderableImage(media));
   const buckets = buildPhotoArchiveBuckets(renderableMedia, params);
 
-  if (buckets.length === 0) {
-    const emptyLabel = escapeHtml(translateRender(language, 'render.photoArchive.empty'));
-    return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container"><div class="photo-archive-empty">${emptyLabel}</div></div></div>`;
-  }
-
-  const monthsHtml = buckets.map((bucket) => {
+  const months = buckets.map((bucket) => {
     const monthName = translateRender(language, `render.month.${bucket.month}`);
     const label = `${monthName} ${bucket.year}`;
     const groupName = `photo-archive-${bucket.year}-${String(bucket.month).padStart(2, '0')}`;
 
-    const itemsHtml = bucket.media.map((media) => {
-      const mediaPath = escapeHtml(buildCanonicalMediaPath(media));
-      const title = escapeHtml(media.caption || media.title || media.originalName || media.filename);
-      const alt = escapeHtml(media.alt || media.title || media.originalName || media.filename);
-      return `<a class="photo-archive-item" href="${mediaPath}" data-lightbox="${groupName}" data-title="${title}"><img src="${mediaPath}" alt="${alt}" loading="lazy" /></a>`;
-    }).join('');
+    const items = bucket.media.map((media) => ({
+      media_path: buildCanonicalMediaPath(media),
+      group_name: groupName,
+      title: media.caption || media.title || media.originalName || media.filename,
+      alt: media.alt || media.title || media.originalName || media.filename,
+    }));
 
-    return `<div class="photo-archive-month-wrapper"><div class="photo-archive-month"><div class="photo-archive-month-label"><span>${escapeHtml(label)}</span></div><div class="photo-archive-gallery">${itemsHtml}</div></div></div>`;
-  }).join('');
+    return {
+      label,
+      items,
+    };
+  });
 
-  return `<div class="${rootClasses.join(' ')}" ${dataAttrs.join(' ')}><div class="photo-archive-container">${monthsHtml}</div></div>`;
+  return renderMacroTemplate('photo-archive', {
+    root_classes: rootClasses.join(' '),
+    data_attrs: dataAttrs,
+    months,
+    empty_label: translateRender(language, 'render.photoArchive.empty'),
+  });
 }
 
 export function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageEntry[], renderLanguage: string): string {
@@ -567,7 +611,14 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
   const height = heightParam && heightParam >= 180 && heightParam <= 900 ? heightParam : 420;
 
   if (tagUsage.length === 0) {
-    return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico"><div class="tag-cloud-empty">${escapeHtml(translateRender(language, 'render.tagCloud.empty'))}</div></div>`;
+    return renderMacroTemplate('tag-cloud', {
+      orientation,
+      words_json: '',
+      width,
+      height,
+      aria_label: translateRender(language, 'render.tagCloud.ariaLabel'),
+      empty_label: translateRender(language, 'render.tagCloud.empty'),
+    });
   }
 
   const minCount = Math.min(...tagUsage.map((entry) => entry.count));
@@ -590,8 +641,14 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
 
   const wordsJson = escapeHtml(JSON.stringify(words));
 
-  const ariaLabel = escapeHtml(translateRender(language, 'render.tagCloud.ariaLabel'));
-  return `<div class="macro-tag-cloud" data-tag-cloud="true" data-orientation="${orientation}" data-color-distribution="quantile" data-color-easing="0.7" data-color-theme="pico" data-tag-cloud-words="${wordsJson}" data-width="${width}" data-height="${height}"><svg class="tag-cloud-canvas" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-label="${ariaLabel}"></svg></div>`;
+  return renderMacroTemplate('tag-cloud', {
+    orientation,
+    words_json: wordsJson,
+    width,
+    height,
+    aria_label: translateRender(language, 'render.tagCloud.ariaLabel'),
+    empty_label: translateRender(language, 'render.tagCloud.empty'),
+  });
 }
 
 export function isExternalOrSpecialUrl(value: string): boolean {
@@ -715,18 +772,18 @@ export function renderMacro(
 
   if (normalizedName === 'youtube') {
     const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
-    const id = escapeHtml(params.id || '');
-    const title = escapeHtml(params.title || translateRender(language, 'render.video.youtubeTitle'));
+    const id = (params.id || '').trim();
+    const title = (params.title || translateRender(language, 'render.video.youtubeTitle')).trim();
     if (!id) return '';
-    return `<div class="macro-youtube"><iframe src="https://www.youtube.com/embed/${id}?rel=0" title="${title}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    return renderMacroTemplate('youtube', { id, title });
   }
 
   if (normalizedName === 'vimeo') {
     const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
-    const id = escapeHtml(params.id || '');
-    const title = escapeHtml(params.title || translateRender(language, 'render.video.vimeoTitle'));
+    const id = (params.id || '').trim();
+    const title = (params.title || translateRender(language, 'render.video.vimeoTitle')).trim();
     if (!id) return '';
-    return `<div class="macro-vimeo"><iframe src="https://player.vimeo.com/video/${id}" title="${title}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
+    return renderMacroTemplate('vimeo', { id, title });
   }
 
   if (normalizedName === 'gallery') {

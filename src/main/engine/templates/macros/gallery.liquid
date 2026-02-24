@@ -1,0 +1,30 @@
+<div
+	class="macro-gallery gallery-cols-{{ columns }}"
+	data-post-id="{{ post_id | escape }}"
+	data-columns="{{ columns }}"
+	data-lightbox="true"
+>
+	<div class="gallery-container gallery-lightbox">
+		{%- if items.size > 0 -%}
+			{%- for item in items -%}
+				<a
+					class="gallery-item"
+					href="{{ item.media_path | escape }}"
+					data-lightbox="{{ item.group_name | escape }}"
+					data-title="{{ item.title | escape }}"
+				>
+					<img
+						src="{{ item.media_path | escape }}"
+						alt="{{ item.alt | escape }}"
+						loading="lazy"
+					/>
+				</a>
+			{%- endfor -%}
+		{%- else -%}
+			<div class="gallery-empty">{{ empty_label | escape }}</div>
+		{%- endif -%}
+	</div>
+	{%- if caption -%}
+		<figcaption class="gallery-caption">{{ caption | escape }}</figcaption>
+	{%- endif -%}
+</div>

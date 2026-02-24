@@ -1,0 +1,19 @@
+<div
+	class="macro-tag-cloud"
+	data-tag-cloud="true"
+	data-orientation="{{ orientation }}"
+	data-color-distribution="quantile"
+	data-color-easing="0.7"
+	data-color-theme="pico"{%- if words_json -%} data-tag-cloud-words="{{ words_json }}" data-width="{{ width }}" data-height="{{ height }}"{%- endif -%}
+>
+	{%- if words_json -%}
+		<svg
+			class="tag-cloud-canvas"
+			viewBox="0 0 {{ width }} {{ height }}"
+			preserveAspectRatio="xMidYMid meet"
+			aria-label="{{ aria_label | escape }}"
+		></svg>
+	{%- else -%}
+		<div class="tag-cloud-empty">{{ empty_label | escape }}</div>
+	{%- endif -%}
+</div>

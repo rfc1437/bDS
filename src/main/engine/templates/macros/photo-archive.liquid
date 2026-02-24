@@ -1,0 +1,33 @@
+<div class="{{ root_classes }}"{% for attr in data_attrs %} {{ attr.name }}="{{ attr.value | escape }}"{% endfor %}>
+	<div class="photo-archive-container">
+		{%- if months.size > 0 -%}
+			{%- for month in months -%}
+				<div class="photo-archive-month-wrapper">
+					<div class="photo-archive-month">
+						<div class="photo-archive-month-label">
+							<span>{{ month.label | escape }}</span>
+						</div>
+						<div class="photo-archive-gallery">
+							{%- for item in month.items -%}
+								<a
+									class="photo-archive-item"
+									href="{{ item.media_path | escape }}"
+									data-lightbox="{{ item.group_name | escape }}"
+									data-title="{{ item.title | escape }}"
+								>
+									<img
+										src="{{ item.media_path | escape }}"
+										alt="{{ item.alt | escape }}"
+										loading="lazy"
+									/>
+								</a>
+							{%- endfor -%}
+						</div>
+					</div>
+				</div>
+			{%- endfor -%}
+		{%- else -%}
+			<div class="photo-archive-empty">{{ empty_label | escape }}</div>
+		{%- endif -%}
+	</div>
+</div>
