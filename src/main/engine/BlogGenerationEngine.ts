@@ -44,6 +44,7 @@ import {
   buildRequestedArchiveMaps,
   selectRequestedPosts,
 } from './ApplyValidationDataService';
+import { getGeneratedFileHashRecord } from '../database/generatedFileHashStore';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -96,6 +97,7 @@ export interface SiteValidationReport {
   sitemapChanged: boolean;
   missingUrlPaths: string[];
   extraUrlPaths: string[];
+  updatedPostUrlPaths: string[];
   expectedUrlCount: number;
   existingHtmlUrlCount: number;
 }
@@ -375,6 +377,7 @@ export class BlogGenerationEngine {
       content,
       knownDirectories: knownOutputDirectories,
       hashCache: generatedHashCache,
+      refreshHashTimestampOnUnchanged: true,
     });
 
     let pagesGenerated = 0;
@@ -551,19 +554,40 @@ export class BlogGenerationEngine {
 
     onProgress(50, 'Comparing sitemap to html pages...');
 
+    const postTimestampChecks = await Promise.all(publishedPosts.map(async (post) => {
+      const createdAt = resolvePostCreatedAt(post);
+      const year = String(createdAt.getFullYear());
+      const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+      const postFilePath = path.join(options.dataDir, 'posts', year, month, `${post.slug}.md`);
+      const postUrlPath = buildCanonicalPostPath(post);
+      const relativePath = `${postUrlPath.replace(/^\//, '')}/index.html`;
+      const generatedRecord = await getGeneratedFileHashRecord(options.projectId, relativePath);
+
+      return {
+        postUrlPath,
+        postFilePath,
+        generatedUpdatedAtMs: generatedRecord?.updatedAt,
+      };
+    }));
+
     const diffResult = await compareSitemapToHtml({
       sitemapXml,
       baseUrl: options.baseUrl,
       htmlDir,
+      postTimestampChecks,
     });
 
-    onProgress(100, `Validation complete (${diffResult.missingUrlPaths.length} missing, ${diffResult.extraUrlPaths.length} extra)`);
+    onProgress(
+      100,
+      `Validation complete (${diffResult.missingUrlPaths.length} missing, ${diffResult.extraUrlPaths.length} extra, ${diffResult.updatedPostUrlPaths.length} updated)`
+    );
 
     return {
       sitemapPath,
       sitemapChanged,
       missingUrlPaths: diffResult.missingUrlPaths,
       extraUrlPaths: diffResult.extraUrlPaths,
+      updatedPostUrlPaths: diffResult.updatedPostUrlPaths,
       expectedUrlCount: diffResult.expectedUrlCount,
       existingHtmlUrlCount: diffResult.existingHtmlUrlCount,
     };
@@ -577,11 +601,13 @@ export class BlogGenerationEngine {
     onProgress(0, 'Applying validation changes...');
 
     const missingPaths = Array.isArray(report.missingUrlPaths) ? report.missingUrlPaths : [];
+    const updatedPostPaths = Array.isArray(report.updatedPostUrlPaths) ? report.updatedPostUrlPaths : [];
+    const rerenderPaths = Array.from(new Set([...missingPaths, ...updatedPostPaths]));
     const extraPaths = Array.isArray(report.extraUrlPaths) ? report.extraUrlPaths : [];
 
     onProgress(10, 'Planning validation apply steps...');
 
-    const missingPathPlan = planMissingValidationPaths(missingPaths);
+    const missingPathPlan = planMissingValidationPaths(rerenderPaths);
 
     onProgress(20, 'Deleting extra URLs...');
 
@@ -686,6 +712,7 @@ export class BlogGenerationEngine {
         htmlDir,
         urlPath,
         content,
+        refreshHashTimestampOnUnchanged: true,
       });
       const onPageGenerated = (_message: string) => {
         // no-op for applyValidation

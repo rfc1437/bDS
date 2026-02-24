@@ -436,6 +436,7 @@ export interface SiteValidationReport {
   sitemapChanged: boolean;
   missingUrlPaths: string[];
   extraUrlPaths: string[];
+  updatedPostUrlPaths: string[];
   expectedUrlCount: number;
   existingHtmlUrlCount: number;
 }

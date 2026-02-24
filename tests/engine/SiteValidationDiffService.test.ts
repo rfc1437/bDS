@@ -90,4 +90,42 @@ describe('SiteValidationDiffService', () => {
     expect(result.expectedUrlCount).toBe(1);
     expect(result.existingHtmlUrlCount).toBe(0);
   });
+
+  it('detects updated post routes when source markdown is newer than generated html', async () => {
+    const tempRoot = path.join('/tmp', makeTempName());
+    const htmlDir = path.join(tempRoot, 'html');
+    const postsDir = path.join(tempRoot, 'posts');
+
+    await mkdir(path.join(htmlDir, '2026', '02', '24', 'updated-post'), { recursive: true });
+    await mkdir(path.join(postsDir, '2026', '02'), { recursive: true });
+
+    const htmlPath = path.join(htmlDir, '2026', '02', '24', 'updated-post', 'index.html');
+    const postPath = path.join(postsDir, '2026', '02', 'updated-post.md');
+
+    await writeFile(htmlPath, '<html>old render</html>', 'utf-8');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await writeFile(postPath, '# Updated post', 'utf-8');
+
+    const sitemapXml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      '  <url><loc>https://example.com/2026/02/24/updated-post/</loc></url>',
+      '</urlset>',
+      '',
+    ].join('\n');
+
+    const result = await compareSitemapToHtml({
+      sitemapXml,
+      baseUrl: 'https://example.com',
+      htmlDir,
+      postTimestampChecks: [{
+        postUrlPath: '/2026/02/24/updated-post',
+        postFilePath: postPath,
+      }],
+    });
+
+    expect(result.missingUrlPaths).toEqual([]);
+    expect(result.extraUrlPaths).toEqual([]);
+    expect(result.updatedPostUrlPaths).toEqual(['/2026/02/24/updated-post']);
+  });
 });

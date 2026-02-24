@@ -60,6 +60,7 @@ export async function writeFileIfHashChanged(params: {
   getGeneratedFileHash?: (projectId: string, relativePath: string) => Promise<string | null>;
   setGeneratedFileHash?: (projectId: string, relativePath: string, hash: string) => Promise<void>;
   computeHash?: (content: string) => string;
+  refreshHashTimestampOnUnchanged?: boolean;
 }): Promise<boolean> {
   const getHash = params.getGeneratedFileHash ?? getGeneratedFileHash;
   const setHash = params.setGeneratedFileHash ?? setGeneratedFileHash;
@@ -75,6 +76,10 @@ export async function writeFileIfHashChanged(params: {
   }
 
   if (previousHash === hash) {
+    if (params.refreshHashTimestampOnUnchanged) {
+      await setHash(params.projectId, params.relativePath, hash);
+      params.hashCache?.set(params.relativePath, hash);
+    }
     return false;
   }
 
@@ -95,6 +100,7 @@ export async function writeHtmlPage(params: {
   getGeneratedFileHash?: (projectId: string, relativePath: string) => Promise<string | null>;
   setGeneratedFileHash?: (projectId: string, relativePath: string, hash: string) => Promise<void>;
   computeHash?: (content: string) => string;
+  refreshHashTimestampOnUnchanged?: boolean;
 }): Promise<boolean> {
   const normalizedPath = params.urlPath.replace(/^\//, '');
   const filePath = normalizedPath
@@ -124,6 +130,7 @@ export async function writeHtmlPage(params: {
     getGeneratedFileHash: params.getGeneratedFileHash,
     setGeneratedFileHash: params.setGeneratedFileHash,
     computeHash: params.computeHash,
+    refreshHashTimestampOnUnchanged: params.refreshHashTimestampOnUnchanged,
   });
 }
 

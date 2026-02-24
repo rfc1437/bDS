@@ -7,13 +7,27 @@ import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 import type { MenuDocument } from '../../src/main/engine/MenuEngine';
 
 const generatedFileHashes = new Map<string, string>();
+const generatedFileUpdatedAt = new Map<string, number>();
 const getGeneratedFileHashMock = vi.fn(async (projectId: string, relativePath: string) => {
   const key = `${projectId}:${relativePath}`;
   return generatedFileHashes.get(key) ?? null;
 });
+const getGeneratedFileHashRecordMock = vi.fn(async (projectId: string, relativePath: string) => {
+  const key = `${projectId}:${relativePath}`;
+  const contentHash = generatedFileHashes.get(key);
+  if (!contentHash) {
+    return null;
+  }
+
+  return {
+    contentHash,
+    updatedAt: generatedFileUpdatedAt.get(key) ?? 0,
+  };
+});
 const setGeneratedFileHashMock = vi.fn(async (projectId: string, relativePath: string, hash: string) => {
   const key = `${projectId}:${relativePath}`;
   generatedFileHashes.set(key, hash);
+  generatedFileUpdatedAt.set(key, Date.now());
 });
 const executeDbSql = vi.fn(async (input: { sql: string; args?: unknown[] }) => {
   const sqlText = input.sql.replace(/\s+/g, ' ').trim();
@@ -40,6 +54,7 @@ const executeDbSql = vi.fn(async (input: { sql: string; args?: unknown[] }) => {
 
 vi.mock('../../src/main/database/generatedFileHashStore', () => ({
   getGeneratedFileHash: getGeneratedFileHashMock,
+  getGeneratedFileHashRecord: getGeneratedFileHashRecordMock,
   setGeneratedFileHash: setGeneratedFileHashMock,
 }));
 
@@ -143,6 +158,7 @@ describe('BlogGenerationEngine', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     generatedFileHashes.clear();
+    generatedFileUpdatedAt.clear();
     tempDir = await mkdtemp(path.join(tmpdir(), 'bds-gen-'));
 
     const { __mockPostEngine } = await import('../../src/main/engine/PostEngine') as any;
@@ -976,6 +992,107 @@ describe('BlogGenerationEngine', () => {
 
     expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'validation-main-post', 'index.html'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html', 'sitemap.xml'))).toBe(true);
+  });
+
+  it('reports updated post routes separately when post markdown is newer than generated html', async () => {
+    const post = makePost({
+      id: '1',
+      slug: 'updated-post',
+      title: 'Updated Post',
+      categories: ['news'],
+      tags: ['update-tag'],
+      createdAt: new Date('2026-02-24T10:00:00Z'),
+    });
+    setupPosts([post]);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    const postFilePath = path.join(tempDir, 'posts', '2026', '02', 'updated-post.md');
+    await mkdir(path.dirname(postFilePath), { recursive: true });
+    await writeFile(postFilePath, '# Updated content', 'utf-8');
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toEqual([]);
+    expect(report.updatedPostUrlPaths).toEqual(['/2026/02/24/updated-post']);
+
+    const applyResult = await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, report, vi.fn());
+
+    expect(applyResult.renderedUrlCount).toBeGreaterThan(0);
+  });
+
+  it('does not repeatedly flag an old unchanged post as updated after a full generation pass', async () => {
+    const post = makePost({
+      id: '1',
+      slug: 'old-stable-post',
+      title: 'Old Stable Post',
+      createdAt: new Date('2021-02-24T10:00:00Z'),
+    });
+    setupPosts([post]);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine();
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    const canonicalHtmlPath = path.join(tempDir, 'html', '2021', '02', '24', 'old-stable-post', 'index.html');
+    const beforeStat = await stat(canonicalHtmlPath);
+
+    const postFilePath = path.join(tempDir, 'posts', '2021', '02', 'old-stable-post.md');
+    await mkdir(path.dirname(postFilePath), { recursive: true });
+    await writeFile(postFilePath, '# Old Stable Post', 'utf-8');
+
+    const firstReport = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    expect(firstReport.updatedPostUrlPaths).toEqual(['/2021/02/24/old-stable-post']);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    const afterStat = await stat(canonicalHtmlPath);
+    expect(afterStat.mtimeMs).toBe(beforeStat.mtimeMs);
+
+    const secondReport = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+    }, vi.fn());
+
+    expect(secondReport.updatedPostUrlPaths).toEqual([]);
   });
 
   it('applies validation by rendering missing pages and deleting extra pages with folder pruning', async () => {

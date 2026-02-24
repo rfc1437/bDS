@@ -4,14 +4,22 @@ import * as path from 'node:path';
 export interface SiteValidationDiffResult {
   missingUrlPaths: string[];
   extraUrlPaths: string[];
+  updatedPostUrlPaths: string[];
   expectedUrlCount: number;
   existingHtmlUrlCount: number;
+}
+
+export interface PostTimestampCheck {
+  postUrlPath: string;
+  postFilePath: string;
+  generatedUpdatedAtMs?: number;
 }
 
 interface CompareSitemapToHtmlParams {
   sitemapXml: string;
   baseUrl: string;
   htmlDir: string;
+  postTimestampChecks?: PostTimestampCheck[];
 }
 
 function normalizeUrlPath(urlPath: string): string {
@@ -127,9 +135,46 @@ export async function compareSitemapToHtml(params: CompareSitemapToHtmlParams): 
     .filter((value, index, array) => array.indexOf(value) === index)
     .sort();
 
+  const updatedPostPathSet = new Set<string>();
+  const postTimestampChecks = Array.isArray(params.postTimestampChecks) ? params.postTimestampChecks : [];
+  for (const check of postTimestampChecks) {
+    const normalizedPostUrlPath = normalizeUrlPath(check.postUrlPath);
+    if (!expectedPathSet.has(normalizedPostUrlPath)) {
+      continue;
+    }
+
+    if (missingUrlPaths.includes(normalizedPostUrlPath)) {
+      continue;
+    }
+
+    const htmlPath = path.join(params.htmlDir, normalizedPostUrlPath === '/' ? 'index.html' : normalizedPostUrlPath.slice(1), 'index.html');
+
+    let htmlStat: Awaited<ReturnType<typeof fs.stat>>;
+    let postStat: Awaited<ReturnType<typeof fs.stat>>;
+
+    try {
+      htmlStat = await fs.stat(htmlPath);
+      postStat = await fs.stat(check.postFilePath);
+    } catch {
+      continue;
+    }
+
+    const generatedUpdatedAtMs = typeof check.generatedUpdatedAtMs === 'number'
+      ? check.generatedUpdatedAtMs
+      : 0;
+    const effectiveGeneratedAtMs = Math.max(htmlStat.mtimeMs, generatedUpdatedAtMs);
+
+    if (postStat.mtimeMs > effectiveGeneratedAtMs) {
+      updatedPostPathSet.add(normalizedPostUrlPath);
+    }
+  }
+
+  const updatedPostUrlPaths = Array.from(updatedPostPathSet.values()).sort();
+
   return {
     missingUrlPaths,
     extraUrlPaths,
+    updatedPostUrlPaths,
     expectedUrlCount: expectedPathSet.size,
     existingHtmlUrlCount: existingHtmlPathSet.size,
   };

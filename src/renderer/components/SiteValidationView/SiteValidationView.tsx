@@ -10,6 +10,7 @@ type SiteValidationReport = {
   sitemapChanged: boolean;
   missingUrlPaths: string[];
   extraUrlPaths: string[];
+  updatedPostUrlPaths: string[];
   expectedUrlCount: number;
   existingHtmlUrlCount: number;
 };
@@ -62,7 +63,8 @@ export const SiteValidationView: React.FC = () => {
 
   const canApply = useMemo(() => {
     if (!report) return false;
-    return report.missingUrlPaths.length > 0 || report.extraUrlPaths.length > 0;
+    const updatedPostUrlPaths = Array.isArray(report.updatedPostUrlPaths) ? report.updatedPostUrlPaths : [];
+    return report.missingUrlPaths.length > 0 || report.extraUrlPaths.length > 0 || updatedPostUrlPaths.length > 0;
   }, [report]);
 
   const handleApply = async () => {
@@ -101,6 +103,8 @@ export const SiteValidationView: React.FC = () => {
     );
   }
 
+  const updatedPostUrlPaths = Array.isArray(report.updatedPostUrlPaths) ? report.updatedPostUrlPaths : [];
+
   return (
     <div className="site-validation-view">
       <div className="site-validation-summary">
@@ -110,6 +114,7 @@ export const SiteValidationView: React.FC = () => {
           existing: report.existingHtmlUrlCount,
           missing: report.missingUrlPaths.length,
           extra: report.extraUrlPaths.length,
+          updated: updatedPostUrlPaths.length,
         })}</p>
       </div>
 
@@ -134,6 +139,19 @@ export const SiteValidationView: React.FC = () => {
           <ul className="site-validation-list site-validation-list-extra">
             {report.extraUrlPaths.map((urlPath) => (
               <li key={`extra:${urlPath}`}>{urlPath}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="site-validation-section">
+        <h3>{tr('siteValidation.updatedTitle')}</h3>
+        {updatedPostUrlPaths.length === 0 ? (
+          <p className="site-validation-empty">{tr('siteValidation.noneUpdated')}</p>
+        ) : (
+          <ul className="site-validation-list site-validation-list-missing">
+            {updatedPostUrlPaths.map((urlPath) => (
+              <li key={`updated:${urlPath}`}>{urlPath}</li>
             ))}
           </ul>
         )}

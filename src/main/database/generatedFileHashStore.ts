@@ -1,5 +1,10 @@
 import { getDatabase } from './connection';
 
+export interface GeneratedFileHashRecord {
+  contentHash: string;
+  updatedAt: number;
+}
+
 export async function getGeneratedFileHash(projectId: string, relativePath: string): Promise<string | null> {
   const client = getDatabase().getLocalClient();
   if (!client) {
@@ -16,6 +21,33 @@ export async function getGeneratedFileHash(projectId: string, relativePath: stri
   }
 
   return result.rows[0].content_hash;
+}
+
+export async function getGeneratedFileHashRecord(projectId: string, relativePath: string): Promise<GeneratedFileHashRecord | null> {
+  const client = getDatabase().getLocalClient();
+  if (!client) {
+    throw new Error('Database client not available');
+  }
+
+  const result = await client.execute({
+    sql: 'SELECT content_hash, updated_at FROM generated_file_hashes WHERE project_id = ? AND relative_path = ? LIMIT 1',
+    args: [projectId, relativePath],
+  });
+
+  const row = result.rows[0];
+  if (!row || typeof row.content_hash !== 'string') {
+    return null;
+  }
+
+  const rawUpdatedAt = row.updated_at;
+  const updatedAt = typeof rawUpdatedAt === 'number'
+    ? rawUpdatedAt
+    : Number(rawUpdatedAt);
+
+  return {
+    contentHash: row.content_hash,
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
+  };
 }
 
 export async function setGeneratedFileHash(projectId: string, relativePath: string, hash: string): Promise<void> {
