@@ -1,24 +1,61 @@
-import { describe, expect, it } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
-const root = path.resolve(__dirname, '../../..');
-
-async function read(relativePath: string): Promise<string> {
-  return readFile(path.join(root, relativePath), 'utf8');
-}
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { ChatPanel } from '../../../src/renderer/components/ChatPanel/ChatPanel';
+import { AssistantSidebar } from '../../../src/renderer/components/AssistantSidebar/AssistantSidebar';
 
 describe('chat surface mode usage guards', () => {
-  it('uses shared mode config in both chat surfaces', async () => {
-    const chatPanel = await read('src/renderer/components/ChatPanel/ChatPanel.tsx');
-    const assistantSidebar = await read('src/renderer/components/AssistantSidebar/AssistantSidebar.tsx');
+  beforeEach(() => {
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = vi.fn();
+    }
 
-    expect(chatPanel).toContain('getChatSurfaceMode(');
-    expect(assistantSidebar).toContain('getChatSurfaceMode(');
+    window.electronAPI.chat = {
+      checkReady: vi.fn().mockResolvedValue({ ready: true }),
+      validateApiKey: vi.fn(),
+      setApiKey: vi.fn(),
+      getApiKey: vi.fn(),
+      getProtocolHealth: vi.fn(),
+      getAvailableModels: vi.fn().mockResolvedValue({
+        success: true,
+        models: [{ id: 'gpt-5', name: 'GPT-5' }],
+      }),
+      setDefaultModel: vi.fn(),
+      getSystemPrompt: vi.fn(),
+      setSystemPrompt: vi.fn(),
+      getConversations: vi.fn(),
+      createConversation: vi.fn(),
+      getConversation: vi.fn().mockResolvedValue({
+        id: 'conv-tab',
+        title: 'Chat',
+        model: 'gpt-5',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      updateConversation: vi.fn(),
+      deleteConversation: vi.fn(),
+      sendMessage: vi.fn(),
+      addSystemEvent: vi.fn(),
+      abortMessage: vi.fn(),
+      getHistory: vi.fn().mockResolvedValue([]),
+      clearMessages: vi.fn(),
+      setConversationModel: vi.fn(),
+      analyzeTaxonomy: vi.fn(),
+      analyzeMediaImage: vi.fn(),
+      onStreamDelta: vi.fn(() => vi.fn()),
+      onToolCall: vi.fn(() => vi.fn()),
+      onToolResult: vi.fn(() => vi.fn()),
+      onTitleUpdated: vi.fn(() => vi.fn()),
+    } as never;
+  });
 
-    expect(chatPanel).toContain('showModelSelector');
-    expect(chatPanel).toContain('showWelcomeTips');
-    expect(assistantSidebar).toContain('showWelcomeTips');
-    expect(assistantSidebar).toContain('showToolMarkers');
+  it('shows model selector in tab chat but not in assistant sidebar', async () => {
+    const { container: tabContainer } = render(React.createElement(ChatPanel, { conversationId: 'conv-tab' }));
+
+    expect(tabContainer.querySelector('.model-selector-button')).not.toBeNull();
+
+    render(React.createElement(AssistantSidebar));
+
+    expect(screen.queryByText('gpt-5')).toBeNull();
   });
 });

@@ -1,25 +1,79 @@
-import { describe, expect, it } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
-const root = path.resolve(__dirname, '../../..');
-
-async function read(relativePath: string): Promise<string> {
-  return readFile(path.join(root, relativePath), 'utf8');
-}
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render } from '@testing-library/react';
+import { ChatPanel } from '../../../src/renderer/components/ChatPanel/ChatPanel';
+import { AssistantSidebar } from '../../../src/renderer/components/AssistantSidebar/AssistantSidebar';
+import { useAppStore } from '../../../src/renderer/store';
 
 describe('chat surface shared usage guards', () => {
-  it('uses shared chat surface state hook and transcript renderer in both surfaces', async () => {
-    const chatPanel = await read('src/renderer/components/ChatPanel/ChatPanel.tsx');
-    const assistantSidebar = await read('src/renderer/components/AssistantSidebar/AssistantSidebar.tsx');
+  beforeEach(() => {
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = vi.fn();
+    }
 
-    expect(chatPanel).toContain('useChatSurfaceState(');
-    expect(chatPanel).toContain('<ChatTranscript');
-    expect(chatPanel).toContain('<AssistantPanelControls');
-    expect(chatPanel).toContain('extractAssistantResponseContent(');
+    useAppStore.setState({ tabs: [], activeTabId: null, activeView: 'posts' });
 
-    expect(assistantSidebar).toContain('useChatSurfaceState(');
-    expect(assistantSidebar).toContain('<ChatTranscript');
-    expect(assistantSidebar).toContain('<AssistantPanelControls');
+    window.electronAPI.chat = {
+      checkReady: vi.fn().mockResolvedValue({ ready: true }),
+      validateApiKey: vi.fn(),
+      setApiKey: vi.fn(),
+      getApiKey: vi.fn(),
+      getProtocolHealth: vi.fn(),
+      getAvailableModels: vi.fn().mockResolvedValue({
+        success: true,
+        models: [{ id: 'gpt-5', name: 'GPT-5' }],
+      }),
+      setDefaultModel: vi.fn(),
+      getSystemPrompt: vi.fn(),
+      setSystemPrompt: vi.fn(),
+      getConversations: vi.fn(),
+      createConversation: vi.fn(),
+      getConversation: vi.fn().mockResolvedValue({
+        id: 'conv-tab',
+        title: 'Chat',
+        model: 'gpt-5',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      updateConversation: vi.fn(),
+      deleteConversation: vi.fn(),
+      sendMessage: vi.fn(),
+      addSystemEvent: vi.fn(),
+      abortMessage: vi.fn(),
+      getHistory: vi.fn().mockResolvedValue([]),
+      clearMessages: vi.fn(),
+      setConversationModel: vi.fn(),
+      analyzeTaxonomy: vi.fn(),
+      analyzeMediaImage: vi.fn(),
+      onStreamDelta: vi.fn(() => vi.fn()),
+      onToolCall: vi.fn(() => vi.fn()),
+      onToolResult: vi.fn(() => vi.fn()),
+      onTitleUpdated: vi.fn(() => vi.fn()),
+    } as never;
+  });
+
+  it('wires chat panel to load data and subscribe to stream/tool/title events', () => {
+    render(React.createElement(ChatPanel, { conversationId: 'conv-tab' }));
+
+    expect(window.electronAPI.chat.checkReady).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.getConversation).toHaveBeenCalledWith('conv-tab');
+    expect(window.electronAPI.chat.getHistory).toHaveBeenCalledWith('conv-tab');
+    expect(window.electronAPI.chat.getAvailableModels).toHaveBeenCalledTimes(1);
+
+    expect(window.electronAPI.chat.onStreamDelta).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.onToolCall).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.onToolResult).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.onTitleUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires assistant sidebar stream subscriptions and does not auto-open chat tab', () => {
+    render(React.createElement(AssistantSidebar));
+
+    expect(window.electronAPI.chat.onStreamDelta).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.onToolCall).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.onToolResult).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.chat.onTitleUpdated).toHaveBeenCalledTimes(1);
+
+    expect(useAppStore.getState().tabs.some((tab) => tab.type === 'chat')).toBe(false);
   });
 });

@@ -79,6 +79,51 @@ describe('assistantActionDispatcher', () => {
     expect(setActiveView).toHaveBeenCalledWith('tags');
   });
 
+  it('supports setActiveView action alias for protocol compatibility', () => {
+    const setActiveView = vi.fn();
+
+    const result = dispatchAssistantAction(
+      {
+        action: 'setActiveView',
+        payload: { view: 'chat' },
+      },
+      {
+        setSelectedPost: vi.fn(),
+        setSelectedMedia: vi.fn(),
+        openTab: vi.fn(),
+        setActiveView,
+        toggleSidebar: vi.fn(),
+        togglePanel: vi.fn(),
+        toggleAssistantSidebar: vi.fn(),
+      },
+    );
+
+    expect(result.handled).toBe(true);
+    expect(setActiveView).toHaveBeenCalledWith('chat');
+  });
+
+  it('supports openPanel action alias for protocol compatibility', () => {
+    const togglePanel = vi.fn();
+
+    const result = dispatchAssistantAction(
+      {
+        action: 'openPanel',
+      },
+      {
+        setSelectedPost: vi.fn(),
+        setSelectedMedia: vi.fn(),
+        openTab: vi.fn(),
+        setActiveView: vi.fn(),
+        toggleSidebar: vi.fn(),
+        togglePanel,
+        toggleAssistantSidebar: vi.fn(),
+      },
+    );
+
+    expect(result.handled).toBe(true);
+    expect(togglePanel).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects switchView payload when view is invalid', () => {
     const setActiveView = vi.fn();
 

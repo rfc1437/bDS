@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../store';
 import { resolveAssistantEditorContext } from '../../navigation/assistantPromptContext';
 import { planAssistantRequest } from '../../navigation/assistantConversation';
@@ -48,6 +48,9 @@ export const AssistantSidebar: React.FC = () => {
     streamingContent,
     toolEvents,
     beginUserTurn,
+    appendStreamDelta,
+    recordToolCall,
+    recordToolResult,
     finalizeAssistantTurn,
     appendAssistantMessage,
     stopStreaming,
@@ -80,6 +83,41 @@ export const AssistantSidebar: React.FC = () => {
       console.error('Failed to persist assistant action event:', error);
     }
   };
+
+  useEffect(() => {
+    const unsubDelta = window.electronAPI?.chat.onStreamDelta((data) => {
+      if (data.conversationId === conversationId) {
+        appendStreamDelta(data.delta);
+      }
+    });
+
+    const unsubToolCall = window.electronAPI?.chat.onToolCall((data) => {
+      if (data.conversationId === conversationId) {
+        const toolCall = data.toolCall as { name: string; arguments: Record<string, unknown> };
+        recordToolCall(toolCall.name, toolCall.arguments);
+      }
+    });
+
+    const unsubToolResult = window.electronAPI?.chat.onToolResult((data) => {
+      if (data.conversationId === conversationId) {
+        const result = data.result as { name: string; result: unknown };
+        recordToolResult(result.name);
+      }
+    });
+
+    const unsubTitle = window.electronAPI?.chat.onTitleUpdated((data) => {
+      if (data.conversationId === conversationId) {
+        return;
+      }
+    });
+
+    return () => {
+      unsubDelta?.();
+      unsubToolCall?.();
+      unsubToolResult?.();
+      unsubTitle?.();
+    };
+  }, [conversationId, appendStreamDelta, recordToolCall, recordToolResult]);
 
   const handleStart = async () => {
     const trimmed = prompt.trim();

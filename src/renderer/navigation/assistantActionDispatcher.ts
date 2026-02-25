@@ -82,10 +82,10 @@ export function dispatchAssistantAction(
     return { handled: true };
   }
 
-  if (input.action === 'switchView') {
+  if (input.action === 'switchView' || input.action === 'setActiveView') {
     const parsed = switchViewPayloadSchema.safeParse(payload);
     if (!parsed.success) {
-      return invalidPayloadError('switchView');
+      return invalidPayloadError(input.action);
     }
     const { view } = parsed.data;
 
@@ -116,6 +116,11 @@ export function dispatchAssistantAction(
   }
 
   if (input.action === 'togglePanel') {
+    dependencies.togglePanel();
+    return { handled: true };
+  }
+
+  if (input.action === 'openPanel') {
     dependencies.togglePanel();
     return { handled: true };
   }
