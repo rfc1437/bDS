@@ -171,4 +171,92 @@ describe('ProtocolResponseBuilder', () => {
       requiresConfirmation: false,
     }));
   });
+
+  it('drops invalid ui payloads from canonical envelopes before renderer consumption', () => {
+    const builder = new ProtocolResponseBuilder();
+
+    const raw = JSON.stringify({
+      protocolVersion: '2.0',
+      assistantText: 'Here is the result',
+      intent: 'summarize',
+      needsInput: { required: false, fields: [] },
+      actions: [],
+      ui: {
+        specVersion: '1',
+        elements: [
+          {
+            type: 'chart',
+            chartType: 'bar',
+          },
+        ],
+      },
+      confidence: 0.7,
+      traceId: 'trace-invalid-ui',
+    });
+
+    const result = builder.build({
+      rawAssistantOutput: raw,
+      surface: 'tab',
+      capabilities: {
+        widgets: ['chart'],
+        actions: ['openPost'],
+        tools: ['search_posts'],
+      },
+    });
+
+    expect(result.envelope.ui).toBeUndefined();
+    expect(result.warnings.some((warning) => warning.includes('Invalid ui payload'))).toBe(true);
+  });
+
+  it('normalizes non-canonical ui element fields inside canonical envelopes', () => {
+    const builder = new ProtocolResponseBuilder();
+
+    const raw = JSON.stringify({
+      protocolVersion: '2.0',
+      assistantText: 'Distribution chart ready.',
+      ui: {
+        specVersion: '1',
+        elements: [
+          {
+            type: 'chart',
+            chartType: 'bar',
+            data: {
+              labels: ['aside', 'article'],
+              datasets: [{ data: [181, 53] }],
+            },
+          },
+          {
+            type: 'text',
+            content: 'Category breakdown',
+          },
+        ],
+      },
+      intent: 'summarize',
+      needsInput: { required: false, fields: [] },
+      actions: [],
+      confidence: 0.95,
+      traceId: 'trace-normalize-ui',
+    });
+
+    const result = builder.build({
+      rawAssistantOutput: raw,
+      surface: 'tab',
+      capabilities: {
+        widgets: ['chart', 'text'],
+        actions: ['openPost'],
+        tools: ['search_posts'],
+      },
+    });
+
+    const elements = result.envelope.ui?.elements as Array<{ type: string; series?: Array<{ label: string; value: number }>; text?: string }>;
+    expect(elements).toHaveLength(2);
+    expect(elements[0]?.type).toBe('chart');
+    expect(elements[0]?.series).toEqual([
+      { label: 'aside', value: 181 },
+      { label: 'article', value: 53 },
+    ]);
+    expect(elements[1]).toEqual({ type: 'text', text: 'Category breakdown' });
+    expect(result.warnings.some((warning) => warning.includes('Normalized non-canonical ui payload'))).toBe(true);
+  });
+
 });

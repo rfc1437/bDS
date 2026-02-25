@@ -332,7 +332,7 @@ Agentic UI Contract:
 - You may include structured UI payloads in your assistant response so the app can render interactive widgets.
 - You DO have the ability to return interactive AGUI payloads (including bar charts) as JSON, even though you cannot draw bitmap images.
 - When the user asks for a chart or guided workflow, prefer returning a valid AGUI payload over refusing.
-- Use JSON with specVersion: "1" and an elements array.
+- Place the AGUI payload in the "ui" field of the protocol response envelope. DO NOT output markdown code blocks containing JSON.
 - Prefer actionable widgets (cards, forms, tabs, inputs, metrics, tables, charts) when they reduce follow-up friction.
 - Keep textual guidance and UI semantically consistent.
 - Include only valid, supported action names. Supported actions include: openSettings, openPost, openMedia, openPanel, setActiveView, toggleSidebar, togglePanel, toggleAssistantSidebar.

@@ -6,6 +6,7 @@ import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { dispatchAssistantAction } from '../../navigation/assistantActionDispatcher';
 import { extractAssistantResponseContent, type AssistantPanelElement } from '../../navigation/assistantPanelSpec';
 import { toClarificationElements } from '../../navigation/protocolNeedsInput';
+import { buildActionPoliciesFromEnvelope } from '../../navigation/protocolActionPolicies';
 import { useAppStore } from '../../store';
 import { ChatTranscript } from '../ChatSurface';
 import { AssistantPanelControls } from '../AssistantPanelControls';
@@ -198,12 +199,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           ? (result.envelope.ui?.elements as AssistantPanelElement[])
           : toClarificationElements(result.envelope.needsInput);
         setPanelElements(uiElements);
-        setActionPolicies(
-          result.envelope.actions.reduce<Record<string, 'silent' | 'confirm' | 'danger'>>((accumulator, action) => {
-            accumulator[action.action] = action.policy;
-            return accumulator;
-          }, {}),
-        );
+        setActionPolicies(buildActionPoliciesFromEnvelope(result.envelope));
       } else if (assistantContent) {
         const parsedResponse = extractAssistantResponseContent(assistantContent);
         finalizeAssistantTurn(conversationId, parsedResponse.displayText);
@@ -272,12 +268,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           ? (result.envelope.ui?.elements as AssistantPanelElement[])
           : toClarificationElements(result.envelope.needsInput);
         setPanelElements(uiElements);
-        setActionPolicies(
-          result.envelope.actions.reduce<Record<string, 'silent' | 'confirm' | 'danger'>>((accumulator, action) => {
-            accumulator[action.action] = action.policy;
-            return accumulator;
-          }, {}),
-        );
+        setActionPolicies(buildActionPoliciesFromEnvelope(result.envelope));
         return;
       }
 

@@ -186,7 +186,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('chat.getConversation', 'Fetch one chat conversation by id.', [requiredString('id')], 'ChatConversation | null'),
   method('chat.updateConversation', 'Update chat conversation metadata.', [requiredString('id'), requiredObject('updates')], 'ChatConversation | null'),
   method('chat.deleteConversation', 'Delete chat conversation by id.', [requiredString('id')], 'boolean'),
-  method('chat.sendMessage', 'Send message to chat conversation.', [requiredString('conversationId'), requiredString('message')], '{ success: boolean; message?: string; error?: string }'),
+  method('chat.sendMessage', 'Send message to chat conversation.', [requiredString('conversationId'), requiredString('message'), optionalObject('metadata')], "{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string }"),
   method('chat.abortMessage', 'Abort active streaming chat response.', [requiredString('conversationId')], 'void'),
   method('chat.getHistory', 'Get message history for conversation.', [requiredString('conversationId')], 'ChatMessage[]'),
   method('chat.clearMessages', 'Clear messages for conversation.', [requiredString('conversationId')], 'void'),
@@ -361,6 +361,45 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
+    name: 'ProtocolNeedsInputField',
+    description: 'A required clarification input field used for needsInput prompts.',
+    fields: [
+      { name: 'key', type: 'string', required: true, description: 'Stable field key used in submitted values.' },
+      { name: 'label', type: 'string', required: true, description: 'User-facing field label.' },
+      { name: 'inputType', type: "'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'", required: true, description: 'Rendered input control type.' },
+      { name: 'required', type: 'boolean', required: false, description: 'Whether user input is required.' },
+      { name: 'options', type: 'Array<{ label: string; value: string }>', required: false, description: 'Selectable options for select controls.' },
+      { name: 'placeholder', type: 'string', required: false, description: 'Optional placeholder text for text-like controls.' },
+      { name: 'defaultValue', type: 'string | number | boolean', required: false, description: 'Default field value shown in UI.' },
+    ],
+  },
+  {
+    name: 'ProtocolAction',
+    description: 'A declarative assistant action exposed to the UI runtime.',
+    fields: [
+      { name: 'id', type: 'string', required: true, description: 'Stable action id within a response envelope.' },
+      { name: 'action', type: 'string', required: true, description: 'Action name to dispatch in renderer.' },
+      { name: 'label', type: 'string', required: false, description: 'Optional user-facing action label.' },
+      { name: 'payload', type: 'Record<string, unknown>', required: false, description: 'Optional action payload arguments.' },
+      { name: 'policy', type: "'silent' | 'confirm' | 'danger'", required: true, description: 'Action confirmation policy level.' },
+      { name: 'requiresConfirmation', type: 'boolean', required: true, description: 'Whether confirmation is required before dispatch.' },
+    ],
+  },
+  {
+    name: 'ProtocolResponseEnvelope',
+    description: 'Canonical AGUI response envelope returned from chat.sendMessage.',
+    fields: [
+      { name: 'protocolVersion', type: "'2.0'", required: true, description: 'Envelope protocol version.' },
+      { name: 'assistantText', type: 'string', required: true, description: 'Assistant text content rendered in transcript.' },
+      { name: 'ui', type: "{ specVersion: '1'; elements: unknown[] }", required: false, description: 'Optional structured UI payload.' },
+      { name: 'intent', type: "'analyze' | 'ask_input' | 'propose_action' | 'execute_action' | 'summarize'", required: true, description: 'Turn intent classification.' },
+      { name: 'needsInput', type: '{ required: boolean; fields: ProtocolNeedsInputField[] }', required: true, description: 'Clarification requirements for next step.' },
+      { name: 'actions', type: 'ProtocolAction[]', required: true, description: 'Declarative actions available for this turn.' },
+      { name: 'confidence', type: 'number', required: true, description: 'Model confidence score from 0 to 1.' },
+      { name: 'traceId', type: 'string', required: true, description: 'Trace id for observability and debugging.' },
+    ],
+  },
+  {
     name: 'ProtocolTelemetrySnapshot',
     description: 'Aggregated protocol telemetry metrics for AGUI response health.',
     fields: [
@@ -377,7 +416,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.4.0',
+  version: '1.5.0',
   generatedAt: '2026-02-25T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

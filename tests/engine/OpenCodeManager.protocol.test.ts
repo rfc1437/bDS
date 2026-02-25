@@ -97,6 +97,12 @@ describe('OpenCodeManager protocol integration', () => {
     const telemetryAfter = getProtocolTelemetryService().getSnapshot();
     expect(telemetryAfter.totalTurns).toBe(telemetryBefore.totalTurns + 1);
     expect(telemetryAfter.validEnvelopeTurns).toBe(telemetryBefore.validEnvelopeTurns + 1);
+
+    expect(chatEngineMock.addMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: 'Please provide a date range.',
+    }));
   });
 
   it('blocks unsupported actions and records blocked-action telemetry', async () => {
@@ -148,5 +154,72 @@ describe('OpenCodeManager protocol integration', () => {
 
     const telemetryAfter = getProtocolTelemetryService().getSnapshot();
     expect(telemetryAfter.blockedActionCount).toBe(telemetryBefore.blockedActionCount + 1);
+  });
+
+  it('retries once with protocol repair prompt when first output is non-canonical', async () => {
+    const conversation: MockConversation = {
+      id: 'conversation-3',
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'show chart' }],
+    };
+
+    const chatEngineMock = createChatEngineMock(conversation);
+    const manager = new OpenCodeManager(
+      chatEngineMock as never,
+      {} as never,
+      {} as never,
+      () => null,
+    );
+    manager.setApiKey('test-api-key');
+
+    const sendSpy = vi.spyOn(manager as never, 'sendOpenAIMessage')
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          title: 'Legacy JSON',
+          widgets: [{ type: 'chart', chartType: 'bar' }],
+        }),
+        toolCalls: [],
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          protocolVersion: '2.0',
+          assistantText: 'Here is your chart.',
+          ui: {
+            specVersion: '1',
+            elements: [
+              {
+                type: 'chart',
+                chartType: 'bar',
+                series: [{ label: '2015', value: 86 }],
+              },
+            ],
+          },
+          intent: 'summarize',
+          needsInput: { required: false, fields: [] },
+          actions: [],
+          confidence: 0.8,
+          traceId: 'trace-retry-success',
+        }),
+        toolCalls: [],
+      });
+
+    const result = await manager.sendMessage('conversation-3', 'Build chart', {
+      metadata: { surface: 'tab' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.envelope?.traceId).toBe('trace-retry-success');
+    expect(sendSpy).toHaveBeenCalledTimes(2);
+
+    const retryMessages = sendSpy.mock.calls[1]?.[2] as Array<{ role: string; content?: string }>;
+    const lastMessage = retryMessages[retryMessages.length - 1]?.content ?? '';
+    expect(lastMessage).toContain('failed protocol validation');
+    expect(lastMessage).toContain('Return ONLY one valid protocol envelope JSON object');
+
+    expect(chatEngineMock.addMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'conversation-3',
+      role: 'assistant',
+      content: 'Here is your chart.',
+    }));
   });
 });

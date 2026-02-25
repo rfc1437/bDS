@@ -1,4 +1,4 @@
-# AGUI Modernization Plan (Protocol-First)
+# A2UI Modernization Plan (Protocol-First)
 
 ## Purpose
 
@@ -56,7 +56,7 @@ Build a **protocol-first chat assistant** that:
 
 ### Already implemented
 
-- AGUI schema parsing for canonical `specVersion: "1"` payloads.
+- A2UI schema parsing for canonical `specVersion: "1"` payloads.
 - Rich widget rendering (chart, form, input, datePicker, card, image, tabs).
 - Shared controls renderer reused by both chat surfaces.
 - Text + UI mixed response extraction.
@@ -71,7 +71,7 @@ Build a **protocol-first chat assistant** that:
 - No explicit protocol envelope enforced server-side each turn.
 - No formal capability handshake/version negotiation.
 - No repair/retry orchestration as a first-class protocol step.
-- No end-to-end telemetry contract for AGUI reliability metrics.
+- No end-to-end telemetry contract for A2UI reliability metrics.
 
 ---
 
@@ -82,7 +82,7 @@ Build a **protocol-first chat assistant** that:
 - Missing: strict response envelope (`assistant_text`, `ui`, `intent`, `confidence`, `needs_input`).
 - Missing: request envelope (`messages`, `context`, `capabilities`, `surface`, `protocol_version`).
 - Missing: version negotiation and deprecation strategy.
-- Missing: canonical machine-readable error model for invalid AGUI payloads.
+- Missing: canonical machine-readable error model for invalid A2UI payloads.
 
 ## 2) Model Interaction Strategy
 
@@ -119,13 +119,13 @@ Build a **protocol-first chat assistant** that:
 ## 7) Test Architecture
 
 - Missing: protocol conformance suite (golden request/response cases).
-- Missing: end-to-end AGUI scenario tests (clarify + execute + reflect).
+- Missing: end-to-end A2UI scenario tests (clarify + execute + reflect).
 - Missing: fuzz tests for malformed payload handling.
 - Missing: migration tests for protocol version compatibility.
 
 ## 8) Governance and Docs
 
-- Missing: authoritative AGUI protocol spec doc with examples.
+- Missing: authoritative A2UI protocol spec doc with examples.
 - Missing: widget/action compatibility matrix by version.
 - Missing: internal governance for protocol changes and ownership boundaries.
 
@@ -135,7 +135,7 @@ Build a **protocol-first chat assistant** that:
 
 ## A. Core Components
 
-1. **AGUI Protocol Layer (Main Process)**
+1. **A2UI Protocol Layer (Main Process)**
    - Owns request/response envelopes, validation, normalization, repair loop.
 
 2. **Capability Registry Service (Main Process)**
@@ -147,7 +147,7 @@ Build a **protocol-first chat assistant** that:
 4. **Action Runtime (Renderer + Main IPC)**
    - Executes declared actions with policy checks and structured result events.
 
-5. **AGUI Renderer (Renderer Shared)**
+5. **A2UI Renderer (Renderer Shared)**
    - Renders protocol `ui` payloads with strict schema and graceful fallbacks.
 
 6. **Observability Pipeline (Main + Renderer)**
@@ -228,7 +228,7 @@ Reason invalid:
 
 ### Protocol Error Codes
 
-- `AGUI_PROTOCOL_VALIDATION_ERROR`
+- `A2UI_PROTOCOL_VALIDATION_ERROR`
    - Emitted for request/response envelope validation failures.
    - Includes human-readable `message` and per-field `details`.
 
@@ -240,7 +240,7 @@ Reason invalid:
 
 ### Scope
 
-- Add AGUI protocol specification section in repo docs.
+- Add A2UI protocol specification section in repo docs.
 - Introduce canonical request/response TypeScript contracts.
 - Add protocol validator module in main process.
 
@@ -248,7 +248,7 @@ Reason invalid:
 
 - `src/main/agentic/protocol/types.ts`
 - `src/main/agentic/protocol/validator.ts`
-- `AGUI.md` + protocol examples + error codes
+- `A2UI.md` + protocol examples + error codes
 
 ### Acceptance Criteria
 
@@ -323,7 +323,7 @@ Reason invalid:
 ### Deliverables
 
 - Action policy map.
-- Confirmation UI flow integrated into AGUI actions.
+- Confirmation UI flow integrated into A2UI actions.
 - Action audit log entries with trace IDs.
 
 ### Acceptance Criteria
@@ -336,14 +336,14 @@ Reason invalid:
 ### Scope
 
 - Instrument protocol metrics and error taxonomy.
-- Build conformance + E2E AGUI test suites.
+- Build conformance + E2E A2UI test suites.
 - Add internal test gates that block merges on protocol drift.
 
 ### Deliverables
 
 - Protocol metrics dashboard.
 - Golden test fixtures for representative workflows.
-- CI quality gates for protocol conformance and AGUI scenarios.
+- CI quality gates for protocol conformance and A2UI scenarios.
 
 ### Acceptance Criteria
 
@@ -381,7 +381,7 @@ Reason invalid:
 
 ## Documentation
 
-- Add AGUI protocol appendix with canonical and invalid examples.
+- Add A2UI protocol appendix with canonical and invalid examples.
 - Add migration guide from legacy message parsing to v2 envelope.
 
 ---
@@ -391,7 +391,7 @@ Reason invalid:
 The branch is complete when:
 
 1. **Protocol reliability**
-   - ≥ 98% of AGUI-intent turns produce valid envelope without renderer fallback.
+   - ≥ 98% of A2UI-intent turns produce valid envelope without renderer fallback.
 
 2. **UI execution reliability**
    - ≥ 95% of emitted actions execute successfully or fail with structured actionable error.
@@ -400,7 +400,7 @@ The branch is complete when:
    - Missing-input tasks use `needsInput` controls instead of textual back-and-forth in ≥ 90% of cases.
 
 4. **Cross-surface parity**
-   - Same AGUI payload renders and behaves equivalently in chat tab and sidebar.
+   - Same A2UI payload renders and behaves equivalently in chat tab and sidebar.
 
 5. **Governance and maintainability**
    - Protocol conformance suite and migration tests are mandatory in CI.

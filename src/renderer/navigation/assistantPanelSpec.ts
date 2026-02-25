@@ -170,14 +170,34 @@ function toRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function normalizeChartElement(record: Record<string, unknown>): Record<string, unknown> | null {
+  const chartType = record.chartType;
   const normalized: Record<string, unknown> = {
-    ...record,
+    type: 'chart',
+    chartType: chartType === 'line' || chartType === 'pie' ? chartType : 'bar',
   };
 
-  const dataRecord = toRecord(record.data);
-  if (Array.isArray(record.series)) {
-    return normalized;
+  if (typeof record.title === 'string' && record.title.trim().length > 0) {
+    normalized.title = record.title;
   }
+
+  if (Array.isArray(record.series)) {
+    const series = record.series
+      .map((entry) => {
+        const item = toRecord(entry);
+        if (!item || typeof item.label !== 'string' || typeof item.value !== 'number') {
+          return null;
+        }
+        return { label: item.label, value: item.value };
+      })
+      .filter((entry): entry is { label: string; value: number } => Boolean(entry));
+
+    if (series.length > 0) {
+      normalized.series = series;
+      return normalized;
+    }
+  }
+
+  const dataRecord = toRecord(record.data);
 
   if (!dataRecord) {
     return normalized;
@@ -204,7 +224,6 @@ function normalizeChartElement(record: Record<string, unknown>): Record<string, 
   }
 
   normalized.series = series;
-  delete normalized.data;
   return normalized;
 }
 
@@ -269,6 +288,10 @@ function normalizeElement(value: unknown): Record<string, unknown> | null {
   }
 
   const type = typeof record.type === 'string' ? record.type : '';
+  if (type === 'text' && typeof record.content === 'string' && typeof record.text !== 'string') {
+    return { type: 'text', text: record.content };
+  }
+
   if (type === 'markdown') {
     const textValue = typeof record.content === 'string' ? record.content : typeof record.text === 'string' ? record.text : '';
     if (!textValue.trim()) {
@@ -300,6 +323,10 @@ function normalizeCandidate(parsed: unknown): AssistantPanelSpec | null {
   const record = toRecord(parsed);
   if (!record) {
     return null;
+  }
+
+  if (record.protocolVersion === '2.0' && record.ui) {
+    return normalizeCandidate(record.ui);
   }
 
   if (record.type === 'tab' && record.content) {
@@ -366,9 +393,9 @@ export function extractAssistantPanelSpec(message: string): AssistantPanelSpec |
 export function extractAssistantResponseContent(message: string): AssistantResponseContent {
   const trimmed = message.trim();
 
-  const fencedMatches = [...trimmed.matchAll(/```(json)?\s*([\s\S]*?)```/gi)];
+  const fencedMatches = [...trimmed.matchAll(/```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)```/gi)];
   for (const match of fencedMatches) {
-    const candidate = match[2]?.trim();
+    const candidate = match[1]?.trim();
     if (!candidate) {
       continue;
     }
@@ -384,8 +411,21 @@ export function extractAssistantResponseContent(message: string): AssistantRespo
   }
 
   const parsedWholeMessage = parseSpecCandidate(trimmed);
+  let displayText = parsedWholeMessage ? '' : trimmed;
+
+  if (parsedWholeMessage) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      if (parsed.protocolVersion === '2.0' && typeof parsed.assistantText === 'string') {
+        displayText = parsed.assistantText;
+      }
+    } catch {
+      // no-op
+    }
+  }
+
   return {
-    displayText: parsedWholeMessage ? '' : trimmed,
+    displayText,
     panelSpec: parsedWholeMessage,
   };
 }

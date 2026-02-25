@@ -5,6 +5,7 @@ import { planAssistantRequest } from '../../navigation/assistantConversation';
 import { dispatchAssistantAction } from '../../navigation/assistantActionDispatcher';
 import { extractAssistantResponseContent, type AssistantPanelElement } from '../../navigation/assistantPanelSpec';
 import { toClarificationElements } from '../../navigation/protocolNeedsInput';
+import { buildActionPoliciesFromEnvelope } from '../../navigation/protocolActionPolicies';
 import { ensureConversationId } from '../../navigation/chatSession';
 import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { useChatMessageSender } from '../../navigation/useChatMessageSender';
@@ -54,6 +55,7 @@ export const AssistantSidebar: React.FC = () => {
     finalizeAssistantTurn,
     appendAssistantMessage,
     stopStreaming,
+    getStreamingContent,
   } = useChatSurfaceState();
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) ?? null, [tabs, activeTabId]);
 
@@ -173,20 +175,18 @@ export const AssistantSidebar: React.FC = () => {
           ? (sendResult.envelope.ui?.elements as AssistantPanelElement[])
           : toClarificationElements(sendResult.envelope.needsInput);
         setPanelElements(uiElements);
-        setActionPolicies(
-          sendResult.envelope.actions.reduce<Record<string, 'silent' | 'confirm' | 'danger'>>((accumulator, action) => {
-            accumulator[action.action] = action.policy;
-            return accumulator;
-          }, {}),
-        );
-      } else if (sendResult.message) {
-        const parsedResponse = extractAssistantResponseContent(sendResult.message);
-        finalizeAssistantTurn(resolvedConversationId, parsedResponse.displayText);
-        setPanelElements(parsedResponse.panelSpec?.elements ?? []);
-        setActionPolicies({});
+        setActionPolicies(buildActionPoliciesFromEnvelope(sendResult.envelope));
       } else {
-        appendAssistantMessage(resolvedConversationId, tr('chat.errorEmptyResponse'));
-        stopStreaming();
+        const assistantContent = getStreamingContent() || sendResult.message;
+        if (assistantContent) {
+          const parsedResponse = extractAssistantResponseContent(assistantContent);
+          finalizeAssistantTurn(resolvedConversationId, parsedResponse.displayText);
+          setPanelElements(parsedResponse.panelSpec?.elements ?? []);
+          setActionPolicies({});
+        } else {
+          appendAssistantMessage(resolvedConversationId, tr('chat.errorEmptyResponse'));
+          stopStreaming();
+        }
       }
 
       setPrompt('');
@@ -230,17 +230,13 @@ export const AssistantSidebar: React.FC = () => {
             ? (sendResult.envelope.ui?.elements as AssistantPanelElement[])
             : toClarificationElements(sendResult.envelope.needsInput);
           setPanelElements(uiElements);
-          setActionPolicies(
-            sendResult.envelope.actions.reduce<Record<string, 'silent' | 'confirm' | 'danger'>>((accumulator, action) => {
-              accumulator[action.action] = action.policy;
-              return accumulator;
-            }, {}),
-          );
+          setActionPolicies(buildActionPoliciesFromEnvelope(sendResult.envelope));
           return;
         }
 
-        if (sendResult.message) {
-          const parsedResponse = extractAssistantResponseContent(sendResult.message);
+        const assistantContent = getStreamingContent() || sendResult.message;
+        if (assistantContent) {
+          const parsedResponse = extractAssistantResponseContent(assistantContent);
           finalizeAssistantTurn(conversationId, parsedResponse.displayText);
           setPanelElements(parsedResponse.panelSpec?.elements ?? []);
           setActionPolicies({});

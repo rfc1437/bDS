@@ -192,4 +192,49 @@ describe('assistantPanelSpec', () => {
     expect(result).not.toBeNull();
     expect(result?.elements).toHaveLength(7);
   });
+
+  it('parses canonical protocol envelope JSON and extracts assistant text plus ui spec', () => {
+    const raw = JSON.stringify({
+      protocolVersion: '2.0',
+      assistantText: 'Here is your chart.',
+      ui: {
+        specVersion: '1',
+        elements: [
+          {
+            type: 'chart',
+            chartType: 'bar',
+            data: {
+              labels: ['aside', 'article'],
+              datasets: [{ data: [181, 53] }],
+            },
+          },
+          {
+            type: 'text',
+            content: 'Breakdown details',
+          },
+        ],
+      },
+      intent: 'summarize',
+      needsInput: { required: false, fields: [] },
+      actions: [],
+      confidence: 0.9,
+      traceId: 'trace-1',
+    });
+
+    const result = extractAssistantResponseContent(raw);
+
+    expect(result.displayText).toBe('Here is your chart.');
+    expect(result.panelSpec).not.toBeNull();
+    expect(result.panelSpec?.elements[0]).toMatchObject({
+      type: 'chart',
+      series: [
+        { label: 'aside', value: 181 },
+        { label: 'article', value: 53 },
+      ],
+    });
+    expect(result.panelSpec?.elements[1]).toEqual({
+      type: 'text',
+      text: 'Breakdown details',
+    });
+  });
 });

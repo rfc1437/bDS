@@ -18,7 +18,7 @@ import { MediaEngine } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
 import { ProtocolResponseBuilder } from '../agentic/protocol/responseBuilder';
 import { CapabilityRegistryService } from '../agentic/capabilities/registry';
-import { validateProtocolRequestEnvelope } from '../agentic/protocol/validator';
+import { validateProtocolRequestEnvelope, validateProtocolResponseEnvelope } from '../agentic/protocol/validator';
 import type { ProtocolResponseEnvelope } from '../agentic/protocol/types';
 import { AgentTurnStateMachine, type AgentTurnState } from '../agentic/workflow/turnStateMachine';
 import { WorkflowCheckpointStore } from '../agentic/workflow/checkpointStore';
@@ -148,6 +148,15 @@ export class OpenCodeManager {
   private workflowCheckpointStore: WorkflowCheckpointStore;
   private apiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
+
+  private readonly protocolBoundaryInstructions = `Protocol response requirements (strict):
+- Return a single JSON object that matches this exact envelope schema:
+  {"protocolVersion":"2.0","assistantText":"string","ui":{"specVersion":"1","elements":[]}?,"intent":"analyze|ask_input|propose_action|execute_action|summarize","needsInput":{"required":boolean,"fields":[]},"actions":[],"confidence":number,"traceId":"string"}
+- Do not return any top-level shape other than this envelope.
+- Do not use legacy top-level keys like title/widgets/tabs/content/data/widgets.
+- ui, if present, must use specVersion "1" and canonical element structures only.
+- DO NOT output markdown code blocks containing JSON. The entire response must be the JSON envelope.
+- If uncertain, return an envelope with assistantText and empty actions/ui rather than alternative JSON formats.`;
 
   constructor(
     chatEngine: ChatEngine,
@@ -294,6 +303,7 @@ export class OpenCodeManager {
       // Get system prompt
       const systemMessage = conversation.messages.find(m => m.role === 'system');
       const systemPrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
+      const protocolSystemPrompt = `${systemPrompt}\n\n${this.protocolBoundaryInstructions}`;
 
       // Build message history from DB (excluding system messages)
       const dbMessages = conversation.messages.filter(m => m.role !== 'system');
@@ -339,29 +349,34 @@ export class OpenCodeManager {
       let fullResponse = '';
       const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
 
+      const requestProvider = async (
+        prompt: string,
+        messages: Array<{ role: string; content?: string; toolCalls?: string; toolCallId?: string }>,
+      ) => {
+        if (provider === 'anthropic') {
+          return this.sendAnthropicMessage(
+            modelId,
+            prompt,
+            messages,
+            abortController.signal,
+            { onDelta, onToolCall, onToolResult },
+          );
+        }
+
+        return this.sendOpenAIMessage(
+          modelId,
+          prompt,
+          messages,
+          abortController.signal,
+          { onDelta, onToolCall, onToolResult },
+        );
+      };
+
       try {
         console.log('[OpenCodeManager] Sending to provider:', provider, 'model:', modelId);
-        if (provider === 'anthropic') {
-          const result = await this.sendAnthropicMessage(
-            modelId,
-            systemPrompt,
-            dbMessages,
-            abortController.signal,
-            { onDelta, onToolCall, onToolResult }
-          );
-          fullResponse = result.content;
-          toolCallsCollected.push(...result.toolCalls);
-        } else {
-          const result = await this.sendOpenAIMessage(
-            modelId,
-            systemPrompt,
-            dbMessages,
-            abortController.signal,
-            { onDelta, onToolCall, onToolResult }
-          );
-          fullResponse = result.content;
-          toolCallsCollected.push(...result.toolCalls);
-        }
+        const firstResult = await requestProvider(protocolSystemPrompt, dbMessages);
+        fullResponse = firstResult.content;
+        toolCallsCollected.push(...firstResult.toolCalls);
         console.log('[OpenCodeManager] fullResponse length:', fullResponse.length);
       } catch (error) {
         console.error('[OpenCodeManager] Request error:', (error as Error).message);
@@ -374,22 +389,54 @@ export class OpenCodeManager {
         this.abortControllers.delete(conversationId);
       }
 
-      // Save assistant response (including partial content from aborted requests)
-      if (fullResponse) {
-        await this.chatEngine.addMessage({
-          conversationId,
-          role: 'assistant',
-          content: fullResponse,
-          toolCalls: toolCallsCollected.length > 0 ? JSON.stringify(toolCallsCollected) : undefined,
-          createdAt: new Date(),
-        });
-      }
+      const isCanonicalProtocolEnvelope = (() => {
+        try {
+          const parsed = JSON.parse(fullResponse);
+          const validated = validateProtocolResponseEnvelope(parsed);
+          return validated.ok;
+        } catch {
+          return false;
+        }
+      })();
 
-      const protocolResult = this.protocolResponseBuilder.build({
+      let protocolResult = this.protocolResponseBuilder.build({
         rawAssistantOutput: fullResponse,
         surface,
         capabilities,
       });
+
+      if (!isCanonicalProtocolEnvelope && fullResponse.trim().length > 0 && !abortController.signal.aborted) {
+        const retryReason = protocolResult.validationError?.message || 'previous output was not a canonical protocol envelope';
+        const retryPrompt = `Your previous output failed protocol validation: ${retryReason}.\nReturn ONLY one valid protocol envelope JSON object and nothing else.`;
+        const retryMessages = [
+          ...dbMessages,
+          {
+            conversationId,
+            role: 'assistant',
+            content: fullResponse,
+            createdAt: new Date(),
+          },
+          {
+            conversationId,
+            role: 'user',
+            content: retryPrompt,
+            createdAt: new Date(),
+          },
+        ];
+
+        try {
+          const retryResult = await requestProvider(protocolSystemPrompt, retryMessages);
+          fullResponse = retryResult.content;
+          toolCallsCollected.push(...retryResult.toolCalls);
+          protocolResult = this.protocolResponseBuilder.build({
+            rawAssistantOutput: fullResponse,
+            surface,
+            capabilities,
+          });
+        } catch (error) {
+          console.error('[OpenCodeManager] Protocol retry failed:', (error as Error).message);
+        }
+      }
 
       const previousCheckpoint = await this.workflowCheckpointStore.load(conversationId);
       const previousState: AgentTurnState = previousCheckpoint?.state || 'planning';
@@ -416,6 +463,17 @@ export class OpenCodeManager {
         fallbackUsed: Boolean(protocolResult.validationError),
         blockedActions: blockedActionWarnings.length,
       });
+
+      // Save normalized assistant response to history so transcript does not render raw protocol JSON.
+      if (fullResponse) {
+        await this.chatEngine.addMessage({
+          conversationId,
+          role: 'assistant',
+          content: protocolResult.envelope.assistantText,
+          toolCalls: toolCallsCollected.length > 0 ? JSON.stringify(toolCallsCollected) : undefined,
+          createdAt: new Date(),
+        });
+      }
 
       // Generate title after first exchange
       const userMsgCount = conversation.messages.filter(m => m.role === 'user').length;

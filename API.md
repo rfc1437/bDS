@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.4.0
+Contract version: 1.5.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -3518,10 +3518,12 @@ Send message to chat conversation.
 
 - conversationId (str, required)
 - message (str, required)
+- metadata (dict, optional)
 
 **Response specification**
 
-- Return type: `{ success: boolean; message?: string; error?: string }`
+- Return type: `{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string }`
+- Data structures: `ProtocolResponseEnvelope`
 
 **Example call**
 
@@ -3533,7 +3535,18 @@ result = await bds.chat.send_message(conversation_id='conversation-1', message='
 **Example response**
 
 ```python
-{}
+[
+{
+    'protocolVersion': None,
+    'assistantText': 'value',
+    'ui': [],
+    'intent': None,
+    'needsInput': False,
+    'actions': [],
+    'confidence': 0,
+    'traceId': 'value'
+}
+]
 ```
 
 ### chat.abortMessage
@@ -4082,6 +4095,54 @@ Stored API key state for chat provider.
 
 - hasKey (`boolean`, required): Whether a key is configured.
 - maskedKey (`string`, required): Masked key representation for UI display.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### ProtocolNeedsInputField
+
+A required clarification input field used for needsInput prompts.
+
+**Fields**
+
+- key (`string`, required): Stable field key used in submitted values.
+- label (`string`, required): User-facing field label.
+- inputType (`'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'`, required): Rendered input control type.
+- required (`boolean`, optional): Whether user input is required.
+- options (`Array<{ label: string; value: string }>`, optional): Selectable options for select controls.
+- placeholder (`string`, optional): Optional placeholder text for text-like controls.
+- defaultValue (`string | number | boolean`, optional): Default field value shown in UI.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### ProtocolAction
+
+A declarative assistant action exposed to the UI runtime.
+
+**Fields**
+
+- id (`string`, required): Stable action id within a response envelope.
+- action (`string`, required): Action name to dispatch in renderer.
+- label (`string`, optional): Optional user-facing action label.
+- payload (`Record<string, unknown>`, optional): Optional action payload arguments.
+- policy (`'silent' | 'confirm' | 'danger'`, required): Action confirmation policy level.
+- requiresConfirmation (`boolean`, required): Whether confirmation is required before dispatch.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### ProtocolResponseEnvelope
+
+Canonical AGUI response envelope returned from chat.sendMessage.
+
+**Fields**
+
+- protocolVersion (`'2.0'`, required): Envelope protocol version.
+- assistantText (`string`, required): Assistant text content rendered in transcript.
+- ui (`{ specVersion: '1'; elements: unknown[] }`, optional): Optional structured UI payload.
+- intent (`'analyze' | 'ask_input' | 'propose_action' | 'execute_action' | 'summarize'`, required): Turn intent classification.
+- needsInput (`{ required: boolean; fields: ProtocolNeedsInputField[] }`, required): Clarification requirements for next step.
+- actions (`ProtocolAction[]`, required): Declarative actions available for this turn.
+- confidence (`number`, required): Model confidence score from 0 to 1.
+- traceId (`string`, required): Trace id for observability and debugging.
 
 [↑ Back to Table of contents](#table-of-contents)
 

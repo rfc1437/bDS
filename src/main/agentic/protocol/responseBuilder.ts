@@ -7,7 +7,8 @@ import type {
   ProtocolValidationError,
 } from './types';
 import { validateProtocolResponseEnvelope } from './validator';
-import { extractAssistantUiSpec } from './uiSpecParser';
+import { extractAssistantUiSpec, normalizeAssistantUiSpec } from './uiSpecParser';
+import { assistantPanelSpecSchema } from './uiSchema';
 import { resolveActionPolicy } from '../policy/actionPolicy';
 
 export interface ProtocolResponseBuildInput {
@@ -30,7 +31,8 @@ export class ProtocolResponseBuilder {
 
     const directEnvelope = this.parseCanonicalEnvelope(input.rawAssistantOutput);
     if (directEnvelope) {
-      const normalizedDirectEnvelope = this.applyActionPolicies(directEnvelope);
+      const sanitizedDirectEnvelope = this.sanitizeUiPayload(directEnvelope, warnings);
+      const normalizedDirectEnvelope = this.applyActionPolicies(sanitizedDirectEnvelope);
       const { filteredEnvelope, warnings: capabilityWarnings } = this.applyCapabilityGuards(normalizedDirectEnvelope, input.capabilities);
       warnings.push(...capabilityWarnings);
       const validated = validateProtocolResponseEnvelope(filteredEnvelope);
@@ -55,7 +57,8 @@ export class ProtocolResponseBuilder {
 
     const repaired = this.repairRawEnvelope(input.rawAssistantOutput);
     if (repaired) {
-      const normalizedRepairedEnvelope = this.applyActionPolicies(repaired);
+      const sanitizedRepairedEnvelope = this.sanitizeUiPayload(repaired, warnings);
+      const normalizedRepairedEnvelope = this.applyActionPolicies(sanitizedRepairedEnvelope);
       const { filteredEnvelope, warnings: capabilityWarnings } = this.applyCapabilityGuards(normalizedRepairedEnvelope, input.capabilities);
       warnings.push(...capabilityWarnings);
       const validated = validateProtocolResponseEnvelope(filteredEnvelope);
@@ -88,7 +91,8 @@ export class ProtocolResponseBuilder {
       traceId: randomUUID(),
     };
 
-    const normalizedBaseEnvelope = this.applyActionPolicies(baseEnvelope);
+    const sanitizedBaseEnvelope = this.sanitizeUiPayload(baseEnvelope, warnings);
+    const normalizedBaseEnvelope = this.applyActionPolicies(sanitizedBaseEnvelope);
     const { filteredEnvelope, warnings: capabilityWarnings } = this.applyCapabilityGuards(normalizedBaseEnvelope, input.capabilities);
     warnings.push(...capabilityWarnings);
 
@@ -112,9 +116,48 @@ export class ProtocolResponseBuilder {
     };
   }
 
+  private sanitizeUiPayload(envelope: ProtocolResponseEnvelope, warnings: string[]): ProtocolResponseEnvelope {
+    if (!envelope.ui) {
+      return envelope;
+    }
+
+    const parsedUi = assistantPanelSpecSchema.safeParse(envelope.ui);
+    if (parsedUi.success) {
+      return {
+        ...envelope,
+        ui: parsedUi.data,
+      };
+    }
+
+    const normalizedUi = normalizeAssistantUiSpec(envelope.ui);
+    if (normalizedUi) {
+      warnings.push('Normalized non-canonical ui payload to canonical AGUI schema');
+      return {
+        ...envelope,
+        ui: normalizedUi,
+      };
+    }
+
+    warnings.push('Invalid ui payload removed from response envelope');
+    return {
+      ...envelope,
+      ui: undefined,
+    };
+  }
+
+  private extractJsonFromMarkdown(raw: string): string {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)```/i);
+    if (match) {
+      return match[1].trim();
+    }
+    return trimmed;
+  }
+
   private parseCanonicalEnvelope(raw: string): ProtocolResponseEnvelope | null {
     try {
-      const parsed = JSON.parse(raw);
+      const jsonString = this.extractJsonFromMarkdown(raw);
+      const parsed = JSON.parse(jsonString);
       const validated = validateProtocolResponseEnvelope(parsed);
       return validated.ok && validated.value ? validated.value : null;
     } catch {
@@ -124,14 +167,16 @@ export class ProtocolResponseBuilder {
 
   private repairRawEnvelope(raw: string): ProtocolResponseEnvelope | null {
     try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const jsonString = this.extractJsonFromMarkdown(raw);
+      const parsed = JSON.parse(jsonString) as Record<string, unknown>;
       const looksLikeEnvelope = Boolean(
         parsed.assistantText
         || parsed.assistant_text
         || parsed.intent
         || parsed.needsInput
         || parsed.needs_input
-        || parsed.actions,
+        || parsed.actions
+        || parsed.ui,
       );
 
       if (!looksLikeEnvelope) {
