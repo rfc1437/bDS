@@ -16,6 +16,13 @@ import { ChatEngine } from './ChatEngine';
 import { PostEngine } from './PostEngine';
 import { MediaEngine } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
+import { ProtocolResponseBuilder } from '../agentic/protocol/responseBuilder';
+import { CapabilityRegistryService } from '../agentic/capabilities/registry';
+import { validateProtocolRequestEnvelope } from '../agentic/protocol/validator';
+import type { ProtocolResponseEnvelope } from '../agentic/protocol/types';
+import { AgentTurnStateMachine, type AgentTurnState } from '../agentic/workflow/turnStateMachine';
+import { WorkflowCheckpointStore } from '../agentic/workflow/checkpointStore';
+import { getProtocolTelemetryService } from '../agentic/observability/protocolTelemetry';
 
 // OpenCode Zen API endpoints
 const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
@@ -77,6 +84,10 @@ export interface SendMessageOptions {
 export interface SendMessageResult {
   success: boolean;
   message?: string;
+  envelope?: ProtocolResponseEnvelope;
+  protocolVersion?: '2.0';
+  traceId?: string;
+  warnings?: string[];
   error?: string;
   toolCalls?: Array<{ name: string; args: unknown }>;
 }
@@ -131,6 +142,10 @@ export class OpenCodeManager {
   private postEngine: PostEngine;
   private mediaEngine: MediaEngine;
   private getMainWindow: () => BrowserWindow | null;
+  private protocolResponseBuilder: ProtocolResponseBuilder;
+  private capabilityRegistry: CapabilityRegistryService;
+  private turnStateMachine: AgentTurnStateMachine;
+  private workflowCheckpointStore: WorkflowCheckpointStore;
   private apiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
 
@@ -144,6 +159,13 @@ export class OpenCodeManager {
     this.postEngine = postEngine;
     this.mediaEngine = mediaEngine;
     this.getMainWindow = getMainWindow;
+    this.protocolResponseBuilder = new ProtocolResponseBuilder();
+    this.capabilityRegistry = new CapabilityRegistryService();
+    this.turnStateMachine = new AgentTurnStateMachine();
+    this.workflowCheckpointStore = new WorkflowCheckpointStore({
+      getSetting: async (key: string) => this.chatEngine.getSetting(key),
+      setSetting: async (key: string, value: string) => this.chatEngine.setSetting(key, value),
+    });
   }
 
   /**
@@ -275,10 +297,37 @@ export class OpenCodeManager {
 
       // Build message history from DB (excluding system messages)
       const dbMessages = conversation.messages.filter(m => m.role !== 'system');
+      const surface = metadata?.surface || 'tab';
+      const capabilities = this.capabilityRegistry.getSnapshot({ surface });
+      const requestEnvelope = {
+        protocolVersion: '2.0' as const,
+        surface,
+        messages: dbMessages
+          .filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'system' || message.role === 'tool')
+          .map((message) => ({
+            role: message.role,
+            content: message.content || '',
+          })),
+        context: {
+          conversationId,
+          modelId,
+        },
+        capabilities,
+      };
+
+      const requestValidation = validateProtocolRequestEnvelope(requestEnvelope);
+      if (!requestValidation.ok) {
+        return {
+          success: false,
+          error: requestValidation.error?.message || 'Invalid protocol request envelope',
+        };
+      }
+
       const surfaceHint = metadata?.surface
         ? `\n\n[Client UI surface: ${metadata.surface}. Render response UI for this surface while keeping content functionally equivalent.]`
         : '';
-      const userMessageForModel = `${userMessage}${surfaceHint}`;
+      const capabilityHint = `\n\n[Protocol request envelope]\n${JSON.stringify(requestEnvelope, null, 2)}`;
+      const userMessageForModel = `${userMessage}${surfaceHint}${capabilityHint}`;
       // Add the new user message
       dbMessages.push({
         conversationId,
@@ -336,6 +385,38 @@ export class OpenCodeManager {
         });
       }
 
+      const protocolResult = this.protocolResponseBuilder.build({
+        rawAssistantOutput: fullResponse,
+        surface,
+        capabilities,
+      });
+
+      const previousCheckpoint = await this.workflowCheckpointStore.load(conversationId);
+      const previousState: AgentTurnState = previousCheckpoint?.state || 'planning';
+      const nextState = this.turnStateMachine.transition({
+        previousState,
+        envelope: {
+          intent: protocolResult.envelope.intent,
+          needsInput: protocolResult.envelope.needsInput,
+        },
+      });
+
+      await this.workflowCheckpointStore.save({
+        conversationId,
+        state: nextState,
+        pendingFields: protocolResult.envelope.needsInput.fields.map((field) => field.key),
+        lastTraceId: protocolResult.envelope.traceId,
+        updatedAt: new Date().toISOString(),
+      });
+
+      const blockedActionWarnings = protocolResult.warnings.filter((warning) => warning.includes('Blocked unsupported action'));
+      getProtocolTelemetryService().recordTurn({
+        validEnvelope: !protocolResult.validationError,
+        repairAttempted: protocolResult.repairAttempted,
+        fallbackUsed: Boolean(protocolResult.validationError),
+        blockedActions: blockedActionWarnings.length,
+      });
+
       // Generate title after first exchange
       const userMsgCount = conversation.messages.filter(m => m.role === 'user').length;
       if (userMsgCount === 0 && fullResponse) {
@@ -346,7 +427,11 @@ export class OpenCodeManager {
 
       return {
         success: true,
-        message: fullResponse,
+        message: protocolResult.envelope.assistantText,
+        envelope: protocolResult.envelope,
+        protocolVersion: protocolResult.envelope.protocolVersion,
+        traceId: protocolResult.traceId,
+        warnings: protocolResult.warnings,
         toolCalls: toolCallsCollected.length > 0 ? toolCallsCollected : undefined,
       };
     } catch (error) {

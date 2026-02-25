@@ -1,10 +1,12 @@
+import type { ProtocolResponseEnvelope } from '../types/electron';
+
 export interface ChatService {
   createConversation: (title?: string, model?: string) => Promise<{ id: string } | null | undefined>;
   sendMessage: (
     conversationId: string,
     message: string,
     metadata?: SendMessageMetadata,
-  ) => Promise<{ success: boolean; message?: string; error?: string } | null | undefined>;
+  ) => Promise<{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string } | null | undefined>;
 }
 
 export interface SendMessageMetadata {
@@ -27,6 +29,10 @@ export interface SendConversationMessageInput {
 export interface SendConversationMessageResult {
   success: boolean;
   message: string;
+  envelope?: ProtocolResponseEnvelope;
+  protocolVersion?: '2.0';
+  traceId?: string;
+  warnings?: string[];
   error?: string;
 }
 
@@ -69,5 +75,9 @@ export async function sendConversationMessage(
   return {
     success: true,
     message: result.message || '',
+    envelope: result.envelope,
+    protocolVersion: result.protocolVersion,
+    traceId: result.traceId,
+    warnings: result.warnings,
   };
 }

@@ -29,11 +29,15 @@ describe('invokePythonApiMethodV1', () => {
     const getProjectMetadata = vi.fn().mockResolvedValue({ name: 'My Project' });
     const getAllProjects = vi.fn().mockResolvedValue([{ id: 'prj-1', name: 'Main' }]);
     const getAllPosts = vi.fn().mockResolvedValue({ items: [], hasMore: false, total: 0 });
+    const getProtocolHealth = vi.fn().mockResolvedValue({ totalTurns: 1, parseValidityRate: 1 });
 
     vi.stubGlobal('window', {
       electronAPI: {
         projects: {
           getAll: getAllProjects,
+        },
+        chat: {
+          getProtocolHealth,
         },
         posts: {
           search: searchPosts,
@@ -49,10 +53,12 @@ describe('invokePythonApiMethodV1', () => {
     await expect(invokePythonApiMethodV1('posts.getAll', { options: { limit: 10, offset: 5 } })).resolves.toEqual({ items: [], hasMore: false, total: 0 });
     await expect(invokePythonApiMethodV1('posts.search', { query: 'hit' })).resolves.toEqual([{ id: 'p1', title: 'Hit' }]);
     await expect(invokePythonApiMethodV1('meta.getProjectMetadata', {})).resolves.toEqual({ name: 'My Project' });
+    await expect(invokePythonApiMethodV1('chat.getProtocolHealth', {})).resolves.toEqual({ totalTurns: 1, parseValidityRate: 1 });
     expect(getAllProjects).toHaveBeenCalledWith();
     expect(getAllPosts).toHaveBeenCalledWith({ limit: 10, offset: 5 });
     expect(searchPosts).toHaveBeenCalledWith('hit');
     expect(getProjectMetadata).toHaveBeenCalledWith();
+    expect(getProtocolHealth).toHaveBeenCalledWith();
   });
 
   it('rejects unknown methods and malformed args', async () => {
@@ -65,6 +71,9 @@ describe('invokePythonApiMethodV1', () => {
         },
         projects: {
           getAll: vi.fn(),
+        },
+        chat: {
+          getProtocolHealth: vi.fn(),
         },
         meta: {
           getProjectMetadata: vi.fn(),

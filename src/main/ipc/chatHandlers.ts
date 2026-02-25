@@ -8,6 +8,7 @@ import { OpenCodeManager } from '../engine/OpenCodeManager';
 import { getPostEngine } from '../engine/PostEngine';
 import { getMediaEngine } from '../engine/MediaEngine';
 import { getDatabase } from '../database';
+import { getProtocolTelemetryService } from '../agentic/observability/protocolTelemetry';
 
 let chatEngine: ChatEngine | null = null;
 let openCodeManager: OpenCodeManager | null = null;
@@ -134,6 +135,10 @@ export function registerChatHandlers(): void {
   });
 
   // ============ Chat Settings ============
+
+  ipcMain.handle('chat:getProtocolHealth', async () => {
+    return getProtocolTelemetryService().getSnapshot();
+  });
 
   // Get available models
   ipcMain.handle('chat:getAvailableModels', async () => {

@@ -1478,6 +1478,12 @@ interface CategoryCount {
   count: number;
 }
 
+interface DashboardProtocolHealth {
+  blockedActionCount: number;
+  parseValidityRate: number;
+  fallbackTurns: number;
+}
+
 const Dashboard: React.FC = () => {
   const { t: tr, language } = useI18n();
   const { posts, media } = useAppStore();
@@ -1486,6 +1492,7 @@ const Dashboard: React.FC = () => {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [tagColors, setTagColors] = useState<Map<string, string>>(new Map());
   const [categoryCounts, setCategoryCounts] = useState<CategoryCount[]>([]);
+  const [protocolHealth, setProtocolHealth] = useState<DashboardProtocolHealth | null>(null);
 
   const uiDateLocale = UI_DATE_LOCALE[language] || UI_DATE_LOCALE.en;
   const monthFormatter = useMemo(
@@ -1496,17 +1503,25 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [ds, ym, tc, cc, colorMap] = await Promise.all([
+        const [ds, ym, tc, cc, colorMap, protocolHealthSnapshot] = await Promise.all([
           window.electronAPI?.posts.getDashboardStats(),
           window.electronAPI?.posts.getByYearMonth(),
           window.electronAPI?.posts.getTagsWithCounts(),
           window.electronAPI?.posts.getCategoriesWithCounts(),
           loadTagColorMap(),
+          window.electronAPI?.chat.getProtocolHealth(),
         ]);
         if (ds) setStats(ds);
         if (ym) setYearMonthData(ym);
         if (tc) setTagCounts(tc);
         if (cc) setCategoryCounts(cc);
+        if (protocolHealthSnapshot) {
+          setProtocolHealth({
+            blockedActionCount: protocolHealthSnapshot.blockedActionCount,
+            parseValidityRate: protocolHealthSnapshot.parseValidityRate,
+            fallbackTurns: protocolHealthSnapshot.fallbackTurns,
+          });
+        }
         setTagColors(colorMap);
       } catch (e) {
         console.error('Failed to load dashboard stats:', e);
@@ -1551,6 +1566,9 @@ const Dashboard: React.FC = () => {
   const displayDraftCount = stats?.draftCount ?? 0;
   const displayPublishedCount = stats?.publishedCount ?? 0;
   const displayArchivedCount = stats?.archivedCount ?? 0;
+  const parseValidityPercent = protocolHealth
+    ? `${Math.round(protocolHealth.parseValidityRate * 100)}%`
+    : '—';
 
   const getPostCountLabel = useCallback((count: number) => {
     return tr(count === 1 ? 'dashboard.postCount.one' : 'dashboard.postCount.other', { count });
@@ -1595,6 +1613,14 @@ const Dashboard: React.FC = () => {
             <div className="stat-label">{tr('dashboard.stats.tags')}</div>
             <div className="stat-breakdown">
               <span className="stat-tag">{tr('dashboard.stats.categories', { count: categoryCounts.length })}</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-number">{parseValidityPercent}</div>
+            <div className="stat-label">{tr('dashboard.stats.protocolHealth')}</div>
+            <div className="stat-breakdown">
+              <span className="stat-tag">{tr('dashboard.stats.blockedActions', { count: protocolHealth?.blockedActionCount ?? 0 })}</span>
+              <span className="stat-tag">{tr('dashboard.stats.fallbackTurns', { count: protocolHealth?.fallbackTurns ?? 0 })}</span>
             </div>
           </div>
         </div>

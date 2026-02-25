@@ -286,6 +286,7 @@ export const electronAPI: ElectronAPI = {
     getApiKey: () => ipcRenderer.invoke('chat:getApiKey'),
 
     // Settings
+    getProtocolHealth: () => ipcRenderer.invoke('chat:getProtocolHealth'),
     getAvailableModels: () => ipcRenderer.invoke('chat:getAvailableModels'),
     setDefaultModel: (modelId: string) => ipcRenderer.invoke('chat:setDefaultModel', modelId),
     getSystemPrompt: () => ipcRenderer.invoke('chat:getSystemPrompt'),

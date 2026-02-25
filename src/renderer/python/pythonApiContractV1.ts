@@ -176,6 +176,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('chat.validateApiKey', 'Validate chat API key and list available models.', [requiredString('apiKey')], '{ isValid: boolean; models: ChatModel[] }'),
   method('chat.setApiKey', 'Store chat API key.', [requiredString('apiKey')], '{ success: boolean; error?: string }'),
   method('chat.getApiKey', 'Get stored chat API key status.', [], 'ChatApiKeyStatus'),
+  method('chat.getProtocolHealth', 'Get AGUI protocol telemetry health snapshot.', [], 'ProtocolTelemetrySnapshot'),
   method('chat.getAvailableModels', 'Get available chat models and selected default.', [], '{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }'),
   method('chat.setDefaultModel', 'Set default chat model.', [requiredString('modelId')], '{ success: boolean; error?: string }'),
   method('chat.getSystemPrompt', 'Get configured system prompt.', [], '{ success: boolean; prompt?: string; error?: string }'),
@@ -359,11 +360,25 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'maskedKey', type: 'string', required: true, description: 'Masked key representation for UI display.' },
     ],
   },
+  {
+    name: 'ProtocolTelemetrySnapshot',
+    description: 'Aggregated protocol telemetry metrics for AGUI response health.',
+    fields: [
+      { name: 'totalTurns', type: 'number', required: true, description: 'Total number of recorded assistant turns.' },
+      { name: 'validEnvelopeTurns', type: 'number', required: true, description: 'Turns with schema-valid protocol envelopes.' },
+      { name: 'repairAttempts', type: 'number', required: true, description: 'Number of response repair attempts.' },
+      { name: 'fallbackTurns', type: 'number', required: true, description: 'Turns that used protocol fallback response.' },
+      { name: 'blockedActionCount', type: 'number', required: true, description: 'Count of actions blocked by policy.' },
+      { name: 'parseValidityRate', type: 'number', required: true, description: 'Ratio of valid envelopes to total turns.' },
+      { name: 'repairRate', type: 'number', required: true, description: 'Ratio of repair attempts to total turns.' },
+      { name: 'fallbackRate', type: 'number', required: true, description: 'Ratio of fallback turns to total turns.' },
+    ],
+  },
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.3.0',
-  generatedAt: '2026-02-24T00:00:00.000Z',
+  version: '1.4.0',
+  generatedAt: '2026-02-25T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
 };

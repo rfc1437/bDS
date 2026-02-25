@@ -435,6 +435,53 @@ export interface ChatSendMetadata {
   surface?: 'tab' | 'sidebar';
 }
 
+export interface ProtocolNeedsInputField {
+  key: string;
+  label: string;
+  inputType: 'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number';
+  required?: boolean;
+  options?: Array<{ label: string; value: string }>;
+  placeholder?: string;
+  defaultValue?: string | number | boolean;
+}
+
+export interface ProtocolAction {
+  id: string;
+  action: string;
+  label?: string;
+  payload?: Record<string, unknown>;
+  policy: 'silent' | 'confirm' | 'danger';
+  requiresConfirmation: boolean;
+}
+
+export interface ProtocolResponseEnvelope {
+  protocolVersion: '2.0';
+  assistantText: string;
+  ui?: {
+    specVersion: '1';
+    elements: unknown[];
+  };
+  intent: 'analyze' | 'ask_input' | 'propose_action' | 'execute_action' | 'summarize';
+  needsInput: {
+    required: boolean;
+    fields: ProtocolNeedsInputField[];
+  };
+  actions: ProtocolAction[];
+  confidence: number;
+  traceId: string;
+}
+
+export interface ProtocolTelemetrySnapshot {
+  totalTurns: number;
+  validEnvelopeTurns: number;
+  repairAttempts: number;
+  fallbackTurns: number;
+  blockedActionCount: number;
+  parseValidityRate: number;
+  repairRate: number;
+  fallbackRate: number;
+}
+
 export interface SiteValidationReport {
   sitemapPath: string;
   sitemapChanged: boolean;
@@ -717,6 +764,7 @@ export interface ElectronAPI {
     getApiKey: () => Promise<ChatApiKeyStatus>;
 
     // Settings
+    getProtocolHealth: () => Promise<ProtocolTelemetrySnapshot>;
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;
     setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
     getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
@@ -730,7 +778,7 @@ export interface ElectronAPI {
     deleteConversation: (id: string) => Promise<boolean>;
 
     // Messaging
-    sendMessage: (conversationId: string, message: string, metadata?: ChatSendMetadata) => Promise<{ success: boolean; message?: string; error?: string }>;
+    sendMessage: (conversationId: string, message: string, metadata?: ChatSendMetadata) => Promise<{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string }>;
     addSystemEvent: (conversationId: string, content: string) => Promise<{ success: boolean; error?: string }>;
     abortMessage: (conversationId: string) => Promise<void>;
     getHistory: (conversationId: string) => Promise<ChatMessage[]>;

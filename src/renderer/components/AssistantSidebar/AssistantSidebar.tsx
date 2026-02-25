@@ -4,6 +4,7 @@ import { resolveAssistantEditorContext } from '../../navigation/assistantPromptC
 import { planAssistantRequest } from '../../navigation/assistantConversation';
 import { dispatchAssistantAction } from '../../navigation/assistantActionDispatcher';
 import { extractAssistantResponseContent, type AssistantPanelElement } from '../../navigation/assistantPanelSpec';
+import { toClarificationElements } from '../../navigation/protocolNeedsInput';
 import { ensureConversationId } from '../../navigation/chatSession';
 import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { useChatMessageSender } from '../../navigation/useChatMessageSender';
@@ -22,6 +23,7 @@ export const AssistantSidebar: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [panelElements, setPanelElements] = useState<AssistantPanelElement[]>([]);
+  const [actionPolicies, setActionPolicies] = useState<Record<string, 'silent' | 'confirm' | 'danger'>>({});
   const [actionError, setActionError] = useState<string | null>(null);
 
   const {
@@ -127,10 +129,23 @@ export const AssistantSidebar: React.FC = () => {
         throw new Error(sendResult.error || 'Failed to send assistant message');
       }
 
-      if (sendResult.message) {
+      if (sendResult.envelope) {
+        finalizeAssistantTurn(resolvedConversationId, sendResult.envelope.assistantText);
+        const uiElements = Array.isArray(sendResult.envelope.ui?.elements)
+          ? (sendResult.envelope.ui?.elements as AssistantPanelElement[])
+          : toClarificationElements(sendResult.envelope.needsInput);
+        setPanelElements(uiElements);
+        setActionPolicies(
+          sendResult.envelope.actions.reduce<Record<string, 'silent' | 'confirm' | 'danger'>>((accumulator, action) => {
+            accumulator[action.action] = action.policy;
+            return accumulator;
+          }, {}),
+        );
+      } else if (sendResult.message) {
         const parsedResponse = extractAssistantResponseContent(sendResult.message);
         finalizeAssistantTurn(resolvedConversationId, parsedResponse.displayText);
         setPanelElements(parsedResponse.panelSpec?.elements ?? []);
+        setActionPolicies({});
       } else {
         appendAssistantMessage(resolvedConversationId, tr('chat.errorEmptyResponse'));
         stopStreaming();
@@ -146,6 +161,61 @@ export const AssistantSidebar: React.FC = () => {
   };
 
   const handleAssistantAction = (action: string, payload?: Record<string, unknown>) => {
+    if (action === 'submitNeedsInput' && conversationId) {
+      const values = payload?.values;
+      if (!values || typeof values !== 'object') {
+        setActionError(tr('assistantSidebar.error.actionFailed'));
+        return;
+      }
+
+      const clarificationMessage = `needs_input_response: ${JSON.stringify(values)}`;
+
+      beginUserTurn(conversationId, clarificationMessage);
+
+      void sendChatMessage({
+        conversationId,
+        message: clarificationMessage,
+        metadata: { surface: 'sidebar' },
+      }).then((sendResult) => {
+        if (!sendResult.success) {
+          appendAssistantMessage(
+            conversationId,
+            tr('chat.errorPrefix', { error: sendResult.error || tr('chat.errorNoResponse') }),
+          );
+          stopStreaming();
+          return;
+        }
+
+        if (sendResult.envelope) {
+          finalizeAssistantTurn(conversationId, sendResult.envelope.assistantText);
+          const uiElements = Array.isArray(sendResult.envelope.ui?.elements)
+            ? (sendResult.envelope.ui?.elements as AssistantPanelElement[])
+            : toClarificationElements(sendResult.envelope.needsInput);
+          setPanelElements(uiElements);
+          setActionPolicies(
+            sendResult.envelope.actions.reduce<Record<string, 'silent' | 'confirm' | 'danger'>>((accumulator, action) => {
+              accumulator[action.action] = action.policy;
+              return accumulator;
+            }, {}),
+          );
+          return;
+        }
+
+        if (sendResult.message) {
+          const parsedResponse = extractAssistantResponseContent(sendResult.message);
+          finalizeAssistantTurn(conversationId, parsedResponse.displayText);
+          setPanelElements(parsedResponse.panelSpec?.elements ?? []);
+          setActionPolicies({});
+        }
+      }).catch((error) => {
+        console.error('Failed to submit assistant clarification:', error);
+        appendAssistantMessage(conversationId, tr('chat.errorGeneric'));
+        stopStreaming();
+      });
+
+      return;
+    }
+
     const result = dispatchAssistantAction(
       {
         action,
@@ -230,7 +300,7 @@ export const AssistantSidebar: React.FC = () => {
       )}
 
       {panelElements.length > 0 && (
-        <AssistantPanelControls elements={panelElements} onAction={handleAssistantAction} />
+        <AssistantPanelControls elements={panelElements} onAction={handleAssistantAction} actionPolicies={actionPolicies} />
       )}
     </div>
   );

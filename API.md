@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.3.0
+Contract version: 1.4.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -3073,6 +3073,7 @@ result = await bds.tags.sync_from_posts()
 - [chat.validateApiKey](#chatvalidateapikey)
 - [chat.setApiKey](#chatsetapikey)
 - [chat.getApiKey](#chatgetapikey)
+- [chat.getProtocolHealth](#chatgetprotocolhealth)
 - [chat.getAvailableModels](#chatgetavailablemodels)
 - [chat.setDefaultModel](#chatsetdefaultmodel)
 - [chat.getSystemPrompt](#chatgetsystemprompt)
@@ -3203,6 +3204,41 @@ result = await bds.chat.get_api_key()
 {
     'hasKey': False,
     'maskedKey': 'value'
+}
+```
+
+### chat.getProtocolHealth
+
+Get AGUI protocol telemetry health snapshot.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `ProtocolTelemetrySnapshot`
+- Data structures: `ProtocolTelemetrySnapshot`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.get_protocol_health()
+```
+
+**Example response**
+
+```python
+{
+    'totalTurns': 0,
+    'validEnvelopeTurns': 0,
+    'repairAttempts': 0,
+    'fallbackTurns': 0,
+    'blockedActionCount': 0,
+    'parseValidityRate': 0,
+    'repairRate': 0,
+    'fallbackRate': 0
 }
 ```
 
@@ -4049,6 +4085,23 @@ Stored API key state for chat provider.
 
 [↑ Back to Table of contents](#table-of-contents)
 
+### ProtocolTelemetrySnapshot
+
+Aggregated protocol telemetry metrics for AGUI response health.
+
+**Fields**
+
+- totalTurns (`number`, required): Total number of recorded assistant turns.
+- validEnvelopeTurns (`number`, required): Turns with schema-valid protocol envelopes.
+- repairAttempts (`number`, required): Number of response repair attempts.
+- fallbackTurns (`number`, required): Turns that used protocol fallback response.
+- blockedActionCount (`number`, required): Count of actions blocked by policy.
+- parseValidityRate (`number`, required): Ratio of valid envelopes to total turns.
+- repairRate (`number`, required): Ratio of repair attempts to total turns.
+- fallbackRate (`number`, required): Ratio of fallback turns to total turns.
+
+[↑ Back to Table of contents](#table-of-contents)
+
 ---
 
-Generated from contract at 2026-02-24T00:00:00.000Z.
+Generated from contract at 2026-02-25T00:00:00.000Z.

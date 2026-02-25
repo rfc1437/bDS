@@ -5,9 +5,10 @@ import './AssistantPanelControls.css';
 interface AssistantPanelControlsProps {
   elements: AssistantPanelElement[];
   onAction: (action: string, payload?: Record<string, unknown>) => void;
+  actionPolicies?: Record<string, 'silent' | 'confirm' | 'danger'>;
 }
 
-export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ elements, onAction }) => {
+export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ elements, onAction, actionPolicies = {} }) => {
   const [widgetValues, setWidgetValues] = useState<Record<string, unknown>>({});
   const [activeTabByWidget, setActiveTabByWidget] = useState<Record<string, string>>({});
 
@@ -20,6 +21,20 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
 
   const getWidgetValue = (key: string, defaultValue?: unknown) =>
     Object.prototype.hasOwnProperty.call(widgetValues, key) ? widgetValues[key] : defaultValue;
+
+  const triggerAction = (action: string, payload?: Record<string, unknown>, label?: string) => {
+    const policy = actionPolicies[action] || 'silent';
+
+    if (policy !== 'silent') {
+      const confirmationText = label || action;
+      const confirmed = window.confirm(confirmationText);
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    onAction(action, payload);
+  };
 
   const renderInputControl = (
     key: string,
@@ -150,7 +165,7 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
           {element.action && element.submitLabel && (
             <button
               type="button"
-              onClick={() => onAction(element.action!, { ...(element.payload ?? {}), [element.key]: currentValue })}
+              onClick={() => triggerAction(element.action!, { ...(element.payload ?? {}), [element.key]: currentValue }, element.submitLabel)}
             >
               {element.submitLabel}
             </button>
@@ -175,7 +190,7 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
           {element.action && element.submitLabel && (
             <button
               type="button"
-              onClick={() => onAction(element.action!, { ...(element.payload ?? {}), [element.key]: currentValue })}
+              onClick={() => triggerAction(element.action!, { ...(element.payload ?? {}), [element.key]: currentValue }, element.submitLabel)}
             >
               {element.submitLabel}
             </button>
@@ -191,11 +206,11 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
           return accumulator;
         }, {});
 
-        onAction(element.action, {
+        triggerAction(element.action, {
           ...(element.payload ?? {}),
           formId: element.formId,
           values,
-        });
+        }, element.submitLabel);
       };
 
       return (
@@ -224,7 +239,7 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
                 <button
                   key={`assistant-card-action-${indexPath}-${actionIndex}`}
                   type="button"
-                  onClick={() => onAction(action.action, action.payload)}
+                  onClick={() => triggerAction(action.action, action.payload, action.label)}
                 >
                   {action.label}
                 </button>
@@ -243,7 +258,7 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
             alt={element.alt || ''}
             onClick={() => {
               if (element.action) {
-                onAction(element.action, element.payload);
+                triggerAction(element.action, element.payload, element.caption || element.alt || element.action);
               }
             }}
           />
@@ -279,7 +294,7 @@ export const AssistantPanelControls: React.FC<AssistantPanelControlsProps> = ({ 
     }
 
     return (
-      <button key={`assistant-element-${indexPath}`} type="button" onClick={() => onAction(element.action, element.payload)}>
+      <button key={`assistant-element-${indexPath}`} type="button" onClick={() => triggerAction(element.action, element.payload, element.label)}>
         {element.label}
       </button>
     );

@@ -18,6 +18,38 @@ Build a **protocol-first chat assistant** that:
 4. Works identically in editor chat and assistant sidebar.
 5. Is observable, testable, and versioned for internal iteration.
 
+## Implementation Status (This Branch)
+
+- ✅ Phase 0 — Foundation Contracts (**completed 2026-02-25**)
+- ✅ Phase 1 — Server-Side Enforcement + Repair Loop (**completed 2026-02-25**)
+- ✅ Phase 2 — Capability Registry + Negotiation (**completed 2026-02-25**)
+- ✅ Phase 3 — Workflow Engine and Clarification UX (**completed 2026-02-25**)
+- ✅ Phase 4 — Action Policy and Safety (**completed 2026-02-25**)
+- ✅ Phase 5 — Observability and QA (**completed 2026-02-25**)
+
+### Implemented Artifacts
+
+- `src/main/agentic/protocol/types.ts`
+- `src/main/agentic/protocol/errors.ts`
+- `src/main/agentic/protocol/validator.ts`
+- `src/main/agentic/protocol/uiSchema.ts`
+- `src/main/agentic/protocol/uiSpecParser.ts`
+- `src/main/agentic/protocol/responseBuilder.ts`
+- `src/main/agentic/capabilities/registry.ts`
+- `src/main/agentic/workflow/turnStateMachine.ts`
+- `src/main/agentic/workflow/checkpointStore.ts`
+- `src/main/agentic/policy/actionPolicy.ts`
+- `src/main/agentic/observability/protocolTelemetry.ts`
+
+### Branch Completion Notes
+
+- Main-process protocol validation/envelope building now runs server-side before renderer consumption.
+- Renderer consumes protocol envelope directly; legacy text parsing remains as compatibility fallback only.
+- Capability snapshots are injected into each model request and unsupported widgets/actions are filtered with diagnostics.
+- Workflow checkpoints are persisted per conversation for resumable needs-input turns.
+- Action policy levels (`silent`, `confirm`, `danger`) are enforced at render-time before dispatch.
+- Protocol telemetry is emitted and available via `chat:getProtocolHealth` IPC.
+
 ---
 
 ## Current State (Baseline)
@@ -149,6 +181,56 @@ Rules:
 - `needsInput.required=true` requires at least one field in `needsInput.fields`.
 - `actions` are declarative, validated against capability registry.
 - Unknown properties are rejected in strict mode.
+
+### Canonical Request Envelope Example
+
+```json
+{
+   "protocolVersion": "2.0",
+   "surface": "tab",
+   "messages": [
+      { "role": "user", "content": "Show posting trend by month" }
+   ],
+   "context": {
+      "projectId": "project-1"
+   },
+   "capabilities": {
+      "widgets": ["chart", "form", "tabs"],
+      "actions": ["openPost", "openSettings"],
+      "tools": ["search_posts", "list_posts"],
+      "disabled": []
+   }
+}
+```
+
+### Invalid Envelope Example (strict mode)
+
+```json
+{
+   "protocolVersion": "2.0",
+   "assistantText": "Please provide missing fields",
+   "intent": "ask_input",
+   "needsInput": {
+      "required": true,
+      "fields": []
+   },
+   "actions": [],
+   "confidence": 0.9,
+   "traceId": "trace-123",
+   "extra": "not-allowed"
+}
+```
+
+Reason invalid:
+
+- `needsInput.required=true` but `needsInput.fields` is empty.
+- `extra` is an unknown property in strict mode.
+
+### Protocol Error Codes
+
+- `AGUI_PROTOCOL_VALIDATION_ERROR`
+   - Emitted for request/response envelope validation failures.
+   - Includes human-readable `message` and per-field `details`.
 
 ---
 

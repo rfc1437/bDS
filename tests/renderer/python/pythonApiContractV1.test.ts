@@ -25,6 +25,7 @@ describe('pythonApiContractV1', () => {
       'app.getSystemLanguage',
       'chat.getConversations',
       'chat.sendMessage',
+      'chat.getProtocolHealth',
     ]));
   });
 
@@ -45,7 +46,7 @@ describe('pythonApiContractV1', () => {
 
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.3.0',
+      version: '1.4.0',
       generatedAt: expect.any(String),
     });
   });
@@ -55,6 +56,7 @@ describe('pythonApiContractV1', () => {
       expect.objectContaining({ name: 'PostData' }),
       expect.objectContaining({ name: 'MediaData' }),
       expect.objectContaining({ name: 'ProjectData' }),
+      expect.objectContaining({ name: 'ProtocolTelemetrySnapshot' }),
     ]));
   });
 });
