@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar } from './components';
+import { ActivityBar, Sidebar, Editor, StatusBar, Panel, TabBar, ToastContainer, showToast, ResizablePanel, WindowTitleBar, AssistantSidebar } from './components';
 import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
 import { openSingletonToolTab } from './navigation/tabPolicy';
@@ -33,6 +33,7 @@ const App: React.FC = () => {
     setLoading,
     toggleSidebar,
     togglePanel,
+    toggleAssistantSidebar,
     setActiveView,
     setSelectedPost,
     setActiveProject,
@@ -308,6 +309,12 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:toggleAssistantSidebar', () => {
+        toggleAssistantSidebar();
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:viewPosts', () => {
         const state = useAppStore.getState();
         executeActivityClick(
@@ -538,7 +545,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const { sidebarVisible } = useAppStore();
+  const { sidebarVisible, assistantSidebarVisible } = useAppStore();
 
   return (
     <div className="app">
@@ -562,6 +569,18 @@ const App: React.FC = () => {
           <Editor />
           <Panel />
         </div>
+        {assistantSidebarVisible && (
+          <ResizablePanel
+            direction="horizontal"
+            initialSize={360}
+            minSize={280}
+            maxSize={640}
+            storageKey="assistant-sidebar-width"
+            resizerPosition="start"
+          >
+            <AssistantSidebar />
+          </ResizablePanel>
+        )}
       </div>
       <StatusBar />
       <ToastContainer />

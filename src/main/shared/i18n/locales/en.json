@@ -24,6 +24,7 @@
   "menu.item.viewMedia": "Media",
   "menu.item.toggleSidebar": "Toggle Sidebar",
   "menu.item.togglePanel": "Toggle Panel",
+  "menu.item.toggleAssistantSidebar": "Toggle Assistant Sidebar",
   "menu.item.toggleDevTools": "Toggle Developer Tools",
   "menu.item.reload": "Reload",
   "menu.item.forceReload": "Force Reload",

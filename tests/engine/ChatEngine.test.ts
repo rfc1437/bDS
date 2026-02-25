@@ -639,6 +639,10 @@ describe('ChatEngine', () => {
 
       expect(result).toContain('Blogging Desktop Server');
       expect(result).toContain('Available Tools');
+      expect(result).toContain('Agentic UI Contract');
+      expect(result).toContain('specVersion');
+      expect(result).toContain('tabs');
+      expect(result).toContain('openSettings');
     });
 
     it('should return built-in prompt when saved prompt is empty', async () => {

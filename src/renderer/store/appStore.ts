@@ -69,6 +69,7 @@ interface AppState {
   activeView: SidebarView;
   sidebarVisible: boolean;
   panelVisible: boolean;
+  assistantSidebarVisible: boolean;
   panelActiveTab: PanelTab;
   panelOutputEntries: PanelOutputEntry[];
   selectedPostId: string | null;
@@ -119,6 +120,7 @@ interface AppState {
   setActiveView: (view: SidebarView) => void;
   toggleSidebar: () => void;
   togglePanel: () => void;
+  toggleAssistantSidebar: () => void;
   setPanelActiveTab: (tab: PanelTab) => void;
   appendPanelOutputEntry: (entry: PanelOutputEntry) => void;
   clearPanelOutputEntries: () => void;
@@ -175,6 +177,7 @@ export const useAppStore = create<AppState>()(
       activeView: 'posts',
       sidebarVisible: true,
       panelVisible: false,
+      assistantSidebarVisible: false,
       panelActiveTab: 'tasks',
       panelOutputEntries: [],
       selectedPostId: null,
@@ -300,6 +303,7 @@ export const useAppStore = create<AppState>()(
       setActiveView: (view) => set({ activeView: view }),
       toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
       togglePanel: () => set((state) => ({ panelVisible: !state.panelVisible })),
+      toggleAssistantSidebar: () => set((state) => ({ assistantSidebarVisible: !state.assistantSidebarVisible })),
       setPanelActiveTab: (panelActiveTab) => set({ panelActiveTab }),
       appendPanelOutputEntry: (entry) => set((state) => ({
         panelOutputEntries: [...state.panelOutputEntries, entry],

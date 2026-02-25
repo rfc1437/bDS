@@ -49,6 +49,20 @@ interface Rectangle {
 // Check if dev server is likely running (only in development)
 const isDev = process.env.NODE_ENV === 'development';
 
+function toggleDetachedDevTools(targetWindow: BrowserWindow | null): void {
+  const webContents = targetWindow?.webContents;
+  if (!webContents) {
+    return;
+  }
+
+  if (webContents.isDevToolsOpened()) {
+    webContents.closeDevTools();
+    return;
+  }
+
+  webContents.openDevTools({ mode: 'detach' });
+}
+
 function getWindowStatePath(): string | null {
   if (typeof app.getPath !== 'function') {
     return null;
@@ -246,7 +260,7 @@ function createWindow(): void {
     // F12 or Ctrl+Shift+I to toggle DevTools
     if (input.key === 'F12' || 
         (input.control && input.shift && input.key.toLowerCase() === 'i')) {
-      mainWindow?.webContents.toggleDevTools();
+      toggleDetachedDevTools(mainWindow);
       event.preventDefault();
     }
   });
@@ -255,13 +269,13 @@ function createWindow(): void {
   const rendererPath = path.join(__dirname, '../renderer/index.html');
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else if (fs.existsSync(rendererPath)) {
     mainWindow.loadFile(rendererPath);
   } else {
     // Fallback to dev server if built files don't exist
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
   // Forward events to renderer
@@ -568,6 +582,11 @@ function createApplicationMenu(): Menu {
       if (mainWindow) {
         mainWindow.setFullScreen(!mainWindow.isFullScreen());
       }
+      return;
+    }
+
+    if (action === 'toggleDevTools') {
+      toggleDetachedDevTools(mainWindow);
       return;
     }
 

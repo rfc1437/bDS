@@ -24,6 +24,7 @@
   "menu.item.viewMedia": "Medien",
   "menu.item.toggleSidebar": "Seitenleiste umschalten",
   "menu.item.togglePanel": "Panel umschalten",
+  "menu.item.toggleAssistantSidebar": "Assistenz-Seitenleiste umschalten",
   "menu.item.toggleDevTools": "Entwicklerwerkzeuge umschalten",
   "menu.item.reload": "Neu laden",
   "menu.item.forceReload": "Erzwungen neu laden",

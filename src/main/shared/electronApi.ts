@@ -431,6 +431,10 @@ export interface ChatTitleUpdate {
   title: string;
 }
 
+export interface ChatSendMetadata {
+  surface?: 'tab' | 'sidebar';
+}
+
 export interface SiteValidationReport {
   sitemapPath: string;
   sitemapChanged: boolean;
@@ -726,7 +730,8 @@ export interface ElectronAPI {
     deleteConversation: (id: string) => Promise<boolean>;
 
     // Messaging
-    sendMessage: (conversationId: string, message: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+    sendMessage: (conversationId: string, message: string, metadata?: ChatSendMetadata) => Promise<{ success: boolean; message?: string; error?: string }>;
+    addSystemEvent: (conversationId: string, content: string) => Promise<{ success: boolean; error?: string }>;
     abortMessage: (conversationId: string) => Promise<void>;
     getHistory: (conversationId: string) => Promise<ChatMessage[]>;
     clearMessages: (conversationId: string) => Promise<void>;

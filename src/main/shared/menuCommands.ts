@@ -19,6 +19,7 @@ export type AppMenuAction =
   | 'viewMedia'
   | 'toggleSidebar'
   | 'togglePanel'
+  | 'toggleAssistantSidebar'
   | 'toggleDevTools'
   | 'reload'
   | 'forceReload'
@@ -103,6 +104,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'menu.item.viewMedia', action: 'viewMedia', accelerator: 'CmdOrCtrl+2' },
       { label: 'menu.item.toggleSidebar', action: 'toggleSidebar', accelerator: 'CmdOrCtrl+B' },
       { label: 'menu.item.togglePanel', action: 'togglePanel', accelerator: 'CmdOrCtrl+J' },
+      { label: 'menu.item.toggleAssistantSidebar', action: 'toggleAssistantSidebar', accelerator: 'CmdOrCtrl+\\' },
       { label: 'menu.item.toggleDevTools', action: 'toggleDevTools', accelerator: 'CmdOrCtrl+Shift+I' },
       { label: '', action: 'view-separator-1', separator: true },
       { label: 'menu.item.reload', action: 'reload' },
@@ -156,6 +158,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   viewMedia: 'menu:viewMedia',
   toggleSidebar: 'menu:toggleSidebar',
   togglePanel: 'menu:togglePanel',
+  toggleAssistantSidebar: 'menu:toggleAssistantSidebar',
   toggleDevTools: 'menu:toggleDevTools',
   previewPost: 'menu:previewPost',
   publishSelected: 'menu:publishSelected',

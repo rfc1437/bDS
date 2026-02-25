@@ -24,6 +24,7 @@
   "menu.item.viewMedia": "Medios",
   "menu.item.toggleSidebar": "Alternar barra lateral",
   "menu.item.togglePanel": "Alternar panel",
+  "menu.item.toggleAssistantSidebar": "Alternar barra del asistente",
   "menu.item.toggleDevTools": "Alternar herramientas de desarrollo",
   "menu.item.reload": "Recargar",
   "menu.item.forceReload": "Forzar recarga",

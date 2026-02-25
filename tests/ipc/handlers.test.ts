@@ -1638,14 +1638,27 @@ describe('IPC Handlers', () => {
         expect(send).not.toHaveBeenCalled();
       });
 
-      it('should execute toggleDevTools on sender when action is toggleDevTools', async () => {
-        const toggleDevTools = vi.fn();
+      it('should open detached devtools on sender when action is toggleDevTools and devtools are closed', async () => {
+        const openDevTools = vi.fn();
+        const isDevToolsOpened = vi.fn(() => false);
         const send = vi.fn();
-        const event = { sender: { toggleDevTools, send } };
+        const event = { sender: { openDevTools, isDevToolsOpened, send } };
 
         await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'toggleDevTools');
 
-        expect(toggleDevTools).toHaveBeenCalled();
+        expect(openDevTools).toHaveBeenCalledWith({ mode: 'detach' });
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it('should close devtools on sender when action is toggleDevTools and devtools are open', async () => {
+        const closeDevTools = vi.fn();
+        const isDevToolsOpened = vi.fn(() => true);
+        const send = vi.fn();
+        const event = { sender: { closeDevTools, isDevToolsOpened, send } };
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'toggleDevTools');
+
+        expect(closeDevTools).toHaveBeenCalled();
         expect(send).not.toHaveBeenCalled();
       });
 

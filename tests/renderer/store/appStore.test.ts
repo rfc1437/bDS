@@ -38,6 +38,7 @@ describe('AppStore', () => {
       posts: [],
       selectedPostId: null,
       dirtyPosts: new Set(),
+      assistantSidebarVisible: false,
     });
   });
 
@@ -165,6 +166,16 @@ describe('AppStore', () => {
       getStore().setPreferredEditorMode('markdown');
 
       expect(getStore().preferredEditorMode).toBe('markdown');
+    });
+
+    it('should toggle assistant sidebar visibility', () => {
+      expect(getStore().assistantSidebarVisible).toBe(false);
+
+      getStore().toggleAssistantSidebar();
+      expect(getStore().assistantSidebarVisible).toBe(true);
+
+      getStore().toggleAssistantSidebar();
+      expect(getStore().assistantSidebarVisible).toBe(false);
     });
 
     it('should set active panel tab', () => {

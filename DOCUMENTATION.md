@@ -11,6 +11,7 @@
 - [Working with media](#working-with-media)
 - [Using macros](#using-macros)
 - [Using scripting (early access)](#using-scripting-early-access)
+- [Using assistant panel widgets](#using-assistant-panel-widgets)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
@@ -250,6 +251,165 @@ Notes:
 - Transform scripts can call `toast("...")` to send user-facing UI notifications.
 - Transform scripts can directly manipulate `title`, `content`, `categories`, and `tags`.
 - Transform pipeline failures always trigger automatic error toasts.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Using assistant panel widgets
+
+The assistant sidebar can render structured panel widgets when the AI response includes a valid JSON panel spec. This is useful when you want the assistant to return actionable UI instead of plain text only.
+
+Use this envelope:
+
+```json
+{
+	"specVersion": "1",
+	"elements": []
+}
+```
+
+### Supported widget types
+
+- `text`
+- `metric`
+- `list`
+- `table`
+- `action`
+- `chart`
+- `input`
+- `form`
+- `datePicker`
+- `card`
+- `image`
+- `tabs`
+
+### Example snippets
+
+```json
+{ "type": "text", "text": "Review complete." }
+```
+
+```json
+{ "type": "metric", "label": "Draft posts", "value": "12" }
+```
+
+```json
+{ "type": "list", "title": "Next steps", "items": ["Refine title", "Add tags"] }
+```
+
+```json
+{
+	"type": "table",
+	"columns": ["Post", "Status"],
+	"rows": [["Roadmap", "Draft"], ["Release", "Published"]]
+}
+```
+
+```json
+{
+	"type": "action",
+	"label": "Open tags",
+	"action": "switchView",
+	"payload": { "view": "tags" }
+}
+```
+
+```json
+{
+	"type": "chart",
+	"chartType": "bar",
+	"title": "Posts by month",
+	"series": [
+		{ "label": "Jan", "value": 10 },
+		{ "label": "Feb", "value": 14 }
+	]
+}
+```
+
+```json
+{
+	"type": "input",
+	"key": "query",
+	"label": "Search",
+	"inputType": "text",
+	"placeholder": "Find post...",
+	"submitLabel": "Run",
+	"action": "openChat"
+}
+```
+
+```json
+{
+	"type": "form",
+	"formId": "meta-form",
+	"title": "Update metadata",
+	"submitLabel": "Apply",
+	"action": "openSettings",
+	"fields": [
+		{ "key": "title", "label": "Title", "inputType": "text" },
+		{ "key": "isDraft", "label": "Draft", "inputType": "checkbox" }
+	]
+}
+```
+
+```json
+{
+	"type": "datePicker",
+	"key": "publishDate",
+	"label": "Publish date",
+	"submitLabel": "Set",
+	"action": "openSettings"
+}
+```
+
+```json
+{
+	"type": "card",
+	"title": "Suggestion",
+	"subtitle": "Editorial",
+	"body": "Add one category and two tags.",
+	"actions": [
+		{ "label": "Open tags", "action": "switchView", "payload": { "view": "tags" } }
+	]
+}
+```
+
+```json
+{
+	"type": "image",
+	"src": "https://example.com/preview.png",
+	"alt": "Generated preview",
+	"caption": "Current preview snapshot"
+}
+```
+
+```json
+{
+	"type": "tabs",
+	"defaultTabId": "summary",
+	"tabs": [
+		{
+			"id": "summary",
+			"label": "Summary",
+			"elements": [{ "type": "text", "text": "Short summary" }]
+		},
+		{
+			"id": "actions",
+			"label": "Actions",
+			"elements": [
+				{ "type": "action", "label": "Open settings", "action": "openSettings" }
+			]
+		}
+	]
+}
+```
+
+### Notes
+
+- `tabs` are panel-local UI tabs inside one assistant response; they are not editor tabs.
+- Unknown or invalid widget payloads are ignored by the parser.
+- Actions are restricted to supported safe action names in the app.
 
 [↑ Back to In this article](#in-this-article)
 

@@ -24,6 +24,7 @@
   "menu.item.viewMedia": "Médias",
   "menu.item.toggleSidebar": "Basculer la barre latérale",
   "menu.item.togglePanel": "Basculer le panneau",
+  "menu.item.toggleAssistantSidebar": "Basculer le panneau Assistant",
   "menu.item.toggleDevTools": "Basculer les outils de développement",
   "menu.item.reload": "Recharger",
   "menu.item.forceReload": "Forcer le rechargement",

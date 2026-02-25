@@ -299,7 +299,8 @@ export const electronAPI: ElectronAPI = {
     deleteConversation: (id: string) => ipcRenderer.invoke('chat:deleteConversation', id),
 
     // Messaging
-    sendMessage: (conversationId: string, message: string) => ipcRenderer.invoke('chat:sendMessage', conversationId, message),
+    sendMessage: (conversationId: string, message: string, metadata?: { surface?: 'tab' | 'sidebar' }) => ipcRenderer.invoke('chat:sendMessage', conversationId, message, metadata),
+    addSystemEvent: (conversationId: string, content: string) => ipcRenderer.invoke('chat:addSystemEvent', conversationId, content),
     abortMessage: (conversationId: string) => ipcRenderer.invoke('chat:abortMessage', conversationId),
     getHistory: (conversationId: string) => ipcRenderer.invoke('chat:getHistory', conversationId),
     clearMessages: (conversationId: string) => ipcRenderer.invoke('chat:clearMessages', conversationId),

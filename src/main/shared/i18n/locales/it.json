@@ -24,6 +24,7 @@
   "menu.item.viewMedia": "Contenuti media",
   "menu.item.toggleSidebar": "Attiva/disattiva barra laterale",
   "menu.item.togglePanel": "Attiva/disattiva pannello",
+  "menu.item.toggleAssistantSidebar": "Attiva/disattiva barra assistente",
   "menu.item.toggleDevTools": "Attiva/disattiva strumenti sviluppatore",
   "menu.item.reload": "Ricarica",
   "menu.item.forceReload": "Forza ricaricamento",

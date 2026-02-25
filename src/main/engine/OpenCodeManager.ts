@@ -66,6 +66,9 @@ export interface ModelInfo {
 }
 
 export interface SendMessageOptions {
+  metadata?: {
+    surface?: 'tab' | 'sidebar';
+  };
   onDelta?: (delta: string) => void;
   onToolCall?: (toolCall: { name: string; args: unknown }) => void;
   onToolResult?: (result: { name: string; result: unknown }) => void;
@@ -237,7 +240,7 @@ export class OpenCodeManager {
     userMessage: string,
     options: SendMessageOptions = {}
   ): Promise<SendMessageResult> {
-    const { onDelta, onToolCall, onToolResult } = options;
+    const { metadata, onDelta, onToolCall, onToolResult } = options;
 
     try {
       const readyCheck = await this.checkReady();
@@ -272,11 +275,15 @@ export class OpenCodeManager {
 
       // Build message history from DB (excluding system messages)
       const dbMessages = conversation.messages.filter(m => m.role !== 'system');
+      const surfaceHint = metadata?.surface
+        ? `\n\n[Client UI surface: ${metadata.surface}. Render response UI for this surface while keeping content functionally equivalent.]`
+        : '';
+      const userMessageForModel = `${userMessage}${surfaceHint}`;
       // Add the new user message
       dbMessages.push({
         conversationId,
         role: 'user',
-        content: userMessage,
+        content: userMessageForModel,
         createdAt: new Date(),
       });
 
