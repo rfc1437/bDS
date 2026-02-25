@@ -36,4 +36,42 @@ describe('WorkflowCheckpointStore', () => {
     expect(loaded?.pendingFields).toEqual(['date']);
     expect(loaded?.lastTraceId).toBe('trace-1');
   });
+
+  it('returns null when no checkpoint exists', async () => {
+    const adapter = new InMemorySettingsAdapter();
+    const store = new WorkflowCheckpointStore(adapter);
+
+    const loaded = await store.load('missing-conversation');
+
+    expect(loaded).toBeNull();
+  });
+
+  it('returns null for malformed checkpoint JSON', async () => {
+    const adapter = new InMemorySettingsAdapter();
+    await adapter.setSetting('agui.workflow.conversation-2', '{not-valid-json');
+    const store = new WorkflowCheckpointStore(adapter);
+
+    const loaded = await store.load('conversation-2');
+
+    expect(loaded).toBeNull();
+  });
+
+  it('returns null when stored checkpoint conversation id does not match', async () => {
+    const adapter = new InMemorySettingsAdapter();
+    await adapter.setSetting(
+      'agui.workflow.conversation-3',
+      JSON.stringify({
+        conversationId: 'other-conversation',
+        state: 'planning',
+        pendingFields: [],
+        lastTraceId: 'trace-mismatch',
+        updatedAt: new Date('2026-02-25T10:00:00.000Z').toISOString(),
+      }),
+    );
+
+    const store = new WorkflowCheckpointStore(adapter);
+    const loaded = await store.load('conversation-3');
+
+    expect(loaded).toBeNull();
+  });
 });

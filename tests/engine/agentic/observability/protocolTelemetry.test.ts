@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { ProtocolTelemetryService } from '../../../../src/main/agentic/observability/protocolTelemetry';
+import {
+  ProtocolTelemetryService,
+  getProtocolTelemetryService,
+} from '../../../../src/main/agentic/observability/protocolTelemetry';
 
 describe('ProtocolTelemetryService', () => {
+  it('returns zero rates before any turns are recorded', () => {
+    const telemetry = new ProtocolTelemetryService();
+    const snapshot = telemetry.getSnapshot();
+
+    expect(snapshot.totalTurns).toBe(0);
+    expect(snapshot.parseValidityRate).toBe(0);
+    expect(snapshot.repairRate).toBe(0);
+    expect(snapshot.fallbackRate).toBe(0);
+  });
+
   it('tracks parse validity, repairs, fallback, and blocked actions', () => {
     const telemetry = new ProtocolTelemetryService();
 
@@ -34,5 +47,12 @@ describe('ProtocolTelemetryService', () => {
     expect(snapshot.fallbackTurns).toBe(1);
     expect(snapshot.blockedActionCount).toBe(3);
     expect(snapshot.parseValidityRate).toBeCloseTo(2 / 3, 5);
+  });
+
+  it('returns the same singleton telemetry service instance', () => {
+    const first = getProtocolTelemetryService();
+    const second = getProtocolTelemetryService();
+
+    expect(first).toBe(second);
   });
 });

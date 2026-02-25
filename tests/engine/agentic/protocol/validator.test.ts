@@ -71,4 +71,23 @@ describe('agentic protocol validator', () => {
 
     expect(result.ok).toBe(true);
   });
+
+  it('rejects invalid request envelope and returns structured protocol error', () => {
+    const result = validateProtocolRequestEnvelope({
+      protocolVersion: '2.0',
+      surface: 'tab',
+      messages: [{ role: 'invalid-role', content: 'Create a chart' }],
+      context: { projectId: 'project-1' },
+      capabilities: {
+        widgets: ['chart'],
+        actions: ['openPost'],
+        tools: ['search_posts'],
+      },
+      unknown: true,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('AGUI_PROTOCOL_VALIDATION_ERROR');
+    expect(result.error?.details?.length).toBeGreaterThan(0);
+  });
 });

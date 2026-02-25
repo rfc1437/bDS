@@ -35,4 +35,72 @@ describe('AgentTurnStateMachine', () => {
 
     expect(next).toBe('completed');
   });
+
+  it('transitions to executing when intent requests action execution', () => {
+    const stateMachine = new AgentTurnStateMachine();
+
+    const next = stateMachine.transition({
+      previousState: 'planning',
+      envelope: {
+        intent: 'execute_action',
+        needsInput: {
+          required: false,
+          fields: [],
+        },
+      },
+    });
+
+    expect(next).toBe('executing');
+  });
+
+  it('transitions to observing when proposing actions', () => {
+    const stateMachine = new AgentTurnStateMachine();
+
+    const next = stateMachine.transition({
+      previousState: 'planning',
+      envelope: {
+        intent: 'propose_action',
+        needsInput: {
+          required: false,
+          fields: [],
+        },
+      },
+    });
+
+    expect(next).toBe('observing');
+  });
+
+  it('returns to executing after awaiting input when input is no longer required', () => {
+    const stateMachine = new AgentTurnStateMachine();
+
+    const next = stateMachine.transition({
+      previousState: 'awaiting_input',
+      envelope: {
+        intent: 'analyze',
+        needsInput: {
+          required: false,
+          fields: [],
+        },
+      },
+    });
+
+    expect(next).toBe('executing');
+  });
+
+  it('stays in planning for non-terminal analyze intent by default', () => {
+    const stateMachine = new AgentTurnStateMachine();
+
+    const next = stateMachine.transition({
+      previousState: 'planning',
+      envelope: {
+        intent: 'analyze',
+        needsInput: {
+          required: false,
+          fields: [],
+        },
+      },
+    });
+
+    expect(next).toBe('planning');
+  });
 });

@@ -114,4 +114,61 @@ describe('ProtocolResponseBuilder', () => {
     expect(result.envelope.actions).toHaveLength(0);
     expect(result.warnings.some((warning) => warning.includes('openSettings'))).toBe(true);
   });
+
+  it('extracts declarative actions from UI elements and applies policy defaults', () => {
+    const builder = new ProtocolResponseBuilder();
+
+    const raw = JSON.stringify({
+      protocolVersion: '2.0',
+      assistantText: 'Choose an option',
+      intent: 'propose_action',
+      needsInput: { required: false, fields: [] },
+      actions: [],
+      ui: {
+        specVersion: '1',
+        elements: [
+          {
+            type: 'card',
+            title: 'Actions',
+            body: 'Pick one',
+            actions: [{ label: 'Delete', action: 'deletePost' }],
+          },
+          {
+            type: 'tabs',
+            tabs: [
+              {
+                id: 'first',
+                label: 'First',
+                elements: [{ type: 'action', label: 'Open post', action: 'openPost' }],
+              },
+            ],
+          },
+        ],
+      },
+      confidence: 0.7,
+      traceId: 'trace-ui-actions',
+    });
+
+    const result = builder.build({
+      rawAssistantOutput: raw,
+      surface: 'tab',
+      capabilities: {
+        widgets: ['card', 'tabs', 'action'],
+        actions: ['deletePost', 'openPost'],
+        tools: ['search_posts'],
+      },
+    });
+
+    expect(result.envelope.actions).toHaveLength(2);
+    expect(result.envelope.actions[0]).toEqual(expect.objectContaining({
+      action: 'deletePost',
+      policy: 'danger',
+      requiresConfirmation: true,
+    }));
+    expect(result.envelope.actions[1]).toEqual(expect.objectContaining({
+      action: 'openPost',
+      policy: 'silent',
+      requiresConfirmation: false,
+    }));
+  });
 });
