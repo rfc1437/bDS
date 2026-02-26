@@ -240,6 +240,115 @@
   flex-shrink: 0;
 }
 
+/* Line chart */
+.assistant-panel-chart-line-svg {
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+}
+
+.assistant-panel-chart-line-grid {
+  stroke: var(--vscode-panel-border, #444);
+  stroke-width: 0.5;
+  stroke-dasharray: 3 3;
+}
+
+.assistant-panel-chart-line-y-label {
+  font-size: 9px;
+  fill: var(--vscode-foreground, #ccc);
+  opacity: 0.7;
+}
+
+.assistant-panel-chart-line-path {
+  stroke: var(--vscode-charts-blue, #75beff);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.assistant-panel-chart-line-dot {
+  fill: var(--vscode-charts-blue, #75beff);
+  stroke: var(--vscode-editor-background, #1e1e1e);
+  stroke-width: 1.5;
+}
+
+.assistant-panel-chart-line-x-label {
+  font-size: 9px;
+  fill: var(--vscode-foreground, #ccc);
+  opacity: 0.7;
+}
+
+.assistant-panel-chart-area-fill {
+  fill: var(--vscode-charts-blue, #75beff);
+  opacity: 0.15;
+}
+
+/* Pie chart */
+.assistant-panel-chart-pie-svg {
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+  align-self: center;
+}
+
+.assistant-panel-chart-pie-slice {
+  stroke: var(--vscode-editor-background, #1e1e1e);
+  stroke-width: 1.5;
+}
+
+/* Donut chart */
+.assistant-panel-chart-donut-hole {
+  fill: var(--vscode-editor-background, #1e1e1e);
+}
+
+.assistant-panel-chart-donut-total {
+  font-size: 16px;
+  font-weight: 600;
+  fill: var(--vscode-foreground, #ccc);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Heatmap chart */
+.assistant-panel-chart-heatmap {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.assistant-panel-chart-heatmap-corner {
+  /* empty top-left cell */
+}
+
+.assistant-panel-chart-heatmap-col-label {
+  text-align: center;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-panel-chart-heatmap-row-label {
+  text-align: right;
+  padding-right: 4px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.assistant-panel-chart-heatmap-cell {
+  aspect-ratio: 1;
+  min-width: 14px;
+  min-height: 14px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .assistant-panel-form {
   display: flex;
   flex-direction: column;

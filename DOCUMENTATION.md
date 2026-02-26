@@ -264,7 +264,7 @@ The assistant works entirely with your local blog content. It does not have acce
 
 ### Charts
 
-The assistant can display bar, line, and pie charts to help you spot patterns and trends in your blog data. Charts include a title, labeled data points, and a visual representation that makes it easy to compare values at a glance.
+The assistant can display bar, stacked-bar, line, area, pie, donut, and heatmap charts to help you spot patterns and trends in your blog data. Charts include a title, labeled data points, and a visual representation that makes it easy to compare values at a glance. Use stacked-bar charts when each bar has multiple segments, area charts for cumulative trends, donut charts for proportional breakdowns with a total in the center, and heatmap charts for matrix data where color intensity encodes value.
 
 **Try asking:** "Show me a chart of posts published per month this year"
 

@@ -30,14 +30,20 @@ const actionElementSchema = z.object({
   payload: z.record(z.string(), z.unknown()).optional(),
 });
 
+const segmentSchema = z.object({
+  label: z.string().min(1),
+  value: z.number(),
+});
+
 const chartElementSchema = z.object({
   type: z.literal('chart'),
-  chartType: z.enum(['bar', 'line', 'pie']),
+  chartType: z.enum(['bar', 'stacked-bar', 'line', 'area', 'pie', 'donut', 'heatmap']),
   title: z.string().min(1).optional(),
   series: z.array(
     z.object({
       label: z.string().min(1),
       value: z.number(),
+      segments: z.array(segmentSchema).optional(),
     }),
   ).min(1),
 });

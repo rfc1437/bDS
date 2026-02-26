@@ -43,7 +43,7 @@ describe('A2UI catalog', () => {
     const entry = getCatalogEntry('chart');
     expect(entry).toEqual({
       type: 'chart',
-      description: 'Bar, line, or pie chart visualization',
+      description: 'Bar, stacked-bar, line, area, pie, donut, or heatmap chart visualization',
       custom: true,
     });
   });
@@ -61,7 +61,7 @@ describe('A2UI catalog', () => {
     const description = buildCatalogDescription();
     expect(description).toContain('Supported UI component types:');
     expect(description).toContain('text: Text block with Markdown support');
-    expect(description).toContain('chart: Bar, line, or pie chart visualization (custom)');
+    expect(description).toContain('chart: Bar, stacked-bar, line, area, pie, donut, or heatmap chart visualization (custom)');
     expect(description).toContain('table: Data table with columns and rows (custom)');
   });
 

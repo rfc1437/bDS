@@ -323,7 +323,7 @@ Available Data Tools:
 - get_media_posts: Get posts that use a specific media file.
 
 Available UI Render Tools (use these to show rich interactive elements):
-- render_chart: Show data as a bar, stacked-bar, line, or pie chart. Use when presenting statistics or comparisons. Use stacked-bar when each bar has multiple segments (e.g., published vs draft posts per year).
+- render_chart: Show data as a bar, stacked-bar, line, area, pie, donut, or heatmap chart. Use when presenting statistics or comparisons. Use stacked-bar when each bar has multiple segments (e.g., published vs draft posts per year). Use area for cumulative or trend data where the filled region emphasizes volume. Use donut for proportional breakdowns with a total displayed in the center. Use heatmap for grid/matrix visualizations where color intensity shows magnitude — e.g., posts per month across years (each series entry is a row like a year, each segment is a column like a month), or a calendar view where rows are weekdays and columns are week numbers. ALWAYS prefer heatmap over a table with emojis or color indicators when showing intensity grids or calendar-style activity views.
 - render_table: Show data in a structured table. Use for tabular comparisons and listings.
 - render_form: Show an interactive form to collect user input (e.g., metadata edits, settings).
 - render_card: Show an information card with title, body, and action buttons.

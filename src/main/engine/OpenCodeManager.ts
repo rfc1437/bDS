@@ -924,31 +924,31 @@ export class OpenCodeManager {
         input_schema: {
           type: 'object',
           properties: {
-            chartType: { type: 'string', enum: ['bar', 'stacked-bar', 'line', 'pie'], description: 'The type of chart to render. Use stacked-bar when each bar has multiple segments (categories).' },
+            chartType: { type: 'string', enum: ['bar', 'stacked-bar', 'line', 'area', 'pie', 'donut', 'heatmap'], description: 'The type of chart to render. Use stacked-bar when each bar has multiple segments (categories). Use area for trend/cumulative data. Use donut for proportional data with a total in the center. Use heatmap for grid/matrix visualizations where color intensity shows magnitude (e.g., posts per month across years). Prefer heatmap over tables with emojis for intensity data.' },
             title: { type: 'string', description: 'Optional chart title' },
             series: {
               type: 'array',
               items: {
                 type: 'object',
                 properties: {
-                  label: { type: 'string', description: 'Data point label' },
-                  value: { type: 'number', description: 'Data point value (total for stacked bars)' },
+                  label: { type: 'string', description: 'Data point label (row label for heatmaps, e.g., year)' },
+                  value: { type: 'number', description: 'Data point value (total for stacked bars, ignored for heatmaps)' },
                   segments: {
                     type: 'array',
                     items: {
                       type: 'object',
                       properties: {
-                        label: { type: 'string', description: 'Segment category label' },
-                        value: { type: 'number', description: 'Segment value' },
+                        label: { type: 'string', description: 'Segment/column label (e.g., month name for heatmaps)' },
+                        value: { type: 'number', description: 'Segment value (color intensity for heatmaps)' },
                       },
                       required: ['label', 'value'],
                     },
-                    description: 'Segments for stacked-bar charts. Each segment is a category within the bar.',
+                    description: 'Segments within this data point. Required for stacked-bar and heatmap charts. For heatmaps, each segment becomes a cell in that row.',
                   },
                 },
                 required: ['label', 'value'],
               },
-              description: 'Array of data points with label and value. For stacked-bar charts, include segments.',
+              description: 'Array of data points. For stacked-bar and heatmap charts, include segments. For heatmaps, each entry is a row and segments are columns.',
             },
           },
           required: ['chartType', 'series'],
@@ -1070,12 +1070,24 @@ export class OpenCodeManager {
                         value: { type: 'string', description: 'Display value (for type metric)' },
                         title: { type: 'string', description: 'Title (for type list, chart, or table)' },
                         items: { type: 'array', items: { type: 'string' }, description: 'Items (for type list)' },
-                        chartType: { type: 'string', enum: ['bar', 'line', 'pie'], description: 'Chart type (for type chart)' },
+                        chartType: { type: 'string', enum: ['bar', 'stacked-bar', 'line', 'area', 'pie', 'donut', 'heatmap'], description: 'Chart type (for type chart). Use heatmap for intensity grids.' },
                         series: {
                           type: 'array',
                           items: {
                             type: 'object',
-                            properties: { label: { type: 'string' }, value: { type: 'number' } },
+                            properties: {
+                              label: { type: 'string' },
+                              value: { type: 'number' },
+                              segments: {
+                                type: 'array',
+                                items: {
+                                  type: 'object',
+                                  properties: { label: { type: 'string' }, value: { type: 'number' } },
+                                  required: ['label', 'value'],
+                                },
+                                description: 'Segments for stacked-bar and heatmap charts',
+                              },
+                            },
                             required: ['label', 'value'],
                           },
                           description: 'Data series (for type chart)',

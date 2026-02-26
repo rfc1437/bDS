@@ -15,7 +15,7 @@ const CATALOG_ENTRIES: A2UICatalogEntry[] = [
   { type: 'text', description: 'Text block with Markdown support' },
   { type: 'button', description: 'Clickable button that dispatches an action' },
   { type: 'card', description: 'Card with title, subtitle, body, and action buttons' },
-  { type: 'chart', description: 'Bar, line, or pie chart visualization', custom: true },
+  { type: 'chart', description: 'Bar, stacked-bar, line, area, pie, donut, or heatmap chart visualization', custom: true },
   { type: 'table', description: 'Data table with columns and rows', custom: true },
   { type: 'textField', description: 'Text input field with data binding' },
   { type: 'checkBox', description: 'Checkbox input with data binding' },
