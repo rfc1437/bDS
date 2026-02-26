@@ -14,7 +14,7 @@ import { URL } from 'url';
 import { BrowserWindow } from 'electron';
 import { ChatEngine } from './ChatEngine';
 import { PostEngine, type PostData } from './PostEngine';
-import { MediaEngine } from './MediaEngine';
+import { MediaEngine, type MediaData } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
 import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
 import type { A2UIServerMessage } from '../a2ui/types';
@@ -742,13 +742,15 @@ export class OpenCodeManager {
     return [
       {
         name: 'search_posts',
-        description: 'Search blog posts using full-text search. Can filter by category or tags. Returns paginated results with totalMatches count. Use offset to page through results when totalMatches > limit.',
+        description: 'Search blog posts using full-text search. Can filter by category, tags, year, or month. Returns paginated results with totalMatches count. Use offset to page through results when totalMatches > limit.',
         input_schema: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'The search query text to find in posts' },
             category: { type: 'string', description: 'Optional category to filter by (e.g., "article", "picture", "aside", "page")' },
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional array of tags to filter by' },
+            year: { type: 'number', description: 'Filter to posts created in this year (e.g., 2024)' },
+            month: { type: 'number', description: 'Filter to posts created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' },
             offset: { type: 'number', description: 'Offset for pagination (default: 0). Use with limit to page through results.' },
           },
@@ -768,13 +770,15 @@ export class OpenCodeManager {
       },
       {
         name: 'list_posts',
-        description: 'List blog posts with optional filtering by status, category, or tags. Returns paginated results. The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use offset/limit to page through all results. Always check total to understand the full data volume.',
+        description: 'List blog posts with optional filtering by status, category, tags, year, or month. Returns paginated results. The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use year/month filters to efficiently narrow to a time period instead of paginating through all posts. Use offset/limit to page through filtered results.',
         input_schema: {
           type: 'object',
           properties: {
             status: { type: 'string', enum: ['draft', 'published', 'archived'], description: 'Filter by post status' },
             category: { type: 'string', description: 'Filter by category' },
             tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags (posts must have all specified tags)' },
+            year: { type: 'number', description: 'Filter to posts created in this year (e.g., 2024). Use this to efficiently narrow results by time period.' },
+            month: { type: 'number', description: 'Filter to posts created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results (default: 20)' },
             offset: { type: 'number', description: 'Offset for pagination (default: 0)' },
           },
@@ -793,11 +797,14 @@ export class OpenCodeManager {
       },
       {
         name: 'list_media',
-        description: 'List media files in the current project with optional filtering. Returns paginated results with total count. Use offset/limit to page through all results.',
+        description: 'List media files in the current project with optional filtering by MIME type, year, month, or tags. Returns paginated results with total count. Use year/month filters to efficiently narrow to a time period.',
         input_schema: {
           type: 'object',
           properties: {
             mimeTypeFilter: { type: 'string', description: 'Filter by MIME type prefix (e.g., "image/")' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags (media must have all specified tags)' },
+            year: { type: 'number', description: 'Filter to media created in this year (e.g., 2024)' },
+            month: { type: 'number', description: 'Filter to media created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results (default: 20)' },
             offset: { type: 'number', description: 'Offset for pagination (default: 0)' },
           },
@@ -1136,6 +1143,14 @@ export class OpenCodeManager {
               (args.tags as string[]).every(tag => p!.tags.includes(tag))
             );
           }
+          if (args.year !== undefined) {
+            const year = args.year as number;
+            filteredPosts = filteredPosts.filter(p => p!.createdAt.getFullYear() === year);
+          }
+          if (args.month !== undefined && args.year !== undefined) {
+            const month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
+            filteredPosts = filteredPosts.filter(p => p!.createdAt.getMonth() === month);
+          }
 
           const totalMatches = filteredPosts.length;
           const offset = (args.offset as number) || 0;
@@ -1175,10 +1190,12 @@ export class OpenCodeManager {
         }
 
         case 'list_posts': {
-          const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[] } = {};
+          const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[]; year?: number; month?: number } = {};
           if (args.status) filter.status = args.status as 'draft' | 'published' | 'archived';
           if (args.tags) filter.tags = args.tags as string[];
           if (args.category) filter.categories = [args.category as string];
+          if (args.year !== undefined) filter.year = args.year as number;
+          if (args.month !== undefined && args.year !== undefined) filter.month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
 
           const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 20;
@@ -1232,7 +1249,19 @@ export class OpenCodeManager {
         }
 
         case 'list_media': {
-          let mediaList = await this.mediaEngine.getAllMedia();
+          const hasMediaFilter = args.year !== undefined || (args.tags && Array.isArray(args.tags) && (args.tags as string[]).length > 0);
+          let mediaList: MediaData[];
+
+          if (hasMediaFilter) {
+            const mediaFilter: { year?: number; month?: number; tags?: string[] } = {};
+            if (args.year !== undefined) mediaFilter.year = args.year as number;
+            if (args.month !== undefined && args.year !== undefined) mediaFilter.month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
+            if (args.tags) mediaFilter.tags = args.tags as string[];
+            mediaList = await this.mediaEngine.getMediaFiltered(mediaFilter);
+          } else {
+            mediaList = await this.mediaEngine.getAllMedia();
+          }
+
           const totalMedia = mediaList.length;
           if (args.mimeTypeFilter) {
             mediaList = mediaList.filter(m => m.mimeType.startsWith(args.mimeTypeFilter as string));

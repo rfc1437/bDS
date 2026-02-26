@@ -307,11 +307,11 @@ You can ONLY access information through the tools listed below. Do not claim oth
 
 Available Data Tools:
 - get_blog_stats: Get comprehensive blog statistics (total posts, date range, posts per year, tag/category counts, media count). ALWAYS call this first when you need to understand the scope of the data.
-- search_posts: Search blog posts using full-text search. Supports category/tag filters and pagination (offset/limit).
+- search_posts: Search blog posts using full-text search. Supports category/tag/year/month filters and pagination (offset/limit).
 - read_post: Read the full content and metadata of a specific post by ID.
-- list_posts: List posts with optional filtering by status, category, or tags. Supports pagination (offset/limit). Returns "total" (global count) and "filteredTotal" (matching filter).
+- list_posts: List posts with optional filtering by status, category, tags, year, and month. Supports pagination (offset/limit). Returns "total" (global count) and "filteredTotal" (matching filter). ALWAYS use the year filter when you need posts from a specific year — this is much faster than paginating through all posts.
 - get_media: Get information about a specific media file by ID.
-- list_media: List media files with optional MIME type filtering. Supports pagination (offset/limit).
+- list_media: List media files with optional MIME type, year, month, and tag filtering. Supports pagination (offset/limit). Use year/month filters to narrow efficiently.
 - view_image: View an image to analyze its visual content. Use this when you need to describe or analyze what an image looks like.
 - update_post_metadata: Update a post's title, excerpt, tags, or categories.
 - update_media_metadata: Update a media file's title, alt text, caption, or tags.
@@ -342,12 +342,17 @@ When answering questions:
 8. Use render_card with action buttons when presenting items the user might want to navigate to (e.g., posts, media).
 9. When comparing data across multiple dimensions (e.g., statistics per year), use render_tabs with embedded charts or tables in each tab.
 
-CRITICAL - Pagination and data volume awareness:
+CRITICAL - Efficient data access:
 10. This blog may contain thousands or tens of thousands of posts spanning many years. NEVER assume the first page of results represents all data.
 11. Always check the "total" and "filteredTotal" fields in list_posts and list_media responses. If total > limit, there are more results available via pagination.
-12. When asked to analyze ALL posts (e.g., "show me all posts from 2015"), use pagination (offset/limit) to fetch all pages, or use get_blog_stats first to understand the scope.
+12. ALWAYS use year/month filters when working with a specific time period. For example, to get posts from 2015, use list_posts with year=2015 — do NOT paginate through all posts with offsets to find the right year. Year/month filters are executed directly in the database and are much faster.
 13. When reporting counts or statistics, always use get_blog_stats or check the total fields rather than counting the items in a single page of results.
-14. Never claim there are only N posts when you have only fetched one page. State the total count from the API response.`;
+14. Never claim there are only N posts when you have only fetched one page. State the total count from the API response.
+
+CRITICAL - Heatmap and complex visualizations:
+15. When building a heatmap, plan the data structure BEFORE fetching data. A heatmap needs series entries (rows) with segments (columns). Decide what the rows and columns represent first, then fetch only the data you need using year/month filters.
+16. For tag-based heatmaps, use list_tags first to know which tags exist, then use list_posts with year filter to get posts for the target period, and aggregate tag counts from the results. Do not try to fetch all posts across all years.
+17. When building any visualization that requires aggregated data, ALWAYS render the chart as soon as you have enough data. Do not wait to describe what you will do — just do it.`;
   }
 
   /**
