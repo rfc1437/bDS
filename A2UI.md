@@ -1,434 +1,381 @@
-# A2UI Modernization Plan (Protocol-First)
+# A2UI Implementation Plan — Full Rework
 
-## Purpose
+## Credits
 
-This document defines the target architecture and execution plan to evolve the current chat assistant from a retrofit UI renderer into a mature, best-practice, protocol-first Agentic UI system.
+- Plan: Claude Opus 4.6 (2026-02-26)
+- A2UI specification: Google (https://a2ui.org, https://github.com/google/A2UI, Apache 2.0)
+- A2UI SDK types: @a2ui-sdk community packages (https://a2ui-sdk.js.org/)
 
-Branch goal: ship a full-fledged assistant that can use all app capabilities, ask clarifying questions through rich UI controls, and reliably present actionable responses in both chat surfaces.
+## Context
 
----
+The current `feature-agui` branch claims to implement "A2UI" but does not implement the actual Google A2UI protocol (https://a2ui.org, https://github.com/google/A2UI). Instead, it has a custom protocol envelope system where the LLM is instructed to output a monolithic JSON blob, which is then validated with hyper-strict Zod schemas. This approach fundamentally doesn't work:
 
-## Product Goal for This Branch
+- The LLM can't reliably produce the exact JSON schema required
+- Raw JSON streams to the chat UI before being replaced (visible flicker)
+- Strict validation rejects almost everything, so UI elements never render
+- A failed retry doubles API cost and latency
+- The 11 files in `src/main/agentic/` are elaborate infrastructure built on a broken premise
 
-Build a **protocol-first chat assistant** that:
-
-1. Emits deterministic structured responses and UI controls.
-2. Uses rich UI to gather missing inputs (forms, pickers, approvals).
-3. Executes app actions safely and reports outcomes back into the reasoning loop.
-4. Works identically in editor chat and assistant sidebar.
-5. Is observable, testable, and versioned for internal iteration.
-
-## Implementation Status (This Branch)
-
-- ✅ Phase 0 — Foundation Contracts (**completed 2026-02-25**)
-- ✅ Phase 1 — Server-Side Enforcement + Repair Loop (**completed 2026-02-25**)
-- ✅ Phase 2 — Capability Registry + Negotiation (**completed 2026-02-25**)
-- ✅ Phase 3 — Workflow Engine and Clarification UX (**completed 2026-02-25**)
-- ✅ Phase 4 — Action Policy and Safety (**completed 2026-02-25**)
-- ✅ Phase 5 — Observability and QA (**completed 2026-02-25**)
-
-### Implemented Artifacts
-
-- `src/main/agentic/protocol/types.ts`
-- `src/main/agentic/protocol/errors.ts`
-- `src/main/agentic/protocol/validator.ts`
-- `src/main/agentic/protocol/uiSchema.ts`
-- `src/main/agentic/protocol/uiSpecParser.ts`
-- `src/main/agentic/protocol/responseBuilder.ts`
-- `src/main/agentic/capabilities/registry.ts`
-- `src/main/agentic/workflow/turnStateMachine.ts`
-- `src/main/agentic/workflow/checkpointStore.ts`
-- `src/main/agentic/policy/actionPolicy.ts`
-- `src/main/agentic/observability/protocolTelemetry.ts`
-
-### Branch Completion Notes
-
-- Main-process protocol validation/envelope building now runs server-side before renderer consumption.
-- Renderer consumes protocol envelope directly; legacy text parsing remains as compatibility fallback only.
-- Capability snapshots are injected into each model request and unsupported widgets/actions are filtered with diagnostics.
-- Workflow checkpoints are persisted per conversation for resumable needs-input turns.
-- Action policy levels (`silent`, `confirm`, `danger`) are enforced at render-time before dispatch.
-- Protocol telemetry is emitted and available via `chat:getProtocolHealth` IPC.
+**Goal:** Replace the broken custom protocol with a proper implementation of Google's A2UI v0.9 protocol — streaming, flat-component, data-binding — so the assistant can progressively render rich interactive UI in both chat surfaces.
 
 ---
 
-## Current State (Baseline)
+## Architecture Overview
 
-### Already implemented
+### Real A2UI (v0.9) Key Concepts
 
-- A2UI schema parsing for canonical `specVersion: "1"` payloads.
-- Rich widget rendering (chart, form, input, datePicker, card, image, tabs).
-- Shared controls renderer reused by both chat surfaces.
-- Text + UI mixed response extraction.
-- Action dispatcher and action-result persistence to chat history.
-- Metadata propagation (`surface: tab|sidebar`) through renderer → preload → IPC → manager.
-- Compatibility normalization for common non-canonical model outputs.
+- **JSONL streaming**: Server sends a stream of JSON messages, each a complete A2UI message
+- **4 message types**: `createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`
+- **Flat component model**: Components are a flat list with ID references (adjacency list), not nested trees
+- **Data binding**: Components bind to a data model via JSON Pointer paths (RFC 6901)
+- **Component catalog**: Client declares which components it supports; agent can only use those
+- **Actions**: User interactions dispatch events back to the server
 
-### Why this is still retrofit
+### How This Maps to Our Electron App
 
-- Structured output is still inferred from free-form model text.
-- UI contract is validated client-side after generation, not guaranteed at generation time.
-- No explicit protocol envelope enforced server-side each turn.
-- No formal capability handshake/version negotiation.
-- No repair/retry orchestration as a first-class protocol step.
-- No end-to-end telemetry contract for A2UI reliability metrics.
-
----
-
-## Missing Elements to Reach Best Practice
-
-## 1) Protocol Contract Maturity
-
-- Missing: strict response envelope (`assistant_text`, `ui`, `intent`, `confidence`, `needs_input`).
-- Missing: request envelope (`messages`, `context`, `capabilities`, `surface`, `protocol_version`).
-- Missing: version negotiation and deprecation strategy.
-- Missing: canonical machine-readable error model for invalid A2UI payloads.
-
-## 2) Model Interaction Strategy
-
-- Missing: hard structured-output mode at provider call boundary.
-- Missing: deterministic prompt templates per intent class (analysis, edit, workflow).
-- Missing: first-class clarification mode (`needs_input`) with required fields contract.
-- Missing: server-side repair loop when response is invalid or incomplete.
-
-## 3) Capability Discovery / Negotiation
-
-- Missing: runtime capability registry sent to model each turn.
-- Missing: widget/action availability by surface and app state.
-- Missing: capability flags for disabled features and permission gates.
-
-## 4) Agent Workflow Engine
-
-- Missing: protocol-level finite-state turn machine (Plan → Ask → Execute → Observe → Continue).
-- Missing: action dependency graph for multi-step guided flows.
-- Missing: state checkpointing for resumable workflows.
-
-## 5) UI Runtime and Action Safety
-
-- Missing: explicit action confirmation policy levels (`silent`, `confirm`, `danger`).
-- Missing: standardized form validation and inline error schema.
-- Missing: universal fallback component for unsupported widgets.
-- Missing: deterministic conflict handling for stale context.
-
-## 6) Observability and Reliability
-
-- Missing: telemetry for parse success, fallback rate, repair rate, action success.
-- Missing: protocol health dashboard and SLOs.
-- Missing: reproducible turn traces for debugging and regression analysis.
-
-## 7) Test Architecture
-
-- Missing: protocol conformance suite (golden request/response cases).
-- Missing: end-to-end A2UI scenario tests (clarify + execute + reflect).
-- Missing: fuzz tests for malformed payload handling.
-- Missing: migration tests for protocol version compatibility.
-
-## 8) Governance and Docs
-
-- Missing: authoritative A2UI protocol spec doc with examples.
-- Missing: widget/action compatibility matrix by version.
-- Missing: internal governance for protocol changes and ownership boundaries.
-
----
-
-## Target Architecture (Protocol-First)
-
-## A. Core Components
-
-1. **A2UI Protocol Layer (Main Process)**
-   - Owns request/response envelopes, validation, normalization, repair loop.
-
-2. **Capability Registry Service (Main Process)**
-   - Publishes current widgets/actions/tools/features by surface and context.
-
-3. **Agent Orchestrator (Main Process)**
-   - Executes turn state machine and mediates tool calls + UI requests.
-
-4. **Action Runtime (Renderer + Main IPC)**
-   - Executes declared actions with policy checks and structured result events.
-
-5. **A2UI Renderer (Renderer Shared)**
-   - Renders protocol `ui` payloads with strict schema and graceful fallbacks.
-
-6. **Observability Pipeline (Main + Renderer)**
-   - Emits protocol metrics and trace IDs for each turn.
-
-## B. Canonical Envelope (v2 proposal)
-
-```json
-{
-  "protocolVersion": "2.0",
-  "assistantText": "...",
-  "ui": {
-    "specVersion": "1",
-    "elements": []
-  },
-  "intent": "analyze|ask_input|propose_action|execute_action|summarize",
-  "needsInput": {
-    "required": false,
-    "fields": []
-  },
-  "actions": [],
-  "confidence": 0.0,
-  "traceId": "..."
-}
+```
+User types message
+    ↓
+Renderer → IPC → Main Process (OpenCodeManager)
+    ↓
+Main Process calls LLM API (text + tool calls)
+    ↓
+LLM responds with text + calls UI tools (render_chart, render_form, etc.)
+    ↓
+Main Process A2UI Generator creates A2UI messages from tool results
+    ↓
+A2UI messages sent to renderer via IPC events (one event per message)
+    ↓
+Renderer A2UI Engine processes messages:
+  - createSurface → initialize surface state
+  - updateComponents → add/update components in flat buffer
+  - updateDataModel → update data model store
+    ↓
+Renderer A2UI Renderer resolves component tree from flat buffer
+    ↓
+React components render (reusing existing widget implementations)
+    ↓
+User clicks button → action event → IPC → Main Process → feed back to LLM
 ```
 
-Rules:
+**Key insight: IPC IS the transport.** We don't need JSONL parsing libraries or SSE. The main process generates A2UI message objects and sends them individually via `webContents.send()`. The renderer receives them as JavaScript objects via `ipcRenderer.on()`.
 
-- `assistantText` is always present (possibly empty string).
-- `ui` is optional but schema-valid when present.
-- `needsInput.required=true` requires at least one field in `needsInput.fields`.
-- `actions` are declarative, validated against capability registry.
-- Unknown properties are rejected in strict mode.
+### Tool-Driven UI Generation (Not Free-Text JSON)
 
-### Canonical Request Envelope Example
+Instead of asking the LLM to produce A2UI JSON as free text (unreliable), we add **UI-rendering tools** that the LLM calls via the existing tool-use mechanism:
 
-```json
-{
-   "protocolVersion": "2.0",
-   "surface": "tab",
-   "messages": [
-      { "role": "user", "content": "Show posting trend by month" }
-   ],
-   "context": {
-      "projectId": "project-1"
-   },
-   "capabilities": {
-      "widgets": ["chart", "form", "tabs"],
-      "actions": ["openPost", "openSettings"],
-      "tools": ["search_posts", "list_posts"],
-      "disabled": []
-   }
-}
-```
+| Tool | Purpose | A2UI Output |
+|------|---------|-------------|
+| `render_chart` | Show bar/line/pie chart | `updateComponents` with chart component |
+| `render_table` | Show data table | `updateComponents` with table rows |
+| `render_form` | Show input form | `updateComponents` with form fields |
+| `render_card` | Show info card | `updateComponents` with card component |
+| `render_metric` | Show key-value metric | `updateComponents` with metric display |
+| `render_list` | Show item list | `updateComponents` with list items |
+| `render_tabs` | Show tabbed content | `updateComponents` with tabs |
 
-### Invalid Envelope Example (strict mode)
-
-```json
-{
-   "protocolVersion": "2.0",
-   "assistantText": "Please provide missing fields",
-   "intent": "ask_input",
-   "needsInput": {
-      "required": true,
-      "fields": []
-   },
-   "actions": [],
-   "confidence": 0.9,
-   "traceId": "trace-123",
-   "extra": "not-allowed"
-}
-```
-
-Reason invalid:
-
-- `needsInput.required=true` but `needsInput.fields` is empty.
-- `extra` is an unknown property in strict mode.
-
-### Protocol Error Codes
-
-- `A2UI_PROTOCOL_VALIDATION_ERROR`
-   - Emitted for request/response envelope validation failures.
-   - Includes human-readable `message` and per-field `details`.
+The LLM calls these tools with structured parameters (validated by the API provider), and our code translates tool results into proper A2UI messages. This is reliable because tool call schemas ARE validated by Claude/GPT APIs.
 
 ---
 
-## Implementation Plan (Phased)
+## Dependencies
 
-## Phase 0 — Foundation Contracts (Required First)
+### Install
 
-### Scope
+| Package | Purpose | Why |
+|---------|---------|-----|
+| `@a2ui-sdk/types` | TypeScript types for A2UI v0.9 messages | Type-safe message handling without full renderer |
 
-- Add A2UI protocol specification section in repo docs.
-- Introduce canonical request/response TypeScript contracts.
-- Add protocol validator module in main process.
+### Evaluate (may not need)
 
-### Deliverables
+| Package | Purpose | Decision Point |
+|---------|---------|---------------|
+| `@a2ui-sdk/react` | React renderer + hooks | If it supports component overrides without forcing Tailwind/shadcn. Our app uses VSCode theme variables. If it forces Tailwind, skip and build custom renderer using existing `AssistantPanelControls` widgets. |
 
-- `src/main/agentic/protocol/types.ts`
-- `src/main/agentic/protocol/validator.ts`
-- `A2UI.md` + protocol examples + error codes
+### Do NOT install
 
-### Acceptance Criteria
-
-- All responses crossing IPC can be validated by `protocolVersion`.
-- Invalid payloads produce structured protocol errors, never silent drops.
-
-## Phase 1 — Server-Side Enforcement + Repair Loop
-
-### Scope
-
-- Move UI parsing/normalization from renderer-first to main-first.
-- Implement deterministic repair retry when response violates contract.
-- Remove legacy response handling once envelope enforcement is in place.
-
-### Deliverables
-
-- `ProtocolResponseBuilder` in main process.
-- `repairAttempt` policy with max retry count + fallback response.
-- Trace IDs propagated to renderer.
-
-### Acceptance Criteria
-
-- 95%+ UI-intent prompts return valid envelope without client fallback.
-- No renderer-side protocol normalization required for valid turns.
-
-## Phase 2 — Capability Registry + Negotiation
-
-### Scope
-
-- Add runtime registry of widgets/actions/tools per surface/context.
-- Inject capability snapshot into every model request.
-- Validate action and widget availability before returning to renderer.
-
-### Deliverables
-
-- `src/main/agentic/capabilities/registry.ts`
-- Capability snapshot in request envelope.
-- Contract tests for per-surface differences.
-
-### Acceptance Criteria
-
-- Model never receives unsupported widget/action lists.
-- Unsupported action attempts are blocked pre-render with clear diagnostics.
-
-## Phase 3 — Workflow Engine and Clarification UX
-
-### Scope
-
-- Implement turn state machine with explicit `needsInput` handling.
-- Add reusable clarification controls (forms/selects/date/radio).
-- Persist workflow state for resumable conversations.
-
-### Deliverables
-
-- `AgentTurnStateMachine` module.
-- Clarification form primitives + validation schema.
-- Workflow checkpoint storage.
-
-### Acceptance Criteria
-
-- Assistant can pause for missing data and resume execution deterministically.
-- Multi-step tasks survive app refresh/reopen.
-
-## Phase 4 — Action Policy and Safety
-
-### Scope
-
-- Add action policy levels and confirmation requirements.
-- Add preconditions and postconditions for critical actions.
-- Add structured rollback hints for reversible actions.
-
-### Deliverables
-
-- Action policy map.
-- Confirmation UI flow integrated into A2UI actions.
-- Action audit log entries with trace IDs.
-
-### Acceptance Criteria
-
-- Dangerous actions always require explicit confirmation.
-- Every executed action emits structured success/failure payload.
-
-## Phase 5 — Observability and QA
-
-### Scope
-
-- Instrument protocol metrics and error taxonomy.
-- Build conformance + E2E A2UI test suites.
-- Add internal test gates that block merges on protocol drift.
-
-### Deliverables
-
-- Protocol metrics dashboard.
-- Golden test fixtures for representative workflows.
-- CI quality gates for protocol conformance and A2UI scenarios.
-
-### Acceptance Criteria
-
-- Defined SLOs met for parse validity, action success, and fallback rate.
-- Regression suite blocks merges on protocol drift.
+| Package | Why Not |
+|---------|---------|
+| `ndjson` / JSONL parsers | IPC is the transport — no JSONL wire format needed |
+| CopilotKit / AG-UI | Full-stack framework, too heavyweight for integration into existing Electron app |
 
 ---
 
-## Architectural Rework Tasks (Concrete Backlog)
+## Files to DELETE (broken protocol machinery)
 
-## Main Process
+All of `src/main/agentic/` — 11 files that implement the broken custom protocol:
 
-- Create `agentic/` domain package with protocol/orchestrator/capabilities.
-- Refactor `OpenCodeManager` response handling into envelope builder.
-- Add repair retry policy for chart/control requests.
-- Add `traceId` generation and propagation.
+- `src/main/agentic/protocol/types.ts` → replaced by `@a2ui-sdk/types`
+- `src/main/agentic/protocol/errors.ts` → no longer needed
+- `src/main/agentic/protocol/validator.ts` → replaced by schema validation in A2UI engine
+- `src/main/agentic/protocol/uiSchema.ts` → duplicate of renderer schema, deleted
+- `src/main/agentic/protocol/uiSpecParser.ts` → replaced by A2UI message parser
+- `src/main/agentic/protocol/responseBuilder.ts` → replaced by A2UI generator
+- `src/main/agentic/capabilities/registry.ts` → replaced by A2UI client capabilities
+- `src/main/agentic/workflow/turnStateMachine.ts` → not needed
+- `src/main/agentic/workflow/checkpointStore.ts` → not needed
+- `src/main/agentic/policy/actionPolicy.ts` → action policies move into A2UI action handler
+- `src/main/agentic/observability/protocolTelemetry.ts` → not needed initially
 
-## IPC / Shared Contracts
+Also delete these test files for removed code:
 
-- Version all chat IPC payloads with `protocolVersion`.
-- Replace raw string assistant response return with envelope return.
-- Remove or rewrite legacy IPC methods that cannot satisfy envelope guarantees.
-
-## Renderer
-
-- Consume envelope (`assistantText` + `ui`) directly.
-- Remove renderer responsibility for protocol normalization over time.
-- Keep widget renderer pure and stateless by schema.
-
-## Testing
-
-- Add protocol conformance tests for all envelope fields.
-- Add model-output compatibility fixtures and repair-path tests.
-- Add scenario tests: “ask chart” → chart render → user input → action execute.
-
-## Documentation
-
-- Add A2UI protocol appendix with canonical and invalid examples.
-- Add migration guide from legacy message parsing to v2 envelope.
+- `tests/engine/agentic/protocol/responseBuilder.test.ts`
+- `tests/engine/OpenCodeManager.protocol.test.ts`
+- Any other tests in `tests/` that test the deleted agentic/ modules
 
 ---
 
-## Success Metrics (Definition of Done)
+## Files to MODIFY
 
-The branch is complete when:
+### `src/main/engine/OpenCodeManager.ts`
+- Remove `protocolBoundaryInstructions` (line 152-159)
+- Remove protocol retry mechanism (lines 408-438)
+- Remove `ProtocolResponseBuilder` usage
+- Remove `CapabilityRegistryService`, `AgentTurnStateMachine`, `WorkflowCheckpointStore`, `protocolTelemetry` usage
+- Remove the `protocolVersion`/`envelope` fields from `SendMessageResult`
+- Add UI-rendering tools to `getToolDefinitions()`: `render_chart`, `render_table`, `render_form`, `render_card`, `render_metric`, `render_list`, `render_tabs`
+- Add `executeTool` handlers that convert tool args into A2UI messages and emit them via IPC
+- Keep text streaming (`onDelta`) as-is for conversational responses
+- Add new callback: `onA2UIMessage` for streaming A2UI messages to renderer
 
-1. **Protocol reliability**
-   - ≥ 98% of A2UI-intent turns produce valid envelope without renderer fallback.
+### `src/main/ipc/chatHandlers.ts`
+- Add new IPC event: `a2ui-message` for streaming A2UI messages
+- Add new IPC handler: `a2ui-action` for receiving user actions from renderer
+- Wire `onA2UIMessage` callback to `webContents.send('a2ui-message', ...)`
 
-2. **UI execution reliability**
-   - ≥ 95% of emitted actions execute successfully or fail with structured actionable error.
+### `src/main/preload.ts`
+- Add `onA2UIMessage(callback)` listener to `window.electronAPI.chat`
+- Add `dispatchA2UIAction(surfaceId, action)` method
+- Add to type definitions
 
-3. **Clarification quality**
-   - Missing-input tasks use `needsInput` controls instead of textual back-and-forth in ≥ 90% of cases.
+### `src/renderer/components/ChatPanel/ChatPanel.tsx`
+- Remove protocol envelope handling (`result.envelope`, `buildActionPoliciesFromEnvelope`, `toClarificationElements`)
+- Subscribe to `onA2UIMessage` events
+- Feed A2UI messages to new A2UI surface state manager
+- Render A2UI surface alongside chat transcript
+- Handle A2UI actions (dispatch back via IPC)
 
-4. **Cross-surface parity**
-   - Same A2UI payload renders and behaves equivalently in chat tab and sidebar.
+### `src/renderer/components/AssistantSidebar/AssistantSidebar.tsx`
+- Same changes as ChatPanel — A2UI surface rendering, remove protocol envelope
 
-5. **Governance and maintainability**
-   - Protocol conformance suite and migration tests are mandatory in CI.
+### `src/main/engine/ChatEngine.ts`
+- Remove `getBuiltInSystemPrompt()` references to "AGUI payload" and protocol envelope
+- Update system prompt to describe available UI tools instead
+- Keep the rest (conversation CRUD, message persistence) as-is
+
+### `src/renderer/navigation/assistantPanelSpec.ts`
+- Keep the Zod schemas and `AssistantPanelElement` types — these become our component catalog definitions
+- Remove `extractAssistantResponseContent()` and `extractAssistantPanelSpec()` (free-text JSON parsing) — no longer needed
+- Export schemas for use by A2UI component registry
+
+### `src/renderer/components/AssistantPanelControls/AssistantPanelControls.tsx`
+- Refactor into individual component files that can be registered in an A2UI catalog
+- Each component becomes a standalone renderer: `A2UIText`, `A2UIChart`, `A2UIForm`, etc.
+- These map A2UI flat components (with data binding) to existing widget rendering
 
 ---
 
-## Risks and Mitigations
+## Files to CREATE
 
-- **Risk:** Provider inconsistency in structured outputs.
-  - **Mitigation:** enforce server-side validation + repair loop + fallback envelope.
+### `src/main/a2ui/types.ts`
+A2UI message types for our app. If `@a2ui-sdk/types` provides adequate types, re-export from there. Otherwise define:
+- `A2UIServerMessage` (union of `CreateSurface | UpdateComponents | UpdateDataModel | DeleteSurface`)
+- `A2UIClientAction` (action events from user interactions)
+- `A2UIComponent` (flat component with ID + type + properties)
+- `BDSCatalogId` — our custom catalog identifier
 
-- **Risk:** Action safety regressions.
-  - **Mitigation:** policy levels, confirmations, audit logs, blocked dangerous defaults.
+### `src/main/a2ui/generator.ts`
+Converts tool call results into A2UI messages:
+- `createChartSurface(toolArgs)` → `[createSurface, updateComponents, updateDataModel]`
+- `createFormSurface(toolArgs)` → `[createSurface, updateComponents]`
+- `createTableSurface(toolArgs)` → `[createSurface, updateComponents, updateDataModel]`
+- etc.
+Each function returns an array of A2UI messages to stream to the renderer.
 
-- **Risk:** Protocol churn breaks compatibility.
-   - **Mitigation:** strict versioned envelopes, migration tests, and single-source protocol ownership.
+### `src/main/a2ui/catalog.ts`
+Defines the bDS component catalog — what component types we support:
+- Maps A2UI basic catalog components to our implementations
+- Adds custom components (chart, metric) not in A2UI basic catalog
+- This is sent as client capabilities to inform the LLM what's available
 
-- **Risk:** Feature complexity growth.
-  - **Mitigation:** domain separation (`protocol`, `orchestrator`, `renderer`), clear ownership boundaries.
+### `src/renderer/a2ui/A2UISurfaceManager.ts`
+Client-side state manager for A2UI surfaces:
+- Maintains per-surface component buffer (Map<ComponentId, Component>)
+- Maintains per-surface data model (JSON object)
+- Processes incoming A2UI messages:
+  - `createSurface` → initialize new surface
+  - `updateComponents` → merge components into buffer
+  - `updateDataModel` → update data at JSON Pointer path
+  - `deleteSurface` → clean up
+- Resolves flat component list into tree (using `children` ID references)
+- Resolves data bindings (JSON Pointer → value)
+- Emits render-ready component tree
+
+### `src/renderer/a2ui/useA2UISurface.ts`
+React hook that wraps `A2UISurfaceManager`:
+- Subscribes to `onA2UIMessage` IPC events
+- Feeds messages into surface manager
+- Returns render-ready component tree + dispatch function for actions
+- Handles progressive rendering (re-render as components arrive)
+
+### `src/renderer/a2ui/A2UIRenderer.tsx`
+React component that renders an A2UI surface:
+- Takes component tree from `useA2UISurface`
+- Maps each A2UI component type to a React component (from our catalog)
+- Handles data binding for input components
+- Dispatches actions on user interaction
+
+### `src/renderer/a2ui/components/` (directory)
+Individual component renderers, refactored from `AssistantPanelControls`:
+- `A2UIText.tsx` — renders Text (with Markdown support)
+- `A2UIButton.tsx` — renders Button with action
+- `A2UICard.tsx` — renders Card with title/body/actions
+- `A2UIChart.tsx` — renders Chart (custom, not in A2UI basic catalog)
+- `A2UIForm.tsx` — renders form with fields
+- `A2UITable.tsx` — renders data table
+- `A2UITabs.tsx` — renders tabbed interface
+- `A2UITextField.tsx` — renders text input with data binding
+- `A2UICheckBox.tsx` — renders checkbox with data binding
+- `A2UIDateTimeInput.tsx` — renders date picker
+- `A2UIImage.tsx` — renders image with caption
+- `A2UIMetric.tsx` — renders metric display (custom)
+- `A2UIList.tsx` — renders item list
+- `A2UIRow.tsx` / `A2UIColumn.tsx` — layout containers
+
+### `tests/a2ui/` (directory)
+- `generator.test.ts` — test A2UI message generation from tool calls
+- `surfaceManager.test.ts` — test surface state management, component tree resolution, data binding
+- `catalog.test.ts` — test component catalog registration
 
 ---
 
-## Recommended Execution Order for This Branch
+## Implementation Phases
 
-1. Phase 0 + Phase 1 (contract + enforcement + repair)
-2. Phase 2 (capability negotiation)
-3. Phase 3 (clarification/workflow engine)
-4. Phase 4 (safety policy)
-5. Phase 5 (observability + QA)
+### Phase 1: Foundation — A2UI Types, Surface Manager, IPC Transport
+**Goal:** Get A2UI messages flowing from main process to renderer and being processed correctly.
 
-This order converts the current retrofit into a stable protocol platform first, then builds mature agentic behavior on top.
+1. Install `@a2ui-sdk/types` (or define our own types if the package doesn't cover v0.9 well)
+2. Create `src/main/a2ui/types.ts` with message types
+3. Create `src/renderer/a2ui/A2UISurfaceManager.ts` — process messages, maintain state, resolve tree
+4. Write tests for surface manager (TDD: red → green → refactor)
+5. Add `a2ui-message` IPC event to `chatHandlers.ts` and preload
+6. Add `a2ui-action` IPC handler for action dispatch
+7. Delete `src/main/agentic/` directory and all its tests
+
+### Phase 2: A2UI Generator — Tool-Driven UI Creation
+**Goal:** LLM can trigger rich UI by calling tools.
+
+1. Create `src/main/a2ui/generator.ts` — converts tool args to A2UI messages
+2. Create `src/main/a2ui/catalog.ts` — defines our component catalog
+3. Add UI-rendering tools to `OpenCodeManager.getToolDefinitions()`:
+   - `render_chart({ chartType, title, series })`
+   - `render_table({ title, columns, rows })`
+   - `render_form({ title, fields, submitAction })`
+   - `render_card({ title, body, subtitle, actions })`
+   - `render_metric({ label, value })`
+   - `render_list({ title, items })`
+   - `render_tabs({ tabs: [{ label, content }] })`
+4. Add `executeTool` handlers that call generator and emit A2UI messages via `onA2UIMessage` callback
+5. Write tests for generator (TDD)
+6. Remove `protocolBoundaryInstructions`, protocol retry, envelope building from `OpenCodeManager`
+7. Update `SendMessageResult` — remove `envelope`/`protocolVersion`/`traceId`
+
+### Phase 3: A2UI Renderer — React Component Catalog
+**Goal:** A2UI surfaces render as interactive UI in the chat.
+
+1. Refactor `AssistantPanelControls` into individual component files under `src/renderer/a2ui/components/`
+2. Create `src/renderer/a2ui/A2UIRenderer.tsx` — maps component types to React components
+3. Create `src/renderer/a2ui/useA2UISurface.ts` — React hook for surface state
+4. Integrate into `ChatPanel.tsx`:
+   - Subscribe to `onA2UIMessage`
+   - Render `A2UIRenderer` for each active surface
+   - Handle actions
+5. Integrate into `AssistantSidebar.tsx` (same pattern)
+6. Remove old protocol envelope handling from both components
+7. Write component tests
+
+### Phase 4: System Prompt and LLM Integration
+**Goal:** LLM knows about and uses UI tools effectively.
+
+1. Update `ChatEngine.getBuiltInSystemPrompt()`:
+   - Remove all "AGUI payload" / "protocol envelope" instructions
+   - Add descriptions of UI tools and when to use them
+   - Include examples: "When showing statistics, use render_chart. When showing a list of posts, use render_table."
+2. Update system prompt to describe the component catalog available
+3. Test end-to-end: user asks for a chart → LLM calls `render_chart` → A2UI messages → UI renders
+
+### Phase 5: Actions, Data Binding, and Polish
+**Goal:** Full interactivity — forms submit, buttons trigger actions, data flows both ways.
+
+1. Implement action dispatch: renderer → IPC → main process → feed back to LLM as tool result
+2. Implement two-way data binding for form inputs:
+   - User edits input → local data model updates
+   - Submit action includes current data model values
+3. Add action confirmation policies (keep the existing silent/confirm/danger concept)
+4. Handle surface lifecycle (delete surfaces when conversation changes)
+5. Clean up: remove unused imports, dead code, duplicate schemas
+6. Update `API.md` and Python API bindings if affected
+
+### Phase 6: Cleanup and Tests
+**Goal:** Zero failing tests, clean build, no dead code.
+
+1. Delete all files listed in "Files to DELETE"
+2. Remove all imports of deleted modules across the codebase
+3. Run full test suite, fix all failures
+4. Run `npm run build`, fix all build errors
+5. Update `protocolActionPolicies.ts` and `protocolNeedsInput.ts` — either adapt for A2UI actions or delete if superseded
+6. Delete `src/renderer/python/pythonApiContractV1.ts` changes if they reference the old protocol
+7. Final review: no unused code, no commented-out code
+
+---
+
+## Component Catalog Mapping: Existing Widgets → A2UI Components
+
+| Existing Widget | A2UI Component | Notes |
+|----------------|----------------|-------|
+| `text` | `Text` | Direct mapping, add Markdown support |
+| `metric` | Custom `Metric` | Not in A2UI basic catalog — register as custom component |
+| `list` | `List` | A2UI has List container |
+| `table` | Custom `Table` | Not in A2UI basic catalog — register as custom |
+| `action` | `Button` | A2UI uses Button with action events |
+| `chart` | Custom `Chart` | Not in A2UI basic catalog — register as custom |
+| `input` | `TextField` / `CheckBox` / `DateTimeInput` / `ChoicePicker` | A2UI splits by type |
+| `form` | `Column` + form fields + `Button` | A2UI doesn't have a Form primitive — compose from layout + inputs |
+| `card` | `Card` | Direct mapping |
+| `image` | `Image` | Direct mapping |
+| `tabs` | `Tabs` | Direct mapping |
+| `datePicker` | `DateTimeInput` | A2UI equivalent |
+| (new) `Row` | `Row` | Layout container |
+| (new) `Column` | `Column` | Layout container |
+| (new) `Divider` | `Divider` | Visual separator |
+
+---
+
+## Verification
+
+After each phase, verify:
+
+1. **Tests pass**: `npm test` — zero failures
+2. **Build succeeds**: `npm run build` — no errors
+3. **Manual test**: Send chat messages, verify:
+   - Text responses render normally in chat
+   - "Show me post statistics as a chart" → LLM calls `render_chart` → chart renders
+   - "List my recent posts in a table" → LLM calls `render_table` → table renders
+   - Forms render with inputs, submit works
+   - Cards with action buttons work
+   - Tab navigation works
+   - Both ChatPanel and AssistantSidebar work
+4. **No regression**: Existing tool calls (search_posts, read_post, etc.) still work
+5. **No raw JSON visible**: Users never see protocol JSON in the chat
+
+---
+
+## Risk Mitigation
+
+| Risk | Mitigation |
+|------|-----------|
+| `@a2ui-sdk/types` doesn't cover v0.9 well | Define our own types — A2UI messages are simple JSON |
+| LLM doesn't call UI tools reliably | Good tool descriptions + examples in system prompt; text fallback always works |
+| Performance: many small IPC messages | Batch `updateComponents` messages; A2UI supports sending multiple components per message |
+| Breaking existing functionality | Phase 1 deletes old code; each subsequent phase adds new functionality. Keep existing tool calls (search_posts etc.) unchanged. |
+| A2UI spec changes (v0.9 is draft) | Our implementation is a subset; the flat component + data binding model is stable |
