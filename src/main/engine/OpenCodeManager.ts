@@ -75,6 +75,18 @@ export interface SendMessageOptions {
   onToolCall?: (toolCall: { name: string; args: unknown }) => void;
   onToolResult?: (result: { name: string; result: unknown }) => void;
   onA2UIMessage?: (message: A2UIServerMessage) => void;
+  onTokenUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    totalTokens: number;
+    cumulativeInputTokens: number;
+    cumulativeOutputTokens: number;
+    cumulativeCacheReadTokens: number;
+    cumulativeCacheWriteTokens: number;
+    cumulativeTotalTokens: number;
+  }) => void;
 }
 
 export interface SendMessageResult {
@@ -136,6 +148,12 @@ export class OpenCodeManager {
   private getMainWindow: () => BrowserWindow | null;
   private apiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
+  private conversationUsage: Map<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  }> = new Map();
 
   constructor(
     chatEngine: ChatEngine,
@@ -243,7 +261,7 @@ export class OpenCodeManager {
     userMessage: string,
     options: SendMessageOptions = {}
   ): Promise<SendMessageResult> {
-    const { metadata, onDelta, onToolCall, onToolResult, onA2UIMessage } = options;
+    const { metadata, onDelta, onToolCall, onToolResult, onA2UIMessage, onTokenUsage } = options;
 
     try {
       const readyCheck = await this.checkReady();
@@ -318,7 +336,7 @@ export class OpenCodeManager {
             prompt,
             messages,
             abortController.signal,
-            { onDelta, onToolCall, onToolResult },
+            { onDelta, onToolCall, onToolResult, onTokenUsage },
             conversationId,
             emitA2UIMessages,
           );
@@ -329,7 +347,7 @@ export class OpenCodeManager {
           prompt,
           messages,
           abortController.signal,
-          { onDelta, onToolCall, onToolResult },
+          { onDelta, onToolCall, onToolResult, onTokenUsage },
           conversationId,
           emitA2UIMessages,
         );
@@ -393,6 +411,7 @@ export class OpenCodeManager {
       onDelta?: (delta: string) => void;
       onToolCall?: (toolCall: { name: string; args: unknown }) => void;
       onToolResult?: (result: { name: string; result: unknown }) => void;
+      onTokenUsage?: SendMessageOptions['onTokenUsage'];
     },
     conversationId: string,
     emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
@@ -403,6 +422,9 @@ export class OpenCodeManager {
 
     // Convert DB messages to Anthropic format
     let messages = this.buildAnthropicMessages(dbMessages);
+
+    // Truncate to fit within context window
+    messages = this.truncateToTokenBudget(messages, systemPrompt, tools);
 
     // Tool use loop - keep going until the model stops calling tools
     const MAX_TOOL_ROUNDS = 10;
@@ -417,6 +439,7 @@ export class OpenCodeManager {
         system: systemPrompt,
         messages,
         tools,
+        cache_control: { type: 'ephemeral' },
       };
 
       const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
@@ -437,6 +460,36 @@ export class OpenCodeManager {
       }
 
       const data = JSON.parse(response.body);
+
+      // Extract and emit token usage
+      if (data.usage && callbacks.onTokenUsage) {
+        const usage = data.usage;
+        const cacheReadTokens = usage.cache_read_input_tokens || 0;
+        const cacheWriteTokens = usage.cache_creation_input_tokens || 0;
+        const inputTokens = (usage.input_tokens || 0) - cacheReadTokens - cacheWriteTokens;
+        const outputTokens = usage.output_tokens || 0;
+        const totalTokens = (usage.input_tokens || 0) + outputTokens;
+
+        const prev = this.conversationUsage.get(conversationId) || {
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+        };
+        const cumulative = {
+          inputTokens: prev.inputTokens + inputTokens,
+          outputTokens: prev.outputTokens + outputTokens,
+          cacheReadTokens: prev.cacheReadTokens + cacheReadTokens,
+          cacheWriteTokens: prev.cacheWriteTokens + cacheWriteTokens,
+        };
+        this.conversationUsage.set(conversationId, cumulative);
+
+        callbacks.onTokenUsage({
+          inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens,
+          cumulativeInputTokens: cumulative.inputTokens,
+          cumulativeOutputTokens: cumulative.outputTokens,
+          cumulativeCacheReadTokens: cumulative.cacheReadTokens,
+          cumulativeCacheWriteTokens: cumulative.cacheWriteTokens,
+          cumulativeTotalTokens: cumulative.inputTokens + cumulative.outputTokens + cumulative.cacheReadTokens + cumulative.cacheWriteTokens,
+        });
+      }
 
       console.log('[OpenCodeManager] Round', round, 'stop_reason:', data.stop_reason, 'content blocks:', JSON.stringify(data.content?.map((b: AnthropicContentBlock) => ({ type: b.type, textLen: b.text?.length, name: b.name }))));
 
@@ -581,12 +634,13 @@ export class OpenCodeManager {
       onDelta?: (delta: string) => void;
       onToolCall?: (toolCall: { name: string; args: unknown }) => void;
       onToolResult?: (result: { name: string; result: unknown }) => void;
+      onTokenUsage?: (usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; totalTokens: number; cumulativeInputTokens: number; cumulativeOutputTokens: number; cumulativeCacheReadTokens: number; cumulativeCacheWriteTokens: number; cumulativeTotalTokens: number }) => void;
     },
     conversationId: string,
     emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     // Build OpenAI-format messages
-    const messages: Array<Record<string, unknown>> = [
+    const allMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
       ...dbMessages
         .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -606,6 +660,19 @@ export class OpenCodeManager {
         parameters: t.input_schema,
       },
     }));
+
+    // Truncate conversation history to fit within context window
+    // Keep system message (index 0), truncate from oldest conversation messages
+    const conversationMessages = allMessages.slice(1);
+    const anthropicFmt = conversationMessages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: (m.content as string) || '',
+    }));
+    const truncated = this.truncateToTokenBudget(anthropicFmt, systemPrompt, anthropicTools);
+    const messages: Array<Record<string, unknown>> = [
+      allMessages[0],
+      ...truncated.map(m => ({ role: m.role, content: m.content })),
+    ];
 
     let accumulatedText = '';
     const allToolCalls: Array<{ name: string; args: unknown }> = [];
@@ -639,6 +706,35 @@ export class OpenCodeManager {
 
       const data = JSON.parse(response.body);
       const choice = data.choices?.[0];
+
+      // Extract and emit token usage (OpenAI format)
+      if (data.usage && callbacks.onTokenUsage) {
+        const usage = data.usage;
+        const cacheReadTokens = usage.prompt_tokens_details?.cached_tokens || 0;
+        const inputTokens = (usage.prompt_tokens || 0) - cacheReadTokens;
+        const outputTokens = usage.completion_tokens || 0;
+        const totalTokens = usage.total_tokens || (usage.prompt_tokens || 0) + outputTokens;
+
+        const prev = this.conversationUsage.get(conversationId) || {
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+        };
+        const cumulative = {
+          inputTokens: prev.inputTokens + inputTokens,
+          outputTokens: prev.outputTokens + outputTokens,
+          cacheReadTokens: prev.cacheReadTokens + cacheReadTokens,
+          cacheWriteTokens: prev.cacheWriteTokens,
+        };
+        this.conversationUsage.set(conversationId, cumulative);
+
+        callbacks.onTokenUsage({
+          inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens: 0, totalTokens,
+          cumulativeInputTokens: cumulative.inputTokens,
+          cumulativeOutputTokens: cumulative.outputTokens,
+          cumulativeCacheReadTokens: cumulative.cacheReadTokens,
+          cumulativeCacheWriteTokens: cumulative.cacheWriteTokens,
+          cumulativeTotalTokens: cumulative.inputTokens + cumulative.outputTokens + cumulative.cacheReadTokens + cumulative.cacheWriteTokens,
+        });
+      }
 
       console.log('[OpenCodeManager:OpenAI] Round', round, 'status:', response.statusCode, 'content type:', typeof choice?.message?.content, 'content length:', choice?.message?.content?.length, 'tool_calls:', choice?.message?.tool_calls?.length);
 
@@ -1482,7 +1578,76 @@ export class OpenCodeManager {
   }
 
   /**
-   * Build Anthropic-format messages from DB message history
+   * Estimate token count for a string using a rough character heuristic.
+   * ~3.5 characters per token for English text (conservative, tends to overestimate).
+   */
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.length / 3.5);
+  }
+
+  /**
+   * Estimate total tokens for an array of Anthropic messages.
+   */
+  private estimateMessageTokens(messages: AnthropicMessage[]): number {
+    let total = 0;
+    for (const msg of messages) {
+      if (typeof msg.content === 'string') {
+        total += this.estimateTokens(msg.content);
+      } else if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.text) total += this.estimateTokens(block.text);
+          if (typeof block.content === 'string') total += this.estimateTokens(block.content);
+        }
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Truncate messages to fit within a token budget.
+   * Drops oldest user/assistant pairs first, keeping the most recent messages.
+   */
+  private truncateToTokenBudget(
+    messages: AnthropicMessage[],
+    systemPrompt: string,
+    tools: ToolDefinition[],
+    maxContextTokens: number = 150000,
+  ): AnthropicMessage[] {
+    const systemTokens = this.estimateTokens(systemPrompt);
+    const toolsTokens = this.estimateTokens(JSON.stringify(tools));
+    const responseReserve = 4096;
+    const availableBudget = maxContextTokens - systemTokens - toolsTokens - responseReserve;
+
+    if (availableBudget <= 0) {
+      return messages.slice(-1);
+    }
+
+    if (this.estimateMessageTokens(messages) <= availableBudget) {
+      return messages;
+    }
+
+    // Drop oldest pairs until we fit
+    let truncated = [...messages];
+    while (truncated.length > 2 && this.estimateMessageTokens(truncated) > availableBudget) {
+      // Ensure valid message structure (must start with user for Anthropic)
+      if (truncated[0].role === 'user') {
+        truncated = truncated.slice(2); // Drop user + assistant pair
+      } else {
+        truncated = truncated.slice(1);
+      }
+    }
+
+    if (truncated.length !== messages.length) {
+      console.log(`[OpenCodeManager] Truncated conversation from ${messages.length} to ${truncated.length} messages (budget: ${availableBudget} tokens)`);
+    }
+
+    return truncated;
+  }
+
+  /**
+   * Build Anthropic-format messages from DB message history.
+   * For assistant messages that had tool calls, appends a summary annotation
+   * so the model retains context about what tools were used on resume.
    */
   private buildAnthropicMessages(
     dbMessages: Array<{ role: string; content?: string; toolCalls?: string; toolCallId?: string }>
@@ -1493,9 +1658,25 @@ export class OpenCodeManager {
       if (msg.role === 'user') {
         messages.push({ role: 'user', content: msg.content || '' });
       } else if (msg.role === 'assistant') {
-        messages.push({ role: 'assistant', content: msg.content || '' });
+        let content = msg.content || '';
+
+        // If this message had tool calls, append a summary for context on resume
+        if (msg.toolCalls) {
+          try {
+            const toolCalls = JSON.parse(msg.toolCalls) as Array<{ name: string; args: unknown }>;
+            if (toolCalls.length > 0) {
+              const summary = toolCalls
+                .map(tc => `- ${tc.name}(${JSON.stringify(tc.args)})`)
+                .join('\n');
+              content += `\n\n[Tools used in this turn:\n${summary}\n]`;
+            }
+          } catch {
+            // Ignore malformed toolCalls JSON
+          }
+        }
+
+        messages.push({ role: 'assistant', content });
       }
-      // Tool messages from history are already incorporated into assistant responses
     }
 
     return messages;

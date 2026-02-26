@@ -283,6 +283,11 @@ export function registerChatHandlers(): void {
             mainWindow.webContents.send('a2ui-message', { conversationId, message });
           }
         },
+        onTokenUsage: (usage) => {
+          if (mainWindow) {
+            mainWindow.webContents.send('chat-token-usage', { conversationId, ...usage });
+          }
+        },
       });
 
       return result;

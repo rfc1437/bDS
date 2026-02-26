@@ -815,6 +815,7 @@
   "statusBar.posts": "Articles",
   "statusBar.media": "Médias",
   "statusBar.more": "+{count} en plus",
+  "statusBar.tokens": "Tokens : {input} entr. / {output} sort. ({cached} en cache)",
   "statusBar.theme": "Thème : {theme}",
   "statusBar.ui": "UI",
   "statusBar.uiLanguage": "Langue de l’interface",

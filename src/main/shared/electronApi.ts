@@ -431,6 +431,20 @@ export interface ChatTitleUpdate {
   title: string;
 }
 
+export interface ChatTokenUsage {
+  conversationId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  cumulativeInputTokens: number;
+  cumulativeOutputTokens: number;
+  cumulativeCacheReadTokens: number;
+  cumulativeCacheWriteTokens: number;
+  cumulativeTotalTokens: number;
+}
+
 export interface ChatSendMetadata {
   surface?: 'tab' | 'sidebar';
 }
@@ -765,6 +779,7 @@ export interface ElectronAPI {
     onToolCall: (callback: (data: ChatToolCall) => void) => () => void;
     onToolResult: (callback: (data: ChatToolResult) => void) => () => void;
     onTitleUpdated: (callback: (data: ChatTitleUpdate) => void) => () => void;
+    onTokenUsage: (callback: (data: ChatTokenUsage) => void) => () => void;
 
     // A2UI streaming
     onA2UIMessage: (callback: (data: { conversationId: string; message: A2UIServerMessage }) => void) => () => void;

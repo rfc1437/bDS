@@ -37,6 +37,7 @@ describe('AssistantSidebar wiring', () => {
       onToolResult,
       onTitleUpdated,
       onA2UIMessage: vi.fn(() => vi.fn()),
+      onTokenUsage: vi.fn(() => vi.fn()),
       dispatchA2UIAction: vi.fn(),
     } as never;
   });

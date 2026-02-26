@@ -63,6 +63,13 @@ vi.mock('../../src/main/engine/OpenCodeManager', () => ({
           options?.onDelta?.('stream-delta');
           options?.onToolCall?.({ name: 'search_posts', args: { query: 'q' } });
           options?.onToolResult?.({ name: 'search_posts', result: { ok: true } });
+          options?.onTokenUsage?.({
+            inputTokens: 100, outputTokens: 50,
+            cacheReadTokens: 80, cacheWriteTokens: 20, totalTokens: 250,
+            cumulativeInputTokens: 100, cumulativeOutputTokens: 50,
+            cumulativeCacheReadTokens: 80, cumulativeCacheWriteTokens: 20,
+            cumulativeTotalTokens: 250,
+          });
           return {
             success: true,
             message: 'assistant reply',
@@ -120,6 +127,7 @@ describe('chatHandlers', () => {
         onDelta: expect.any(Function),
         onToolCall: expect.any(Function),
         onToolResult: expect.any(Function),
+        onTokenUsage: expect.any(Function),
       }),
     );
 
@@ -135,5 +143,11 @@ describe('chatHandlers', () => {
       conversationId: 'conversation-1',
       result: { name: 'search_posts', result: { ok: true } },
     });
+    expect(webContentsSend).toHaveBeenCalledWith('chat-token-usage', expect.objectContaining({
+      conversationId: 'conversation-1',
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 80,
+    }));
   });
 });

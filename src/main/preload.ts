@@ -339,6 +339,11 @@ export const electronAPI: ElectronAPI = {
       ipcRenderer.on('chat-title-updated', subscription);
       return () => ipcRenderer.removeListener('chat-title-updated', subscription);
     },
+    onTokenUsage: (callback: (data: import('./shared/electronApi').ChatTokenUsage) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: import('./shared/electronApi').ChatTokenUsage) => callback(data);
+      ipcRenderer.on('chat-token-usage', subscription);
+      return () => ipcRenderer.removeListener('chat-token-usage', subscription);
+    },
 
     // A2UI streaming
     onA2UIMessage: (callback: (data: { conversationId: string; message: import('./a2ui/types').A2UIServerMessage }) => void) => {

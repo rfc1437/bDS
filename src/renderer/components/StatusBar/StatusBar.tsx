@@ -21,6 +21,9 @@ export const StatusBar: React.FC = () => {
     selectedPostId,
     totalPosts,
     picoTheme,
+    tabs,
+    activeTabId,
+    chatTokenUsage,
   } = useAppStore();
 
   const [selectedPostStatus, setSelectedPostStatus] = useState<string | null>(null);
@@ -38,6 +41,10 @@ export const StatusBar: React.FC = () => {
 
   const runningTasks = tasks.filter(t => t.status === 'running');
   const activeTheme = getRendererPicoTheme(picoTheme);
+
+  // Detect active chat tab and its token usage
+  const activeTab = tabs.find(tab => tab.id === activeTabId);
+  const activeChatUsage = activeTab?.type === 'chat' ? chatTokenUsage[activeTab.id] : null;
 
   return (
     <div className="status-bar">
@@ -73,6 +80,17 @@ export const StatusBar: React.FC = () => {
         <div className="status-bar-item">
           <span>{t('statusBar.media', { count: media.length })}</span>
         </div>
+
+        {/* Token Usage (visible when chat tab is active) */}
+        {activeChatUsage && (
+          <div className="status-bar-item token-usage">
+            <span>{t('statusBar.tokens', {
+              input: activeChatUsage.inputTokens.toLocaleString(),
+              output: activeChatUsage.outputTokens.toLocaleString(),
+              cached: activeChatUsage.cacheReadTokens.toLocaleString(),
+            })}</span>
+          </div>
+        )}
 
         <div className="status-bar-item theme-badge">
           <span>{t('statusBar.theme', { theme: activeTheme })}</span>

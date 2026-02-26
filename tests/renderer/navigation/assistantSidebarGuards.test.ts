@@ -35,6 +35,7 @@ describe('assistant sidebar guard rails', () => {
       onToolResult: vi.fn(() => vi.fn()),
       onTitleUpdated: vi.fn(() => vi.fn()),
       onA2UIMessage: vi.fn(() => vi.fn()),
+      onTokenUsage: vi.fn(() => vi.fn()),
       dispatchA2UIAction: vi.fn(),
     } as never;
   });

@@ -100,6 +100,15 @@ interface AppState {
   isLoading: boolean;
   error: string | null;
 
+  // Chat token usage (keyed by conversationId, ephemeral - not persisted)
+  chatTokenUsage: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    totalTokens: number;
+  }>;
+
   // Project Actions
   setProjects: (projects: ProjectData[]) => void;
   setActiveProject: (project: ProjectData | null) => void;
@@ -160,6 +169,16 @@ interface AppState {
   // Loading Actions
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+
+  // Chat token usage actions
+  setChatTokenUsage: (conversationId: string, usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    totalTokens: number;
+  }) => void;
+  clearChatTokenUsage: (conversationId: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -211,6 +230,9 @@ export const useAppStore = create<AppState>()(
       // Initial Loading State
       isLoading: false,
       error: null,
+
+      // Chat token usage (ephemeral, not persisted)
+      chatTokenUsage: {},
 
       // Project Actions
       setProjects: (projects) => set({ projects }),
@@ -388,6 +410,15 @@ export const useAppStore = create<AppState>()(
       // Loading Actions
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
+
+      // Chat token usage actions
+      setChatTokenUsage: (conversationId, usage) => set((state) => ({
+        chatTokenUsage: { ...state.chatTokenUsage, [conversationId]: usage },
+      })),
+      clearChatTokenUsage: (conversationId) => set((state) => {
+        const { [conversationId]: _, ...rest } = state.chatTokenUsage;
+        return { chatTokenUsage: rest };
+      }),
     }),
     {
       name: STORAGE_KEY,

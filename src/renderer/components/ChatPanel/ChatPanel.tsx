@@ -148,11 +148,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       }
     });
 
+    const unsubTokenUsage = window.electronAPI?.chat.onTokenUsage((data) => {
+      if (data.conversationId === conversationId) {
+        useAppStore.getState().setChatTokenUsage(conversationId, {
+          inputTokens: data.cumulativeInputTokens,
+          outputTokens: data.cumulativeOutputTokens,
+          cacheReadTokens: data.cumulativeCacheReadTokens,
+          cacheWriteTokens: data.cumulativeCacheWriteTokens,
+          totalTokens: data.cumulativeTotalTokens,
+        });
+      }
+    });
+
     return () => {
       unsubDelta?.();
       unsubToolCall?.();
       unsubToolResult?.();
       unsubTitle?.();
+      unsubTokenUsage?.();
     };
   }, [conversationId, loadData, scrollToBottom, checkReady, appendStreamDelta, recordToolCall, recordToolResult]);
 
