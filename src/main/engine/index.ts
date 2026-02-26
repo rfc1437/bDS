@@ -112,5 +112,5 @@ export {
   PublishEngine,
   getPublishEngine,
   type PublishCredentials,
-  type PublishResult,
+  type DirectoryUploadResult,
 } from './PublishEngine';

@@ -12,10 +12,8 @@ export interface PublishCredentials {
   sshMode: 'scp' | 'rsync';
 }
 
-export interface PublishResult {
-  htmlFilesUploaded: number;
-  thumbnailFilesUploaded: number;
-  mediaFilesUploaded: number;
+export interface DirectoryUploadResult {
+  filesUploaded: number;
   filesSkipped: number;
 }
 
@@ -37,49 +35,101 @@ export class PublishEngine extends EventEmitter {
     this.dataDir = dataDir;
   }
 
-  async uploadSite(
+  // ── Public upload methods (one per directory, run as parallel tasks) ───
+
+  /**
+   * Upload html/ → remote root.
+   * Requires html/ to exist (site must be rendered first).
+   */
+  async uploadHtml(
     credentials: PublishCredentials,
     onProgress: ProgressCallback,
-  ): Promise<PublishResult> {
-    if (!this.dataDir || !this.projectId) {
-      throw new Error('No project context set');
-    }
+  ): Promise<DirectoryUploadResult> {
+    this.ensureProjectContext();
     this.validateCredentials(credentials);
 
-    const htmlDir = path.join(this.dataDir, 'html');
-    const thumbnailsDir = path.join(this.dataDir, 'thumbnails');
-    const mediaDir = path.join(this.dataDir, 'media');
-
-    // Verify the generated site exists
+    const htmlDir = path.join(this.dataDir!, 'html');
     await this.ensureDirectoryExists(htmlDir, 'Generated site not found. Please render the site first.');
 
-    const result: PublishResult = {
-      htmlFilesUploaded: 0,
-      thumbnailFilesUploaded: 0,
-      mediaFilesUploaded: 0,
-      filesSkipped: 0,
-    };
-
     if (credentials.sshMode === 'rsync') {
-      await this.uploadViaRsync(credentials, htmlDir, thumbnailsDir, mediaDir, result, onProgress);
-    } else {
-      await this.uploadViaScp(credentials, htmlDir, thumbnailsDir, mediaDir, result, onProgress);
+      return this.rsyncDirectory(
+        htmlDir + '/',
+        this.rsyncDest(credentials, '/'),
+        onProgress,
+      );
     }
-
-    onProgress(100, 'Upload complete');
-    return result;
+    return this.scpUploadDir(credentials, htmlDir, credentials.sshRemotePath, onProgress);
   }
 
-  // ── SCP mode ──────────────────────────────────────────────────────────────
-
-  private async uploadViaScp(
+  /**
+   * Upload thumbnails/ → remote/thumbnails/.
+   * Silently returns zero counts if thumbnails/ does not exist.
+   */
+  async uploadThumbnails(
     credentials: PublishCredentials,
-    htmlDir: string,
-    thumbnailsDir: string,
-    mediaDir: string,
-    result: PublishResult,
     onProgress: ProgressCallback,
-  ): Promise<void> {
+  ): Promise<DirectoryUploadResult> {
+    this.ensureProjectContext();
+    this.validateCredentials(credentials);
+
+    const thumbnailsDir = path.join(this.dataDir!, 'thumbnails');
+    if (!(await this.directoryExists(thumbnailsDir))) {
+      onProgress(100, 'No thumbnails to upload');
+      return { filesUploaded: 0, filesSkipped: 0 };
+    }
+
+    const remotePath = path.posix.join(credentials.sshRemotePath, 'thumbnails');
+    if (credentials.sshMode === 'rsync') {
+      return this.rsyncDirectory(
+        thumbnailsDir + '/',
+        this.rsyncDest(credentials, '/thumbnails/'),
+        onProgress,
+      );
+    }
+    return this.scpUploadDir(credentials, thumbnailsDir, remotePath, onProgress);
+  }
+
+  /**
+   * Upload media/ → remote/media/, excluding .meta sidecar files.
+   * Silently returns zero counts if media/ does not exist.
+   */
+  async uploadMedia(
+    credentials: PublishCredentials,
+    onProgress: ProgressCallback,
+  ): Promise<DirectoryUploadResult> {
+    this.ensureProjectContext();
+    this.validateCredentials(credentials);
+
+    const mediaDir = path.join(this.dataDir!, 'media');
+    if (!(await this.directoryExists(mediaDir))) {
+      onProgress(100, 'No media to upload');
+      return { filesUploaded: 0, filesSkipped: 0 };
+    }
+
+    const remotePath = path.posix.join(credentials.sshRemotePath, 'media');
+    if (credentials.sshMode === 'rsync') {
+      return this.rsyncDirectory(
+        mediaDir + '/',
+        this.rsyncDest(credentials, '/media/'),
+        onProgress,
+        ['*.meta'],
+      );
+    }
+    return this.scpUploadDir(
+      credentials, mediaDir, remotePath, onProgress,
+      (name) => !name.endsWith(META_EXTENSION),
+    );
+  }
+
+  // ── SCP mode ──────────────────────────────────────────────────────────
+
+  private async scpUploadDir(
+    credentials: PublishCredentials,
+    localDir: string,
+    remoteDir: string,
+    onProgress: ProgressCallback,
+    fileFilter?: (name: string) => boolean,
+  ): Promise<DirectoryUploadResult> {
     const client = await scpClient({
       host: credentials.sshHost,
       username: credentials.sshUser,
@@ -87,109 +137,53 @@ export class PublishEngine extends EventEmitter {
     });
 
     try {
-      // Phase 1: html/ → remote root (0–33%)
-      onProgress(0, 'Uploading HTML files...');
-      const htmlResult = await this.scpUploadDirectory(
-        client,
-        htmlDir,
-        credentials.sshRemotePath,
-        (p, msg) => onProgress(Math.round(p * 0.33), msg),
-      );
-      result.htmlFilesUploaded = htmlResult.uploaded;
-      result.filesSkipped += htmlResult.skipped;
+      const files = await this.collectFiles(localDir, '', fileFilter);
+      let uploaded = 0;
+      let skipped = 0;
 
-      // Phase 2: thumbnails/ → remote/thumbnails/ (33–66%)
-      onProgress(33, 'Uploading thumbnails...');
-      if (await this.directoryExists(thumbnailsDir)) {
-        const thumbResult = await this.scpUploadDirectory(
-          client,
-          thumbnailsDir,
-          path.posix.join(credentials.sshRemotePath, 'thumbnails'),
-          (p, msg) => onProgress(33 + Math.round(p * 0.33), msg),
-        );
-        result.thumbnailFilesUploaded = thumbResult.uploaded;
-        result.filesSkipped += thumbResult.skipped;
+      if (files.length === 0) {
+        onProgress(100, 'No files to upload');
+        return { filesUploaded: 0, filesSkipped: 0 };
       }
 
-      // Phase 3: media/ → remote/media/ (66–99%), excluding .meta files
-      onProgress(66, 'Uploading media files...');
-      if (await this.directoryExists(mediaDir)) {
-        const mediaResult = await this.scpUploadDirectory(
-          client,
-          mediaDir,
-          path.posix.join(credentials.sshRemotePath, 'media'),
-          (p, msg) => onProgress(66 + Math.round(p * 0.33), msg),
-          (name) => !name.endsWith(META_EXTENSION),
-        );
-        result.mediaFilesUploaded = mediaResult.uploaded;
-        result.filesSkipped += mediaResult.skipped;
+      await this.scpEnsureDir(client, remoteDir);
+      const createdDirs = new Set<string>();
+
+      for (let i = 0; i < files.length; i++) {
+        const relativePath = files[i];
+        const localPath = path.join(localDir, relativePath);
+        const remotePath = path.posix.join(remoteDir, relativePath.split(path.sep).join('/'));
+
+        // Ensure parent directory exists on remote
+        const remoteParent = path.posix.dirname(remotePath);
+        if (!createdDirs.has(remoteParent)) {
+          await this.scpEnsureDir(client, remoteParent);
+          createdDirs.add(remoteParent);
+        }
+
+        // Check if we need to upload (compare mtime)
+        const localStat = await fs.stat(localPath);
+        const needsUpload = await this.scpNeedsUpload(client, remotePath, localStat.mtimeMs);
+
+        if (needsUpload) {
+          await client.uploadFile(localPath, remotePath);
+          uploaded++;
+          const progress = Math.round(((i + 1) / files.length) * 100);
+          onProgress(progress, `Uploaded ${relativePath} (${uploaded}/${files.length})`);
+        } else {
+          skipped++;
+          const progress = Math.round(((i + 1) / files.length) * 100);
+          onProgress(progress, `Skipped ${relativePath} (${i + 1}/${files.length})`);
+        }
       }
+
+      onProgress(100, `Done: ${uploaded} uploaded, ${skipped} unchanged`);
+      return { filesUploaded: uploaded, filesSkipped: skipped };
     } finally {
       client.close();
     }
   }
 
-  /**
-   * Recursively upload a local directory to a remote path via SCP/SFTP.
-   * Only uploads files that are newer than the remote version.
-   */
-  private async scpUploadDirectory(
-    client: ScpClient,
-    localDir: string,
-    remoteDir: string,
-    onProgress: ProgressCallback,
-    fileFilter?: (name: string) => boolean,
-  ): Promise<{ uploaded: number; skipped: number }> {
-    // Collect all files first for progress tracking
-    const files = await this.collectFiles(localDir, '', fileFilter);
-    let uploaded = 0;
-    let skipped = 0;
-
-    if (files.length === 0) {
-      onProgress(100, 'No files to upload');
-      return { uploaded: 0, skipped: 0 };
-    }
-
-    // Ensure remote directory exists
-    await this.scpEnsureDir(client, remoteDir);
-
-    // Track created directories to avoid redundant mkdir calls
-    const createdDirs = new Set<string>();
-
-    for (let i = 0; i < files.length; i++) {
-      const relativePath = files[i];
-      const localPath = path.join(localDir, relativePath);
-      const remotePath = path.posix.join(remoteDir, relativePath.split(path.sep).join('/'));
-
-      // Ensure parent directory exists on remote
-      const remoteParent = path.posix.dirname(remotePath);
-      if (!createdDirs.has(remoteParent)) {
-        await this.scpEnsureDir(client, remoteParent);
-        createdDirs.add(remoteParent);
-      }
-
-      // Check if we need to upload (compare mtime)
-      const localStat = await fs.stat(localPath);
-      const needsUpload = await this.scpNeedsUpload(client, remotePath, localStat.mtimeMs);
-
-      if (needsUpload) {
-        await client.uploadFile(localPath, remotePath);
-        uploaded++;
-      } else {
-        skipped++;
-      }
-
-      const progress = ((i + 1) / files.length) * 100;
-      onProgress(progress, `${uploaded} uploaded, ${skipped} skipped (${i + 1}/${files.length})`);
-    }
-
-    return { uploaded, skipped };
-  }
-
-  /**
-   * Check if a local file is newer than the remote file.
-   * Returns true if upload is needed.
-   */
   private async scpNeedsUpload(
     client: ScpClient,
     remotePath: string,
@@ -197,11 +191,9 @@ export class PublishEngine extends EventEmitter {
   ): Promise<boolean> {
     try {
       const remoteStat = await client.stat(remotePath);
-      // SSH2 Stats.mtime is in seconds, localMtimeMs is in milliseconds
       const remoteMtimeMs = remoteStat.mtime * 1000;
       return localMtimeMs > remoteMtimeMs;
     } catch {
-      // File doesn't exist on remote → needs upload
       return true;
     }
   }
@@ -214,61 +206,20 @@ export class PublishEngine extends EventEmitter {
     }
   }
 
-  // ── rsync mode ────────────────────────────────────────────────────────────
+  // ── rsync mode ────────────────────────────────────────────────────────
 
-  private async uploadViaRsync(
-    credentials: PublishCredentials,
-    htmlDir: string,
-    thumbnailsDir: string,
-    mediaDir: string,
-    result: PublishResult,
-    onProgress: ProgressCallback,
-  ): Promise<void> {
-    const remoteDest = `${credentials.sshUser}@${credentials.sshHost}:${credentials.sshRemotePath}`;
-
-    // Phase 1: html/ → remote root (0–33%)
-    onProgress(0, 'Syncing HTML files via rsync...');
-    const htmlCount = await this.rsyncDirectory(
-      htmlDir + '/',
-      remoteDest + '/',
-    );
-    result.htmlFilesUploaded = htmlCount;
-    onProgress(33, 'HTML sync complete');
-
-    // Phase 2: thumbnails/ → remote/thumbnails/ (33–66%)
-    if (await this.directoryExists(thumbnailsDir)) {
-      onProgress(33, 'Syncing thumbnails via rsync...');
-      const thumbCount = await this.rsyncDirectory(
-        thumbnailsDir + '/',
-        remoteDest + '/thumbnails/',
-      );
-      result.thumbnailFilesUploaded = thumbCount;
-    }
-    onProgress(66, 'Thumbnails sync complete');
-
-    // Phase 3: media/ → remote/media/ (66–99%), excluding .meta files
-    if (await this.directoryExists(mediaDir)) {
-      onProgress(66, 'Syncing media files via rsync...');
-      const mediaCount = await this.rsyncDirectory(
-        mediaDir + '/',
-        remoteDest + '/media/',
-        ['*.meta'],
-      );
-      result.mediaFilesUploaded = mediaCount;
-    }
-    onProgress(99, 'Media sync complete');
+  private rsyncDest(credentials: PublishCredentials, suffix: string): string {
+    return `${credentials.sshUser}@${credentials.sshHost}:${credentials.sshRemotePath}${suffix}`;
   }
 
-  /**
-   * Run rsync for a directory with incremental (--update --times) and recursive transfer.
-   * Returns estimated file count from stdout.
-   */
   private rsyncDirectory(
     src: string,
     dest: string,
+    onProgress: ProgressCallback,
     exclude?: string[],
-  ): Promise<number> {
+  ): Promise<DirectoryUploadResult> {
     return new Promise((resolve, reject) => {
+      onProgress(0, 'Starting rsync...');
       rsync(
         {
           src,
@@ -283,20 +234,18 @@ export class PublishEngine extends EventEmitter {
           if (error) {
             reject(error);
           } else {
-            // Count uploaded files from rsync stdout (each transferred file gets a line)
             const lines = stdout.trim().split('\n').filter((l: string) => l.length > 0);
-            resolve(lines.length);
+            const count = lines.length;
+            onProgress(100, `rsync complete: ${count} files transferred`);
+            resolve({ filesUploaded: count, filesSkipped: 0 });
           }
         },
       );
     });
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────
 
-  /**
-   * Recursively collect all file paths relative to baseDir, with optional filter.
-   */
   private async collectFiles(
     baseDir: string,
     prefix: string,
@@ -327,6 +276,12 @@ export class PublishEngine extends EventEmitter {
     }
 
     return files;
+  }
+
+  private ensureProjectContext(): void {
+    if (!this.dataDir || !this.projectId) {
+      throw new Error('No project context set');
+    }
   }
 
   private validateCredentials(credentials: PublishCredentials): void {
