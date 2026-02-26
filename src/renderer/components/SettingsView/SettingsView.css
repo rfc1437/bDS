@@ -257,6 +257,22 @@
   opacity: 1;
 }
 
+/* Info banner */
+.setting-info-banner {
+  padding: 10px 16px;
+  margin: 0 0 4px;
+  background: var(--vscode-editorInfo-background, rgba(0, 120, 212, 0.1));
+  border-left: 3px solid var(--vscode-editorInfo-foreground, #3794ff);
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--vscode-foreground);
+}
+
+.setting-info-banner p {
+  margin: 0;
+}
+
 /* Action buttons */
 .setting-actions {
   display: flex;

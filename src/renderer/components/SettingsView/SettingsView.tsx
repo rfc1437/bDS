@@ -23,14 +23,11 @@ export const scrollToSettingsSection = (category: SettingsCategory) => {
 // Settings categories
 
 interface Credentials {
-  // FTP Publishing
-  ftpHost: string;
-  ftpUser: string;
-  ftpPassword: string;
   // SSH Publishing
   sshHost: string;
   sshUser: string;
-  sshKeyPath: string;
+  sshRemotePath: string;
+  sshMode: 'scp' | 'rsync';
 }
 
 interface CategoryMetadata {
@@ -48,12 +45,10 @@ const RENDER_LANGUAGE_LABEL_KEY: Record<SupportedLanguage, string> = {
 };
 
 const defaultCredentials: Credentials = {
-  ftpHost: '',
-  ftpUser: '',
-  ftpPassword: '',
   sshHost: '',
   sshUser: '',
-  sshKeyPath: '',
+  sshRemotePath: '',
+  sshMode: 'scp',
 };
 
 // Search icon for the search bar
@@ -137,7 +132,6 @@ export const SettingsView: React.FC = () => {
   } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [credentials, setCredentials] = useState<Credentials>(defaultCredentials);
-  const [showSecrets, setShowSecrets] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Project settings
@@ -304,23 +298,11 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleClearCredentials = (type: 'ftp' | 'ssh') => {
-    const newCreds = { ...credentials };
-    switch (type) {
-      case 'ftp':
-        newCreds.ftpHost = '';
-        newCreds.ftpUser = '';
-        newCreds.ftpPassword = '';
-        break;
-      case 'ssh':
-        newCreds.sshHost = '';
-        newCreds.sshUser = '';
-        newCreds.sshKeyPath = '';
-        break;
-    }
+  const handleClearCredentials = () => {
+    const newCreds = { ...credentials, sshHost: '', sshUser: '', sshRemotePath: '', sshMode: 'scp' as const };
     setCredentials(newCreds);
     localStorage.setItem('bds-credentials', JSON.stringify(newCreds));
-    showToast.success(t('settings.toast.credentialsCleared', { type: type.toUpperCase() }));
+    showToast.success(t('settings.toast.credentialsCleared', { type: 'SSH' }));
   };
 
   // Save project settings
@@ -395,7 +377,7 @@ export const SettingsView: React.FC = () => {
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
   const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
-  const publishingKeywords = ['publishing', 'ftp', 'ssh', 'deploy', 'server', 'host', 'upload'];
+  const publishingKeywords = ['publishing', 'ssh', 'deploy', 'server', 'host', 'upload', 'scp', 'rsync'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
 
   const renderProjectSettings = () => (
@@ -1054,123 +1036,78 @@ export const SettingsView: React.FC = () => {
   );
 
   const renderPublishingSettings = () => (
-    <>
-      <SettingSection
-        id="settings-section-publishing"
-        title={t('settings.publishing.ftpTitle')}
-        description={t('credentials.ftp.description')}
-        hidden={!sectionHasMatches(publishingKeywords)}
+    <SettingSection
+      id="settings-section-publishing"
+      title={t('settings.publishing.sshTitle')}
+      description={t('credentials.ssh.description')}
+      hidden={!sectionHasMatches(publishingKeywords)}
+    >
+      <div className="setting-info-banner">
+        <p>{t('settings.publishing.sshKeyAuthNotice')}</p>
+      </div>
+
+      <SettingRow
+        id="ssh-mode"
+        label={t('settings.publishing.sshModeLabel')}
+        description={t('settings.publishing.sshModeDescription')}
       >
-        <SettingRow
-          id="ftp-host"
-          label={t('credentials.field.host')}
-          description={t('settings.publishing.ftpHostDescription')}
+        <select
+          id="ssh-mode"
+          value={credentials.sshMode}
+          onChange={(e) => setCredentials({ ...credentials, sshMode: e.target.value as 'scp' | 'rsync' })}
         >
-          <input
-            id="ftp-host"
-            type="text"
-            placeholder={t('credentials.ftp.placeholder.host')}
-            value={credentials.ftpHost}
-            onChange={(e) => setCredentials({ ...credentials, ftpHost: e.target.value })}
-          />
-        </SettingRow>
+          <option value="scp">{t('settings.publishing.sshMode.scp')}</option>
+          <option value="rsync">{t('settings.publishing.sshMode.rsync')}</option>
+        </select>
+      </SettingRow>
 
-        <SettingRow
-          id="ftp-user"
-          label={t('credentials.field.username')}
-          description={t('settings.publishing.ftpUsernameDescription')}
-        >
-          <input
-            id="ftp-user"
-            type="text"
-            placeholder={t('credentials.ftp.placeholder.username')}
-            value={credentials.ftpUser}
-            onChange={(e) => setCredentials({ ...credentials, ftpUser: e.target.value })}
-          />
-        </SettingRow>
-
-        <SettingRow
-          id="ftp-password"
-          label={t('credentials.field.password')}
-          description={t('settings.publishing.ftpPasswordDescription')}
-        >
-          <div className="setting-input-group">
-            <input
-              id="ftp-password"
-              type={showSecrets ? 'text' : 'password'}
-              placeholder={t('credentials.ftp.placeholder.password')}
-              value={credentials.ftpPassword}
-              onChange={(e) => setCredentials({ ...credentials, ftpPassword: e.target.value })}
-            />
-            <button
-              className="setting-toggle-visibility"
-              onClick={() => setShowSecrets(!showSecrets)}
-              title={showSecrets ? t('settings.publishing.hidePassword') : t('settings.publishing.showPassword')}
-            >
-              {showSecrets ? '🔒' : '👁'}
-            </button>
-          </div>
-        </SettingRow>
-
-        <div className="setting-actions">
-          <button className="primary" onClick={handleSavePublishing}>{t('common.save')}</button>
-          <button className="secondary danger" onClick={() => handleClearCredentials('ftp')}>{t('common.clear')}</button>
-        </div>
-      </SettingSection>
-
-      <SettingSection
-        title={t('settings.publishing.sshTitle')}
-        description={t('credentials.ssh.description')}
-        hidden={!sectionHasMatches(publishingKeywords)}
+      <SettingRow
+        id="ssh-host"
+        label={t('credentials.field.host')}
+        description={t('settings.publishing.sshHostDescription')}
       >
-        <SettingRow
+        <input
           id="ssh-host"
-          label={t('credentials.field.host')}
-          description={t('settings.publishing.sshHostDescription')}
-        >
-          <input
-            id="ssh-host"
-            type="text"
-            placeholder={t('credentials.ssh.placeholder.host')}
-            value={credentials.sshHost}
-            onChange={(e) => setCredentials({ ...credentials, sshHost: e.target.value })}
-          />
-        </SettingRow>
+          type="text"
+          placeholder={t('credentials.ssh.placeholder.host')}
+          value={credentials.sshHost}
+          onChange={(e) => setCredentials({ ...credentials, sshHost: e.target.value })}
+        />
+      </SettingRow>
 
-        <SettingRow
+      <SettingRow
+        id="ssh-user"
+        label={t('credentials.field.username')}
+        description={t('settings.publishing.sshUsernameDescription')}
+      >
+        <input
           id="ssh-user"
-          label={t('credentials.field.username')}
-          description={t('settings.publishing.sshUsernameDescription')}
-        >
-          <input
-            id="ssh-user"
-            type="text"
-            placeholder={t('credentials.ssh.placeholder.username')}
-            value={credentials.sshUser}
-            onChange={(e) => setCredentials({ ...credentials, sshUser: e.target.value })}
-          />
-        </SettingRow>
+          type="text"
+          placeholder={t('credentials.ssh.placeholder.username')}
+          value={credentials.sshUser}
+          onChange={(e) => setCredentials({ ...credentials, sshUser: e.target.value })}
+        />
+      </SettingRow>
 
-        <SettingRow
-          id="ssh-keypath"
-          label={t('credentials.field.sshKeyPath')}
-          description={t('settings.publishing.sshKeyPathDescription')}
-        >
-          <input
-            id="ssh-keypath"
-            type="text"
-            placeholder={t('credentials.ssh.placeholder.keyPath')}
-            value={credentials.sshKeyPath}
-            onChange={(e) => setCredentials({ ...credentials, sshKeyPath: e.target.value })}
-          />
-        </SettingRow>
+      <SettingRow
+        id="ssh-remote-path"
+        label={t('credentials.field.sshRemotePath')}
+        description={t('settings.publishing.sshRemotePathDescription')}
+      >
+        <input
+          id="ssh-remote-path"
+          type="text"
+          placeholder={t('credentials.ssh.placeholder.remotePath')}
+          value={credentials.sshRemotePath}
+          onChange={(e) => setCredentials({ ...credentials, sshRemotePath: e.target.value })}
+        />
+      </SettingRow>
 
-        <div className="setting-actions">
-          <button className="primary" onClick={handleSavePublishing}>{t('common.save')}</button>
-          <button className="secondary danger" onClick={() => handleClearCredentials('ssh')}>{t('common.clear')}</button>
-        </div>
-      </SettingSection>
-    </>
+      <div className="setting-actions">
+        <button className="primary" onClick={handleSavePublishing}>{t('common.save')}</button>
+        <button className="secondary danger" onClick={handleClearCredentials}>{t('common.clear')}</button>
+      </div>
+    </SettingSection>
   );
 
   const renderDataSettings = () => (

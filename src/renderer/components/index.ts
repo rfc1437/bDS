@@ -10,7 +10,6 @@ export { MilkdownEditor } from './MilkdownEditor';
 export { Lightbox, ImageGallery, useMarkdownImages } from './Lightbox';
 export { TaskPopup } from './TaskPopup';
 export { ResizablePanel } from './ResizablePanel';
-export { CredentialsPanel } from './CredentialsPanel';
 export { SettingsView } from './SettingsView';
 export { StyleView } from './StyleView';
 export { TagsView, scrollToTagsSection, type TagsCategory } from './TagsView';
