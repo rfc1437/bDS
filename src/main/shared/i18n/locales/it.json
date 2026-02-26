@@ -41,6 +41,7 @@
   "menu.item.generateSitemap": "Renderizza sito",
   "menu.item.regenerateCalendar": "Rigenera calendario",
   "menu.item.validateSite": "Valida sito",
+  "menu.item.uploadSite": "Carica sito",
   "menu.item.about": "Informazioni su Blogging Desktop Server",
   "menu.item.openDocumentation": "Apri documentazione",
   "menu.item.openApiDocumentation": "Documentazione API",

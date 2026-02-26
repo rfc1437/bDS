@@ -108,3 +108,9 @@ export {
   type CreateScriptInput,
   type UpdateScriptInput,
 } from './ScriptEngine';
+export {
+  PublishEngine,
+  getPublishEngine,
+  type PublishCredentials,
+  type PublishResult,
+} from './PublishEngine';

@@ -709,6 +709,19 @@ export interface ElectronAPI {
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
     regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };
+  publish: {
+    uploadSite: (credentials: {
+      sshHost: string;
+      sshUser: string;
+      sshRemotePath: string;
+      sshMode: 'scp' | 'rsync';
+    }) => Promise<{
+      htmlFilesUploaded: number;
+      thumbnailFilesUploaded: number;
+      mediaFilesUploaded: number;
+      filesSkipped: number;
+    }>;
+  };
   menu: {
     get: () => Promise<MenuDocument>;
     save: (menu: MenuDocument) => Promise<MenuDocument>;

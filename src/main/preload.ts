@@ -272,6 +272,12 @@ export const electronAPI: ElectronAPI = {
     regenerateCalendar: () => ipcRenderer.invoke('blog:regenerateCalendar'),
   },
 
+  // Site publishing (SCP/rsync)
+  publish: {
+    uploadSite: (credentials: { sshHost: string; sshUser: string; sshRemotePath: string; sshMode: 'scp' | 'rsync' }) =>
+      ipcRenderer.invoke('publish:uploadSite', credentials),
+  },
+
   menu: {
     get: () => ipcRenderer.invoke('menu:get'),
     save: (menu: import('./shared/electronApi').MenuDocument) => ipcRenderer.invoke('menu:save', menu),

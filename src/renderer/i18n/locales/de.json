@@ -32,6 +32,8 @@
   "app.textReindexFailed": "Text-Neuindizierung fehlgeschlagen",
   "app.sitemapGenerationFailed": "Sitemap-Erstellung fehlgeschlagen",
   "app.calendarRegenerationFailed": "Kalender-Neuerstellung fehlgeschlagen",
+  "app.uploadSiteFailed": "Website-Upload fehlgeschlagen",
+  "app.uploadSiteNoCredentials": "Bitte konfigurieren Sie zuerst die SSH-Zugangsdaten in den Einstellungen.",
   "app.previewOpenFailed": "Ausgewählte Beitragsvorschau konnte nicht geöffnet werden",
   "app.metadataDiff": "Metadaten-Diff",
   "app.importComplete": "Import abgeschlossen: {posts} Beiträge, {media} Mediendateien",

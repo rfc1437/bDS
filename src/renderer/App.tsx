@@ -496,6 +496,27 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:uploadSite', async () => {
+        try {
+          const stored = localStorage.getItem('bds-credentials');
+          if (!stored) {
+            showToast.error(tr('app.uploadSiteNoCredentials'));
+            return;
+          }
+          const credentials = JSON.parse(stored);
+          if (!credentials.sshHost || !credentials.sshUser || !credentials.sshRemotePath) {
+            showToast.error(tr('app.uploadSiteNoCredentials'));
+            return;
+          }
+          await window.electronAPI?.publish.uploadSite(credentials);
+        } catch (error) {
+          console.error('Site upload failed:', error);
+          showToast.error(tr('app.uploadSiteFailed'));
+        }
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:openDocumentation', () => {
         openSingletonToolTab(openTab, 'documentation');
       }) || (() => {})

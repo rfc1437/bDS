@@ -18,6 +18,7 @@ import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_WEB_CONTENTS_ACTIONS, type AppMenuA
 import { generateBlogmarkBookmarkletSource } from '../shared/blogmark';
 import { registerMetadataDiffHandlers } from './metadataDiffHandlers';
 import { registerBlogHandlers } from './blogHandlers';
+import { registerPublishHandlers } from './publishHandlers';
 
 /**
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
@@ -1433,6 +1434,7 @@ export function registerIpcHandlers(): void {
 
   registerMetadataDiffHandlers(safeHandle);
   registerBlogHandlers(safeHandle);
+  registerPublishHandlers(safeHandle);
 
   // ============ Event Forwarding ============
   

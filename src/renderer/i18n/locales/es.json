@@ -32,6 +32,8 @@
   "app.textReindexFailed": "La reindexación de texto falló",
   "app.sitemapGenerationFailed": "La generación del sitemap falló",
   "app.calendarRegenerationFailed": "La regeneración del calendario falló",
+  "app.uploadSiteFailed": "Error al subir el sitio",
+  "app.uploadSiteNoCredentials": "Configure primero las credenciales SSH en Configuración.",
   "app.previewOpenFailed": "No se pudo abrir la vista previa de la entrada seleccionada",
   "app.metadataDiff": "Diferencia de Metadatos",
   "app.importComplete": "Importación completada: {posts} entradas, {media} archivos multimedia",
