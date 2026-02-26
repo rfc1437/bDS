@@ -158,11 +158,7 @@ user will be able to see that there are 2 tasks running and will be able to clic
 on that to see a small popup that lists all active async tasks.
 
 All preferences are always local to the selected project and project settings
-are easily reachable via a gear icon in the bottom of the iconbar. Also login
-are easily reachable via a gear icon in the bottom of the icon bar. Also login
-credentials can be managed via a user icon in the bottom of the icon bar
-directly above the gear icon. This is similar to what vscode does, separating
-logins and settings.
+are easily reachable via a gear icon in the bottom of the icon bar.
 
 Tags are something that should be mainly focused on reusing but need easy ways to
 add new tags. This should not be a simple text field, but more a feature like
@@ -280,10 +276,10 @@ be linked to the same tag of the new import, so that the user can see it was
 referenced by multiple imports.
 
 Essentially my main idea for imports is that the importer is classes that can
-read websites from different sources (starting with WordPress backup and HTTP URL)
-and that each discovered element is handed to the AI to convert to markdown and
-in the case of the HTTP URL also separate out posts, then use the tools to check
-for duplicates and update tags or create new posts based on the process.
+read websites from different sources (starting with WordPress backup)
+and that each discovered element is handed to the AI to convert to markdown,
+then use the tools to check for duplicates and update tags or create new posts
+based on the process.
 
 Import runs can be shown in the main panel, so that the user can see what came
 with what import and can manage posts and media from imports that way. Migration
@@ -376,11 +372,5 @@ and their use in overviews. Every post can define via category or tag
 (tag-related templates override category templates but can be overridden via
 article-specific template selections).
 
-There must be way to open a browser tab in the application that then uses the
-application itself and does dynamic rendering of the content, using the same
-templates and everything else, so that the user can do a proper preview before
-deciding to update the remote static web storage. The browser tab will of course
-use the correct styling of the website.
-
-Publishing of files can be configured to be done via FTP or SSH, connection data
+Publishing of files can be configured to be done via SSH, connection data
 must be configurable in preferences for the website.
