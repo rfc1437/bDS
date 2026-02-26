@@ -1018,7 +1018,7 @@ export class OpenCodeManager {
       },
       {
         name: 'render_tabs',
-        description: 'Render a tabbed interface in the chat UI. Use this when you want to organize information into multiple tabs that the user can switch between.',
+        description: 'Render a tabbed interface in the chat UI. Use this when you want to organize information into multiple tabs that the user can switch between. Each tab can contain any combination of text, metrics, lists, charts, and tables.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1033,7 +1033,28 @@ export class OpenCodeManager {
                     items: {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['text', 'metric', 'list'], description: 'Content type' },
+                        type: { type: 'string', enum: ['text', 'metric', 'list', 'chart', 'table'], description: 'Content type' },
+                        text: { type: 'string', description: 'Text content (for type text)' },
+                        label: { type: 'string', description: 'Label (for type metric)' },
+                        value: { type: 'string', description: 'Display value (for type metric)' },
+                        title: { type: 'string', description: 'Title (for type list, chart, or table)' },
+                        items: { type: 'array', items: { type: 'string' }, description: 'Items (for type list)' },
+                        chartType: { type: 'string', enum: ['bar', 'line', 'pie'], description: 'Chart type (for type chart)' },
+                        series: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: { label: { type: 'string' }, value: { type: 'number' } },
+                            required: ['label', 'value'],
+                          },
+                          description: 'Data series (for type chart)',
+                        },
+                        columns: { type: 'array', items: { type: 'string' }, description: 'Column headers (for type table)' },
+                        rows: {
+                          type: 'array',
+                          items: { type: 'array', items: { type: 'string' } },
+                          description: 'Table rows (for type table)',
+                        },
                       },
                       required: ['type'],
                     },

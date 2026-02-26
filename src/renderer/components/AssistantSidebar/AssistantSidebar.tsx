@@ -250,7 +250,7 @@ export const AssistantSidebar: React.FC = () => {
 
       {actionError && <p className="assistant-sidebar-error chat-surface-error">{actionError}</p>}
 
-      {surfaceMode.showWelcomeTips && messages.length === 0 && !isStreaming && (
+      {surfaceMode.showWelcomeTips && messages.filter(m => m.role !== 'system' && m.role !== 'tool').length === 0 && !isStreaming && (
         <div className="assistant-sidebar-raw-message chat-surface-section">
           {tr('chat.welcomeDescription')}
         </div>

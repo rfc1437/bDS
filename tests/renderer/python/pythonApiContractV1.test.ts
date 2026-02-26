@@ -70,7 +70,7 @@ describe('pythonApiContractV1', () => {
 
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.5.0',
+      version: '1.6.0',
       generatedAt: expect.any(String),
     });
   });

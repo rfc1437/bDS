@@ -328,7 +328,7 @@ Available UI Render Tools (use these to show rich interactive elements):
 - render_card: Show an information card with title, body, and action buttons.
 - render_metric: Show a single KPI or statistic prominently.
 - render_list: Show a bulleted list of items.
-- render_tabs: Organize information into switchable tabs.
+- render_tabs: Organize information into switchable tabs. Tab content supports all content types: text, metrics, lists, charts, and tables.
 
 When answering questions:
 1. USE THE TOOLS to find information. Never make up data about posts or media.
@@ -338,7 +338,8 @@ When answering questions:
 5. When asked to describe or analyze an image, use the view_image tool to see the actual image content.
 6. When presenting data, statistics, or comparisons, prefer using render tools (render_chart, render_table, render_metric) to show rich interactive UI instead of plain text.
 7. When you need user input for a multi-field operation, use render_form to present a structured form.
-8. Use render_card with action buttons when presenting items the user might want to navigate to (e.g., posts, media).`;
+8. Use render_card with action buttons when presenting items the user might want to navigate to (e.g., posts, media).
+9. When comparing data across multiple dimensions (e.g., statistics per year), use render_tabs with embedded charts or tables in each tab.`;
   }
 
   /**

@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.5.0
+Contract version: 1.6.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -4047,37 +4047,6 @@ Stored API key state for chat provider.
 
 - hasKey (`boolean`, required): Whether a key is configured.
 - maskedKey (`string`, required): Masked key representation for UI display.
-
-[↑ Back to Table of contents](#table-of-contents)
-
-### ProtocolNeedsInputField
-
-A required clarification input field used for needsInput prompts.
-
-**Fields**
-
-- key (`string`, required): Stable field key used in submitted values.
-- label (`string`, required): User-facing field label.
-- inputType (`'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'`, required): Rendered input control type.
-- required (`boolean`, optional): Whether user input is required.
-- options (`Array<{ label: string; value: string }>`, optional): Selectable options for select controls.
-- placeholder (`string`, optional): Optional placeholder text for text-like controls.
-- defaultValue (`string | number | boolean`, optional): Default field value shown in UI.
-
-[↑ Back to Table of contents](#table-of-contents)
-
-### ProtocolAction
-
-A declarative assistant action exposed to the UI runtime.
-
-**Fields**
-
-- id (`string`, required): Stable action id within a response envelope.
-- action (`string`, required): Action name to dispatch in renderer.
-- label (`string`, optional): Optional user-facing action label.
-- payload (`Record<string, unknown>`, optional): Optional action payload arguments.
-- policy (`'silent' | 'confirm' | 'danger'`, required): Action confirmation policy level.
-- requiresConfirmation (`boolean`, required): Whether confirmation is required before dispatch.
 
 [↑ Back to Table of contents](#table-of-contents)
 

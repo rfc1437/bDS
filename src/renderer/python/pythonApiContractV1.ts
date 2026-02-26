@@ -359,35 +359,10 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'maskedKey', type: 'string', required: true, description: 'Masked key representation for UI display.' },
     ],
   },
-  {
-    name: 'ProtocolNeedsInputField',
-    description: 'A required clarification input field used for needsInput prompts.',
-    fields: [
-      { name: 'key', type: 'string', required: true, description: 'Stable field key used in submitted values.' },
-      { name: 'label', type: 'string', required: true, description: 'User-facing field label.' },
-      { name: 'inputType', type: "'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'", required: true, description: 'Rendered input control type.' },
-      { name: 'required', type: 'boolean', required: false, description: 'Whether user input is required.' },
-      { name: 'options', type: 'Array<{ label: string; value: string }>', required: false, description: 'Selectable options for select controls.' },
-      { name: 'placeholder', type: 'string', required: false, description: 'Optional placeholder text for text-like controls.' },
-      { name: 'defaultValue', type: 'string | number | boolean', required: false, description: 'Default field value shown in UI.' },
-    ],
-  },
-  {
-    name: 'ProtocolAction',
-    description: 'A declarative assistant action exposed to the UI runtime.',
-    fields: [
-      { name: 'id', type: 'string', required: true, description: 'Stable action id within a response envelope.' },
-      { name: 'action', type: 'string', required: true, description: 'Action name to dispatch in renderer.' },
-      { name: 'label', type: 'string', required: false, description: 'Optional user-facing action label.' },
-      { name: 'payload', type: 'Record<string, unknown>', required: false, description: 'Optional action payload arguments.' },
-      { name: 'policy', type: "'silent' | 'confirm' | 'danger'", required: true, description: 'Action confirmation policy level.' },
-      { name: 'requiresConfirmation', type: 'boolean', required: true, description: 'Whether confirmation is required before dispatch.' },
-    ],
-  },
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.5.0',
+  version: '1.6.0',
   generatedAt: '2026-02-25T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

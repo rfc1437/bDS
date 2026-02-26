@@ -259,5 +259,60 @@ describe('A2UI generator', () => {
       expect(tabsComponent!.children).toHaveLength(2);
       expect(tabsComponent!.properties.tabLabels).toEqual(['Overview', 'Details']);
     });
+
+    it('creates chart components inside tabs with series in properties', () => {
+      const messages = generateTabs('conv-1', {
+        tabs: [
+          {
+            label: 'Stats',
+            content: [{
+              type: 'chart',
+              chartType: 'bar',
+              title: 'Monthly Posts',
+              series: [{ label: 'Jan', value: 5 }, { label: 'Feb', value: 8 }],
+            }],
+          },
+        ],
+      });
+
+      expect(messages).toHaveLength(2);
+      const updateMsg = messages[1] as Extract<A2UIServerMessage, { type: 'updateComponents' }>;
+
+      const chartComponent = updateMsg.components.find((c) => c.type === 'chart');
+      expect(chartComponent).toBeDefined();
+      expect(chartComponent!.properties.chartType).toBe('bar');
+      expect(chartComponent!.properties.title).toBe('Monthly Posts');
+      expect(chartComponent!.properties.series).toEqual([
+        { label: 'Jan', value: 5 },
+        { label: 'Feb', value: 8 },
+      ]);
+    });
+
+    it('creates table components inside tabs with rows in properties', () => {
+      const messages = generateTabs('conv-1', {
+        tabs: [
+          {
+            label: 'Data',
+            content: [{
+              type: 'table',
+              title: 'Recent Posts',
+              columns: ['Title', 'Status'],
+              rows: [['Hello', 'published'], ['Draft', 'draft']],
+            }],
+          },
+        ],
+      });
+
+      expect(messages).toHaveLength(2);
+      const updateMsg = messages[1] as Extract<A2UIServerMessage, { type: 'updateComponents' }>;
+
+      const tableComponent = updateMsg.components.find((c) => c.type === 'table');
+      expect(tableComponent).toBeDefined();
+      expect(tableComponent!.properties.columns).toEqual(['Title', 'Status']);
+      expect(tableComponent!.properties.rows).toEqual([
+        ['Hello', 'published'],
+        ['Draft', 'draft'],
+      ]);
+    });
   });
 });

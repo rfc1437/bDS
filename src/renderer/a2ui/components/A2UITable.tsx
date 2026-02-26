@@ -11,7 +11,7 @@ interface A2UIComponentProps {
 
 export const A2UITable: React.FC<A2UIComponentProps> = ({ component }) => {
   const columns = (component.properties.columns as string[]) ?? [];
-  const rows = (component.boundValue as string[][]) ?? [];
+  const rows = (component.boundValue as string[][]) ?? (component.properties.rows as string[][]) ?? [];
   const title = component.properties.title as string | undefined;
 
   return (

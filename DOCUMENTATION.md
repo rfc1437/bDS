@@ -11,7 +11,7 @@
 - [Working with media](#working-with-media)
 - [Using macros](#using-macros)
 - [Using scripting (early access)](#using-scripting-early-access)
-- [Using assistant panel widgets](#using-assistant-panel-widgets)
+- [Using the AI assistant](#using-the-ai-assistant)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
@@ -256,160 +256,60 @@ Notes:
 
 ---
 
-## Using assistant panel widgets
+## Using the AI assistant
 
-The assistant sidebar can render structured panel widgets when the AI response includes a valid JSON panel spec. This is useful when you want the assistant to return actionable UI instead of plain text only.
+The AI assistant is built into bDS to help you manage your blog through natural conversation. You can ask it to search posts, analyze your content, update metadata, and visualize data. Instead of returning only plain text, the assistant can present results as rich interactive elements such as charts, tables, forms, and more.
 
-Use this envelope:
+The assistant works entirely with your local blog content. It does not have access to the internet or external services. When you ask a question, it uses your posts, media, tags, and categories to find answers and present them in the most useful format. In most cases the assistant automatically picks the right visualization for your request, but you can also ask for a specific format explicitly.
 
-```json
-{
-	"specVersion": "1",
-	"elements": []
-}
-```
+### Charts
 
-### Supported widget types
+The assistant can display bar, line, and pie charts to help you spot patterns and trends in your blog data. Charts include a title, labeled data points, and a visual representation that makes it easy to compare values at a glance.
 
-- `text`
-- `metric`
-- `list`
-- `table`
-- `action`
-- `chart`
-- `input`
-- `form`
-- `datePicker`
-- `card`
-- `image`
-- `tabs`
+**Try asking:** "Show me a chart of posts published per month this year"
 
-### Example snippets
+### Tables
 
-```json
-{ "type": "text", "text": "Review complete." }
-```
+When you need to compare posts side by side or see structured information, the assistant can render a table with columns and rows. Tables are useful for listings, comparisons, and any data that benefits from a grid layout.
 
-```json
-{ "type": "metric", "label": "Draft posts", "value": "12" }
-```
+**Try asking:** "Compare my last 10 posts showing title, status, and word count"
 
-```json
-{ "type": "list", "title": "Next steps", "items": ["Refine title", "Add tags"] }
-```
+### Cards
 
-```json
-{
-	"type": "table",
-	"columns": ["Post", "Status"],
-	"rows": [["Roadmap", "Draft"], ["Release", "Published"]]
-}
-```
+Cards present a focused summary with a title, body text, and optional action buttons. The assistant uses cards when highlighting a specific item, making a recommendation, or presenting a result that you might want to act on.
 
-```json
-{
-	"type": "action",
-	"label": "Open tags",
-	"action": "switchView",
-	"payload": { "view": "tags" }
-}
-```
+**Try asking:** "Give me a summary card for my most recent draft post"
 
-```json
-{
-	"type": "chart",
-	"chartType": "bar",
-	"title": "Posts by month",
-	"series": [
-		{ "label": "Jan", "value": 10 },
-		{ "label": "Feb", "value": 14 }
-	]
-}
-```
+### Metrics
 
-```json
-{
-	"type": "input",
-	"key": "query",
-	"label": "Search",
-	"inputType": "text",
-	"placeholder": "Find post...",
-	"submitLabel": "Run",
-	"action": "openChat"
-}
-```
+A metric is a single prominent number or value with a label. The assistant uses metrics when the answer to your question is one key figure, such as a count, a status, or a statistic.
 
-```json
-{
-	"type": "form",
-	"formId": "meta-form",
-	"title": "Update metadata",
-	"submitLabel": "Apply",
-	"action": "openSettings",
-	"fields": [
-		{ "key": "title", "label": "Title", "inputType": "text" },
-		{ "key": "isDraft", "label": "Draft", "inputType": "checkbox" }
-	]
-}
-```
+**Try asking:** "How many draft posts do I have?"
 
-```json
-{
-	"type": "datePicker",
-	"key": "publishDate",
-	"label": "Publish date",
-	"submitLabel": "Set",
-	"action": "openSettings"
-}
-```
+### Lists
 
-```json
-{
-	"type": "card",
-	"title": "Suggestion",
-	"subtitle": "Editorial",
-	"body": "Add one category and two tags.",
-	"actions": [
-		{ "label": "Open tags", "action": "switchView", "payload": { "view": "tags" } }
-	]
-}
-```
+Lists display items as a simple bulleted enumeration. They work well for tag listings, next steps, checklists, and any result that is naturally a sequence of items.
 
-```json
-{
-	"type": "image",
-	"src": "https://example.com/preview.png",
-	"alt": "Generated preview",
-	"caption": "Current preview snapshot"
-}
-```
+**Try asking:** "List all tags that are used by fewer than 3 posts"
 
-```json
-{
-	"type": "tabs",
-	"defaultTabId": "summary",
-	"tabs": [
-		{
-			"id": "summary",
-			"label": "Summary",
-			"elements": [{ "type": "text", "text": "Short summary" }]
-		},
-		{
-			"id": "actions",
-			"label": "Actions",
-			"elements": [
-				{ "type": "action", "label": "Open settings", "action": "openSettings" }
-			]
-		}
-	]
-}
-```
+### Forms
 
-### Notes
+When the assistant needs structured input from you, it can display an interactive form with text fields, checkboxes, dropdowns, and date pickers. Forms are typically used for metadata updates, multi-field edits, and configuration tasks where typing everything into a single message would be awkward.
 
-- `tabs` are panel-local UI tabs inside one assistant response; they are not editor tabs.
-- Unknown or invalid widget payloads are ignored by the parser.
-- Actions are restricted to supported safe action names in the app.
+**Try asking:** "Help me update the metadata for my post about React"
+
+### Tabs
+
+Tabs let the assistant organize multiple views into a single switchable interface. Each tab can contain any combination of text, charts, tables, metrics, and lists. Tabs are especially useful for multi-dimensional comparisons where you want to explore different slices of data without scrolling through a long response.
+
+**Try asking:** "Show post statistics by year, with each year as a tab containing a chart of monthly post counts"
+
+### Key takeaways
+
+- The assistant picks the right visualization automatically based on your question.
+- You can ask for a specific format by mentioning it in your prompt ("show as a chart", "put it in a table").
+- Tabs can contain charts, tables, and other elements for rich multi-view displays.
+- The assistant can only access your local blog content.
 
 [↑ Back to In this article](#in-this-article)
 

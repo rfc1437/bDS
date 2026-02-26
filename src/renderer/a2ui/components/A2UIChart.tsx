@@ -17,7 +17,7 @@ interface SeriesEntry {
 export const A2UIChart: React.FC<A2UIComponentProps> = ({ component }) => {
   const chartType = String(component.properties.chartType ?? 'bar');
   const title = component.properties.title as string | undefined;
-  const series = (component.boundValue as SeriesEntry[]) ?? [];
+  const series = (component.boundValue as SeriesEntry[]) ?? (component.properties.series as SeriesEntry[]) ?? [];
   const maxValue = Math.max(...series.map((entry) => entry.value), 0);
 
   return (

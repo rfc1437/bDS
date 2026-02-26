@@ -344,17 +344,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       </div>
 
       <div className="chat-messages chat-surface-scroll">
-        {surfaceMode.showWelcomeTips && messages.length === 0 && !isStreaming && (
+        {surfaceMode.showWelcomeTips && messages.filter(m => m.role !== 'system' && m.role !== 'tool').length === 0 && !isStreaming && (
           <div className="chat-welcome">
             <div className="chat-welcome-icon">{'\u{1F916}'}</div>
             <h2>{tr('chat.welcomeTitle')}</h2>
             <p>{tr('chat.welcomeDescription')}</p>
             <ul>
               <li>{tr('chat.welcomeTipSearch')}</li>
-              <li>{tr('chat.welcomeTipDetails')}</li>
-              <li>{tr('chat.welcomeTipTags')}</li>
+              <li>{tr('chat.welcomeTipChart')}</li>
+              <li>{tr('chat.welcomeTipTable')}</li>
               <li>{tr('chat.welcomeTipMetadata')}</li>
-              <li>{tr('chat.welcomeTipImages')}</li>
+              <li>{tr('chat.welcomeTipTabs')}</li>
             </ul>
           </div>
         )}

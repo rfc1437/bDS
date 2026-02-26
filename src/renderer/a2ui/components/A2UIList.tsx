@@ -11,7 +11,7 @@ interface A2UIComponentProps {
 
 export const A2UIList: React.FC<A2UIComponentProps> = ({ component }) => {
   const title = component.properties.title as string | undefined;
-  const items = (component.boundValue as string[]) ?? [];
+  const items = (component.boundValue as string[]) ?? (component.properties.items as string[]) ?? [];
 
   return (
     <div>
