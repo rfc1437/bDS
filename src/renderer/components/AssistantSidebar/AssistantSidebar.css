@@ -155,12 +155,16 @@
   opacity: 0.7;
 }
 
-.assistant-panel-chart-item {
+.assistant-panel-chart-body {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 8px;
+  gap: 4px 8px;
   align-items: center;
   font-size: 12px;
+}
+
+.assistant-panel-chart-item {
+  display: contents;
 }
 
 .assistant-panel-chart-label {

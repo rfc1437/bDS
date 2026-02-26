@@ -72,41 +72,43 @@ export const A2UIChart: React.FC<A2UIComponentProps> = ({ component }) => {
     <div className="assistant-panel-chart">
       {title && <p className="assistant-panel-chart-title">{title}</p>}
       <div className="assistant-panel-chart-type">{chartType}</div>
-      {series.map((entry, index) => {
-        const totalValue = isStacked && entry.segments
-          ? entry.segments.reduce((sum, s) => sum + s.value, 0)
-          : entry.value;
+      <div className="assistant-panel-chart-body">
+        {series.map((entry, index) => {
+          const totalValue = isStacked && entry.segments
+            ? entry.segments.reduce((sum, s) => sum + s.value, 0)
+            : entry.value;
 
-        return (
-          <div key={`${component.id}-series-${index}`} className="assistant-panel-chart-item">
-            <span className="assistant-panel-chart-label">{entry.label}</span>
-            <div className="assistant-panel-chart-bar-track">
-              {isStacked && entry.segments ? (
-                entry.segments.map((seg, si) => {
-                  const segWidth = maxValue > 0 ? (seg.value / maxValue) * 100 : 0;
-                  return (
-                    <div
-                      key={`${component.id}-seg-${index}-${si}`}
-                      className="assistant-panel-chart-bar-segment"
-                      style={{
-                        width: `${segWidth}%`,
-                        backgroundColor: getSegmentColor(segmentLabels.indexOf(seg.label)),
-                      }}
-                      title={`${seg.label}: ${seg.value}`}
-                    />
-                  );
-                })
-              ) : (
-                <div
-                  className="assistant-panel-chart-bar-fill"
-                  style={{ width: `${maxValue > 0 ? (entry.value / maxValue) * 100 : 0}%` }}
-                />
-              )}
+          return (
+            <div key={`${component.id}-series-${index}`} className="assistant-panel-chart-item">
+              <span className="assistant-panel-chart-label">{entry.label}</span>
+              <div className="assistant-panel-chart-bar-track">
+                {isStacked && entry.segments ? (
+                  entry.segments.map((seg, si) => {
+                    const segWidth = maxValue > 0 ? (seg.value / maxValue) * 100 : 0;
+                    return (
+                      <div
+                        key={`${component.id}-seg-${index}-${si}`}
+                        className="assistant-panel-chart-bar-segment"
+                        style={{
+                          width: `${segWidth}%`,
+                          backgroundColor: getSegmentColor(segmentLabels.indexOf(seg.label)),
+                        }}
+                        title={`${seg.label}: ${seg.value}`}
+                      />
+                    );
+                  })
+                ) : (
+                  <div
+                    className="assistant-panel-chart-bar-fill"
+                    style={{ width: `${maxValue > 0 ? (entry.value / maxValue) * 100 : 0}%` }}
+                  />
+                )}
+              </div>
+              <span className="assistant-panel-chart-value">{totalValue}</span>
             </div>
-            <span className="assistant-panel-chart-value">{totalValue}</span>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
       {isStacked && segmentLabels.length > 0 && (
         <div className="assistant-panel-chart-legend">
           {segmentLabels.map((label, i) => (
