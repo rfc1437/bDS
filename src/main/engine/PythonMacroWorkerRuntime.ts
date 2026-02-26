@@ -182,15 +182,17 @@ export class PythonMacroWorkerRuntime {
     this.worker = this.workerFactory(workerPath);
     this.workerReady = false;
 
-    this.worker.on('message', (message: WorkerResponseMessage) => {
-      this.handleWorkerMessage(message);
+    this.worker.on('message', (...args: unknown[]) => {
+      this.handleWorkerMessage(args[0] as WorkerResponseMessage);
     });
 
-    this.worker.on('error', (error) => {
+    this.worker.on('error', (...args: unknown[]) => {
+      const error = args[0];
       this.handleWorkerCrash(error instanceof Error ? error : new Error(String(error)));
     });
 
-    this.worker.on('exit', (code) => {
+    this.worker.on('exit', (...args: unknown[]) => {
+      const code = args[0] as number;
       if (code !== 0) {
         this.handleWorkerCrash(new Error(`Python macro worker exited with code ${code}`));
       }
