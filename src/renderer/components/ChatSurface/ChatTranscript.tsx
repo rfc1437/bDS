@@ -2,6 +2,10 @@ import React from 'react';
 import Markdown from 'marked-react';
 import type { ChatMessage } from '../../types/electron';
 import type { ChatToolEvent } from '../../navigation/useChatSurfaceState';
+import type { A2UIResolvedComponent, A2UIClientAction } from '../../../main/a2ui/types';
+import { InlineSurface } from '../../a2ui/InlineSurface';
+import type { SurfaceEntry } from '../../a2ui/useA2UISurface';
+import { computeTurnIndex } from '../../a2ui/surfaceAssociation';
 
 interface ChatTranscriptProps {
   messages: ChatMessage[];
@@ -12,6 +16,20 @@ interface ChatTranscriptProps {
   userRoleLabel: string;
   showToolMarkers?: boolean;
   endRef?: React.RefObject<HTMLDivElement | null>;
+  /** Surfaces grouped by the turn index that created them */
+  surfacesByTurn?: Map<number, SurfaceEntry[]>;
+  /** The surfaceId of the most recently created surface */
+  latestSurfaceId?: string | null;
+  /** Set of surface IDs the user has dismissed */
+  dismissedSurfaceIds?: Set<string>;
+  /** Callback to dismiss a surface */
+  onSurfaceDismiss?: (surfaceId: string) => void;
+  /** Callback for surface actions */
+  onSurfaceAction?: (action: A2UIClientAction) => void;
+  /** Callback for surface data changes */
+  onSurfaceDataChange?: (surfaceId: string, path: string, value: unknown) => void;
+  /** The current streaming turn index */
+  currentTurnIndex?: number;
 }
 
 export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
@@ -23,6 +41,13 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
   userRoleLabel,
   showToolMarkers = true,
   endRef,
+  surfacesByTurn,
+  latestSurfaceId,
+  dismissedSurfaceIds,
+  onSurfaceDismiss,
+  onSurfaceAction,
+  onSurfaceDataChange,
+  currentTurnIndex,
 }) => {
   const renderToolMarkers = (events: ChatToolEvent[]) => {
     if (events.length === 0) {
@@ -65,7 +90,34 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
     );
   };
 
-  const renderMessage = (message: ChatMessage) => {
+  const renderInlineSurfaces = (turnIndex: number) => {
+    if (!surfacesByTurn?.has(turnIndex)) {
+      return null;
+    }
+
+    const turnSurfaces = surfacesByTurn.get(turnIndex)!;
+    const visibleSurfaces = turnSurfaces.filter(
+      (s) => !dismissedSurfaceIds?.has(s.surfaceId),
+    );
+
+    if (visibleSurfaces.length === 0) {
+      return null;
+    }
+
+    return visibleSurfaces.map((surface) => (
+      <InlineSurface
+        key={surface.surfaceId}
+        surfaceId={surface.surfaceId}
+        tree={surface.tree}
+        isExpanded={surface.surfaceId === latestSurfaceId}
+        onDismiss={onSurfaceDismiss}
+        onAction={onSurfaceAction}
+        onDataChange={onSurfaceDataChange}
+      />
+    ));
+  };
+
+  const renderMessage = (message: ChatMessage, messageIndex: number) => {
     if (message.role === 'system' || message.role === 'tool') {
       return null;
     }
@@ -80,7 +132,7 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
       }
     }
 
-    return (
+    const messageEl = (
       <div key={message.id} className={`chat-message ${message.role}`}>
         <div className="chat-message-avatar">
           {message.role === 'user' ? '\u{1F464}' : '\u{1F916}'}
@@ -113,28 +165,47 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
         </div>
       </div>
     );
+
+    // After an assistant message, render any inline surfaces for this turn
+    if (message.role === 'assistant' && surfacesByTurn) {
+      const turnIndex = computeTurnIndex(messages, messageIndex);
+      const inlineSurfaces = renderInlineSurfaces(turnIndex);
+      if (inlineSurfaces) {
+        return (
+          <React.Fragment key={message.id}>
+            {messageEl}
+            {inlineSurfaces}
+          </React.Fragment>
+        );
+      }
+    }
+
+    return messageEl;
   };
 
   return (
     <>
-      {messages.map(renderMessage)}
+      {messages.map((message, index) => renderMessage(message, index))}
 
       {isStreaming && (streamingContent || (showToolMarkers && toolEvents.length > 0)) && (
-        <div className="chat-message assistant streaming">
-          <div className="chat-message-avatar">{'\u{1F916}'}</div>
-          <div className="chat-message-content">
-            <div className="chat-message-header">
-              <span className="chat-message-role">{assistantRoleLabel}</span>
-              <span className="streaming-indicator">{'\u25CF'}</span>
-            </div>
-            {showToolMarkers ? renderToolMarkers(toolEvents) : null}
-            {streamingContent && (
-              <div className="chat-message-text">
-                <Markdown gfm>{streamingContent}</Markdown>
+        <>
+          <div className="chat-message assistant streaming">
+            <div className="chat-message-avatar">{'\u{1F916}'}</div>
+            <div className="chat-message-content">
+              <div className="chat-message-header">
+                <span className="chat-message-role">{assistantRoleLabel}</span>
+                <span className="streaming-indicator">{'\u25CF'}</span>
               </div>
-            )}
+              {showToolMarkers ? renderToolMarkers(toolEvents) : null}
+              {streamingContent && (
+                <div className="chat-message-text">
+                  <Markdown gfm>{streamingContent}</Markdown>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+          {currentTurnIndex !== undefined && renderInlineSurfaces(currentTurnIndex)}
+        </>
       )}
 
       {isStreaming && !streamingContent && (!showToolMarkers || toolEvents.length === 0) && (

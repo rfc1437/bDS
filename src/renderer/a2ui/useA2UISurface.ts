@@ -13,9 +13,22 @@ interface UseA2UISurfaceInput {
   conversationId: string | null;
 }
 
+export interface SurfaceEntry {
+  surfaceId: string;
+  tree: A2UIResolvedComponent[];
+}
+
 interface UseA2UISurfaceResult {
   /** All active surface trees for this conversation */
-  surfaces: Array<{ surfaceId: string; tree: A2UIResolvedComponent[] }>;
+  surfaces: SurfaceEntry[];
+  /** Surfaces grouped by the turn index that created them */
+  surfacesByTurn: Map<number, SurfaceEntry[]>;
+  /** The surfaceId of the most recently created surface */
+  latestSurfaceId: string | null;
+  /** Set of surface IDs that the user has dismissed */
+  dismissedSurfaceIds: Set<string>;
+  /** Dismiss a surface by ID */
+  dismissSurface: (surfaceId: string) => void;
   /** Dispatch an action back to the main process */
   dispatchAction: (action: A2UIClientAction) => void;
   /** Update a local data binding (for form inputs) */
@@ -30,6 +43,7 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
   const { conversationId } = input;
   const managerRef = useRef<A2UISurfaceManager>(new A2UISurfaceManager());
   const [renderTick, setRenderTick] = useState(0);
+  const [dismissedSurfaceIds, setDismissedSurfaceIds] = useState<Set<string>>(new Set());
 
   // Subscribe to surface changes
   useEffect(() => {
@@ -58,8 +72,9 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
     };
   }, [conversationId]);
 
-  // Clear surfaces when conversation changes
+  // Clear surfaces and dismissed set when conversation changes
   useEffect(() => {
+    setDismissedSurfaceIds(new Set());
     return () => {
       if (conversationId) {
         managerRef.current.clearConversation(conversationId);
@@ -83,6 +98,52 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
     }));
   }, [conversationId, renderTick]);
 
+  const surfacesByTurn = useMemo(() => {
+    void renderTick;
+
+    const map = new Map<number, SurfaceEntry[]>();
+    if (!conversationId) {
+      return map;
+    }
+
+    const manager = managerRef.current;
+    const surfaceIds = manager.getSurfaceIds(conversationId);
+
+    for (const surfaceId of surfaceIds) {
+      const surface = manager.getSurface(surfaceId);
+      const turnIndex = (surface?.metadata?.turnIndex as number) ?? -1;
+      const entry: SurfaceEntry = { surfaceId, tree: manager.resolveTree(surfaceId) };
+
+      const existing = map.get(turnIndex);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        map.set(turnIndex, [entry]);
+      }
+    }
+
+    return map;
+  }, [conversationId, renderTick]);
+
+  const latestSurfaceId = useMemo(() => {
+    void renderTick;
+
+    if (!conversationId) {
+      return null;
+    }
+
+    const ids = managerRef.current.getSurfaceIds(conversationId);
+    return ids.length > 0 ? ids[ids.length - 1] : null;
+  }, [conversationId, renderTick]);
+
+  const dismissSurface = useCallback((surfaceId: string) => {
+    setDismissedSurfaceIds((prev) => {
+      const next = new Set(prev);
+      next.add(surfaceId);
+      return next;
+    });
+  }, []);
+
   const dispatchAction = useCallback((action: A2UIClientAction) => {
     window.electronAPI?.chat.dispatchA2UIAction?.(action);
   }, []);
@@ -103,6 +164,10 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
 
   return {
     surfaces,
+    surfacesByTurn,
+    latestSurfaceId,
+    dismissedSurfaceIds,
+    dismissSurface,
     dispatchAction,
     updateLocalData,
     getDataModel,

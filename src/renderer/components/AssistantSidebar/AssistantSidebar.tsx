@@ -8,7 +8,6 @@ import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { useChatMessageSender } from '../../navigation/useChatMessageSender';
 import { useChatSurfaceState } from '../../navigation/useChatSurfaceState';
 import { useA2UISurface } from '../../a2ui/useA2UISurface';
-import { A2UIRenderer } from '../../a2ui/A2UIRenderer';
 import { ChatTranscript } from '../ChatSurface';
 import { useI18n } from '../../i18n';
 import '../../styles/chatSurface.css';
@@ -55,7 +54,19 @@ export const AssistantSidebar: React.FC = () => {
   } = useChatSurfaceState();
 
   // A2UI surface rendering
-  const { surfaces, dispatchAction, updateLocalData } = useA2UISurface({ conversationId });
+  const {
+    surfacesByTurn,
+    latestSurfaceId,
+    dismissedSurfaceIds,
+    dismissSurface,
+    dispatchAction,
+    updateLocalData,
+  } = useA2UISurface({ conversationId });
+
+  // Current turn index for associating streaming surfaces
+  const currentTurnIndex = useMemo(() => {
+    return messages.filter(m => m.role === 'user').length - 1;
+  }, [messages]);
 
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) ?? null, [tabs, activeTabId]);
 
@@ -266,19 +277,16 @@ export const AssistantSidebar: React.FC = () => {
             assistantRoleLabel={tr('chat.role.assistant')}
             userRoleLabel={tr('chat.role.you')}
             showToolMarkers={surfaceMode.showToolMarkers}
+            surfacesByTurn={surfacesByTurn}
+            latestSurfaceId={latestSurfaceId}
+            dismissedSurfaceIds={dismissedSurfaceIds}
+            onSurfaceDismiss={dismissSurface}
+            onSurfaceAction={dispatchAction}
+            onSurfaceDataChange={updateLocalData}
+            currentTurnIndex={currentTurnIndex}
           />
         </div>
       )}
-
-      {surfaces.map((surface) => (
-        <A2UIRenderer
-          key={surface.surfaceId}
-          surfaceId={surface.surfaceId}
-          tree={surface.tree}
-          onAction={dispatchAction}
-          onDataChange={updateLocalData}
-        />
-      ))}
     </div>
   );
 };

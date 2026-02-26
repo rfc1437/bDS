@@ -10,7 +10,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:a2ui-sdk.js.org)",
-      "WebFetch(domain:www.copilotkit.ai)"
+      "WebFetch(domain:www.copilotkit.ai)",
+      "Bash(grep -l \"A2UIRenderer\\\\|useA2UISurface\\\\|a2ui-surface\" /Users/gb/Projects/bDS/src/renderer/components/**/*.tsx)",
+      "Bash(npm test)"
     ]
   }
 }

@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ChatConversation, ChatModel } from '../../types/electron';
 import { useChatMessageSender } from '../../navigation/useChatMessageSender';
 import { useChatSurfaceState } from '../../navigation/useChatSurfaceState';
 import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { dispatchAssistantAction } from '../../navigation/assistantActionDispatcher';
 import { useA2UISurface } from '../../a2ui/useA2UISurface';
-import { A2UIRenderer } from '../../a2ui/A2UIRenderer';
 import { useAppStore } from '../../store';
 import { ChatTranscript } from '../ChatSurface';
 import { useI18n } from '../../i18n';
@@ -60,7 +59,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   } = useChatSurfaceState();
 
   // A2UI surface rendering
-  const { surfaces, dispatchAction, updateLocalData } = useA2UISurface({ conversationId });
+  const {
+    surfacesByTurn,
+    latestSurfaceId,
+    dismissedSurfaceIds,
+    dismissSurface,
+    dispatchAction,
+    updateLocalData,
+  } = useA2UISurface({ conversationId });
+
+  // Current turn index for associating streaming surfaces
+  const currentTurnIndex = useMemo(() => {
+    return messages.filter(m => m.role === 'user').length - 1;
+  }, [messages]);
 
   // Scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
@@ -368,17 +379,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           userRoleLabel={tr('chat.role.you')}
           showToolMarkers={surfaceMode.showToolMarkers}
           endRef={messagesEndRef}
+          surfacesByTurn={surfacesByTurn}
+          latestSurfaceId={latestSurfaceId}
+          dismissedSurfaceIds={dismissedSurfaceIds}
+          onSurfaceDismiss={dismissSurface}
+          onSurfaceAction={dispatchAction}
+          onSurfaceDataChange={updateLocalData}
+          currentTurnIndex={currentTurnIndex}
         />
-
-        {surfaces.map((surface) => (
-          <A2UIRenderer
-            key={surface.surfaceId}
-            surfaceId={surface.surfaceId}
-            tree={surface.tree}
-            onAction={dispatchAction}
-            onDataChange={updateLocalData}
-          />
-        ))}
 
         {actionError && <p className="chat-surface-error">{actionError}</p>}
       </div>

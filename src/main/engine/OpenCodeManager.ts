@@ -293,10 +293,16 @@ export class OpenCodeManager {
       let fullResponse = '';
       const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
 
+      // Compute turn index for surface-to-message association
+      const turnIndex = dbMessages.filter(m => m.role === 'user').length - 1;
+
       // Wrap onA2UIMessage emission for render tools
       const emitA2UIMessages = (messages: A2UIServerMessage[]) => {
         if (onA2UIMessage) {
           for (const msg of messages) {
+            if (msg.type === 'createSurface') {
+              msg.metadata = { ...msg.metadata, turnIndex };
+            }
             onA2UIMessage(msg);
           }
         }

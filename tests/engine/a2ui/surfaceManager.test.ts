@@ -34,6 +34,21 @@ describe('A2UISurfaceManager', () => {
       expect(surface!.dataModel).toEqual({});
     });
 
+    it('preserves metadata including turnIndex on createSurface', () => {
+      const manager = new A2UISurfaceManager();
+
+      manager.processMessage({
+        type: 'createSurface',
+        surfaceId: 'surface-1',
+        conversationId: 'conv-1',
+        metadata: { turnIndex: 3 },
+      });
+
+      const surface = manager.getSurface('surface-1');
+      expect(surface).toBeDefined();
+      expect(surface!.metadata).toEqual({ turnIndex: 3 });
+    });
+
     it('notifies listeners on surface creation', () => {
       const manager = new A2UISurfaceManager();
       const listener = vi.fn();
