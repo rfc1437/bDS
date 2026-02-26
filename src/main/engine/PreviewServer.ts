@@ -19,7 +19,10 @@ import {
   type HtmlRewriteContext,
   type MediaEngineContract,
   type PostMediaEngineContract,
+  type PythonMacroRendererContract,
 } from './PageRenderer';
+import { getScriptEngine } from './ScriptEngine';
+import { getPythonMacroWorkerRuntime } from './PythonMacroWorkerRuntime';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
 import {
@@ -103,7 +106,7 @@ export class PreviewServer {
         projectDescription: activeProject?.description ?? undefined,
       };
     });
-    this.pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine);
+    this.pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine, buildPythonMacroRenderer());
   }
 
   async start(preferredPort = 0): Promise<number> {
@@ -613,4 +616,22 @@ export class PreviewServer {
     res.setHeader('Cache-Control', 'no-store');
     res.end(body);
   }
+}
+
+function buildPythonMacroRenderer(): PythonMacroRendererContract {
+  return {
+    async getEnabledMacroScripts() {
+      const scripts = await getScriptEngine().getEnabledMacroScripts();
+      return scripts.map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        entrypoint: s.entrypoint,
+        content: s.content,
+        version: s.version,
+      }));
+    },
+    async renderMacro(params) {
+      return getPythonMacroWorkerRuntime().renderMacro(params);
+    },
+  };
 }

@@ -222,6 +222,24 @@ export class ScriptEngine extends EventEmitter {
     return Promise.all(rows.map((item) => this.toScriptData(item)));
   }
 
+  async getEnabledMacroScripts(): Promise<ScriptData[]> {
+    const rows = await this.getAllScriptRows();
+    const macroRows = rows.filter((row) => row.kind === 'macro' && row.enabled);
+    return Promise.all(macroRows.map((item) => this.toScriptData(item)));
+  }
+
+  async getMacroScriptBySlug(slug: string): Promise<ScriptData | null> {
+    const normalizedSlug = slug.toLowerCase();
+    const rows = await this.getAllScriptRows();
+    const match = rows.find(
+      (row) => row.kind === 'macro' && row.enabled && row.slug.toLowerCase() === normalizedSlug,
+    );
+    if (!match) {
+      return null;
+    }
+    return this.toScriptData(match);
+  }
+
   async rebuildDatabaseFromFiles(): Promise<void> {
     const db = getDatabase().getLocal();
     const scriptsDir = this.getScriptsDir();

@@ -5,10 +5,21 @@
  * Macros self-register using registerMacro() function.
  */
 
-import type { MacroDefinition, MacroParams, MacroRenderContext, ParsedMacro } from './types';
+import type {
+  MacroDefinition,
+  MacroParams,
+  MacroRenderContext,
+  ParsedMacro,
+  PythonMacroResolver,
+  PythonMacroRendererFn,
+} from './types';
 
 // Internal registry storage
 const macroRegistry = new Map<string, MacroDefinition>();
+
+// Python macro resolution
+let pythonMacroResolverFn: PythonMacroResolver | null = null;
+let pythonMacroRendererFn: PythonMacroRendererFn | null = null;
 
 /**
  * Register a macro definition.
@@ -23,6 +34,18 @@ export function registerMacro(macro: MacroDefinition): void {
     console.warn(`Macro "${name}" is already registered. Overwriting.`);
   }
   macroRegistry.set(name, macro);
+}
+
+/**
+ * Set the Python macro resolver and renderer for preview rendering.
+ * When a macro is not found in the JS registry, the resolver will be called.
+ */
+export function setPythonMacroResolver(
+  resolver: PythonMacroResolver | null,
+  renderer: PythonMacroRendererFn | null,
+): void {
+  pythonMacroResolverFn = resolver;
+  pythonMacroRendererFn = renderer;
 }
 
 /**
@@ -124,6 +147,7 @@ export function parseMacros(markdown: string): ParsedMacro[] {
 
 /**
  * Render a single macro to HTML.
+ * First checks JS registry, then falls back to Python macro resolver.
  * 
  * @param macro - The parsed macro
  * @param context - Render context
@@ -135,25 +159,36 @@ export async function renderMacro(
 ): Promise<string> {
   const definition = getMacro(macro.name);
   
-  if (!definition) {
-    return `<span class="macro-error" title="Unknown macro: ${macro.name}">${macro.rawText}</span>`;
-  }
-  
-  // Validate if validator exists
-  if (definition.validate) {
-    const error = definition.validate(macro.params);
-    if (error) {
-      return `<span class="macro-error" title="${error}">${macro.rawText}</span>`;
+  if (definition) {
+    // Validate if validator exists
+    if (definition.validate) {
+      const error = definition.validate(macro.params);
+      if (error) {
+        return `<span class="macro-error" title="${error}">${macro.rawText}</span>`;
+      }
+    }
+    
+    try {
+      const result = definition.render(macro.params, context);
+      return result instanceof Promise ? await result : result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Render error';
+      return `<span class="macro-error" title="${message}">${macro.rawText}</span>`;
     }
   }
-  
-  try {
-    const result = definition.render(macro.params, context);
-    return result instanceof Promise ? await result : result;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Render error';
-    return `<span class="macro-error" title="${message}">${macro.rawText}</span>`;
+
+  if (pythonMacroResolverFn && pythonMacroRendererFn) {
+    try {
+      const pythonInfo = await pythonMacroResolverFn(macro.name);
+      if (pythonInfo) {
+        return await pythonMacroRendererFn(pythonInfo, macro.params, context);
+      }
+    } catch {
+      return `<span class="macro-error" title="Python macro error">${macro.rawText}</span>`;
+    }
   }
+
+  return `<span class="macro-error" title="Unknown macro: ${macro.name}">${macro.rawText}</span>`;
 }
 
 /**

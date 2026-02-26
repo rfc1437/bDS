@@ -11,6 +11,25 @@ import { CALENDAR_RUNTIME_JS } from './assets/calendarRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
 import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
 
+export interface PythonMacroScript {
+  id: string;
+  slug: string;
+  entrypoint: string;
+  content: string;
+  version: number;
+}
+
+export interface PythonMacroRendererContract {
+  getEnabledMacroScripts(): Promise<PythonMacroScript[]>;
+  renderMacro(params: {
+    scriptContent: string;
+    entrypoint: string;
+    contextJson: string;
+    cacheKey?: string;
+    timeoutMs?: number;
+  }): Promise<{ html: string; data?: Record<string, unknown>; warnings?: string[] }>;
+}
+
 export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
   canonicalMediaPathBySourcePath: Map<string, string>;
@@ -801,6 +820,107 @@ export function renderMacro(
   return '';
 }
 
+const JS_BUILTIN_MACROS = new Set(['youtube', 'vimeo', 'gallery', 'photo_archive', 'photo_album', 'tag_cloud']);
+
+export function isBuiltInMacro(name: string): boolean {
+  return JS_BUILTIN_MACROS.has(normalizeMacroName(name));
+}
+
+export async function replaceAllMacrosAsync(
+  content: string,
+  postId: string,
+  mediaItems: MediaData[],
+  linkedMediaIds: Set<string> | null,
+  tagUsage: TagUsageEntry[],
+  renderLanguage: string,
+  pythonMacroRenderer?: PythonMacroRendererContract | null,
+): Promise<string> {
+  const macroRegex = /\[\[(\w+)(?:\s+([^\]]+))?\]\]/g;
+  const matches: Array<{ fullMatch: string; name: string; rawParams: string | undefined; start: number; end: number }> = [];
+
+  let match: RegExpExecArray | null = null;
+  while ((match = macroRegex.exec(content)) !== null) {
+    matches.push({
+      fullMatch: match[0],
+      name: match[1].toLowerCase(),
+      rawParams: match[2],
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  if (matches.length === 0) {
+    return content;
+  }
+
+  let pythonScripts: PythonMacroScript[] | null = null;
+  const hasUnknownMacros = matches.some((m) => !isBuiltInMacro(m.name));
+
+  if (hasUnknownMacros && pythonMacroRenderer) {
+    try {
+      pythonScripts = await pythonMacroRenderer.getEnabledMacroScripts();
+    } catch {
+      pythonScripts = [];
+    }
+  }
+
+  const scriptsBySlug = new Map<string, PythonMacroScript>();
+  if (pythonScripts) {
+    for (const script of pythonScripts) {
+      scriptsBySlug.set(script.slug.toLowerCase(), script);
+    }
+  }
+
+  const rendered: string[] = [];
+
+  for (const m of matches) {
+    const params = parseMacroParams(m.rawParams);
+    const builtInResult = renderMacro(m.name, params, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage);
+
+    if (builtInResult || isBuiltInMacro(m.name)) {
+      rendered.push(builtInResult);
+      continue;
+    }
+
+    const pythonScript = scriptsBySlug.get(normalizeMacroName(m.name));
+    if (pythonScript && pythonMacroRenderer) {
+      try {
+        const context = {
+          env: {
+            isPreview: false,
+            mainLanguage: renderLanguage,
+            hook: m.name,
+            source: { kind: 'macro', id: pythonScript.id },
+          },
+          params: params as Record<string, unknown>,
+        };
+
+        const result = await pythonMacroRenderer.renderMacro({
+          scriptContent: pythonScript.content,
+          entrypoint: pythonScript.entrypoint,
+          contextJson: JSON.stringify(context),
+          cacheKey: `${pythonScript.id}:${pythonScript.version}`,
+          timeoutMs: 10000,
+        });
+
+        rendered.push(result.html);
+      } catch {
+        rendered.push('');
+      }
+    } else {
+      rendered.push('');
+    }
+  }
+
+  let result = content;
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const m = matches[i];
+    result = result.slice(0, m.start) + rendered[i] + result.slice(m.end);
+  }
+
+  return result;
+}
+
 export function buildCanonicalPostPath(post: PostData): string {
   const year = post.createdAt.getFullYear();
   const month = String(post.createdAt.getMonth() + 1).padStart(2, '0');
@@ -898,12 +1018,19 @@ export class PageRenderer {
   private readonly mediaEngine: MediaEngineContract;
   private readonly postMediaEngine: PostMediaEngineContract;
   private readonly postEngineForMacros?: PostEngineContract;
+  private readonly pythonMacroRenderer?: PythonMacroRendererContract;
   private readonly liquid: Liquid;
 
-  constructor(mediaEngine: MediaEngineContract, postMediaEngine: PostMediaEngineContract, postEngineForMacros?: PostEngineContract) {
+  constructor(
+    mediaEngine: MediaEngineContract,
+    postMediaEngine: PostMediaEngineContract,
+    postEngineForMacros?: PostEngineContract,
+    pythonMacroRenderer?: PythonMacroRendererContract,
+  ) {
     this.mediaEngine = mediaEngine;
     this.postMediaEngine = postMediaEngine;
     this.postEngineForMacros = postEngineForMacros;
+    this.pythonMacroRenderer = pythonMacroRenderer;
 
     const templateRoots = resolvePageRendererTemplateRoots();
 
@@ -951,10 +1078,9 @@ export class PageRenderer {
           .catch(() => null)
         : null;
 
-      const withMacros = content.replace(/\[\[(\w+)(?:\s+([^\]]+))?\]\]/g, (_match, macroName: string, rawParams: string | undefined) => {
-        const params = parseMacroParams(rawParams);
-        return renderMacro(macroName.toLowerCase(), params, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage);
-      });
+      const withMacros = await replaceAllMacrosAsync(
+        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer,
+      );
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
       const annotatedMarkdownHtml = annotateCodeBlocksWithLanguage(markdownHtml);
