@@ -28,4 +28,3 @@ export { DocumentationView } from './DocumentationView/DocumentationView';
 export { SiteValidationView } from './SiteValidationView';
 export { ScriptsView } from './ScriptsView/ScriptsView';
 export { AssistantSidebar } from './AssistantSidebar';
-export { AssistantPanelControls } from './AssistantPanelControls';

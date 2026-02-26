@@ -286,7 +286,6 @@ export const electronAPI: ElectronAPI = {
     getApiKey: () => ipcRenderer.invoke('chat:getApiKey'),
 
     // Settings
-    getProtocolHealth: () => ipcRenderer.invoke('chat:getProtocolHealth'),
     getAvailableModels: () => ipcRenderer.invoke('chat:getAvailableModels'),
     setDefaultModel: (modelId: string) => ipcRenderer.invoke('chat:setDefaultModel', modelId),
     getSystemPrompt: () => ipcRenderer.invoke('chat:getSystemPrompt'),
@@ -334,6 +333,14 @@ export const electronAPI: ElectronAPI = {
       ipcRenderer.on('chat-title-updated', subscription);
       return () => ipcRenderer.removeListener('chat-title-updated', subscription);
     },
+
+    // A2UI streaming
+    onA2UIMessage: (callback: (data: { conversationId: string; message: import('./a2ui/types').A2UIServerMessage }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; message: import('./a2ui/types').A2UIServerMessage }) => callback(data);
+      ipcRenderer.on('a2ui-message', subscription);
+      return () => ipcRenderer.removeListener('a2ui-message', subscription);
+    },
+    dispatchA2UIAction: (action: import('./a2ui/types').A2UIClientAction) => ipcRenderer.invoke('a2ui:dispatch', action),
   },
 
   // Event listeners

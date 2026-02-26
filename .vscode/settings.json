@@ -3,6 +3,7 @@
         "npx vitest": true,
         "npx tsc": true,
         "git remote": true,
-        "npx asar": true
+        "npx asar": true,
+        "npx tsx": true
     }
 }

@@ -3073,7 +3073,6 @@ result = await bds.tags.sync_from_posts()
 - [chat.validateApiKey](#chatvalidateapikey)
 - [chat.setApiKey](#chatsetapikey)
 - [chat.getApiKey](#chatgetapikey)
-- [chat.getProtocolHealth](#chatgetprotocolhealth)
 - [chat.getAvailableModels](#chatgetavailablemodels)
 - [chat.setDefaultModel](#chatsetdefaultmodel)
 - [chat.getSystemPrompt](#chatgetsystemprompt)
@@ -3204,41 +3203,6 @@ result = await bds.chat.get_api_key()
 {
     'hasKey': False,
     'maskedKey': 'value'
-}
-```
-
-### chat.getProtocolHealth
-
-Get AGUI protocol telemetry health snapshot.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `ProtocolTelemetrySnapshot`
-- Data structures: `ProtocolTelemetrySnapshot`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_protocol_health()
-```
-
-**Example response**
-
-```python
-{
-    'totalTurns': 0,
-    'validEnvelopeTurns': 0,
-    'repairAttempts': 0,
-    'fallbackTurns': 0,
-    'blockedActionCount': 0,
-    'parseValidityRate': 0,
-    'repairRate': 0,
-    'fallbackRate': 0
 }
 ```
 
@@ -3522,8 +3486,7 @@ Send message to chat conversation.
 
 **Response specification**
 
-- Return type: `{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string }`
-- Data structures: `ProtocolResponseEnvelope`
+- Return type: `{ success: boolean; message?: string; error?: string }`
 
 **Example call**
 
@@ -3535,18 +3498,7 @@ result = await bds.chat.send_message(conversation_id='conversation-1', message='
 **Example response**
 
 ```python
-[
-{
-    'protocolVersion': None,
-    'assistantText': 'value',
-    'ui': [],
-    'intent': None,
-    'needsInput': False,
-    'actions': [],
-    'confidence': 0,
-    'traceId': 'value'
-}
-]
+{}
 ```
 
 ### chat.abortMessage
@@ -4126,40 +4078,6 @@ A declarative assistant action exposed to the UI runtime.
 - payload (`Record<string, unknown>`, optional): Optional action payload arguments.
 - policy (`'silent' | 'confirm' | 'danger'`, required): Action confirmation policy level.
 - requiresConfirmation (`boolean`, required): Whether confirmation is required before dispatch.
-
-[↑ Back to Table of contents](#table-of-contents)
-
-### ProtocolResponseEnvelope
-
-Canonical AGUI response envelope returned from chat.sendMessage.
-
-**Fields**
-
-- protocolVersion (`'2.0'`, required): Envelope protocol version.
-- assistantText (`string`, required): Assistant text content rendered in transcript.
-- ui (`{ specVersion: '1'; elements: unknown[] }`, optional): Optional structured UI payload.
-- intent (`'analyze' | 'ask_input' | 'propose_action' | 'execute_action' | 'summarize'`, required): Turn intent classification.
-- needsInput (`{ required: boolean; fields: ProtocolNeedsInputField[] }`, required): Clarification requirements for next step.
-- actions (`ProtocolAction[]`, required): Declarative actions available for this turn.
-- confidence (`number`, required): Model confidence score from 0 to 1.
-- traceId (`string`, required): Trace id for observability and debugging.
-
-[↑ Back to Table of contents](#table-of-contents)
-
-### ProtocolTelemetrySnapshot
-
-Aggregated protocol telemetry metrics for AGUI response health.
-
-**Fields**
-
-- totalTurns (`number`, required): Total number of recorded assistant turns.
-- validEnvelopeTurns (`number`, required): Turns with schema-valid protocol envelopes.
-- repairAttempts (`number`, required): Number of response repair attempts.
-- fallbackTurns (`number`, required): Turns that used protocol fallback response.
-- blockedActionCount (`number`, required): Count of actions blocked by policy.
-- parseValidityRate (`number`, required): Ratio of valid envelopes to total turns.
-- repairRate (`number`, required): Ratio of repair attempts to total turns.
-- fallbackRate (`number`, required): Ratio of fallback turns to total turns.
 
 [↑ Back to Table of contents](#table-of-contents)
 

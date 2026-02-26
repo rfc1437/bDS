@@ -15,7 +15,6 @@ describe('chat surface mode usage guards', () => {
       validateApiKey: vi.fn(),
       setApiKey: vi.fn(),
       getApiKey: vi.fn(),
-      getProtocolHealth: vi.fn(),
       getAvailableModels: vi.fn().mockResolvedValue({
         success: true,
         models: [{ id: 'gpt-5', name: 'GPT-5' }],
@@ -46,6 +45,8 @@ describe('chat surface mode usage guards', () => {
       onToolCall: vi.fn(() => vi.fn()),
       onToolResult: vi.fn(() => vi.fn()),
       onTitleUpdated: vi.fn(() => vi.fn()),
+      onA2UIMessage: vi.fn(() => vi.fn()),
+      dispatchA2UIAction: vi.fn(),
     } as never;
   });
 

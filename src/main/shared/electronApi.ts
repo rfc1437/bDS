@@ -435,52 +435,9 @@ export interface ChatSendMetadata {
   surface?: 'tab' | 'sidebar';
 }
 
-export interface ProtocolNeedsInputField {
-  key: string;
-  label: string;
-  inputType: 'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number';
-  required?: boolean;
-  options?: Array<{ label: string; value: string }>;
-  placeholder?: string;
-  defaultValue?: string | number | boolean;
-}
-
-export interface ProtocolAction {
-  id: string;
-  action: string;
-  label?: string;
-  payload?: Record<string, unknown>;
-  policy: 'silent' | 'confirm' | 'danger';
-  requiresConfirmation: boolean;
-}
-
-export interface ProtocolResponseEnvelope {
-  protocolVersion: '2.0';
-  assistantText: string;
-  ui?: {
-    specVersion: '1';
-    elements: unknown[];
-  };
-  intent: 'analyze' | 'ask_input' | 'propose_action' | 'execute_action' | 'summarize';
-  needsInput: {
-    required: boolean;
-    fields: ProtocolNeedsInputField[];
-  };
-  actions: ProtocolAction[];
-  confidence: number;
-  traceId: string;
-}
-
-export interface ProtocolTelemetrySnapshot {
-  totalTurns: number;
-  validEnvelopeTurns: number;
-  repairAttempts: number;
-  fallbackTurns: number;
-  blockedActionCount: number;
-  parseValidityRate: number;
-  repairRate: number;
-  fallbackRate: number;
-}
+// A2UI types imported for use in ElectronAPI and re-exported for renderer
+import type { A2UIServerMessage, A2UIClientAction } from '../a2ui/types';
+export type { A2UIServerMessage, A2UIClientAction };
 
 export interface SiteValidationReport {
   sitemapPath: string;
@@ -764,7 +721,6 @@ export interface ElectronAPI {
     getApiKey: () => Promise<ChatApiKeyStatus>;
 
     // Settings
-    getProtocolHealth: () => Promise<ProtocolTelemetrySnapshot>;
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;
     setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
     getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
@@ -778,7 +734,7 @@ export interface ElectronAPI {
     deleteConversation: (id: string) => Promise<boolean>;
 
     // Messaging
-    sendMessage: (conversationId: string, message: string, metadata?: ChatSendMetadata) => Promise<{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string }>;
+    sendMessage: (conversationId: string, message: string, metadata?: ChatSendMetadata) => Promise<{ success: boolean; message?: string; error?: string }>;
     addSystemEvent: (conversationId: string, content: string) => Promise<{ success: boolean; error?: string }>;
     abortMessage: (conversationId: string) => Promise<void>;
     getHistory: (conversationId: string) => Promise<ChatMessage[]>;
@@ -796,6 +752,10 @@ export interface ElectronAPI {
     onToolCall: (callback: (data: ChatToolCall) => void) => () => void;
     onToolResult: (callback: (data: ChatToolResult) => void) => () => void;
     onTitleUpdated: (callback: (data: ChatTitleUpdate) => void) => () => void;
+
+    // A2UI streaming
+    onA2UIMessage: (callback: (data: { conversationId: string; message: A2UIServerMessage }) => void) => () => void;
+    dispatchA2UIAction: (action: A2UIClientAction) => Promise<{ success: boolean; error?: string }>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

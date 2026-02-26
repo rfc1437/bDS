@@ -55,18 +55,7 @@ describe('Editor dashboard timeline', () => {
     ]);
     (window as any).electronAPI.posts.getTagsWithCounts = vi.fn().mockResolvedValue([]);
     (window as any).electronAPI.posts.getCategoriesWithCounts = vi.fn().mockResolvedValue([]);
-    (window as any).electronAPI.chat = {
-      getProtocolHealth: vi.fn().mockResolvedValue({
-        totalTurns: 10,
-        validEnvelopeTurns: 9,
-        repairAttempts: 1,
-        fallbackTurns: 0,
-        blockedActionCount: 2,
-        parseValidityRate: 0.9,
-        repairRate: 0.1,
-        fallbackRate: 0,
-      }),
-    };
+    (window as any).electronAPI.chat = {};
     (window as any).electronAPI.tags = {
       getAll: vi.fn().mockResolvedValue([]),
     };
@@ -93,18 +82,5 @@ describe('Editor dashboard timeline', () => {
     });
 
     expect(screen.getByText('2024')).toBeInTheDocument();
-  });
-
-  it('renders protocol telemetry stats in dashboard', async () => {
-    render(<Editor />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(screen.getByText('90%')).toBeInTheDocument();
-    expect(screen.getByText('2 blocked actions')).toBeInTheDocument();
   });
 });

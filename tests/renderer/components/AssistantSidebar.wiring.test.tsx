@@ -15,7 +15,6 @@ describe('AssistantSidebar wiring', () => {
       validateApiKey: vi.fn(),
       setApiKey: vi.fn(),
       getApiKey: vi.fn(),
-      getProtocolHealth: vi.fn(),
       getAvailableModels: vi.fn(),
       setDefaultModel: vi.fn(),
       getSystemPrompt: vi.fn(),
@@ -37,6 +36,8 @@ describe('AssistantSidebar wiring', () => {
       onToolCall,
       onToolResult,
       onTitleUpdated,
+      onA2UIMessage: vi.fn(() => vi.fn()),
+      dispatchA2UIAction: vi.fn(),
     } as never;
   });
 

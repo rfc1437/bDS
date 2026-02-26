@@ -25,7 +25,6 @@ describe('pythonApiContractV1', () => {
       'app.getSystemLanguage',
       'chat.getConversations',
       'chat.sendMessage',
-      'chat.getProtocolHealth',
     ]));
   });
 
@@ -44,7 +43,7 @@ describe('pythonApiContractV1', () => {
     });
   });
 
-  it('documents chat.sendMessage protocol envelope return contract and metadata input', () => {
+  it('documents chat.sendMessage return contract and metadata input', () => {
     expect(getPythonApiMethodContract('chat.sendMessage')).toEqual({
       method: 'chat.sendMessage',
       description: 'Send message to chat conversation.',
@@ -65,7 +64,7 @@ describe('pythonApiContractV1', () => {
           required: false,
         },
       ],
-      returns: "{ success: boolean; message?: string; envelope?: ProtocolResponseEnvelope; protocolVersion?: '2.0'; traceId?: string; warnings?: string[]; error?: string }",
+      returns: '{ success: boolean; message?: string; error?: string }',
     });
   });
 
@@ -81,8 +80,6 @@ describe('pythonApiContractV1', () => {
       expect.objectContaining({ name: 'PostData' }),
       expect.objectContaining({ name: 'MediaData' }),
       expect.objectContaining({ name: 'ProjectData' }),
-      expect.objectContaining({ name: 'ProtocolResponseEnvelope' }),
-      expect.objectContaining({ name: 'ProtocolTelemetrySnapshot' }),
     ]));
   });
 });

@@ -3,15 +3,13 @@ import { useAppStore } from '../../store';
 import { resolveAssistantEditorContext } from '../../navigation/assistantPromptContext';
 import { planAssistantRequest } from '../../navigation/assistantConversation';
 import { dispatchAssistantAction } from '../../navigation/assistantActionDispatcher';
-import { extractAssistantResponseContent, type AssistantPanelElement } from '../../navigation/assistantPanelSpec';
-import { toClarificationElements } from '../../navigation/protocolNeedsInput';
-import { buildActionPoliciesFromEnvelope } from '../../navigation/protocolActionPolicies';
 import { ensureConversationId } from '../../navigation/chatSession';
 import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { useChatMessageSender } from '../../navigation/useChatMessageSender';
 import { useChatSurfaceState } from '../../navigation/useChatSurfaceState';
+import { useA2UISurface } from '../../a2ui/useA2UISurface';
+import { A2UIRenderer } from '../../a2ui/A2UIRenderer';
 import { ChatTranscript } from '../ChatSurface';
-import { AssistantPanelControls } from '../AssistantPanelControls';
 import { useI18n } from '../../i18n';
 import '../../styles/chatSurface.css';
 import './AssistantSidebar.css';
@@ -23,8 +21,6 @@ export const AssistantSidebar: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [panelElements, setPanelElements] = useState<AssistantPanelElement[]>([]);
-  const [actionPolicies, setActionPolicies] = useState<Record<string, 'silent' | 'confirm' | 'danger'>>({});
   const [actionError, setActionError] = useState<string | null>(null);
 
   const {
@@ -57,6 +53,10 @@ export const AssistantSidebar: React.FC = () => {
     stopStreaming,
     getStreamingContent,
   } = useChatSurfaceState();
+
+  // A2UI surface rendering
+  const { surfaces, dispatchAction, updateLocalData } = useA2UISurface({ conversationId });
+
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) ?? null, [tabs, activeTabId]);
 
   const editorContext = useMemo(
@@ -169,24 +169,12 @@ export const AssistantSidebar: React.FC = () => {
         throw new Error(sendResult.error || 'Failed to send assistant message');
       }
 
-      if (sendResult.envelope) {
-        finalizeAssistantTurn(resolvedConversationId, sendResult.envelope.assistantText);
-        const uiElements = Array.isArray(sendResult.envelope.ui?.elements)
-          ? (sendResult.envelope.ui?.elements as AssistantPanelElement[])
-          : toClarificationElements(sendResult.envelope.needsInput);
-        setPanelElements(uiElements);
-        setActionPolicies(buildActionPoliciesFromEnvelope(sendResult.envelope));
+      const assistantContent = getStreamingContent() || sendResult.message;
+      if (assistantContent) {
+        finalizeAssistantTurn(resolvedConversationId, assistantContent);
       } else {
-        const assistantContent = getStreamingContent() || sendResult.message;
-        if (assistantContent) {
-          const parsedResponse = extractAssistantResponseContent(assistantContent);
-          finalizeAssistantTurn(resolvedConversationId, parsedResponse.displayText);
-          setPanelElements(parsedResponse.panelSpec?.elements ?? []);
-          setActionPolicies({});
-        } else {
-          appendAssistantMessage(resolvedConversationId, tr('chat.errorEmptyResponse'));
-          stopStreaming();
-        }
+        appendAssistantMessage(resolvedConversationId, tr('chat.errorEmptyResponse'));
+        stopStreaming();
       }
 
       setPrompt('');
@@ -199,57 +187,6 @@ export const AssistantSidebar: React.FC = () => {
   };
 
   const handleAssistantAction = (action: string, payload?: Record<string, unknown>) => {
-    if (action === 'submitNeedsInput' && conversationId) {
-      const values = payload?.values;
-      if (!values || typeof values !== 'object') {
-        setActionError(tr('assistantSidebar.error.actionFailed'));
-        return;
-      }
-
-      const clarificationMessage = `needs_input_response: ${JSON.stringify(values)}`;
-
-      beginUserTurn(conversationId, clarificationMessage);
-
-      void sendChatMessage({
-        conversationId,
-        message: clarificationMessage,
-        metadata: { surface: 'sidebar' },
-      }).then((sendResult) => {
-        if (!sendResult.success) {
-          appendAssistantMessage(
-            conversationId,
-            tr('chat.errorPrefix', { error: sendResult.error || tr('chat.errorNoResponse') }),
-          );
-          stopStreaming();
-          return;
-        }
-
-        if (sendResult.envelope) {
-          finalizeAssistantTurn(conversationId, sendResult.envelope.assistantText);
-          const uiElements = Array.isArray(sendResult.envelope.ui?.elements)
-            ? (sendResult.envelope.ui?.elements as AssistantPanelElement[])
-            : toClarificationElements(sendResult.envelope.needsInput);
-          setPanelElements(uiElements);
-          setActionPolicies(buildActionPoliciesFromEnvelope(sendResult.envelope));
-          return;
-        }
-
-        const assistantContent = getStreamingContent() || sendResult.message;
-        if (assistantContent) {
-          const parsedResponse = extractAssistantResponseContent(assistantContent);
-          finalizeAssistantTurn(conversationId, parsedResponse.displayText);
-          setPanelElements(parsedResponse.panelSpec?.elements ?? []);
-          setActionPolicies({});
-        }
-      }).catch((error) => {
-        console.error('Failed to submit assistant clarification:', error);
-        appendAssistantMessage(conversationId, tr('chat.errorGeneric'));
-        stopStreaming();
-      });
-
-      return;
-    }
-
     const result = dispatchAssistantAction(
       {
         action,
@@ -333,9 +270,15 @@ export const AssistantSidebar: React.FC = () => {
         </div>
       )}
 
-      {panelElements.length > 0 && (
-        <AssistantPanelControls elements={panelElements} onAction={handleAssistantAction} actionPolicies={actionPolicies} />
-      )}
+      {surfaces.map((surface) => (
+        <A2UIRenderer
+          key={surface.surfaceId}
+          surfaceId={surface.surfaceId}
+          tree={surface.tree}
+          onAction={dispatchAction}
+          onDataChange={updateLocalData}
+        />
+      ))}
     </div>
   );
 };

@@ -4,12 +4,10 @@ import { useChatMessageSender } from '../../navigation/useChatMessageSender';
 import { useChatSurfaceState } from '../../navigation/useChatSurfaceState';
 import { getChatSurfaceMode } from '../../navigation/chatSurfaceMode';
 import { dispatchAssistantAction } from '../../navigation/assistantActionDispatcher';
-import { extractAssistantResponseContent, type AssistantPanelElement } from '../../navigation/assistantPanelSpec';
-import { toClarificationElements } from '../../navigation/protocolNeedsInput';
-import { buildActionPoliciesFromEnvelope } from '../../navigation/protocolActionPolicies';
+import { useA2UISurface } from '../../a2ui/useA2UISurface';
+import { A2UIRenderer } from '../../a2ui/A2UIRenderer';
 import { useAppStore } from '../../store';
 import { ChatTranscript } from '../ChatSurface';
-import { AssistantPanelControls } from '../AssistantPanelControls';
 import { useI18n } from '../../i18n';
 import '../../styles/chatSurface.css';
 import './ChatPanel.css';
@@ -29,8 +27,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [apiKeyError, setApiKeyError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
-  const [panelElements, setPanelElements] = useState<AssistantPanelElement[]>([]);
-  const [actionPolicies, setActionPolicies] = useState<Record<string, 'silent' | 'confirm' | 'danger'>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -62,6 +58,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     abortStreaming,
     getStreamingContent,
   } = useChatSurfaceState();
+
+  // A2UI surface rendering
+  const { surfaces, dispatchAction, updateLocalData } = useA2UISurface({ conversationId });
 
   // Scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
@@ -193,37 +192,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       // Fall back to the backend result message if streaming didn't capture the content
       const assistantContent = getStreamingContent() || (result.success ? result.message : '');
 
-      if (result.envelope) {
-        finalizeAssistantTurn(conversationId, result.envelope.assistantText);
-        const uiElements = Array.isArray(result.envelope.ui?.elements)
-          ? (result.envelope.ui?.elements as AssistantPanelElement[])
-          : toClarificationElements(result.envelope.needsInput);
-        setPanelElements(uiElements);
-        setActionPolicies(buildActionPoliciesFromEnvelope(result.envelope));
-      } else if (assistantContent) {
-        const parsedResponse = extractAssistantResponseContent(assistantContent);
-        finalizeAssistantTurn(conversationId, parsedResponse.displayText);
-        setPanelElements(parsedResponse.panelSpec?.elements ?? []);
-        setActionPolicies({});
+      if (assistantContent) {
+        finalizeAssistantTurn(conversationId, assistantContent);
       } else if (!result.success) {
-        // Backend returned an error (API failure, model unavailable, etc.)
         appendAssistantMessage(conversationId, tr('chat.errorPrefix', { error: result.error || tr('chat.errorNoResponse') }));
         stopStreaming();
-        setPanelElements([]);
-        setActionPolicies({});
       } else {
-        // No content from streaming AND no error, but also no success message
-        // This can happen with some models that don't return content properly
         appendAssistantMessage(conversationId, tr('chat.errorEmptyResponse'));
         stopStreaming();
-        setPanelElements([]);
-        setActionPolicies({});
       }
     } catch (error) {
       console.error('Failed to send message:', error);
       appendAssistantMessage(conversationId, tr('chat.errorGeneric'));
       stopStreaming();
-      setPanelElements([]);
     } finally {
       if (isStreaming) {
         stopStreaming();
@@ -239,59 +220,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     }
   };
 
-  const handleNeedsInputSubmit = async (payload?: Record<string, unknown>) => {
-    const values = payload?.values;
-    if (!values || typeof values !== 'object') {
-      setActionError(tr('assistantSidebar.error.actionFailed'));
-      return;
-    }
-
-    const clarificationMessage = `needs_input_response: ${JSON.stringify(values)}`;
-    beginUserTurn(conversationId, clarificationMessage);
-
-    try {
-      const result = await sendChatMessage({
-        conversationId,
-        message: clarificationMessage,
-        metadata: { surface: 'tab' },
-      });
-
-      if (!result.success) {
-        appendAssistantMessage(conversationId, tr('chat.errorPrefix', { error: result.error || tr('chat.errorNoResponse') }));
-        stopStreaming();
-        return;
-      }
-
-      if (result.envelope) {
-        finalizeAssistantTurn(conversationId, result.envelope.assistantText);
-        const uiElements = Array.isArray(result.envelope.ui?.elements)
-          ? (result.envelope.ui?.elements as AssistantPanelElement[])
-          : toClarificationElements(result.envelope.needsInput);
-        setPanelElements(uiElements);
-        setActionPolicies(buildActionPoliciesFromEnvelope(result.envelope));
-        return;
-      }
-
-      const assistantContent = getStreamingContent() || result.message;
-      if (assistantContent) {
-        const parsedResponse = extractAssistantResponseContent(assistantContent);
-        finalizeAssistantTurn(conversationId, parsedResponse.displayText);
-        setPanelElements(parsedResponse.panelSpec?.elements ?? []);
-        setActionPolicies({});
-      }
-    } catch (error) {
-      console.error('Failed to submit clarification:', error);
-      appendAssistantMessage(conversationId, tr('chat.errorGeneric'));
-      stopStreaming();
-    }
-  };
-
   const handleAssistantAction = (action: string, payload?: Record<string, unknown>) => {
-    if (action === 'submitNeedsInput') {
-      void handleNeedsInputSubmit(payload);
-      return;
-    }
-
     const result = dispatchAssistantAction(
       {
         action,
@@ -441,9 +370,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           endRef={messagesEndRef}
         />
 
-        {panelElements.length > 0 && (
-          <AssistantPanelControls elements={panelElements} onAction={handleAssistantAction} actionPolicies={actionPolicies} />
-        )}
+        {surfaces.map((surface) => (
+          <A2UIRenderer
+            key={surface.surfaceId}
+            surfaceId={surface.surfaceId}
+            tree={surface.tree}
+            onAction={dispatchAction}
+            onDataChange={updateLocalData}
+          />
+        ))}
 
         {actionError && <p className="chat-surface-error">{actionError}</p>}
       </div>

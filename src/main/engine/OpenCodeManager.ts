@@ -16,13 +16,8 @@ import { ChatEngine } from './ChatEngine';
 import { PostEngine } from './PostEngine';
 import { MediaEngine } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
-import { ProtocolResponseBuilder } from '../agentic/protocol/responseBuilder';
-import { CapabilityRegistryService } from '../agentic/capabilities/registry';
-import { validateProtocolRequestEnvelope, validateProtocolResponseEnvelope } from '../agentic/protocol/validator';
-import type { ProtocolResponseEnvelope } from '../agentic/protocol/types';
-import { AgentTurnStateMachine, type AgentTurnState } from '../agentic/workflow/turnStateMachine';
-import { WorkflowCheckpointStore } from '../agentic/workflow/checkpointStore';
-import { getProtocolTelemetryService } from '../agentic/observability/protocolTelemetry';
+import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
+import type { A2UIServerMessage } from '../a2ui/types';
 
 // OpenCode Zen API endpoints
 const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
@@ -79,15 +74,12 @@ export interface SendMessageOptions {
   onDelta?: (delta: string) => void;
   onToolCall?: (toolCall: { name: string; args: unknown }) => void;
   onToolResult?: (result: { name: string; result: unknown }) => void;
+  onA2UIMessage?: (message: A2UIServerMessage) => void;
 }
 
 export interface SendMessageResult {
   success: boolean;
   message?: string;
-  envelope?: ProtocolResponseEnvelope;
-  protocolVersion?: '2.0';
-  traceId?: string;
-  warnings?: string[];
   error?: string;
   toolCalls?: Array<{ name: string; args: unknown }>;
 }
@@ -142,21 +134,8 @@ export class OpenCodeManager {
   private postEngine: PostEngine;
   private mediaEngine: MediaEngine;
   private getMainWindow: () => BrowserWindow | null;
-  private protocolResponseBuilder: ProtocolResponseBuilder;
-  private capabilityRegistry: CapabilityRegistryService;
-  private turnStateMachine: AgentTurnStateMachine;
-  private workflowCheckpointStore: WorkflowCheckpointStore;
   private apiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
-
-  private readonly protocolBoundaryInstructions = `Protocol response requirements (strict):
-- Return a single JSON object that matches this exact envelope schema:
-  {"protocolVersion":"2.0","assistantText":"string","ui":{"specVersion":"1","elements":[]}?,"intent":"analyze|ask_input|propose_action|execute_action|summarize","needsInput":{"required":boolean,"fields":[]},"actions":[],"confidence":number,"traceId":"string"}
-- Do not return any top-level shape other than this envelope.
-- Do not use legacy top-level keys like title/widgets/tabs/content/data/widgets.
-- ui, if present, must use specVersion "1" and canonical element structures only.
-- DO NOT output markdown code blocks containing JSON. The entire response must be the JSON envelope.
-- If uncertain, return an envelope with assistantText and empty actions/ui rather than alternative JSON formats.`;
 
   constructor(
     chatEngine: ChatEngine,
@@ -168,13 +147,6 @@ export class OpenCodeManager {
     this.postEngine = postEngine;
     this.mediaEngine = mediaEngine;
     this.getMainWindow = getMainWindow;
-    this.protocolResponseBuilder = new ProtocolResponseBuilder();
-    this.capabilityRegistry = new CapabilityRegistryService();
-    this.turnStateMachine = new AgentTurnStateMachine();
-    this.workflowCheckpointStore = new WorkflowCheckpointStore({
-      getSetting: async (key: string) => this.chatEngine.getSetting(key),
-      setSetting: async (key: string, value: string) => this.chatEngine.setSetting(key, value),
-    });
   }
 
   /**
@@ -271,7 +243,7 @@ export class OpenCodeManager {
     userMessage: string,
     options: SendMessageOptions = {}
   ): Promise<SendMessageResult> {
-    const { metadata, onDelta, onToolCall, onToolResult } = options;
+    const { metadata, onDelta, onToolCall, onToolResult, onA2UIMessage } = options;
 
     try {
       const readyCheck = await this.checkReady();
@@ -303,51 +275,29 @@ export class OpenCodeManager {
       // Get system prompt
       const systemMessage = conversation.messages.find(m => m.role === 'system');
       const systemPrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
-      const protocolSystemPrompt = `${systemPrompt}\n\n${this.protocolBoundaryInstructions}`;
 
       // Build message history from DB (excluding system messages)
       const dbMessages = conversation.messages.filter(m => m.role !== 'system');
-      const surface = metadata?.surface || 'tab';
-      const capabilities = this.capabilityRegistry.getSnapshot({ surface });
-      const requestEnvelope = {
-        protocolVersion: '2.0' as const,
-        surface,
-        messages: dbMessages
-          .filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'system' || message.role === 'tool')
-          .map((message) => ({
-            role: message.role,
-            content: message.content || '',
-          })),
-        context: {
-          conversationId,
-          modelId,
-        },
-        capabilities,
-      };
 
-      const requestValidation = validateProtocolRequestEnvelope(requestEnvelope);
-      if (!requestValidation.ok) {
-        return {
-          success: false,
-          error: requestValidation.error?.message || 'Invalid protocol request envelope',
-        };
-      }
-
-      const surfaceHint = metadata?.surface
-        ? `\n\n[Client UI surface: ${metadata.surface}. Render response UI for this surface while keeping content functionally equivalent.]`
-        : '';
-      const capabilityHint = `\n\n[Protocol request envelope]\n${JSON.stringify(requestEnvelope, null, 2)}`;
-      const userMessageForModel = `${userMessage}${surfaceHint}${capabilityHint}`;
       // Add the new user message
       dbMessages.push({
         conversationId,
         role: 'user',
-        content: userMessageForModel,
+        content: userMessage,
         createdAt: new Date(),
       });
 
       let fullResponse = '';
       const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
+
+      // Wrap onA2UIMessage emission for render tools
+      const emitA2UIMessages = (messages: A2UIServerMessage[]) => {
+        if (onA2UIMessage) {
+          for (const msg of messages) {
+            onA2UIMessage(msg);
+          }
+        }
+      };
 
       const requestProvider = async (
         prompt: string,
@@ -360,6 +310,8 @@ export class OpenCodeManager {
             messages,
             abortController.signal,
             { onDelta, onToolCall, onToolResult },
+            conversationId,
+            emitA2UIMessages,
           );
         }
 
@@ -369,12 +321,14 @@ export class OpenCodeManager {
           messages,
           abortController.signal,
           { onDelta, onToolCall, onToolResult },
+          conversationId,
+          emitA2UIMessages,
         );
       };
 
       try {
         console.log('[OpenCodeManager] Sending to provider:', provider, 'model:', modelId);
-        const firstResult = await requestProvider(protocolSystemPrompt, dbMessages);
+        const firstResult = await requestProvider(systemPrompt, dbMessages);
         fullResponse = firstResult.content;
         toolCallsCollected.push(...firstResult.toolCalls);
         console.log('[OpenCodeManager] fullResponse length:', fullResponse.length);
@@ -384,92 +338,16 @@ export class OpenCodeManager {
         if (!isAborted) {
           throw error;
         }
-        // On abort, keep whatever was streamed so far (already in fullResponse or empty)
       } finally {
         this.abortControllers.delete(conversationId);
       }
 
-      const isCanonicalProtocolEnvelope = (() => {
-        try {
-          const parsed = JSON.parse(fullResponse);
-          const validated = validateProtocolResponseEnvelope(parsed);
-          return validated.ok;
-        } catch {
-          return false;
-        }
-      })();
-
-      let protocolResult = this.protocolResponseBuilder.build({
-        rawAssistantOutput: fullResponse,
-        surface,
-        capabilities,
-      });
-
-      if (!isCanonicalProtocolEnvelope && fullResponse.trim().length > 0 && !abortController.signal.aborted) {
-        const retryReason = protocolResult.validationError?.message || 'previous output was not a canonical protocol envelope';
-        const retryPrompt = `Your previous output failed protocol validation: ${retryReason}.\nReturn ONLY one valid protocol envelope JSON object and nothing else.`;
-        const retryMessages = [
-          ...dbMessages,
-          {
-            conversationId,
-            role: 'assistant',
-            content: fullResponse,
-            createdAt: new Date(),
-          },
-          {
-            conversationId,
-            role: 'user',
-            content: retryPrompt,
-            createdAt: new Date(),
-          },
-        ];
-
-        try {
-          const retryResult = await requestProvider(protocolSystemPrompt, retryMessages);
-          fullResponse = retryResult.content;
-          toolCallsCollected.push(...retryResult.toolCalls);
-          protocolResult = this.protocolResponseBuilder.build({
-            rawAssistantOutput: fullResponse,
-            surface,
-            capabilities,
-          });
-        } catch (error) {
-          console.error('[OpenCodeManager] Protocol retry failed:', (error as Error).message);
-        }
-      }
-
-      const previousCheckpoint = await this.workflowCheckpointStore.load(conversationId);
-      const previousState: AgentTurnState = previousCheckpoint?.state || 'planning';
-      const nextState = this.turnStateMachine.transition({
-        previousState,
-        envelope: {
-          intent: protocolResult.envelope.intent,
-          needsInput: protocolResult.envelope.needsInput,
-        },
-      });
-
-      await this.workflowCheckpointStore.save({
-        conversationId,
-        state: nextState,
-        pendingFields: protocolResult.envelope.needsInput.fields.map((field) => field.key),
-        lastTraceId: protocolResult.envelope.traceId,
-        updatedAt: new Date().toISOString(),
-      });
-
-      const blockedActionWarnings = protocolResult.warnings.filter((warning) => warning.includes('Blocked unsupported action'));
-      getProtocolTelemetryService().recordTurn({
-        validEnvelope: !protocolResult.validationError,
-        repairAttempted: protocolResult.repairAttempted,
-        fallbackUsed: Boolean(protocolResult.validationError),
-        blockedActions: blockedActionWarnings.length,
-      });
-
-      // Save normalized assistant response to history so transcript does not render raw protocol JSON.
+      // Save assistant response to history
       if (fullResponse) {
         await this.chatEngine.addMessage({
           conversationId,
           role: 'assistant',
-          content: protocolResult.envelope.assistantText,
+          content: fullResponse,
           toolCalls: toolCallsCollected.length > 0 ? JSON.stringify(toolCallsCollected) : undefined,
           createdAt: new Date(),
         });
@@ -485,11 +363,7 @@ export class OpenCodeManager {
 
       return {
         success: true,
-        message: protocolResult.envelope.assistantText,
-        envelope: protocolResult.envelope,
-        protocolVersion: protocolResult.envelope.protocolVersion,
-        traceId: protocolResult.traceId,
-        warnings: protocolResult.warnings,
+        message: fullResponse,
         toolCalls: toolCallsCollected.length > 0 ? toolCallsCollected : undefined,
       };
     } catch (error) {
@@ -510,7 +384,9 @@ export class OpenCodeManager {
       onDelta?: (delta: string) => void;
       onToolCall?: (toolCall: { name: string; args: unknown }) => void;
       onToolResult?: (result: { name: string; result: unknown }) => void;
-    }
+    },
+    conversationId: string,
+    emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     const tools = this.getToolDefinitions();
     const allToolCalls: Array<{ name: string; args: unknown }> = [];
@@ -601,6 +477,29 @@ export class OpenCodeManager {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
         }
 
+        // Check if this is a render tool — generate A2UI messages instead of executing
+        if (isRenderTool(toolName)) {
+          const a2uiMessages = generateFromToolCall(
+            conversationId,
+            toolName,
+            toolArgs as Record<string, unknown>,
+          );
+          if (a2uiMessages) {
+            emitA2UIMessages(a2uiMessages);
+          }
+
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: { success: true, rendered: true } });
+          }
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: JSON.stringify({ success: true, rendered: true }),
+          });
+          continue;
+        }
+
         // Execute the tool
         const result = await this.executeTool(toolName, toolArgs as Record<string, unknown>);
 
@@ -673,7 +572,9 @@ export class OpenCodeManager {
       onDelta?: (delta: string) => void;
       onToolCall?: (toolCall: { name: string; args: unknown }) => void;
       onToolResult?: (result: { name: string; result: unknown }) => void;
-    }
+    },
+    conversationId: string,
+    emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     // Build OpenAI-format messages
     const messages: Array<Record<string, unknown>> = [
@@ -785,6 +686,25 @@ export class OpenCodeManager {
         allToolCalls.push({ name: toolName, args: toolArgs });
         if (callbacks.onToolCall) {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
+        }
+
+        // Check if this is a render tool
+        if (isRenderTool(toolName)) {
+          const a2uiMessages = generateFromToolCall(conversationId, toolName, toolArgs);
+          if (a2uiMessages) {
+            emitA2UIMessages(a2uiMessages);
+          }
+
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: { success: true, rendered: true } });
+          }
+
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify({ success: true, rendered: true }),
+            tool_call_id: toolCall.id,
+          });
+          continue;
         }
 
         const result = await this.executeTool(toolName, toolArgs);
@@ -976,6 +896,156 @@ export class OpenCodeManager {
             mediaId: { type: 'string', description: 'The ID of the media file to find linked posts for' },
           },
           required: ['mediaId'],
+        },
+      },
+      // ── A2UI Render Tools ──
+      {
+        name: 'render_chart',
+        description: 'Render an interactive chart in the chat UI. Use this when the user asks for a chart, graph, or data visualization. The chart will be displayed as a rich UI element in the conversation.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            chartType: { type: 'string', enum: ['bar', 'line', 'pie'], description: 'The type of chart to render' },
+            title: { type: 'string', description: 'Optional chart title' },
+            series: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', description: 'Data point label' },
+                  value: { type: 'number', description: 'Data point value' },
+                },
+                required: ['label', 'value'],
+              },
+              description: 'Array of data points with label and value',
+            },
+          },
+          required: ['chartType', 'series'],
+        },
+      },
+      {
+        name: 'render_table',
+        description: 'Render a data table in the chat UI. Use this when the user asks for tabular data, comparisons, or structured information. The table will be displayed as a rich UI element.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Optional table title' },
+            columns: { type: 'array', items: { type: 'string' }, description: 'Column header names' },
+            rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, description: 'Table rows, each row is an array of cell values' },
+          },
+          required: ['columns', 'rows'],
+        },
+      },
+      {
+        name: 'render_form',
+        description: 'Render an interactive form in the chat UI. Use this when you need to collect structured input from the user, such as metadata updates, configuration, or multi-field data entry.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Optional form title' },
+            fields: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string', description: 'Field identifier' },
+                  label: { type: 'string', description: 'Field label shown to user' },
+                  inputType: { type: 'string', enum: ['text', 'textarea', 'select', 'checkbox', 'date', 'number'], description: 'Type of input control' },
+                  placeholder: { type: 'string', description: 'Placeholder text' },
+                  defaultValue: { description: 'Default value for the field' },
+                  options: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, value: { type: 'string' } }, required: ['label', 'value'] }, description: 'Options for select fields' },
+                  required: { type: 'boolean', description: 'Whether the field is required' },
+                },
+                required: ['key', 'label', 'inputType'],
+              },
+              description: 'Form fields to display',
+            },
+            submitLabel: { type: 'string', description: 'Label for the submit button' },
+            submitAction: { type: 'string', description: 'Action to dispatch on submit' },
+          },
+          required: ['fields', 'submitLabel'],
+        },
+      },
+      {
+        name: 'render_card',
+        description: 'Render an information card in the chat UI. Use this for displaying a summary, highlight, or actionable item with a title, body, and optional action buttons.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Card title' },
+            body: { type: 'string', description: 'Card body text (supports markdown)' },
+            subtitle: { type: 'string', description: 'Optional subtitle' },
+            actions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', description: 'Button label' },
+                  action: { type: 'string', description: 'Action name to dispatch (e.g., openPost, openMedia)' },
+                  payload: { type: 'object', description: 'Optional action payload' },
+                },
+                required: ['label', 'action'],
+              },
+              description: 'Optional action buttons on the card',
+            },
+          },
+          required: ['title', 'body'],
+        },
+      },
+      {
+        name: 'render_metric',
+        description: 'Render a single metric/KPI display in the chat UI. Use this for showing a single important value with a label, such as post counts, statistics, or status indicators.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Metric label' },
+            value: { type: 'string', description: 'Metric value (displayed prominently)' },
+          },
+          required: ['label', 'value'],
+        },
+      },
+      {
+        name: 'render_list',
+        description: 'Render a list of items in the chat UI. Use this for displaying bullet-point style lists, checklists, or simple enumerations.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Optional list title' },
+            items: { type: 'array', items: { type: 'string' }, description: 'List items' },
+          },
+          required: ['items'],
+        },
+      },
+      {
+        name: 'render_tabs',
+        description: 'Render a tabbed interface in the chat UI. Use this when you want to organize information into multiple tabs that the user can switch between.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            tabs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', description: 'Tab label' },
+                  content: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['text', 'metric', 'list'], description: 'Content type' },
+                      },
+                      required: ['type'],
+                    },
+                    description: 'Content items within the tab',
+                  },
+                },
+                required: ['label', 'content'],
+              },
+              description: 'Array of tabs',
+            },
+          },
+          required: ['tabs'],
         },
       },
     ];
