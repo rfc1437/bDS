@@ -8,6 +8,8 @@
   font-size: 12px;
   padding: 0 8px;
   user-select: none;
+  overflow: hidden;
+  flex-wrap: nowrap;
 }
 
 .status-bar-left,
@@ -15,6 +17,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.status-bar-left {
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .status-bar-item {
@@ -23,6 +32,16 @@
   gap: 6px;
   padding: 0 8px;
   height: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status-bar-item .task-message-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
 }
 
 .status-bar-item:hover {
