@@ -24,42 +24,52 @@ const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
 const ZEN_OPENAI_URL = 'https://opencode.ai/zen/v1/chat/completions';
 const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 
-// Full model catalog from OpenCode Zen (fallback when API unavailable)
-const AVAILABLE_MODELS: ModelInfo[] = [
+// Known model display names: maps model IDs to polished names and serves as offline fallback
+const MODEL_DISPLAY_NAMES: Record<string, string> = {
   // Anthropic Claude
-  { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic' },
-  { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
-  { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'anthropic' },
-  { id: 'claude-3-5-haiku', name: 'Claude Haiku 3.5', provider: 'anthropic' },
-  { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'anthropic' },
-  { id: 'claude-opus-4-1', name: 'Claude Opus 4.1', provider: 'anthropic' },
+  'claude-opus-4-6': 'Claude Opus 4.6',
+  'claude-opus-4-5': 'Claude Opus 4.5',
+  'claude-opus-4-1': 'Claude Opus 4.1',
+  'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+  'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+  'claude-sonnet-4': 'Claude Sonnet 4',
+  'claude-haiku-4-5': 'Claude Haiku 4.5',
+  'claude-3-5-haiku': 'Claude 3.5 Haiku',
   // OpenAI GPT
-  { id: 'gpt-5.2', name: 'GPT 5.2', provider: 'openai' },
-  { id: 'gpt-5.2-codex', name: 'GPT 5.2 Codex', provider: 'openai' },
-  { id: 'gpt-5.1', name: 'GPT 5.1', provider: 'openai' },
-  { id: 'gpt-5.1-codex', name: 'GPT 5.1 Codex', provider: 'openai' },
-  { id: 'gpt-5.1-codex-max', name: 'GPT 5.1 Codex Max', provider: 'openai' },
-  { id: 'gpt-5.1-codex-mini', name: 'GPT 5.1 Codex Mini', provider: 'openai' },
-  { id: 'gpt-5', name: 'GPT 5', provider: 'openai' },
-  { id: 'gpt-5-codex', name: 'GPT 5 Codex', provider: 'openai' },
-  { id: 'gpt-5-nano', name: 'GPT 5 Nano (Free)', provider: 'openai' },
+  'gpt-5.3-codex': 'GPT 5.3 Codex',
+  'gpt-5.2': 'GPT 5.2',
+  'gpt-5.2-codex': 'GPT 5.2 Codex',
+  'gpt-5.1': 'GPT 5.1',
+  'gpt-5.1-codex': 'GPT 5.1 Codex',
+  'gpt-5.1-codex-max': 'GPT 5.1 Codex Max',
+  'gpt-5.1-codex-mini': 'GPT 5.1 Codex Mini',
+  'gpt-5': 'GPT 5',
+  'gpt-5-codex': 'GPT 5 Codex',
+  'gpt-5-nano': 'GPT 5 Nano',
   // Google Gemini
-  { id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'google' },
-  { id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google' },
+  'gemini-3.1-pro': 'Gemini 3.1 Pro',
+  'gemini-3-pro': 'Gemini 3 Pro',
+  'gemini-3-flash': 'Gemini 3 Flash',
   // Other providers
-  { id: 'qwen3-coder', name: 'Qwen3 Coder 480B', provider: 'other' },
-  { id: 'minimax-m2.1', name: 'MiniMax M2.1', provider: 'other' },
-  { id: 'minimax-m2.1-free', name: 'MiniMax M2.1 (Free)', provider: 'other' },
-  { id: 'glm-4.7', name: 'GLM 4.7', provider: 'other' },
-  { id: 'glm-4.7-free', name: 'GLM 4.7 (Free)', provider: 'other' },
-  { id: 'glm-4.6', name: 'GLM 4.6', provider: 'other' },
-  { id: 'kimi-k2.5', name: 'Kimi K2.5', provider: 'other' },
-  { id: 'kimi-k2.5-free', name: 'Kimi K2.5 (Free)', provider: 'other' },
-  { id: 'kimi-k2', name: 'Kimi K2', provider: 'other' },
-  { id: 'kimi-k2-thinking', name: 'Kimi K2 Thinking', provider: 'other' },
-  { id: 'big-pickle', name: 'Big Pickle (Free)', provider: 'other' },
-  { id: 'trinity-large-preview-free', name: 'Trinity Large Preview (Free)', provider: 'other' },
-];
+  'glm-5': 'GLM 5',
+  'glm-5-free': 'GLM 5 Free',
+  'glm-4.7': 'GLM 4.7',
+  'glm-4.6': 'GLM 4.6',
+  'qwen3-coder': 'Qwen3 Coder',
+  'minimax-m2.5': 'MiniMax M2.5',
+  'minimax-m2.5-free': 'MiniMax M2.5 Free',
+  'minimax-m2.1': 'MiniMax M2.1',
+  'minimax-m2.1-free': 'MiniMax M2.1 Free',
+  'kimi-k2.5': 'Kimi K2.5',
+  'kimi-k2.5-free': 'Kimi K2.5 Free',
+  'kimi-k2': 'Kimi K2',
+  'kimi-k2-thinking': 'Kimi K2 Thinking',
+  'big-pickle': 'Big Pickle',
+  'trinity-large-preview-free': 'Trinity Large Preview Free',
+};
+
+// Uppercase prefixes that should not be title-cased
+const UPPERCASE_PREFIXES = ['gpt', 'glm'];
 
 export interface ModelInfo {
   id: string;
@@ -148,6 +158,9 @@ export class OpenCodeManager {
   private getMainWindow: () => BrowserWindow | null;
   private apiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
+  private cachedModels: ModelInfo[] | null = null;
+  private cachedModelsAt: number = 0;
+  private static MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   private conversationUsage: Map<string, {
     inputTokens: number;
     outputTokens: number;
@@ -212,7 +225,7 @@ export class OpenCodeManager {
           headers,
         });
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          return { isValid: true, models: AVAILABLE_MODELS };
+          return { isValid: true, models: Object.entries(MODEL_DISPLAY_NAMES).map(([id, name]) => ({ id, name, provider: this.detectProvider(id) })) };
         }
       } catch {
         // Try next auth method
@@ -223,10 +236,15 @@ export class OpenCodeManager {
   }
 
   /**
-   * Get available models
+   * Get available models (cached with 5-minute TTL)
    */
   async getAvailableModels(): Promise<ModelInfo[]> {
-    // Try fetching from API, fall back to hardcoded list
+    // Return cached models if within TTL
+    if (this.cachedModels && Date.now() - this.cachedModelsAt < OpenCodeManager.MODEL_CACHE_TTL) {
+      return this.cachedModels;
+    }
+
+    // Try fetching from API
     if (this.apiKey) {
       try {
         const response = await this.httpRequest(ZEN_MODELS_URL, {
@@ -239,18 +257,28 @@ export class OpenCodeManager {
         if (response.statusCode === 200) {
           const data = JSON.parse(response.body);
           if (data.data && Array.isArray(data.data)) {
-            return data.data.map((m: { id: string; name?: string }) => ({
+            const models = data.data.map((m: { id: string }) => ({
               id: m.id,
-              name: m.name || this.formatModelName(m.id),
+              name: this.formatModelName(m.id),
               provider: this.detectProvider(m.id),
             }));
+            this.cachedModels = models;
+            this.cachedModelsAt = Date.now();
+            return models;
           }
         }
       } catch {
-        // Fall through to hardcoded
+        // Fall through to fallback
       }
     }
-    return AVAILABLE_MODELS;
+
+    // Build fallback from display name map
+    const fallback = Object.entries(MODEL_DISPLAY_NAMES).map(([id, name]) => ({
+      id,
+      name,
+      provider: this.detectProvider(id),
+    }));
+    return fallback;
   }
 
   /**
@@ -1823,9 +1851,21 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
   }
 
   private formatModelName(modelId: string): string {
-    return modelId
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    // Check display name map first
+    if (MODEL_DISPLAY_NAMES[modelId]) {
+      return MODEL_DISPLAY_NAMES[modelId];
+    }
+    // Auto-format: split on hyphens, handle uppercase prefixes and version dots
+    const words = modelId.split('-');
+    return words
+      .map((word, index) => {
+        // First word: check for uppercase prefixes
+        if (index === 0 && UPPERCASE_PREFIXES.includes(word.toLowerCase())) {
+          return word.toUpperCase();
+        }
+        // Capitalize first letter
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
       .join(' ');
   }
 
