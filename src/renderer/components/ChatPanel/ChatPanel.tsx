@@ -66,6 +66,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     dismissSurface,
     dispatchAction,
     updateLocalData,
+    replayFromMessages,
   } = useA2UISurface({ conversationId });
 
   // Current turn index for associating streaming surfaces
@@ -102,12 +103,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       ]);
 
       if (conv) setConversation(conv);
-      if (msgs) setMessages(msgs);
+      if (msgs) {
+        setMessages(msgs);
+        replayFromMessages(msgs);
+      }
       if (modelsResult?.models) setAvailableModels(modelsResult.models);
     } catch (error) {
       console.error('Failed to load chat data:', error);
     }
-  }, [conversationId]);
+  }, [conversationId, replayFromMessages]);
 
   useEffect(() => {
     checkReady();

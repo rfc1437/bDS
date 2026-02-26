@@ -7,7 +7,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { A2UISurfaceManager } from './A2UISurfaceManager';
+import { replaySurfacesFromMessages } from './surfaceAssociation';
 import type { A2UIResolvedComponent, A2UIServerMessage, A2UIClientAction } from '../../main/a2ui/types';
+import type { ChatMessage } from '../../main/shared/electronApi';
 
 interface UseA2UISurfaceInput {
   conversationId: string | null;
@@ -37,6 +39,8 @@ interface UseA2UISurfaceResult {
   getDataModel: (surfaceId: string) => Record<string, unknown>;
   /** Clear all surfaces for the conversation */
   clearSurfaces: () => void;
+  /** Replay surfaces from persisted chat messages */
+  replayFromMessages: (messages: ChatMessage[]) => void;
 }
 
 export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult {
@@ -162,6 +166,17 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
     }
   }, [conversationId]);
 
+  const replayFromMessages = useCallback((msgs: ChatMessage[]) => {
+    if (!conversationId) return;
+    const manager = managerRef.current;
+    // Only replay if no surfaces exist yet (avoid duplicates on re-render)
+    if (manager.getSurfaceIds(conversationId).length > 0) return;
+    const a2uiMessages = replaySurfacesFromMessages(conversationId, msgs);
+    for (const msg of a2uiMessages) {
+      manager.processMessage(msg);
+    }
+  }, [conversationId]);
+
   return {
     surfaces,
     surfacesByTurn,
@@ -172,5 +187,6 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
     updateLocalData,
     getDataModel,
     clearSurfaces,
+    replayFromMessages,
   };
 }
