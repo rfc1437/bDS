@@ -60,8 +60,17 @@ interface ActiveRequest extends QueuedRequest {
   timeoutId: ReturnType<typeof setTimeout> | null;
 }
 
+export interface WorkerLike {
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  postMessage(message: unknown): void;
+  terminate(): void;
+  removeAllListeners(): void;
+}
+
+export type WorkerFactory = (workerPath: string) => WorkerLike;
+
 export class PythonMacroWorkerRuntime {
-  private worker: Worker | null = null;
+  private worker: WorkerLike | null = null;
   private workerReady = false;
   private workerStartPromise: Promise<void> | null = null;
   private workerStartResolve: (() => void) | null = null;
@@ -72,6 +81,11 @@ export class PythonMacroWorkerRuntime {
   private _macroCount = 0;
   private _errorCount = 0;
   private _timeoutCount = 0;
+  private readonly workerFactory: WorkerFactory;
+
+  constructor(workerFactory?: WorkerFactory) {
+    this.workerFactory = workerFactory ?? ((workerPath: string) => new Worker(workerPath) as unknown as WorkerLike);
+  }
 
   async renderMacro(params: MacroRenderParams): Promise<MacroRenderResult> {
     const requestId = this.nextRequestId();
@@ -165,7 +179,7 @@ export class PythonMacroWorkerRuntime {
     }
 
     const workerPath = path.join(__dirname, 'pythonMacro.worker.js');
-    this.worker = new Worker(workerPath);
+    this.worker = this.workerFactory(workerPath);
     this.workerReady = false;
 
     this.worker.on('message', (message: WorkerResponseMessage) => {
