@@ -219,7 +219,9 @@ export class PublishEngine extends EventEmitter {
     exclude?: string[],
   ): Promise<DirectoryUploadResult> {
     return new Promise((resolve, reject) => {
-      onProgress(0, 'Starting rsync...');
+      onProgress(0, `Starting rsync → ${dest}`);
+      let filesTransferred = 0;
+
       rsync(
         {
           src,
@@ -227,17 +229,31 @@ export class PublishEngine extends EventEmitter {
           ssh: true,
           recursive: true,
           times: true,
-          args: ['--update', '--compress'],
+          args: ['--update', '--compress', '--verbose'],
           exclude: exclude || [],
+          onStdout: (data: string | Buffer) => {
+            const lines = data.toString().split('\n');
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
+              if (trimmed.startsWith('sending ')) continue;
+              if (/\bbytes\b/.test(trimmed)) continue;
+              if (/total size is/.test(trimmed)) continue;
+              if (/speedup is/.test(trimmed)) continue;
+              filesTransferred++;
+              onProgress(
+                Math.min(filesTransferred, 99),
+                `${trimmed} → ${dest}`,
+              );
+            }
+          },
         },
-        (error, stdout, _stderr, _cmd) => {
+        (error, _stdout, _stderr, _cmd) => {
           if (error) {
             reject(error);
           } else {
-            const lines = stdout.trim().split('\n').filter((l: string) => l.length > 0);
-            const count = lines.length;
-            onProgress(100, `rsync complete: ${count} files transferred`);
-            resolve({ filesUploaded: count, filesSkipped: 0 });
+            onProgress(100, `rsync complete: ${filesTransferred} files transferred`);
+            resolve({ filesUploaded: filesTransferred, filesSkipped: 0 });
           }
         },
       );

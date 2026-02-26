@@ -348,6 +348,113 @@ describe('PublishEngine', () => {
     });
   });
 
+  // ── rsync live progress via onStdout ──────────────────────────────────
+
+  describe('rsync mode – live progress', () => {
+    const rsyncCredentials: PublishCredentials = { ...defaultCredentials, sshMode: 'rsync' };
+
+    it('should pass --verbose flag so rsync reports each file', async () => {
+      await engine.uploadHtml(rsyncCredentials, vi.fn());
+      const [options] = mockRsync.mock.calls[0];
+      expect(options.args).toContain('--verbose');
+    });
+
+    it('should provide onStdout callback to rsync options', async () => {
+      await engine.uploadHtml(rsyncCredentials, vi.fn());
+      const [options] = mockRsync.mock.calls[0];
+      expect(typeof options.onStdout).toBe('function');
+    });
+
+    it('should report filenames from rsync stdout as progress messages', async () => {
+      mockRsync.mockImplementation((options: any, callback: any) => {
+        if (options.onStdout) {
+          options.onStdout('sending incremental file list\n');
+          options.onStdout('index.html\n');
+          options.onStdout('about.html\n');
+          options.onStdout('css/style.css\n');
+        }
+        callback(null, 'index.html\nabout.html\ncss/style.css\n', '', 'rsync cmd');
+      });
+
+      const onProgress = vi.fn();
+      await engine.uploadHtml(rsyncCredentials, onProgress);
+
+      const messages = onProgress.mock.calls.map(([, m]: [number, string]) => m);
+      expect(messages.some(m => m.includes('index.html'))).toBe(true);
+      expect(messages.some(m => m.includes('about.html'))).toBe(true);
+      expect(messages.some(m => m.includes('css/style.css'))).toBe(true);
+    });
+
+    it('should show the remote destination in progress messages', async () => {
+      mockRsync.mockImplementation((options: any, callback: any) => {
+        if (options.onStdout) {
+          options.onStdout('index.html\n');
+        }
+        callback(null, 'index.html\n', '', 'rsync cmd');
+      });
+
+      const onProgress = vi.fn();
+      await engine.uploadHtml(rsyncCredentials, onProgress);
+
+      const messages = onProgress.mock.calls.map(([, m]: [number, string]) => m);
+      expect(messages.some(m => m.includes('example.com'))).toBe(true);
+    });
+
+    it('should skip non-file lines from rsync output', async () => {
+      mockRsync.mockImplementation((options: any, callback: any) => {
+        if (options.onStdout) {
+          options.onStdout('sending incremental file list\n');
+          options.onStdout('index.html\n');
+          options.onStdout('\n');
+          options.onStdout('sent 1234 bytes  received 56 bytes\n');
+          options.onStdout('total size is 9876  speedup is 2.50\n');
+        }
+        callback(null, 'index.html\n', '', 'rsync cmd');
+      });
+
+      const onProgress = vi.fn();
+      await engine.uploadHtml(rsyncCredentials, onProgress);
+
+      const messages = onProgress.mock.calls.map(([, m]: [number, string]) => m);
+      expect(messages.some(m => m.includes('sending incremental'))).toBe(false);
+      expect(messages.some(m => m.includes('sent 1234'))).toBe(false);
+      expect(messages.some(m => m.includes('total size'))).toBe(false);
+    });
+
+    it('should handle multi-line chunks from onStdout', async () => {
+      mockRsync.mockImplementation((options: any, callback: any) => {
+        if (options.onStdout) {
+          // rsync may send multiple files in a single stdout chunk
+          options.onStdout('file1.html\nfile2.html\nfile3.html\n');
+        }
+        callback(null, 'file1.html\nfile2.html\nfile3.html\n', '', 'rsync cmd');
+      });
+
+      const onProgress = vi.fn();
+      await engine.uploadHtml(rsyncCredentials, onProgress);
+
+      const messages = onProgress.mock.calls.map(([, m]: [number, string]) => m);
+      expect(messages.some(m => m.includes('file1.html'))).toBe(true);
+      expect(messages.some(m => m.includes('file2.html'))).toBe(true);
+      expect(messages.some(m => m.includes('file3.html'))).toBe(true);
+    });
+
+    it('should reach 100% on completion with file count', async () => {
+      mockRsync.mockImplementation((options: any, callback: any) => {
+        if (options.onStdout) {
+          options.onStdout('file1.html\nfile2.html\n');
+        }
+        callback(null, 'file1.html\nfile2.html\n', '', 'rsync cmd');
+      });
+
+      const onProgress = vi.fn();
+      await engine.uploadHtml(rsyncCredentials, onProgress);
+
+      const last = onProgress.mock.calls[onProgress.mock.calls.length - 1];
+      expect(last[0]).toBe(100);
+    });
+  });
+
   // ── per-file progress across methods ──────────────────────────────────
 
   describe('per-file progress', () => {
