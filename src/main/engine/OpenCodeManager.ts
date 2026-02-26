@@ -13,7 +13,7 @@ import http from 'http';
 import { URL } from 'url';
 import { BrowserWindow } from 'electron';
 import { ChatEngine } from './ChatEngine';
-import { PostEngine } from './PostEngine';
+import { PostEngine, type PostData } from './PostEngine';
 import { MediaEngine } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
 import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
@@ -274,7 +274,10 @@ export class OpenCodeManager {
 
       // Get system prompt
       const systemMessage = conversation.messages.find(m => m.role === 'system');
-      const systemPrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
+      const basePrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
+
+      // Inject live blog stats into system prompt for data volume awareness
+      const systemPrompt = await this.appendBlogStats(basePrompt);
 
       // Build message history from DB (excluding system messages)
       const dbMessages = conversation.messages.filter(m => m.role !== 'system');
@@ -733,7 +736,7 @@ export class OpenCodeManager {
     return [
       {
         name: 'search_posts',
-        description: 'Search blog posts using full-text search. Can filter by category or tags. Returns matching posts with their metadata.',
+        description: 'Search blog posts using full-text search. Can filter by category or tags. Returns paginated results with totalMatches count. Use offset to page through results when totalMatches > limit.',
         input_schema: {
           type: 'object',
           properties: {
@@ -741,6 +744,7 @@ export class OpenCodeManager {
             category: { type: 'string', description: 'Optional category to filter by (e.g., "article", "picture", "aside", "page")' },
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional array of tags to filter by' },
             limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' },
+            offset: { type: 'number', description: 'Offset for pagination (default: 0). Use with limit to page through results.' },
           },
           required: ['query'],
         },
@@ -758,7 +762,7 @@ export class OpenCodeManager {
       },
       {
         name: 'list_posts',
-        description: 'List blog posts with optional filtering by status, category, or tags.',
+        description: 'List blog posts with optional filtering by status, category, or tags. Returns paginated results. The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use offset/limit to page through all results. Always check total to understand the full data volume.',
         input_schema: {
           type: 'object',
           properties: {
@@ -783,12 +787,13 @@ export class OpenCodeManager {
       },
       {
         name: 'list_media',
-        description: 'List all media files in the current project with optional filtering.',
+        description: 'List media files in the current project with optional filtering. Returns paginated results with total count. Use offset/limit to page through all results.',
         input_schema: {
           type: 'object',
           properties: {
             mimeTypeFilter: { type: 'string', description: 'Filter by MIME type prefix (e.g., "image/")' },
             limit: { type: 'number', description: 'Maximum number of results (default: 20)' },
+            offset: { type: 'number', description: 'Offset for pagination (default: 0)' },
           },
         },
       },
@@ -833,6 +838,14 @@ export class OpenCodeManager {
       {
         name: 'list_categories',
         description: 'List all categories used across blog posts, with the count of posts in each category. Useful for understanding the category structure.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_blog_stats',
+        description: 'Get comprehensive blog statistics: total posts, drafts, published, archived counts, date range (oldest to newest post), posts per year breakdown, number of unique tags and categories, and total media count. Use this FIRST to understand the full scope of the blog before making queries. This is essential to understand the data volume.',
         input_schema: {
           type: 'object',
           properties: {},
@@ -1094,12 +1107,18 @@ export class OpenCodeManager {
             );
           }
 
+          const totalMatches = filteredPosts.length;
+          const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 10;
-          filteredPosts = filteredPosts.slice(0, limit);
+          filteredPosts = filteredPosts.slice(offset, offset + limit);
 
           return {
             success: true,
             count: filteredPosts.length,
+            totalMatches,
+            hasMore: offset + limit < totalMatches,
+            offset,
+            limit,
             posts: filteredPosts.map(p => ({
               id: p!.id, title: p!.title, slug: p!.slug,
               excerpt: p!.excerpt, status: p!.status,
@@ -1131,27 +1150,35 @@ export class OpenCodeManager {
           if (args.tags) filter.tags = args.tags as string[];
           if (args.category) filter.categories = [args.category as string];
 
-          let posts;
-          if (Object.keys(filter).length > 0) {
-            posts = await this.postEngine.getPostsFiltered(filter);
-          } else {
-            const result = await this.postEngine.getAllPosts({
-              limit: (args.limit as number) || 20,
-              offset: (args.offset as number) || 0,
-            });
-            posts = result.items;
-          }
-
           const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 20;
-          const slicedPosts = posts.slice(offset, offset + limit);
+
+          // Always get global total for awareness
+          const globalStats = await this.postEngine.getDashboardStats();
+          const globalTotal = globalStats.totalPosts;
+
+          let pageItems: PostData[];
+          let filteredTotal: number;
+
+          if (Object.keys(filter).length > 0) {
+            const allFiltered = await this.postEngine.getPostsFiltered(filter);
+            filteredTotal = allFiltered.length;
+            pageItems = allFiltered.slice(offset, offset + limit);
+          } else {
+            const result = await this.postEngine.getAllPosts({ limit, offset });
+            pageItems = result.items;
+            filteredTotal = result.total;
+          }
 
           return {
             success: true,
-            count: slicedPosts.length,
-            total: posts.length,
-            hasMore: offset + limit < posts.length,
-            posts: slicedPosts.map(p => ({
+            count: pageItems.length,
+            total: globalTotal,
+            filteredTotal,
+            hasMore: offset + limit < filteredTotal,
+            offset,
+            limit,
+            posts: pageItems.map(p => ({
               id: p.id, title: p.title, slug: p.slug,
               status: p.status, categories: p.categories,
               tags: p.tags, createdAt: p.createdAt, updatedAt: p.updatedAt,
@@ -1176,15 +1203,23 @@ export class OpenCodeManager {
 
         case 'list_media': {
           let mediaList = await this.mediaEngine.getAllMedia();
+          const totalMedia = mediaList.length;
           if (args.mimeTypeFilter) {
             mediaList = mediaList.filter(m => m.mimeType.startsWith(args.mimeTypeFilter as string));
           }
+          const filteredTotal = mediaList.length;
+          const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 20;
-          mediaList = mediaList.slice(0, limit);
+          const pageItems = mediaList.slice(offset, offset + limit);
           return {
             success: true,
-            count: mediaList.length,
-            media: mediaList.map(m => ({
+            count: pageItems.length,
+            total: totalMedia,
+            filteredTotal,
+            hasMore: offset + limit < filteredTotal,
+            offset,
+            limit,
+            media: pageItems.map(m => ({
               id: m.id, filename: m.filename,
               originalName: m.originalName, mimeType: m.mimeType,
               title: m.title, alt: m.alt, tags: m.tags,
@@ -1360,6 +1395,25 @@ export class OpenCodeManager {
           };
         }
 
+        case 'get_blog_stats': {
+          const stats = await this.postEngine.getBlogStats();
+          const mediaList = await this.mediaEngine.getAllMedia();
+          return {
+            success: true,
+            totalPosts: stats.totalPosts,
+            draftCount: stats.draftCount,
+            publishedCount: stats.publishedCount,
+            archivedCount: stats.archivedCount,
+            dateRange: stats.oldestPostDate && stats.newestPostDate
+              ? { oldest: stats.oldestPostDate, newest: stats.newestPostDate }
+              : null,
+            postsPerYear: stats.postsPerYear,
+            tagCount: stats.tagCount,
+            categoryCount: stats.categoryCount,
+            totalMedia: mediaList.length,
+          };
+        }
+
         default:
           return { success: false, error: `Unknown tool: ${name}` };
       }
@@ -1480,6 +1534,45 @@ export class OpenCodeManager {
   }
 
   // ── Helpers ──
+
+  /**
+   * Append live blog statistics to the system prompt so the AI
+   * knows the true scale of the data before its first tool call.
+   */
+  private async appendBlogStats(basePrompt: string): Promise<string> {
+    try {
+      const stats = await this.postEngine.getBlogStats();
+      const mediaList = await this.mediaEngine.getAllMedia();
+
+      if (stats.totalPosts === 0) {
+        return basePrompt;
+      }
+
+      const dateRange = stats.oldestPostDate && stats.newestPostDate
+        ? `from ${stats.oldestPostDate.toISOString().split('T')[0]} to ${stats.newestPostDate.toISOString().split('T')[0]}`
+        : 'unknown';
+
+      const yearBreakdown = Object.entries(stats.postsPerYear)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([year, count]) => `${year}: ${count}`)
+        .join(', ');
+
+      const statsSummary = `
+
+--- CURRENT BLOG DATA SUMMARY ---
+Total posts: ${stats.totalPosts} (${stats.publishedCount} published, ${stats.draftCount} drafts, ${stats.archivedCount} archived)
+Date range: ${dateRange}
+Posts per year: ${yearBreakdown}
+Unique tags: ${stats.tagCount}, Unique categories: ${stats.categoryCount}
+Total media files: ${mediaList.length}
+NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all data. Default page size is 20.`;
+
+      return basePrompt + statsSummary;
+    } catch (error) {
+      console.error('[OpenCodeManager] Failed to append blog stats:', error);
+      return basePrompt;
+    }
+  }
 
   private detectProvider(modelId: string): string {
     const id = modelId.toLowerCase();

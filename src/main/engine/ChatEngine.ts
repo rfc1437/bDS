@@ -306,11 +306,12 @@ IMPORTANT: You do NOT have access to the internet, real-time data, or any extern
 You can ONLY access information through the tools listed below. Do not claim otherwise.
 
 Available Data Tools:
-- search_posts: Search blog posts using full-text search. Supports category/tag filters.
+- get_blog_stats: Get comprehensive blog statistics (total posts, date range, posts per year, tag/category counts, media count). ALWAYS call this first when you need to understand the scope of the data.
+- search_posts: Search blog posts using full-text search. Supports category/tag filters and pagination (offset/limit).
 - read_post: Read the full content and metadata of a specific post by ID.
-- list_posts: List posts with optional filtering by status, category, or tags.
+- list_posts: List posts with optional filtering by status, category, or tags. Supports pagination (offset/limit). Returns "total" (global count) and "filteredTotal" (matching filter).
 - get_media: Get information about a specific media file by ID.
-- list_media: List media files with optional MIME type filtering.
+- list_media: List media files with optional MIME type filtering. Supports pagination (offset/limit).
 - view_image: View an image to analyze its visual content. Use this when you need to describe or analyze what an image looks like.
 - update_post_metadata: Update a post's title, excerpt, tags, or categories.
 - update_media_metadata: Update a media file's title, alt text, caption, or tags.
@@ -339,7 +340,14 @@ When answering questions:
 6. When presenting data, statistics, or comparisons, prefer using render tools (render_chart, render_table, render_metric) to show rich interactive UI instead of plain text.
 7. When you need user input for a multi-field operation, use render_form to present a structured form.
 8. Use render_card with action buttons when presenting items the user might want to navigate to (e.g., posts, media).
-9. When comparing data across multiple dimensions (e.g., statistics per year), use render_tabs with embedded charts or tables in each tab.`;
+9. When comparing data across multiple dimensions (e.g., statistics per year), use render_tabs with embedded charts or tables in each tab.
+
+CRITICAL - Pagination and data volume awareness:
+10. This blog may contain thousands or tens of thousands of posts spanning many years. NEVER assume the first page of results represents all data.
+11. Always check the "total" and "filteredTotal" fields in list_posts and list_media responses. If total > limit, there are more results available via pagination.
+12. When asked to analyze ALL posts (e.g., "show me all posts from 2015"), use pagination (offset/limit) to fetch all pages, or use get_blog_stats first to understand the scope.
+13. When reporting counts or statistics, always use get_blog_stats or check the total fields rather than counting the items in a single page of results.
+14. Never claim there are only N posts when you have only fetched one page. State the total count from the API response.`;
   }
 
   /**
