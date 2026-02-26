@@ -64,7 +64,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     latestSurfaceId,
     dismissedSurfaceIds,
     dismissSurface,
-    dispatchAction,
     updateLocalData,
     replayFromMessages,
   } = useA2UISurface({ conversationId });
@@ -387,7 +386,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
           latestSurfaceId={latestSurfaceId}
           dismissedSurfaceIds={dismissedSurfaceIds}
           onSurfaceDismiss={dismissSurface}
-          onSurfaceAction={dispatchAction}
+          onSurfaceAction={(a) => handleAssistantAction(a.action, a.payload)}
           onSurfaceDataChange={updateLocalData}
           currentTurnIndex={currentTurnIndex}
         />

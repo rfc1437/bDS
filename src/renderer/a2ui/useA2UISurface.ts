@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { A2UISurfaceManager } from './A2UISurfaceManager';
 import { replaySurfacesFromMessages } from './surfaceAssociation';
-import type { A2UIResolvedComponent, A2UIServerMessage, A2UIClientAction } from '../../main/a2ui/types';
+import type { A2UIResolvedComponent, A2UIServerMessage } from '../../main/a2ui/types';
 import type { ChatMessage } from '../../main/shared/electronApi';
 
 interface UseA2UISurfaceInput {
@@ -31,8 +31,6 @@ interface UseA2UISurfaceResult {
   dismissedSurfaceIds: Set<string>;
   /** Dismiss a surface by ID */
   dismissSurface: (surfaceId: string) => void;
-  /** Dispatch an action back to the main process */
-  dispatchAction: (action: A2UIClientAction) => void;
   /** Update a local data binding (for form inputs) */
   updateLocalData: (surfaceId: string, path: string, value: unknown) => void;
   /** Get the data model for a surface */
@@ -148,10 +146,6 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
     });
   }, []);
 
-  const dispatchAction = useCallback((action: A2UIClientAction) => {
-    window.electronAPI?.chat.dispatchA2UIAction?.(action);
-  }, []);
-
   const updateLocalData = useCallback((surfaceId: string, path: string, value: unknown) => {
     managerRef.current.updateLocalData(surfaceId, path, value);
   }, []);
@@ -183,7 +177,6 @@ export function useA2UISurface(input: UseA2UISurfaceInput): UseA2UISurfaceResult
     latestSurfaceId,
     dismissedSurfaceIds,
     dismissSurface,
-    dispatchAction,
     updateLocalData,
     getDataModel,
     clearSurfaces,

@@ -59,7 +59,6 @@ export const AssistantSidebar: React.FC = () => {
     latestSurfaceId,
     dismissedSurfaceIds,
     dismissSurface,
-    dispatchAction,
     updateLocalData,
   } = useA2UISurface({ conversationId });
 
@@ -281,7 +280,7 @@ export const AssistantSidebar: React.FC = () => {
             latestSurfaceId={latestSurfaceId}
             dismissedSurfaceIds={dismissedSurfaceIds}
             onSurfaceDismiss={dismissSurface}
-            onSurfaceAction={dispatchAction}
+            onSurfaceAction={(a) => handleAssistantAction(a.action, a.payload)}
             onSurfaceDataChange={updateLocalData}
             currentTurnIndex={currentTurnIndex}
           />
