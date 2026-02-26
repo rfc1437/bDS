@@ -1,0 +1,27 @@
+.chat-surface {
+  min-height: 0;
+}
+
+.chat-surface-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-surface-input {
+  border-radius: 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+}
+
+.chat-surface-error {
+  margin: 0;
+  color: var(--vscode-errorForeground);
+  font-size: 12px;
+}
+
+.chat-surface-section {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding-top: 8px;
+}

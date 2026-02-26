@@ -2619,6 +2619,88 @@ Published snapshot content`);
     });
   });
 
+  describe('getBlogStats', () => {
+    it('should return comprehensive blog statistics', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { status: 'draft', createdAt: new Date('2015-03-10'), tags: '["travel","photo"]', categories: '["article"]' },
+            { status: 'published', createdAt: new Date('2016-07-22'), tags: '["tech"]', categories: '["article"]' },
+            { status: 'published', createdAt: new Date('2020-01-05'), tags: '["travel"]', categories: '["aside"]' },
+            { status: 'published', createdAt: new Date('2024-11-30'), tags: '["tech","ai"]', categories: '["article"]' },
+            { status: 'archived', createdAt: new Date('2018-06-15'), tags: '[]', categories: '["page"]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getBlogStats();
+
+      expect(result.totalPosts).toBe(5);
+      expect(result.draftCount).toBe(1);
+      expect(result.publishedCount).toBe(3);
+      expect(result.archivedCount).toBe(1);
+      expect(result.oldestPostDate).toEqual(new Date('2015-03-10'));
+      expect(result.newestPostDate).toEqual(new Date('2024-11-30'));
+      expect(result.postsPerYear).toEqual({
+        2015: 1,
+        2016: 1,
+        2018: 1,
+        2020: 1,
+        2024: 1,
+      });
+      expect(result.tagCount).toBe(4);
+      expect(result.categoryCount).toBe(3);
+    });
+
+    it('should handle empty project', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getBlogStats();
+
+      expect(result.totalPosts).toBe(0);
+      expect(result.draftCount).toBe(0);
+      expect(result.publishedCount).toBe(0);
+      expect(result.archivedCount).toBe(0);
+      expect(result.oldestPostDate).toBeNull();
+      expect(result.newestPostDate).toBeNull();
+      expect(result.postsPerYear).toEqual({});
+      expect(result.tagCount).toBe(0);
+      expect(result.categoryCount).toBe(0);
+    });
+
+    it('should count unique tags and categories', async () => {
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { status: 'published', createdAt: new Date('2023-01-01'), tags: '["a","b","c"]', categories: '["x"]' },
+            { status: 'published', createdAt: new Date('2023-06-01'), tags: '["b","c","d"]', categories: '["x","y"]' },
+          ]),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getBlogStats();
+
+      expect(result.tagCount).toBe(4); // a, b, c, d
+      expect(result.categoryCount).toBe(2); // x, y
+    });
+  });
+
   describe('extractInternalLinks', () => {
     it('should extract markdown-style internal links', () => {
       const content = 'Check out [my post](/posts/my-post) for more info.';

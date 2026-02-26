@@ -638,7 +638,11 @@ describe('ChatEngine', () => {
       const result = await chatEngine.getDefaultSystemPrompt();
 
       expect(result).toContain('Blogging Desktop Server');
-      expect(result).toContain('Available Tools');
+      expect(result).toContain('Available Data Tools');
+      expect(result).toContain('UI Render Tools');
+      expect(result).toContain('render_chart');
+      expect(result).toContain('tabs');
+      expect(result).toContain('render_form');
     });
 
     it('should return built-in prompt when saved prompt is empty', async () => {

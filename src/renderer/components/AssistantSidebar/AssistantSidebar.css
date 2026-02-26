@@ -1,0 +1,432 @@
+.assistant-sidebar {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  background-color: var(--vscode-sideBar-background);
+  color: var(--vscode-sideBar-foreground);
+}
+
+.assistant-sidebar-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assistant-sidebar-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.assistant-sidebar-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background, rgba(0, 0, 0, 0.2));
+}
+
+.assistant-sidebar-context-label {
+  font-size: 11px;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.assistant-sidebar-context-value {
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.assistant-sidebar-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+}
+
+.assistant-sidebar-start-button {
+  align-self: flex-start;
+}
+
+.assistant-sidebar-error {
+  margin: 0;
+  color: var(--vscode-errorForeground);
+  font-size: 12px;
+}
+
+.assistant-sidebar-panel-output {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--vscode-panel-border);
+  padding-top: 10px;
+}
+
+.assistant-panel-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+}
+
+.assistant-panel-metric-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.assistant-panel-metric-value {
+  font-size: 14px;
+}
+
+.assistant-panel-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.assistant-panel-table th,
+.assistant-panel-table td {
+  border: 1px solid var(--vscode-panel-border);
+  padding: 6px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.assistant-sidebar-raw-message {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding-top: 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.assistant-panel-widget-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-panel-widget-label {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.assistant-panel-widget-input {
+  width: 100%;
+  padding: 8px;
+}
+
+.assistant-panel-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.assistant-panel-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.assistant-panel-chart-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.assistant-panel-chart-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.assistant-panel-chart-body {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.assistant-panel-chart-item {
+  display: contents;
+}
+
+.assistant-panel-chart-label {
+  justify-self: end;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-panel-chart-bar-track {
+  height: 14px;
+  background: var(--vscode-input-background);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  min-width: 60px;
+}
+
+.assistant-panel-chart-bar-fill {
+  height: 100%;
+  background: var(--vscode-charts-blue, #75beff);
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.assistant-panel-chart-bar-segment {
+  height: 100%;
+  min-width: 1px;
+  transition: width 0.3s ease;
+}
+
+.assistant-panel-chart-bar-segment:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.assistant-panel-chart-bar-segment:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.assistant-panel-chart-bar-segment:only-child {
+  border-radius: 3px;
+}
+
+.assistant-panel-chart-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 24px;
+}
+
+.assistant-panel-chart-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  padding-top: 4px;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.assistant-panel-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assistant-panel-chart-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Line chart */
+.assistant-panel-chart-line-svg {
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+}
+
+.assistant-panel-chart-line-grid {
+  stroke: var(--vscode-panel-border, #444);
+  stroke-width: 0.5;
+  stroke-dasharray: 3 3;
+}
+
+.assistant-panel-chart-line-y-label {
+  font-size: 9px;
+  fill: var(--vscode-foreground, #ccc);
+  opacity: 0.7;
+}
+
+.assistant-panel-chart-line-path {
+  stroke: var(--vscode-charts-blue, #75beff);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.assistant-panel-chart-line-dot {
+  fill: var(--vscode-charts-blue, #75beff);
+  stroke: var(--vscode-editor-background, #1e1e1e);
+  stroke-width: 1.5;
+}
+
+.assistant-panel-chart-line-x-label {
+  font-size: 9px;
+  fill: var(--vscode-foreground, #ccc);
+  opacity: 0.7;
+}
+
+.assistant-panel-chart-area-fill {
+  fill: var(--vscode-charts-blue, #75beff);
+  opacity: 0.15;
+}
+
+/* Pie chart */
+.assistant-panel-chart-pie-svg {
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+  align-self: center;
+}
+
+.assistant-panel-chart-pie-slice {
+  stroke: var(--vscode-editor-background, #1e1e1e);
+  stroke-width: 1.5;
+}
+
+/* Donut chart */
+.assistant-panel-chart-donut-hole {
+  fill: var(--vscode-editor-background, #1e1e1e);
+}
+
+.assistant-panel-chart-donut-total {
+  font-size: 16px;
+  font-weight: 600;
+  fill: var(--vscode-foreground, #ccc);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Heatmap chart */
+.assistant-panel-chart-heatmap {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.assistant-panel-chart-heatmap-corner {
+  /* empty top-left cell */
+}
+
+.assistant-panel-chart-heatmap-col-label {
+  text-align: center;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-panel-chart-heatmap-row-label {
+  text-align: right;
+  padding-right: 4px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.assistant-panel-chart-heatmap-cell {
+  aspect-ratio: 1;
+  min-width: 14px;
+  min-height: 14px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.assistant-panel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.assistant-panel-form-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.assistant-panel-card {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-panel-card h4,
+.assistant-panel-card p {
+  margin: 0;
+}
+
+.assistant-panel-card-subtitle {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.assistant-panel-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.assistant-panel-image {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-panel-image img {
+  max-width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.assistant-panel-image figcaption {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.assistant-panel-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assistant-panel-tab-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.assistant-panel-tab-button.active {
+  border-color: var(--vscode-focusBorder);
+}
+
+.assistant-panel-tab-panel {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

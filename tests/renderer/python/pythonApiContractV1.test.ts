@@ -43,9 +43,34 @@ describe('pythonApiContractV1', () => {
     });
   });
 
+  it('documents chat.sendMessage return contract and metadata input', () => {
+    expect(getPythonApiMethodContract('chat.sendMessage')).toEqual({
+      method: 'chat.sendMessage',
+      description: 'Send message to chat conversation.',
+      params: [
+        {
+          name: 'conversationId',
+          type: 'string',
+          required: true,
+        },
+        {
+          name: 'message',
+          type: 'string',
+          required: true,
+        },
+        {
+          name: 'metadata',
+          type: 'object',
+          required: false,
+        },
+      ],
+      returns: '{ success: boolean; message?: string; error?: string }',
+    });
+  });
+
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.3.0',
+      version: '1.6.0',
       generatedAt: expect.any(String),
     });
   });
@@ -74,7 +99,7 @@ describe('generatePythonApiModuleV1', () => {
     expect(moduleCode).toContain('async def search(self, query):');
     expect(moduleCode).toContain('async def get_project_metadata(self):');
     expect(moduleCode).toContain('async def get_conversations(self):');
-    expect(moduleCode).toContain('async def send_message(self, conversation_id, message):');
+    expect(moduleCode).toContain('async def send_message(self, conversation_id, message, metadata=None):');
     expect(moduleCode).toContain('class BdsApi:');
     expect(moduleCode).toContain('bds = BdsApi(_transport)');
   });

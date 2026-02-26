@@ -98,6 +98,8 @@
   justify-content: center;
   text-align: center;
   padding: 32px;
+  min-height: 100%;
+  box-sizing: border-box;
   color: var(--vscode-descriptionForeground);
 }
 

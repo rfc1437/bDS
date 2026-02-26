@@ -299,7 +299,8 @@ export const electronAPI: ElectronAPI = {
     deleteConversation: (id: string) => ipcRenderer.invoke('chat:deleteConversation', id),
 
     // Messaging
-    sendMessage: (conversationId: string, message: string) => ipcRenderer.invoke('chat:sendMessage', conversationId, message),
+    sendMessage: (conversationId: string, message: string, metadata?: { surface?: 'tab' | 'sidebar' }) => ipcRenderer.invoke('chat:sendMessage', conversationId, message, metadata),
+    addSystemEvent: (conversationId: string, content: string) => ipcRenderer.invoke('chat:addSystemEvent', conversationId, content),
     abortMessage: (conversationId: string) => ipcRenderer.invoke('chat:abortMessage', conversationId),
     getHistory: (conversationId: string) => ipcRenderer.invoke('chat:getHistory', conversationId),
     clearMessages: (conversationId: string) => ipcRenderer.invoke('chat:clearMessages', conversationId),
@@ -332,6 +333,14 @@ export const electronAPI: ElectronAPI = {
       ipcRenderer.on('chat-title-updated', subscription);
       return () => ipcRenderer.removeListener('chat-title-updated', subscription);
     },
+
+    // A2UI streaming
+    onA2UIMessage: (callback: (data: { conversationId: string; message: import('./a2ui/types').A2UIServerMessage }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; message: import('./a2ui/types').A2UIServerMessage }) => callback(data);
+      ipcRenderer.on('a2ui-message', subscription);
+      return () => ipcRenderer.removeListener('a2ui-message', subscription);
+    },
+    dispatchA2UIAction: (action: import('./a2ui/types').A2UIClientAction) => ipcRenderer.invoke('a2ui:dispatch', action),
   },
 
   // Event listeners

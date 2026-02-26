@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.3.0
+Contract version: 1.6.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -3482,6 +3482,7 @@ Send message to chat conversation.
 
 - conversationId (str, required)
 - message (str, required)
+- metadata (dict, optional)
 
 **Response specification**
 
@@ -4051,4 +4052,4 @@ Stored API key state for chat provider.
 
 ---
 
-Generated from contract at 2026-02-24T00:00:00.000Z.
+Generated from contract at 2026-02-25T00:00:00.000Z.

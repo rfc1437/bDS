@@ -16,6 +16,7 @@ describe('WindowTitleBar', () => {
     useAppStore.setState({
       sidebarVisible: true,
       panelVisible: false,
+      assistantSidebarVisible: false,
     });
   });
 
@@ -32,6 +33,7 @@ describe('WindowTitleBar', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(screen.getByLabelText('Toggle Sidebar')).toBeInTheDocument();
     expect(screen.getByLabelText('Toggle Panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle Assistant Sidebar')).toBeInTheDocument();
   });
 
   it('does not request macOS title bar metrics when simulated title bar is disabled', async () => {
@@ -139,9 +141,23 @@ describe('WindowTitleBar', () => {
 
     const actionButtons = Array.from(document.querySelectorAll('.window-titlebar-actions .window-titlebar-action-button'));
 
-    expect(actionButtons).toHaveLength(2);
+    expect(actionButtons).toHaveLength(3);
     expect(actionButtons[0]).toHaveAttribute('aria-label', 'Toggle Sidebar');
     expect(actionButtons[1]).toHaveAttribute('aria-label', 'Toggle Panel');
+    expect(actionButtons[2]).toHaveAttribute('aria-label', 'Toggle Assistant Sidebar');
+  });
+
+  it('renders a right-side assistant sidebar toggle button and toggles assistant sidebar visibility', () => {
+    render(<WindowTitleBar />);
+
+    const toggleButton = screen.getByLabelText('Toggle Assistant Sidebar');
+    expect(toggleButton).toBeInTheDocument();
+    expect(toggleButton).toHaveAttribute('title', 'Show Assistant Sidebar (Ctrl+\\)');
+
+    fireEvent.click(toggleButton);
+
+    expect(useAppStore.getState().assistantSidebarVisible).toBe(true);
+    expect(toggleButton).toHaveAttribute('title', 'Hide Assistant Sidebar (Ctrl+\\)');
   });
 
   it('updates overlay inset CSS variables when window controls geometry changes', () => {
@@ -248,6 +264,7 @@ describe('WindowTitleBar', () => {
     expect(screen.getByRole('button', { name: 'Media Ctrl+2' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle Sidebar Ctrl+B' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle Panel Ctrl+J' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle Assistant Sidebar Ctrl+\\' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Blog' }));
     expect(screen.getByRole('button', { name: 'Publish Selected Ctrl+Shift+P' })).toBeInTheDocument();

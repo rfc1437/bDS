@@ -185,7 +185,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('chat.getConversation', 'Fetch one chat conversation by id.', [requiredString('id')], 'ChatConversation | null'),
   method('chat.updateConversation', 'Update chat conversation metadata.', [requiredString('id'), requiredObject('updates')], 'ChatConversation | null'),
   method('chat.deleteConversation', 'Delete chat conversation by id.', [requiredString('id')], 'boolean'),
-  method('chat.sendMessage', 'Send message to chat conversation.', [requiredString('conversationId'), requiredString('message')], '{ success: boolean; message?: string; error?: string }'),
+  method('chat.sendMessage', 'Send message to chat conversation.', [requiredString('conversationId'), requiredString('message'), optionalObject('metadata')], '{ success: boolean; message?: string; error?: string }'),
   method('chat.abortMessage', 'Abort active streaming chat response.', [requiredString('conversationId')], 'void'),
   method('chat.getHistory', 'Get message history for conversation.', [requiredString('conversationId')], 'ChatMessage[]'),
   method('chat.clearMessages', 'Clear messages for conversation.', [requiredString('conversationId')], 'void'),
@@ -362,8 +362,8 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.3.0',
-  generatedAt: '2026-02-24T00:00:00.000Z',
+  version: '1.6.0',
+  generatedAt: '2026-02-25T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
 };

@@ -13,9 +13,11 @@ import http from 'http';
 import { URL } from 'url';
 import { BrowserWindow } from 'electron';
 import { ChatEngine } from './ChatEngine';
-import { PostEngine } from './PostEngine';
-import { MediaEngine } from './MediaEngine';
+import { PostEngine, type PostData } from './PostEngine';
+import { MediaEngine, type MediaData } from './MediaEngine';
 import { getPostMediaEngine } from './PostMediaEngine';
+import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
+import type { A2UIServerMessage } from '../a2ui/types';
 
 // OpenCode Zen API endpoints
 const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
@@ -66,9 +68,13 @@ export interface ModelInfo {
 }
 
 export interface SendMessageOptions {
+  metadata?: {
+    surface?: 'tab' | 'sidebar';
+  };
   onDelta?: (delta: string) => void;
   onToolCall?: (toolCall: { name: string; args: unknown }) => void;
   onToolResult?: (result: { name: string; result: unknown }) => void;
+  onA2UIMessage?: (message: A2UIServerMessage) => void;
 }
 
 export interface SendMessageResult {
@@ -237,7 +243,7 @@ export class OpenCodeManager {
     userMessage: string,
     options: SendMessageOptions = {}
   ): Promise<SendMessageResult> {
-    const { onDelta, onToolCall, onToolResult } = options;
+    const { metadata, onDelta, onToolCall, onToolResult, onA2UIMessage } = options;
 
     try {
       const readyCheck = await this.checkReady();
@@ -268,10 +274,14 @@ export class OpenCodeManager {
 
       // Get system prompt
       const systemMessage = conversation.messages.find(m => m.role === 'system');
-      const systemPrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
+      const basePrompt = systemMessage?.content || await this.chatEngine.getDefaultSystemPrompt();
+
+      // Inject live blog stats into system prompt for data volume awareness
+      const systemPrompt = await this.appendBlogStats(basePrompt);
 
       // Build message history from DB (excluding system messages)
       const dbMessages = conversation.messages.filter(m => m.role !== 'system');
+
       // Add the new user message
       dbMessages.push({
         conversationId,
@@ -283,29 +293,53 @@ export class OpenCodeManager {
       let fullResponse = '';
       const toolCallsCollected: Array<{ name: string; args: unknown }> = [];
 
+      // Compute turn index for surface-to-message association
+      const turnIndex = dbMessages.filter(m => m.role === 'user').length - 1;
+
+      // Wrap onA2UIMessage emission for render tools
+      const emitA2UIMessages = (messages: A2UIServerMessage[]) => {
+        if (onA2UIMessage) {
+          for (const msg of messages) {
+            if (msg.type === 'createSurface') {
+              msg.metadata = { ...msg.metadata, turnIndex };
+            }
+            onA2UIMessage(msg);
+          }
+        }
+      };
+
+      const requestProvider = async (
+        prompt: string,
+        messages: Array<{ role: string; content?: string; toolCalls?: string; toolCallId?: string }>,
+      ) => {
+        if (provider === 'anthropic') {
+          return this.sendAnthropicMessage(
+            modelId,
+            prompt,
+            messages,
+            abortController.signal,
+            { onDelta, onToolCall, onToolResult },
+            conversationId,
+            emitA2UIMessages,
+          );
+        }
+
+        return this.sendOpenAIMessage(
+          modelId,
+          prompt,
+          messages,
+          abortController.signal,
+          { onDelta, onToolCall, onToolResult },
+          conversationId,
+          emitA2UIMessages,
+        );
+      };
+
       try {
         console.log('[OpenCodeManager] Sending to provider:', provider, 'model:', modelId);
-        if (provider === 'anthropic') {
-          const result = await this.sendAnthropicMessage(
-            modelId,
-            systemPrompt,
-            dbMessages,
-            abortController.signal,
-            { onDelta, onToolCall, onToolResult }
-          );
-          fullResponse = result.content;
-          toolCallsCollected.push(...result.toolCalls);
-        } else {
-          const result = await this.sendOpenAIMessage(
-            modelId,
-            systemPrompt,
-            dbMessages,
-            abortController.signal,
-            { onDelta, onToolCall, onToolResult }
-          );
-          fullResponse = result.content;
-          toolCallsCollected.push(...result.toolCalls);
-        }
+        const firstResult = await requestProvider(systemPrompt, dbMessages);
+        fullResponse = firstResult.content;
+        toolCallsCollected.push(...firstResult.toolCalls);
         console.log('[OpenCodeManager] fullResponse length:', fullResponse.length);
       } catch (error) {
         console.error('[OpenCodeManager] Request error:', (error as Error).message);
@@ -313,12 +347,11 @@ export class OpenCodeManager {
         if (!isAborted) {
           throw error;
         }
-        // On abort, keep whatever was streamed so far (already in fullResponse or empty)
       } finally {
         this.abortControllers.delete(conversationId);
       }
 
-      // Save assistant response (including partial content from aborted requests)
+      // Save assistant response to history
       if (fullResponse) {
         await this.chatEngine.addMessage({
           conversationId,
@@ -360,7 +393,9 @@ export class OpenCodeManager {
       onDelta?: (delta: string) => void;
       onToolCall?: (toolCall: { name: string; args: unknown }) => void;
       onToolResult?: (result: { name: string; result: unknown }) => void;
-    }
+    },
+    conversationId: string,
+    emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     const tools = this.getToolDefinitions();
     const allToolCalls: Array<{ name: string; args: unknown }> = [];
@@ -451,6 +486,29 @@ export class OpenCodeManager {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
         }
 
+        // Check if this is a render tool — generate A2UI messages instead of executing
+        if (isRenderTool(toolName)) {
+          const a2uiMessages = generateFromToolCall(
+            conversationId,
+            toolName,
+            toolArgs as Record<string, unknown>,
+          );
+          if (a2uiMessages) {
+            emitA2UIMessages(a2uiMessages);
+          }
+
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: { success: true, rendered: true } });
+          }
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: JSON.stringify({ success: true, rendered: true }),
+          });
+          continue;
+        }
+
         // Execute the tool
         const result = await this.executeTool(toolName, toolArgs as Record<string, unknown>);
 
@@ -523,7 +581,9 @@ export class OpenCodeManager {
       onDelta?: (delta: string) => void;
       onToolCall?: (toolCall: { name: string; args: unknown }) => void;
       onToolResult?: (result: { name: string; result: unknown }) => void;
-    }
+    },
+    conversationId: string,
+    emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     // Build OpenAI-format messages
     const messages: Array<Record<string, unknown>> = [
@@ -637,6 +697,25 @@ export class OpenCodeManager {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
         }
 
+        // Check if this is a render tool
+        if (isRenderTool(toolName)) {
+          const a2uiMessages = generateFromToolCall(conversationId, toolName, toolArgs);
+          if (a2uiMessages) {
+            emitA2UIMessages(a2uiMessages);
+          }
+
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: { success: true, rendered: true } });
+          }
+
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify({ success: true, rendered: true }),
+            tool_call_id: toolCall.id,
+          });
+          continue;
+        }
+
         const result = await this.executeTool(toolName, toolArgs);
 
         if (callbacks.onToolResult) {
@@ -663,14 +742,17 @@ export class OpenCodeManager {
     return [
       {
         name: 'search_posts',
-        description: 'Search blog posts using full-text search. Can filter by category or tags. Returns matching posts with their metadata.',
+        description: 'Search blog posts using full-text search. Can filter by category, tags, year, or month. Returns paginated results with totalMatches count. Use offset to page through results when totalMatches > limit.',
         input_schema: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'The search query text to find in posts' },
             category: { type: 'string', description: 'Optional category to filter by (e.g., "article", "picture", "aside", "page")' },
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional array of tags to filter by' },
+            year: { type: 'number', description: 'Filter to posts created in this year (e.g., 2024)' },
+            month: { type: 'number', description: 'Filter to posts created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' },
+            offset: { type: 'number', description: 'Offset for pagination (default: 0). Use with limit to page through results.' },
           },
           required: ['query'],
         },
@@ -688,13 +770,15 @@ export class OpenCodeManager {
       },
       {
         name: 'list_posts',
-        description: 'List blog posts with optional filtering by status, category, or tags.',
+        description: 'List blog posts with optional filtering by status, category, tags, year, or month. Returns paginated results. The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use year/month filters to efficiently narrow to a time period instead of paginating through all posts. Use offset/limit to page through filtered results.',
         input_schema: {
           type: 'object',
           properties: {
             status: { type: 'string', enum: ['draft', 'published', 'archived'], description: 'Filter by post status' },
             category: { type: 'string', description: 'Filter by category' },
             tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags (posts must have all specified tags)' },
+            year: { type: 'number', description: 'Filter to posts created in this year (e.g., 2024). Use this to efficiently narrow results by time period.' },
+            month: { type: 'number', description: 'Filter to posts created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results (default: 20)' },
             offset: { type: 'number', description: 'Offset for pagination (default: 0)' },
           },
@@ -713,12 +797,16 @@ export class OpenCodeManager {
       },
       {
         name: 'list_media',
-        description: 'List all media files in the current project with optional filtering.',
+        description: 'List media files in the current project with optional filtering by MIME type, year, month, or tags. Returns paginated results with total count. Use year/month filters to efficiently narrow to a time period.',
         input_schema: {
           type: 'object',
           properties: {
             mimeTypeFilter: { type: 'string', description: 'Filter by MIME type prefix (e.g., "image/")' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags (media must have all specified tags)' },
+            year: { type: 'number', description: 'Filter to media created in this year (e.g., 2024)' },
+            month: { type: 'number', description: 'Filter to media created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results (default: 20)' },
+            offset: { type: 'number', description: 'Offset for pagination (default: 0)' },
           },
         },
       },
@@ -763,6 +851,14 @@ export class OpenCodeManager {
       {
         name: 'list_categories',
         description: 'List all categories used across blog posts, with the count of posts in each category. Useful for understanding the category structure.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_blog_stats',
+        description: 'Get comprehensive blog statistics: total posts, drafts, published, archived counts, date range (oldest to newest post), posts per year breakdown, number of unique tags and categories, and total media count. Use this FIRST to understand the full scope of the blog before making queries. This is essential to understand the data volume.',
         input_schema: {
           type: 'object',
           properties: {},
@@ -828,6 +924,201 @@ export class OpenCodeManager {
           required: ['mediaId'],
         },
       },
+      // ── A2UI Render Tools ──
+      {
+        name: 'render_chart',
+        description: 'Render an interactive chart in the chat UI. Use this when the user asks for a chart, graph, or data visualization. The chart will be displayed as a rich UI element in the conversation.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            chartType: { type: 'string', enum: ['bar', 'stacked-bar', 'line', 'area', 'pie', 'donut', 'heatmap'], description: 'The type of chart to render. Use stacked-bar when each bar has multiple segments (categories). Use area for trend/cumulative data. Use donut for proportional data with a total in the center. Use heatmap for grid/matrix visualizations where color intensity shows magnitude (e.g., posts per month across years). Prefer heatmap over tables with emojis for intensity data.' },
+            title: { type: 'string', description: 'Optional chart title' },
+            series: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', description: 'Data point label (row label for heatmaps, e.g., year)' },
+                  value: { type: 'number', description: 'Data point value (total for stacked bars, ignored for heatmaps)' },
+                  segments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        label: { type: 'string', description: 'Segment/column label (e.g., month name for heatmaps)' },
+                        value: { type: 'number', description: 'Segment value (color intensity for heatmaps)' },
+                      },
+                      required: ['label', 'value'],
+                    },
+                    description: 'Segments within this data point. Required for stacked-bar and heatmap charts. For heatmaps, each segment becomes a cell in that row.',
+                  },
+                },
+                required: ['label', 'value'],
+              },
+              description: 'Array of data points. For stacked-bar and heatmap charts, include segments. For heatmaps, each entry is a row and segments are columns.',
+            },
+          },
+          required: ['chartType', 'series'],
+        },
+      },
+      {
+        name: 'render_table',
+        description: 'Render a data table in the chat UI. Use this when the user asks for tabular data, comparisons, or structured information. The table will be displayed as a rich UI element.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Optional table title' },
+            columns: { type: 'array', items: { type: 'string' }, description: 'Column header names' },
+            rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, description: 'Table rows, each row is an array of cell values' },
+          },
+          required: ['columns', 'rows'],
+        },
+      },
+      {
+        name: 'render_form',
+        description: 'Render an interactive form in the chat UI. Use this when you need to collect structured input from the user, such as metadata updates, configuration, or multi-field data entry.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Optional form title' },
+            fields: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string', description: 'Field identifier' },
+                  label: { type: 'string', description: 'Field label shown to user' },
+                  inputType: { type: 'string', enum: ['text', 'textarea', 'select', 'checkbox', 'date', 'number'], description: 'Type of input control' },
+                  placeholder: { type: 'string', description: 'Placeholder text' },
+                  defaultValue: { description: 'Default value for the field' },
+                  options: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, value: { type: 'string' } }, required: ['label', 'value'] }, description: 'Options for select fields' },
+                  required: { type: 'boolean', description: 'Whether the field is required' },
+                },
+                required: ['key', 'label', 'inputType'],
+              },
+              description: 'Form fields to display',
+            },
+            submitLabel: { type: 'string', description: 'Label for the submit button' },
+            submitAction: { type: 'string', description: 'Action to dispatch on submit' },
+          },
+          required: ['fields', 'submitLabel'],
+        },
+      },
+      {
+        name: 'render_card',
+        description: 'Render an information card in the chat UI. Use this for displaying a summary, highlight, or actionable item with a title, body, and optional action buttons.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Card title' },
+            body: { type: 'string', description: 'Card body text (supports markdown)' },
+            subtitle: { type: 'string', description: 'Optional subtitle' },
+            actions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', description: 'Button label' },
+                  action: { type: 'string', description: 'Action name to dispatch (e.g., openPost, openMedia)' },
+                  payload: { type: 'object', description: 'Optional action payload' },
+                },
+                required: ['label', 'action'],
+              },
+              description: 'Optional action buttons on the card',
+            },
+          },
+          required: ['title', 'body'],
+        },
+      },
+      {
+        name: 'render_metric',
+        description: 'Render a single metric/KPI display in the chat UI. Use this for showing a single important value with a label, such as post counts, statistics, or status indicators.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Metric label' },
+            value: { type: 'string', description: 'Metric value (displayed prominently)' },
+          },
+          required: ['label', 'value'],
+        },
+      },
+      {
+        name: 'render_list',
+        description: 'Render a list of items in the chat UI. Use this for displaying bullet-point style lists, checklists, or simple enumerations.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Optional list title' },
+            items: { type: 'array', items: { type: 'string' }, description: 'List items' },
+          },
+          required: ['items'],
+        },
+      },
+      {
+        name: 'render_tabs',
+        description: 'Render a tabbed interface in the chat UI. Use this when you want to organize information into multiple tabs that the user can switch between. Each tab can contain any combination of text, metrics, lists, charts, and tables.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            tabs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', description: 'Tab label' },
+                  content: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['text', 'metric', 'list', 'chart', 'table'], description: 'Content type' },
+                        text: { type: 'string', description: 'Text content (for type text)' },
+                        label: { type: 'string', description: 'Label (for type metric)' },
+                        value: { type: 'string', description: 'Display value (for type metric)' },
+                        title: { type: 'string', description: 'Title (for type list, chart, or table)' },
+                        items: { type: 'array', items: { type: 'string' }, description: 'Items (for type list)' },
+                        chartType: { type: 'string', enum: ['bar', 'stacked-bar', 'line', 'area', 'pie', 'donut', 'heatmap'], description: 'Chart type (for type chart). Use heatmap for intensity grids.' },
+                        series: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              label: { type: 'string' },
+                              value: { type: 'number' },
+                              segments: {
+                                type: 'array',
+                                items: {
+                                  type: 'object',
+                                  properties: { label: { type: 'string' }, value: { type: 'number' } },
+                                  required: ['label', 'value'],
+                                },
+                                description: 'Segments for stacked-bar and heatmap charts',
+                              },
+                            },
+                            required: ['label', 'value'],
+                          },
+                          description: 'Data series (for type chart)',
+                        },
+                        columns: { type: 'array', items: { type: 'string' }, description: 'Column headers (for type table)' },
+                        rows: {
+                          type: 'array',
+                          items: { type: 'array', items: { type: 'string' } },
+                          description: 'Table rows (for type table)',
+                        },
+                      },
+                      required: ['type'],
+                    },
+                    description: 'Content items within the tab',
+                  },
+                },
+                required: ['label', 'content'],
+              },
+              description: 'Array of tabs',
+            },
+          },
+          required: ['tabs'],
+        },
+      },
     ];
   }
 
@@ -852,13 +1143,27 @@ export class OpenCodeManager {
               (args.tags as string[]).every(tag => p!.tags.includes(tag))
             );
           }
+          if (args.year !== undefined) {
+            const year = args.year as number;
+            filteredPosts = filteredPosts.filter(p => p!.createdAt.getFullYear() === year);
+          }
+          if (args.month !== undefined && args.year !== undefined) {
+            const month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
+            filteredPosts = filteredPosts.filter(p => p!.createdAt.getMonth() === month);
+          }
 
+          const totalMatches = filteredPosts.length;
+          const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 10;
-          filteredPosts = filteredPosts.slice(0, limit);
+          filteredPosts = filteredPosts.slice(offset, offset + limit);
 
           return {
             success: true,
             count: filteredPosts.length,
+            totalMatches,
+            hasMore: offset + limit < totalMatches,
+            offset,
+            limit,
             posts: filteredPosts.map(p => ({
               id: p!.id, title: p!.title, slug: p!.slug,
               excerpt: p!.excerpt, status: p!.status,
@@ -885,32 +1190,42 @@ export class OpenCodeManager {
         }
 
         case 'list_posts': {
-          const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[] } = {};
+          const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[]; year?: number; month?: number } = {};
           if (args.status) filter.status = args.status as 'draft' | 'published' | 'archived';
           if (args.tags) filter.tags = args.tags as string[];
           if (args.category) filter.categories = [args.category as string];
-
-          let posts;
-          if (Object.keys(filter).length > 0) {
-            posts = await this.postEngine.getPostsFiltered(filter);
-          } else {
-            const result = await this.postEngine.getAllPosts({
-              limit: (args.limit as number) || 20,
-              offset: (args.offset as number) || 0,
-            });
-            posts = result.items;
-          }
+          if (args.year !== undefined) filter.year = args.year as number;
+          if (args.month !== undefined && args.year !== undefined) filter.month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
 
           const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 20;
-          const slicedPosts = posts.slice(offset, offset + limit);
+
+          // Always get global total for awareness
+          const globalStats = await this.postEngine.getDashboardStats();
+          const globalTotal = globalStats.totalPosts;
+
+          let pageItems: PostData[];
+          let filteredTotal: number;
+
+          if (Object.keys(filter).length > 0) {
+            const allFiltered = await this.postEngine.getPostsFiltered(filter);
+            filteredTotal = allFiltered.length;
+            pageItems = allFiltered.slice(offset, offset + limit);
+          } else {
+            const result = await this.postEngine.getAllPosts({ limit, offset });
+            pageItems = result.items;
+            filteredTotal = result.total;
+          }
 
           return {
             success: true,
-            count: slicedPosts.length,
-            total: posts.length,
-            hasMore: offset + limit < posts.length,
-            posts: slicedPosts.map(p => ({
+            count: pageItems.length,
+            total: globalTotal,
+            filteredTotal,
+            hasMore: offset + limit < filteredTotal,
+            offset,
+            limit,
+            posts: pageItems.map(p => ({
               id: p.id, title: p.title, slug: p.slug,
               status: p.status, categories: p.categories,
               tags: p.tags, createdAt: p.createdAt, updatedAt: p.updatedAt,
@@ -934,16 +1249,36 @@ export class OpenCodeManager {
         }
 
         case 'list_media': {
-          let mediaList = await this.mediaEngine.getAllMedia();
+          const hasMediaFilter = args.year !== undefined || (args.tags && Array.isArray(args.tags) && (args.tags as string[]).length > 0);
+          let mediaList: MediaData[];
+
+          if (hasMediaFilter) {
+            const mediaFilter: { year?: number; month?: number; tags?: string[] } = {};
+            if (args.year !== undefined) mediaFilter.year = args.year as number;
+            if (args.month !== undefined && args.year !== undefined) mediaFilter.month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
+            if (args.tags) mediaFilter.tags = args.tags as string[];
+            mediaList = await this.mediaEngine.getMediaFiltered(mediaFilter);
+          } else {
+            mediaList = await this.mediaEngine.getAllMedia();
+          }
+
+          const totalMedia = mediaList.length;
           if (args.mimeTypeFilter) {
             mediaList = mediaList.filter(m => m.mimeType.startsWith(args.mimeTypeFilter as string));
           }
+          const filteredTotal = mediaList.length;
+          const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 20;
-          mediaList = mediaList.slice(0, limit);
+          const pageItems = mediaList.slice(offset, offset + limit);
           return {
             success: true,
-            count: mediaList.length,
-            media: mediaList.map(m => ({
+            count: pageItems.length,
+            total: totalMedia,
+            filteredTotal,
+            hasMore: offset + limit < filteredTotal,
+            offset,
+            limit,
+            media: pageItems.map(m => ({
               id: m.id, filename: m.filename,
               originalName: m.originalName, mimeType: m.mimeType,
               title: m.title, alt: m.alt, tags: m.tags,
@@ -1119,6 +1454,25 @@ export class OpenCodeManager {
           };
         }
 
+        case 'get_blog_stats': {
+          const stats = await this.postEngine.getBlogStats();
+          const mediaList = await this.mediaEngine.getAllMedia();
+          return {
+            success: true,
+            totalPosts: stats.totalPosts,
+            draftCount: stats.draftCount,
+            publishedCount: stats.publishedCount,
+            archivedCount: stats.archivedCount,
+            dateRange: stats.oldestPostDate && stats.newestPostDate
+              ? { oldest: stats.oldestPostDate, newest: stats.newestPostDate }
+              : null,
+            postsPerYear: stats.postsPerYear,
+            tagCount: stats.tagCount,
+            categoryCount: stats.categoryCount,
+            totalMedia: mediaList.length,
+          };
+        }
+
         default:
           return { success: false, error: `Unknown tool: ${name}` };
       }
@@ -1239,6 +1593,45 @@ export class OpenCodeManager {
   }
 
   // ── Helpers ──
+
+  /**
+   * Append live blog statistics to the system prompt so the AI
+   * knows the true scale of the data before its first tool call.
+   */
+  private async appendBlogStats(basePrompt: string): Promise<string> {
+    try {
+      const stats = await this.postEngine.getBlogStats();
+      const mediaList = await this.mediaEngine.getAllMedia();
+
+      if (stats.totalPosts === 0) {
+        return basePrompt;
+      }
+
+      const dateRange = stats.oldestPostDate && stats.newestPostDate
+        ? `from ${stats.oldestPostDate.toISOString().split('T')[0]} to ${stats.newestPostDate.toISOString().split('T')[0]}`
+        : 'unknown';
+
+      const yearBreakdown = Object.entries(stats.postsPerYear)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([year, count]) => `${year}: ${count}`)
+        .join(', ');
+
+      const statsSummary = `
+
+--- CURRENT BLOG DATA SUMMARY ---
+Total posts: ${stats.totalPosts} (${stats.publishedCount} published, ${stats.draftCount} drafts, ${stats.archivedCount} archived)
+Date range: ${dateRange}
+Posts per year: ${yearBreakdown}
+Unique tags: ${stats.tagCount}, Unique categories: ${stats.categoryCount}
+Total media files: ${mediaList.length}
+NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all data. Default page size is 20.`;
+
+      return basePrompt + statsSummary;
+    } catch (error) {
+      console.error('[OpenCodeManager] Failed to append blog stats:', error);
+      return basePrompt;
+    }
+  }
 
   private detectProvider(modelId: string): string {
     const id = modelId.toLowerCase();

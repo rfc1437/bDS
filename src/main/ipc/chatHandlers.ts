@@ -256,12 +256,13 @@ export function registerChatHandlers(): void {
   // ============ Chat Messaging ============
 
   // Send a message
-  ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string) => {
+  ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string, metadata?: { surface?: 'tab' | 'sidebar' }) => {
     try {
       const manager = await getOpenCodeManager();
       const mainWindow = mainWindowGetter?.();
 
       const result = await manager.sendMessage(conversationId, message, {
+        metadata,
         onDelta: (delta) => {
           if (mainWindow) {
             mainWindow.webContents.send('chat-stream-delta', { conversationId, delta });
@@ -277,11 +278,32 @@ export function registerChatHandlers(): void {
             mainWindow.webContents.send('chat-tool-result', { conversationId, result });
           }
         },
+        onA2UIMessage: (message) => {
+          if (mainWindow) {
+            mainWindow.webContents.send('a2ui-message', { conversationId, message });
+          }
+        },
       });
 
       return result;
     } catch (error) {
       console.error('[Chat IPC] Error sending message:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:addSystemEvent', async (_, conversationId: string, content: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.addMessage({
+        conversationId,
+        role: 'system',
+        content,
+        createdAt: new Date(),
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error adding system event:', error);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -354,6 +376,20 @@ export function registerChatHandlers(): void {
       return await manager.analyzeMediaImage(mediaId, language || 'en');
     } catch (error) {
       console.error('[Chat IPC] Error analyzing media image:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ A2UI Actions ============
+
+  ipcMain.handle('a2ui:dispatch', async (_, action: { surfaceId: string; componentId: string; action: string; payload?: Record<string, unknown> }) => {
+    try {
+      console.log('[Chat IPC] A2UI action dispatched:', action);
+      // Currently, A2UI actions are handled client-side (navigation, UI toggles).
+      // Server-side action handling can be added here in the future.
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error dispatching A2UI action:', error);
       return { success: false, error: (error as Error).message };
     }
   });

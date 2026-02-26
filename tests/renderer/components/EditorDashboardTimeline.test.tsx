@@ -55,6 +55,7 @@ describe('Editor dashboard timeline', () => {
     ]);
     (window as any).electronAPI.posts.getTagsWithCounts = vi.fn().mockResolvedValue([]);
     (window as any).electronAPI.posts.getCategoriesWithCounts = vi.fn().mockResolvedValue([]);
+    (window as any).electronAPI.chat = {};
     (window as any).electronAPI.tags = {
       getAll: vi.fn().mockResolvedValue([]),
     };

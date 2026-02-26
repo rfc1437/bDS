@@ -958,6 +958,67 @@ export class PostEngine extends EventEmitter {
     };
   }
 
+  async getBlogStats(): Promise<{
+    totalPosts: number;
+    draftCount: number;
+    publishedCount: number;
+    archivedCount: number;
+    oldestPostDate: Date | null;
+    newestPostDate: Date | null;
+    postsPerYear: Record<number, number>;
+    tagCount: number;
+    categoryCount: number;
+  }> {
+    const db = getDatabase().getLocal();
+    const dbPosts = await db
+      .select({ status: posts.status, createdAt: posts.createdAt, tags: posts.tags, categories: posts.categories })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    let draftCount = 0;
+    let publishedCount = 0;
+    let archivedCount = 0;
+    let oldestPostDate: Date | null = null;
+    let newestPostDate: Date | null = null;
+    const postsPerYear: Record<number, number> = {};
+    const uniqueTags = new Set<string>();
+    const uniqueCategories = new Set<string>();
+
+    for (const row of dbPosts) {
+      switch (row.status) {
+        case 'draft': draftCount++; break;
+        case 'published': publishedCount++; break;
+        case 'archived': archivedCount++; break;
+      }
+
+      const created = row.createdAt;
+      if (!oldestPostDate || created < oldestPostDate) oldestPostDate = created;
+      if (!newestPostDate || created > newestPostDate) newestPostDate = created;
+
+      const year = created.getFullYear();
+      postsPerYear[year] = (postsPerYear[year] || 0) + 1;
+
+      const parsedTags: string[] = JSON.parse(row.tags || '[]');
+      for (const tag of parsedTags) uniqueTags.add(tag);
+
+      const parsedCategories: string[] = JSON.parse(row.categories || '[]');
+      for (const cat of parsedCategories) uniqueCategories.add(cat);
+    }
+
+    return {
+      totalPosts: dbPosts.length,
+      draftCount,
+      publishedCount,
+      archivedCount,
+      oldestPostDate,
+      newestPostDate,
+      postsPerYear,
+      tagCount: uniqueTags.size,
+      categoryCount: uniqueCategories.size,
+    };
+  }
+
   async getPostsByYearMonth(): Promise<{ year: number; month: number; count: number }[]> {
     const allPosts = await this.getAllPostsUnpaginated();
     const counts = new Map<string, { year: number; month: number; count: number }>();

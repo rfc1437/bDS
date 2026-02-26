@@ -84,7 +84,11 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
       sender.selectAll?.();
       return true;
     case 'toggleDevTools':
-      sender.toggleDevTools?.();
+      if (sender.isDevToolsOpened?.()) {
+        sender.closeDevTools?.();
+      } else {
+        sender.openDevTools?.({ mode: 'detach' });
+      }
       return true;
     case 'reload':
       sender.reload?.();

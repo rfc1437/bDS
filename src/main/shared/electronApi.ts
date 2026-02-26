@@ -431,6 +431,14 @@ export interface ChatTitleUpdate {
   title: string;
 }
 
+export interface ChatSendMetadata {
+  surface?: 'tab' | 'sidebar';
+}
+
+// A2UI types imported for use in ElectronAPI and re-exported for renderer
+import type { A2UIServerMessage, A2UIClientAction } from '../a2ui/types';
+export type { A2UIServerMessage, A2UIClientAction };
+
 export interface SiteValidationReport {
   sitemapPath: string;
   sitemapChanged: boolean;
@@ -726,7 +734,8 @@ export interface ElectronAPI {
     deleteConversation: (id: string) => Promise<boolean>;
 
     // Messaging
-    sendMessage: (conversationId: string, message: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+    sendMessage: (conversationId: string, message: string, metadata?: ChatSendMetadata) => Promise<{ success: boolean; message?: string; error?: string }>;
+    addSystemEvent: (conversationId: string, content: string) => Promise<{ success: boolean; error?: string }>;
     abortMessage: (conversationId: string) => Promise<void>;
     getHistory: (conversationId: string) => Promise<ChatMessage[]>;
     clearMessages: (conversationId: string) => Promise<void>;
@@ -743,6 +752,10 @@ export interface ElectronAPI {
     onToolCall: (callback: (data: ChatToolCall) => void) => () => void;
     onToolResult: (callback: (data: ChatToolResult) => void) => () => void;
     onTitleUpdated: (callback: (data: ChatTitleUpdate) => void) => () => void;
+
+    // A2UI streaming
+    onA2UIMessage: (callback: (data: { conversationId: string; message: A2UIServerMessage }) => void) => () => void;
+    dispatchA2UIAction: (action: A2UIClientAction) => Promise<{ success: boolean; error?: string }>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

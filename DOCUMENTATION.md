@@ -11,6 +11,7 @@
 - [Working with media](#working-with-media)
 - [Using macros](#using-macros)
 - [Using scripting (early access)](#using-scripting-early-access)
+- [Using the AI assistant](#using-the-ai-assistant)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
@@ -250,6 +251,65 @@ Notes:
 - Transform scripts can call `toast("...")` to send user-facing UI notifications.
 - Transform scripts can directly manipulate `title`, `content`, `categories`, and `tags`.
 - Transform pipeline failures always trigger automatic error toasts.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Using the AI assistant
+
+The AI assistant is built into bDS to help you manage your blog through natural conversation. You can ask it to search posts, analyze your content, update metadata, and visualize data. Instead of returning only plain text, the assistant can present results as rich interactive elements such as charts, tables, forms, and more.
+
+The assistant works entirely with your local blog content. It does not have access to the internet or external services. When you ask a question, it uses your posts, media, tags, and categories to find answers and present them in the most useful format. In most cases the assistant automatically picks the right visualization for your request, but you can also ask for a specific format explicitly.
+
+### Charts
+
+The assistant can display bar, stacked-bar, line, area, pie, donut, and heatmap charts to help you spot patterns and trends in your blog data. Charts include a title, labeled data points, and a visual representation that makes it easy to compare values at a glance. Use stacked-bar charts when each bar has multiple segments, area charts for cumulative trends, donut charts for proportional breakdowns with a total in the center, and heatmap charts for matrix data where color intensity encodes value.
+
+**Try asking:** "Show me a chart of posts published per month this year"
+
+### Tables
+
+When you need to compare posts side by side or see structured information, the assistant can render a table with columns and rows. Tables are useful for listings, comparisons, and any data that benefits from a grid layout.
+
+**Try asking:** "Compare my last 10 posts showing title, status, and word count"
+
+### Cards
+
+Cards present a focused summary with a title, body text, and optional action buttons. The assistant uses cards when highlighting a specific item, making a recommendation, or presenting a result that you might want to act on.
+
+**Try asking:** "Give me a summary card for my most recent draft post"
+
+### Metrics
+
+A metric is a single prominent number or value with a label. The assistant uses metrics when the answer to your question is one key figure, such as a count, a status, or a statistic.
+
+**Try asking:** "How many draft posts do I have?"
+
+### Lists
+
+Lists display items as a simple bulleted enumeration. They work well for tag listings, next steps, checklists, and any result that is naturally a sequence of items.
+
+**Try asking:** "List all tags that are used by fewer than 3 posts"
+
+### Forms
+
+When the assistant needs structured input from you, it can display an interactive form with text fields, checkboxes, dropdowns, and date pickers. Forms are typically used for metadata updates, multi-field edits, and configuration tasks where typing everything into a single message would be awkward.
+
+**Try asking:** "Help me update the metadata for my post about React"
+
+### Tabs
+
+Tabs let the assistant organize multiple views into a single switchable interface. Each tab can contain any combination of text, charts, tables, metrics, and lists. Tabs are especially useful for multi-dimensional comparisons where you want to explore different slices of data without scrolling through a long response.
+
+**Try asking:** "Show post statistics by year, with each year as a tab containing a chart of monthly post counts"
+
+### Key takeaways
+
+- The assistant picks the right visualization automatically based on your question.
+- You can ask for a specific format by mentioning it in your prompt ("show as a chart", "put it in a table").
+- Tabs can contain charts, tables, and other elements for rich multi-view displays.
+- The assistant can only access your local blog content.
 
 [↑ Back to In this article](#in-this-article)
 
