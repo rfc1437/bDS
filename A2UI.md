@@ -66,7 +66,7 @@ Instead of asking the LLM to produce A2UI JSON as free text (unreliable), we add
 
 | Tool | Purpose | A2UI Output |
 |------|---------|-------------|
-| `render_chart` | Show bar/line/pie chart | `updateComponents` with chart component |
+| `render_chart` | Show bar/stacked-bar/line/pie chart | `updateComponents` with chart component |
 | `render_table` | Show data table | `updateComponents` with table rows |
 | `render_form` | Show input form | `updateComponents` with form fields |
 | `render_card` | Show info card | `updateComponents` with card component |
@@ -268,7 +268,7 @@ Individual component renderers, refactored from `AssistantPanelControls`:
 1. Create `src/main/a2ui/generator.ts` — converts tool args to A2UI messages
 2. Create `src/main/a2ui/catalog.ts` — defines our component catalog
 3. Add UI-rendering tools to `OpenCodeManager.getToolDefinitions()`:
-   - `render_chart({ chartType, title, series })`
+   - `render_chart({ chartType, title, series })` — chartType includes `bar`, `stacked-bar`, `line`, `pie`
    - `render_table({ title, columns, rows })`
    - `render_form({ title, fields, submitAction })`
    - `render_card({ title, body, subtitle, actions })`

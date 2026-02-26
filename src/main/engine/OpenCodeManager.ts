@@ -924,7 +924,7 @@ export class OpenCodeManager {
         input_schema: {
           type: 'object',
           properties: {
-            chartType: { type: 'string', enum: ['bar', 'line', 'pie'], description: 'The type of chart to render' },
+            chartType: { type: 'string', enum: ['bar', 'stacked-bar', 'line', 'pie'], description: 'The type of chart to render. Use stacked-bar when each bar has multiple segments (categories).' },
             title: { type: 'string', description: 'Optional chart title' },
             series: {
               type: 'array',
@@ -932,11 +932,23 @@ export class OpenCodeManager {
                 type: 'object',
                 properties: {
                   label: { type: 'string', description: 'Data point label' },
-                  value: { type: 'number', description: 'Data point value' },
+                  value: { type: 'number', description: 'Data point value (total for stacked bars)' },
+                  segments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        label: { type: 'string', description: 'Segment category label' },
+                        value: { type: 'number', description: 'Segment value' },
+                      },
+                      required: ['label', 'value'],
+                    },
+                    description: 'Segments for stacked-bar charts. Each segment is a category within the bar.',
+                  },
                 },
                 required: ['label', 'value'],
               },
-              description: 'Array of data points with label and value',
+              description: 'Array of data points with label and value. For stacked-bar charts, include segments.',
             },
           },
           required: ['chartType', 'series'],

@@ -82,6 +82,56 @@ describe('A2UI generator', () => {
         { label: 'Feb', value: 20 },
       ]);
     });
+
+    it('creates stacked-bar chart with segment data', () => {
+      const messages = generateChart('conv-1', {
+        chartType: 'stacked-bar',
+        title: 'Posts by Year',
+        series: [
+          {
+            label: '2023',
+            value: 30,
+            segments: [
+              { label: 'Published', value: 20 },
+              { label: 'Draft', value: 10 },
+            ],
+          },
+          {
+            label: '2024',
+            value: 45,
+            segments: [
+              { label: 'Published', value: 35 },
+              { label: 'Draft', value: 10 },
+            ],
+          },
+        ],
+      });
+
+      expect(messages).toHaveLength(3);
+
+      const updateMsg = messages[1] as Extract<A2UIServerMessage, { type: 'updateComponents' }>;
+      expect(updateMsg.components[0].properties.chartType).toBe('stacked-bar');
+
+      const dataMsg = messages[2] as Extract<A2UIServerMessage, { type: 'updateDataModel' }>;
+      expect(dataMsg.value).toEqual([
+        {
+          label: '2023',
+          value: 30,
+          segments: [
+            { label: 'Published', value: 20 },
+            { label: 'Draft', value: 10 },
+          ],
+        },
+        {
+          label: '2024',
+          value: 45,
+          segments: [
+            { label: 'Published', value: 35 },
+            { label: 'Draft', value: 10 },
+          ],
+        },
+      ]);
+    });
   });
 
   describe('generateTable', () => {

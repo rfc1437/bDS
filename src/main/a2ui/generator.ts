@@ -56,9 +56,9 @@ function createSurfaceMessages(
 // ---- Tool argument interfaces ----
 
 export interface RenderChartArgs {
-  chartType: 'bar' | 'line' | 'pie';
+  chartType: 'bar' | 'stacked-bar' | 'line' | 'pie';
   title?: string;
-  series: Array<{ label: string; value: number }>;
+  series: Array<{ label: string; value: number; segments?: Array<{ label: string; value: number }> }>;
 }
 
 export interface RenderTableArgs {

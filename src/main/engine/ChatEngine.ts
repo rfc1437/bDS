@@ -323,7 +323,7 @@ Available Data Tools:
 - get_media_posts: Get posts that use a specific media file.
 
 Available UI Render Tools (use these to show rich interactive elements):
-- render_chart: Show data as a bar, line, or pie chart. Use when presenting statistics or comparisons.
+- render_chart: Show data as a bar, stacked-bar, line, or pie chart. Use when presenting statistics or comparisons. Use stacked-bar when each bar has multiple segments (e.g., published vs draft posts per year).
 - render_table: Show data in a structured table. Use for tabular comparisons and listings.
 - render_form: Show an interactive form to collect user input (e.g., metadata edits, settings).
 - render_card: Show an information card with title, body, and action buttons.
