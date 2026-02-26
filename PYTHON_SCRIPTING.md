@@ -79,13 +79,7 @@ These are current realities and should be treated as authoritative unless we exp
 - [ ] Add fixtures/golden tests for mixed macro rendering stability.
 - [ ] Document precedence/dispatch behavior when macro names overlap (Python script vs JS built-in).
 
-## 5) Default script seeding/versioning (P2)
-
-- [ ] Bundle default scripts in repo/app resources.
-- [ ] Seed missing defaults on project init/startup deterministically.
-- [ ] Add versioned update strategy for default scripts.
-
-## 6) Diagnostics and performance visibility (P3)
+## 5) Diagnostics and performance visibility (P3)
 
 - [ ] Add macro execution counters (count, timeout/error counts, p50/p95) for real render path.
 - [ ] Define regression thresholds based on benchmark trends.
