@@ -859,7 +859,8 @@ export async function replaceAllMacrosAsync(
   if (hasUnknownMacros && pythonMacroRenderer) {
     try {
       pythonScripts = await pythonMacroRenderer.getEnabledMacroScripts();
-    } catch {
+    } catch (error) {
+      console.warn('[PageRenderer] Failed to resolve Python macro scripts:', error instanceof Error ? error.message : String(error));
       pythonScripts = [];
     }
   }
@@ -892,7 +893,7 @@ export async function replaceAllMacrosAsync(
             hook: m.name,
             source: { kind: 'macro', id: pythonScript.id },
           },
-          params: params as Record<string, unknown>,
+          params: params,
         };
 
         const result = await pythonMacroRenderer.renderMacro({
@@ -904,7 +905,8 @@ export async function replaceAllMacrosAsync(
         });
 
         rendered.push(result.html);
-      } catch {
+      } catch (error) {
+        console.warn(`[PageRenderer] Python macro '${m.name}' failed:`, error instanceof Error ? error.message : String(error));
         rendered.push('');
       }
     } else {

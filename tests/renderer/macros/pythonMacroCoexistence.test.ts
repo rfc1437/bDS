@@ -119,7 +119,7 @@ describe('Python macro coexistence in renderer registry', () => {
 
       const result = await renderMacro(macro, context);
       expect(result).toContain('macro-error');
-      expect(result).toContain('Python macro error');
+      expect(result).toContain('Resolution failed');
     });
 
     it('should show unknown macro error when no Python resolver is set', async () => {

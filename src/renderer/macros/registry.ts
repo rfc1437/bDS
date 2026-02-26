@@ -183,8 +183,9 @@ export async function renderMacro(
       if (pythonInfo) {
         return await pythonMacroRendererFn(pythonInfo, macro.params, context);
       }
-    } catch {
-      return `<span class="macro-error" title="Python macro error">${macro.rawText}</span>`;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Python macro error';
+      return `<span class="macro-error" title="${errorMessage}">${macro.rawText}</span>`;
     }
   }
 
