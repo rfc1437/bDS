@@ -13,6 +13,7 @@ const setModelMarkersMock = vi.fn();
 vi.mock('@monaco-editor/react', () => ({
   default: (props: {
     value?: string;
+    defaultValue?: string;
     onChange?: (value?: string) => void;
     language?: string;
     onMount?: (editor: unknown, monaco: unknown) => void;
@@ -34,7 +35,7 @@ vi.mock('@monaco-editor/react', () => ({
     return (
       <textarea
         aria-label="Script Content"
-        value={props.value || ''}
+        defaultValue={props.defaultValue ?? props.value ?? ''}
         onChange={(event) => props.onChange?.(event.target.value)}
       />
     );
@@ -91,11 +92,13 @@ describe('ScriptsView', () => {
   it('loads scripts and allows editing content', async () => {
     render(<ScriptsView scriptId="script-1" />);
 
-    const textarea = screen.getByLabelText('Script Content') as HTMLTextAreaElement;
+    // After script loads, Monaco remounts with new key — re-query the textarea
     await vi.waitFor(() => {
+      const textarea = screen.getByLabelText('Script Content') as HTMLTextAreaElement;
       expect(textarea.value).toContain('print("hello")');
     });
 
+    const textarea = screen.getByLabelText('Script Content') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'print("updated")' } });
     expect(textarea.value).toContain('updated');
 

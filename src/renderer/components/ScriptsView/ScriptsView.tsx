@@ -60,6 +60,9 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
   const [isCheckingSyntax, setIsCheckingSyntax] = useState(false);
   const editorRef = useRef<ScriptMonacoEditor | null>(null);
   const monacoRef = useRef<ScriptMonacoRuntime | null>(null);
+  // Token incremented to signal Monaco to remount with fresh defaultValue.
+  // Prevents controlled-mode cursor jumps during typing.
+  const [monacoResetToken, setMonacoResetToken] = useState(0);
 
   const buildCacheKey = (scriptMeta: Pick<ScriptData, 'id' | 'version'>, content: string): string => {
     let hash = 0;
@@ -203,6 +206,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         setAvailableEntrypoints(['main']);
         setEnabled(true);
         setScriptContent('');
+        setMonacoResetToken(prev => prev + 1);
         setIsSlugManuallyEdited(false);
         return;
       }
@@ -217,6 +221,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         setAvailableEntrypoints(['main']);
         setEnabled(true);
         setScriptContent('');
+        setMonacoResetToken(prev => prev + 1);
         setIsSlugManuallyEdited(false);
         return;
       }
@@ -228,6 +233,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
       setEntrypoint(item.entrypoint || 'render');
       setEnabled(item.enabled ?? true);
       setScriptContent(item.content || '');
+      setMonacoResetToken(prev => prev + 1);
       const normalizedExisting = toFunctionSlug(item.slug || item.title || '');
       setIsSlugManuallyEdited(normalizedExisting !== toFunctionSlug(item.title || ''));
       await refreshEntrypoints(item.content || '', item);
@@ -520,10 +526,11 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
 
         <div className="scripts-monaco">
           <MonacoEditor
+            key={monacoResetToken}
             height="100%"
             language="python"
             theme="vs-dark"
-            value={scriptContent}
+            defaultValue={scriptContent}
             onChange={(value) => setScriptContent(value || '')}
             onMount={handleEditorDidMount}
             options={{
