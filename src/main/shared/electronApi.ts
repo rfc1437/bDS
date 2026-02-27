@@ -589,6 +589,7 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<ScriptData | null>;
     getAll: () => Promise<ScriptData[]>;
+    /** Internal: editor macro plugin helper. Not exposed via Python API contract. */
     getEnabledMacroSlugs: () => Promise<string[]>;
     rebuildFromFiles: () => Promise<void>;
   };

@@ -772,6 +772,9 @@ export function registerIpcHandlers(): void {
     return engine.getAllScripts();
   });
 
+  // Internal: used by the editor macro plugin to detect known Python macros.
+  // Intentionally excluded from the Python API contract and API.md because
+  // it is an internal renderer helper, not a user-facing scripting API.
   safeHandle('scripts:getEnabledMacroSlugs', async () => {
     const engine = getScriptEngine();
     const scripts = await engine.getEnabledMacroScripts();

@@ -15,7 +15,7 @@ import { createDeferredEventGate } from './navigation/deferredEventGate';
 import { createAndFocusPost } from './navigation/postCreation';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
 import { addWindowEventListener, BDS_EVENT_SCRIPTS_CHANGED } from './utils/windowEvents';
-import { refreshPythonMacroSlugs } from './macros';
+import { refreshPythonMacroSlugs, wirePythonMacroPreview, invalidatePythonMacroScriptCache } from './macros';
 import { useI18n } from './i18n';
 import './App.css';
 
@@ -109,6 +109,9 @@ const App: React.FC = () => {
 
         // Load known Python macro slugs for editor detection
         await refreshPythonMacroSlugs();
+
+        // Wire Python macro resolver/renderer for editor preview
+        wirePythonMacroPreview();
       } catch (error) {
         console.error('Failed to load initial data:', error);
       } finally {
@@ -565,6 +568,7 @@ const App: React.FC = () => {
     // Refresh Python macro slugs when scripts change
     unsubscribers.push(
       addWindowEventListener(BDS_EVENT_SCRIPTS_CHANGED, () => {
+        invalidatePythonMacroScriptCache();
         void refreshPythonMacroSlugs();
       })
     );

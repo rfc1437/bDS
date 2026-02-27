@@ -4,6 +4,8 @@ Contract version: 1.6.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
+`bds_api` is available in both **macro scripts** (executed during preview and page generation) and **transform scripts** (executed during blogmark import). In macro entrypoints, API calls run in the same runtime context as the macro and can be used to fetch posts, media, tags, or other application data.
+
 ## Usage
 
 ```python

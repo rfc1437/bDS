@@ -65,7 +65,7 @@ function validateParamValue(methodName: string, param: PythonApiParamContractV1,
 
 type EngineGetter = () => Record<string, (...args: unknown[]) => unknown>;
 
-const ENGINE_MAP: Record<string, EngineGetter> = {
+export const ENGINE_MAP: Record<string, EngineGetter> = {
   posts: () => {
     const { getPostEngine } = require('../engine/PostEngine');
     return getPostEngine();

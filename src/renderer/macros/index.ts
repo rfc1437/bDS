@@ -45,3 +45,8 @@ export {
   setPythonMacroResolver,
   refreshPythonMacroSlugs,
 } from './registry';
+
+export {
+  wirePythonMacroPreview,
+  invalidatePythonMacroScriptCache,
+} from './pythonMacroPreview';

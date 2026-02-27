@@ -1,6 +1,15 @@
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 
+export interface BlogmarkWorkerLike {
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  postMessage(message: unknown): void;
+  terminate(): void;
+  removeAllListeners(): void;
+}
+
+export type BlogmarkWorkerFactory = (workerPath: string) => BlogmarkWorkerLike;
+
 interface WorkerRunTransformRequest {
   type: 'runTransform';
   requestId: string;
@@ -45,7 +54,7 @@ interface ActiveRequest extends QueuedRequest {
 }
 
 export class BlogmarkPythonWorkerRuntime {
-  private worker: Worker | null = null;
+  private worker: BlogmarkWorkerLike | null = null;
   private workerReady = false;
   private workerStartPromise: Promise<void> | null = null;
   private workerStartResolve: (() => void) | null = null;
@@ -53,6 +62,11 @@ export class BlogmarkPythonWorkerRuntime {
   private activeRequest: ActiveRequest | null = null;
   private queue: QueuedRequest[] = [];
   private requestCounter = 0;
+  private readonly workerFactory: BlogmarkWorkerFactory;
+
+  constructor(workerFactory?: BlogmarkWorkerFactory) {
+    this.workerFactory = workerFactory ?? ((workerPath: string) => new Worker(workerPath) as unknown as BlogmarkWorkerLike);
+  }
 
   async executeTransform(params: {
     scriptContent: string;
@@ -96,6 +110,12 @@ export class BlogmarkPythonWorkerRuntime {
 
     await this.ensureWorkerStarted();
 
+    // Re-check guard after await — another dispatchNext() may have
+    // activated a request while we were waiting for the worker.
+    if (this.activeRequest || this.queue.length === 0) {
+      return;
+    }
+
     const nextRequest = this.queue.shift();
     if (!nextRequest) {
       return;
@@ -131,18 +151,20 @@ export class BlogmarkPythonWorkerRuntime {
     }
 
     const workerPath = path.join(__dirname, 'blogmarkPython.worker.js');
-    this.worker = new Worker(workerPath);
+    this.worker = this.workerFactory(workerPath);
     this.workerReady = false;
 
-    this.worker.on('message', (message: WorkerResponseMessage) => {
-      this.handleWorkerMessage(message);
+    this.worker.on('message', (...args: unknown[]) => {
+      this.handleWorkerMessage(args[0] as WorkerResponseMessage);
     });
 
-    this.worker.on('error', (error) => {
+    this.worker.on('error', (...args: unknown[]) => {
+      const error = args[0];
       this.handleWorkerCrash(error instanceof Error ? error : new Error(String(error)));
     });
 
-    this.worker.on('exit', (code) => {
+    this.worker.on('exit', (...args: unknown[]) => {
+      const code = args[0] as number;
       if (code !== 0) {
         this.handleWorkerCrash(new Error(`Python worker exited with code ${code}`));
       }
