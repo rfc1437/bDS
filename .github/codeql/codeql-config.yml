@@ -1,0 +1,4 @@
+name: bDS CodeQL Configuration
+
+paths-ignore:
+  - tests/
