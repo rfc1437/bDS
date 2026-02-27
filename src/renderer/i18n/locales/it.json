@@ -508,6 +508,7 @@
   "editor.insertMediaTitle": "Inserisci immagine dalla libreria media",
   "editor.previewFrameTitle": "Anteprima post",
   "editor.previewLoading": "Caricamento anteprima...",
+  "editor.metadata.toggle": "Metadati",
   "editor.footer.created": "Creato",
   "editor.footer.updated": "Aggiornato",
   "editor.footer.published": "Pubblicato",

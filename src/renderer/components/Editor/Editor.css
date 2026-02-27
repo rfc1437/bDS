@@ -115,6 +115,32 @@
   gap: 16px;
 }
 
+.metadata-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.metadata-toggle:hover {
+  color: var(--vscode-foreground);
+}
+
+.metadata-toggle-chevron {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
 .editor-header-row {
   display: flex;
   gap: 16px;

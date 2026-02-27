@@ -510,6 +510,7 @@
   "editor.insertMediaTitle": "Bild aus Medienbibliothek einfügen",
   "editor.previewFrameTitle": "Beitragsvorschau",
   "editor.previewLoading": "Vorschau wird geladen...",
+  "editor.metadata.toggle": "Metadaten",
   "editor.footer.created": "Erstellt",
   "editor.footer.updated": "Aktualisiert",
   "editor.footer.published": "Veröffentlicht",

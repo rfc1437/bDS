@@ -510,6 +510,7 @@
   "editor.insertMediaTitle": "Insert image from media library",
   "editor.previewFrameTitle": "Post preview",
   "editor.previewLoading": "Loading preview...",
+  "editor.metadata.toggle": "Metadata",
   "editor.footer.created": "Created",
   "editor.footer.updated": "Updated",
   "editor.footer.published": "Published",

@@ -189,6 +189,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showPostSearch, setShowPostSearch] = useState(false);
   const [showMediaSearch, setShowMediaSearch] = useState(false);
+  const [metadataExpanded, setMetadataExpanded] = useState(true);
   const editorRef = useRef<unknown>(null);
 
   const isDirty = checkIsDirty(postId);
@@ -298,6 +299,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
+      if (!isInitialized) {
+        setMetadataExpanded(post.title === '');
+      }
       markClean(postId);
       // Mark as initialized AFTER setting local state
       setIsInitialized(true);
@@ -718,6 +722,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       </div>
 
       <div className="editor-content">
+        <button
+          className={`metadata-toggle ${metadataExpanded ? 'expanded' : ''}`}
+          onClick={() => setMetadataExpanded(v => !v)}
+        >
+          <span className="metadata-toggle-chevron">{metadataExpanded ? '▼' : '▶'}</span>
+          <span>{tr('editor.metadata.toggle')}</span>
+        </button>
+        {metadataExpanded && (
         <div className="editor-header-row">
           <div className="editor-meta">
             <div className="editor-field">
@@ -768,18 +780,19 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 />
               </div>
             </div>
-            
+
             <PostLinks
               postId={postId}
               updatedAt={post.updatedAt}
               onPostClick={(id) => useAppStore.getState().setSelectedPost(id)}
             />
           </div>
-          
+
           <div className="editor-media-panel">
             <LinkedMediaPanel postId={postId} />
           </div>
         </div>
+        )}
         
         <div className="editor-body">
           <div className="editor-toolbar">
