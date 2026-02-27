@@ -54,6 +54,8 @@ interface MilkdownEditorProps {
   content: string;
   onChange: (markdown: string) => void;
   placeholder?: string;
+  currentPostTags?: string[];
+  currentPostCategories?: string[];
 }
 
 interface MilkdownChangePropagationInput {
@@ -86,10 +88,12 @@ export const shouldPropagateMilkdownChange = ({
 
 interface EditorToolbarProps {
   onUserInteraction: () => void;
+  currentPostTags?: string[];
+  currentPostCategories?: string[];
 }
 
 // Toolbar component that uses the editor instance
-const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
+const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction, currentPostTags, currentPostCategories }) => {
   const { t: tr } = useI18n();
   const [loading, getEditor] = useInstance();
   const [insertMode, setInsertMode] = useState<InsertModalMode>(null);
@@ -269,6 +273,8 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ onUserInteraction }) => {
           onInsertImage={handleInsertImage}
           onClose={() => setInsertMode(null)}
           initialText={selectedText}
+          currentPostTags={currentPostTags}
+          currentPostCategories={currentPostCategories}
         />
       )}
     </>
@@ -289,6 +295,8 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
   content,
   onChange,
   placeholder,
+  currentPostTags,
+  currentPostCategories,
 }) => {
   const { t: tr } = useI18n();
   const resolvedPlaceholder = placeholder || tr('editor.placeholder');
@@ -376,7 +384,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
       onPasteCapture={markUserInteraction}
       onInputCapture={markUserInteraction}
     >
-      <EditorToolbar onUserInteraction={markUserInteraction} />
+      <EditorToolbar onUserInteraction={markUserInteraction} currentPostTags={currentPostTags} currentPostCategories={currentPostCategories} />
       <div className="milkdown-content" data-placeholder={resolvedPlaceholder}>
         <Milkdown />
       </div>

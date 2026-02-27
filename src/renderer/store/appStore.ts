@@ -118,6 +118,7 @@ interface AppState {
   
   // Tab Actions
   openTab: (tab: { type: TabType; id: string; isTransient: boolean }) => void;
+  openTabInBackground: (tab: { type: TabType; id: string; isTransient: boolean }) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   pinTab: (id: string) => void;
@@ -274,7 +275,23 @@ export const useAppStore = create<AppState>()(
         const newTab: Tab = { type, id, isTransient };
         return { tabs: [...state.tabs, newTab], activeTabId: id };
       }),
-      
+
+      openTabInBackground: ({ type, id, isTransient }) => set((state) => {
+        const existingTabIndex = state.tabs.findIndex((t) => t.id === id && t.type === type);
+
+        if (existingTabIndex >= 0) {
+          if (!isTransient) {
+            const updatedTabs = [...state.tabs];
+            updatedTabs[existingTabIndex] = { ...updatedTabs[existingTabIndex], isTransient: false };
+            return { tabs: updatedTabs };
+          }
+          return state;
+        }
+
+        const newTab: Tab = { type, id, isTransient };
+        return { tabs: [...state.tabs, newTab] };
+      }),
+
       closeTab: (id) => set((state) => {
         const tabIndex = state.tabs.findIndex((t) => t.id === id);
         if (tabIndex === -1) return state;

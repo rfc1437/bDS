@@ -847,6 +847,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               content={content}
               onChange={setContent}
               placeholder={tr('editor.placeholder.startWriting')}
+              currentPostTags={tags}
+              currentPostCategories={selectedCategories}
             />
           )}
           
@@ -921,6 +923,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           onInsertLink={handleInsertLink}
           onInsertImage={() => {}}
           onClose={() => setShowPostSearch(false)}
+          currentPostTags={tags}
+          currentPostCategories={selectedCategories}
         />
       )}
       

@@ -246,6 +246,8 @@
   "insert.hint.external": "Inserisci URL e premi Invio o clicca il pulsante, Esc per chiudere",
   "insert.hint.canonicalPost": "Canonico: /YYYY/MM/DD/slug",
   "insert.hint.canonicalMedia": "Canonico: /media/YYYY/MM/file.ext",
+  "insert.createPost": "Crea articolo \"{title}\"",
+  "insert.createdPost": "Articolo \"{title}\" creato",
   "postLinks.loading": "Caricamento link...",
   "postLinks.link": "collegamento",
   "postLinks.links": "link",

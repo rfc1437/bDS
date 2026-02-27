@@ -248,6 +248,8 @@
   "insert.hint.external": "Enter URL and press Enter or click button, Esc to close",
   "insert.hint.canonicalPost": "Canonical: /YYYY/MM/DD/slug",
   "insert.hint.canonicalMedia": "Canonical: /media/YYYY/MM/file.ext",
+  "insert.createPost": "Create post \"{title}\"",
+  "insert.createdPost": "Post \"{title}\" created",
   "postLinks.loading": "Loading links...",
   "postLinks.link": "link",
   "postLinks.links": "links",

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
+import { useAppStore } from '../../store/appStore';
+import { showToast } from '../Toast';
 import './InsertModal.css';
 
 interface PostSearchResult {
@@ -20,8 +22,8 @@ interface MediaSearchResult {
 /** Get display name for media: title (truncated to 60 chars) or fallback to filename */
 function getMediaDisplayName(media: MediaSearchResult): string {
   if (media.title) {
-    return media.title.length > 60 
-      ? media.title.substring(0, 60) + '...' 
+    return media.title.length > 60
+      ? media.title.substring(0, 60) + '...'
       : media.title;
   }
   return media.originalName;
@@ -38,6 +40,8 @@ interface InsertModalProps {
   onInsertImage: (url: string, alt: string, mediaId?: string) => void;
   onClose: () => void;
   initialText?: string; // Selected text in editor
+  currentPostTags?: string[];
+  currentPostCategories?: string[];
 }
 
 function isPostResult(result: SearchResult): result is PostSearchResult {
@@ -54,8 +58,11 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   onInsertImage,
   onClose,
   initialText = '',
+  currentPostTags,
+  currentPostCategories,
 }) => {
   const { t: tr } = useI18n();
+  const openTabInBackground = useAppStore((s) => s.openTabInBackground);
   const [activeTab, setActiveTab] = useState<Tab>('internal');
   const [query, setQuery] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
@@ -64,8 +71,19 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const externalUrlRef = useRef<HTMLInputElement>(null);
+
+  // Whether to show the "Create post" option
+  const showCreateOption = mode === 'link' &&
+    activeTab === 'internal' &&
+    query.trim().length >= 2 &&
+    !isSearching &&
+    !results.some(r => isPostResult(r) && r.title.toLowerCase() === query.trim().toLowerCase());
+
+  // Total selectable items count (results + optional create option)
+  const totalItems = results.length + (showCreateOption ? 1 : 0);
 
   // Focus appropriate input on mount and tab change
   useEffect(() => {
@@ -106,6 +124,34 @@ export const InsertModal: React.FC<InsertModalProps> = ({
     return () => clearTimeout(timeoutId);
   }, [query, mode, activeTab]);
 
+  // Handle creating a new post from the search query
+  const handleCreatePost = useCallback(async () => {
+    const title = query.trim();
+    if (!title || isCreating) return;
+
+    setIsCreating(true);
+    try {
+      const newPost = await window.electronAPI.posts.create({
+        title,
+        tags: currentPostTags || [],
+        categories: currentPostCategories || [],
+      });
+
+      if (newPost) {
+        openTabInBackground({ type: 'post', id: newPost.id, isTransient: false });
+        const linkUrl = `/posts/${newPost.slug}`;
+        onInsertLink(linkUrl, title);
+        showToast.success(tr('insert.createdPost', { title }));
+        onClose();
+      }
+    } catch (error) {
+      const err = error as Error;
+      showToast.error(err.message);
+    } finally {
+      setIsCreating(false);
+    }
+  }, [query, isCreating, currentPostTags, currentPostCategories, openTabInBackground, onInsertLink, onClose, tr]);
+
   // Keyboard navigation handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     switch (e.key) {
@@ -116,7 +162,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
       case 'ArrowDown':
         if (activeTab === 'internal') {
           e.preventDefault();
-          setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
+          setSelectedIndex(prev => Math.min(prev + 1, totalItems - 1));
         }
         break;
       case 'ArrowUp':
@@ -127,9 +173,13 @@ export const InsertModal: React.FC<InsertModalProps> = ({
         break;
       case 'Enter':
         e.preventDefault();
-        if (activeTab === 'internal' && results[selectedIndex]) {
-          handleSelectResult(results[selectedIndex]);
-        } else if (activeTab === 'external' && externalUrl) {
+        if (activeTab === 'internal') {
+          if (selectedIndex < results.length && results[selectedIndex]) {
+            handleSelectResult(results[selectedIndex]);
+          } else if (showCreateOption && selectedIndex === results.length) {
+            handleCreatePost();
+          }
+        } else if (externalUrl) {
           handleExternalSubmit();
         }
         break;
@@ -137,7 +187,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
         // Allow tab switching with Tab key when on the tab buttons
         break;
     }
-  }, [activeTab, results, selectedIndex, externalUrl, onClose]);
+  }, [activeTab, results, selectedIndex, totalItems, showCreateOption, externalUrl, onClose, handleCreatePost]);
 
   // Handle selecting a search result
   const handleSelectResult = useCallback(async (result: SearchResult) => {
@@ -161,7 +211,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   // Handle external URL submission
   const handleExternalSubmit = useCallback(() => {
     if (!externalUrl) return;
-    
+
     if (mode === 'link') {
       onInsertLink(externalUrl, externalText || undefined);
     } else {
@@ -180,7 +230,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
 
   // Scroll selected item into view
   useEffect(() => {
-    const selectedElement = document.querySelector('.insert-modal-result-item.selected');
+    const selectedElement = document.querySelector('.insert-modal-result-item.selected, .insert-modal-result-create.selected');
     if (selectedElement) {
       selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
@@ -189,7 +239,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   const title = mode === 'link' ? tr('insert.title.link') : tr('insert.title.image');
   const internalLabel = mode === 'link' ? tr('insert.tab.linkInternal') : tr('insert.tab.imageInternal');
   const externalLabel = mode === 'link' ? tr('insert.tab.linkExternal') : tr('insert.tab.imageExternal');
-  const searchPlaceholder = mode === 'link' 
+  const searchPlaceholder = mode === 'link'
     ? tr('insert.searchPlaceholder.link')
     : tr('insert.searchPlaceholder.image');
 
@@ -224,6 +274,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                 placeholder={searchPlaceholder}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
                 autoComplete="off"
               />
             </div>
@@ -239,7 +290,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                 </div>
               )}
 
-              {!isSearching && query.length >= 2 && results.length === 0 && (
+              {!isSearching && query.length >= 2 && results.length === 0 && !showCreateOption && (
                 <div className="insert-modal-status">
                   {tr('insert.status.noResults', { kind: mode === 'link' ? tr('activity.posts').toLowerCase() : tr('activity.media').toLowerCase(), query })}
                 </div>
@@ -274,6 +325,19 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                   )}
                 </div>
               ))}
+
+              {showCreateOption && (
+                <button
+                  type="button"
+                  className={`insert-modal-result-create ${selectedIndex === results.length ? 'selected' : ''}`}
+                  onClick={handleCreatePost}
+                  onMouseEnter={() => setSelectedIndex(results.length)}
+                  disabled={isCreating}
+                >
+                  <span className="insert-modal-create-icon">+</span>
+                  <span>{tr('insert.createPost', { title: query.trim() })}</span>
+                </button>
+              )}
             </div>
           </>
         ) : (
@@ -290,7 +354,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                 autoComplete="off"
               />
             </div>
-            
+
             {mode === 'link' ? (
               <div className="insert-modal-field">
                 <label className="insert-modal-label">{tr('insert.label.linkTextOptional')}</label>
@@ -328,7 +392,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
         <div className="insert-modal-footer">
           <div className="insert-modal-footer-content">
             <span className="insert-modal-hint">
-              {activeTab === 'internal' 
+              {activeTab === 'internal'
                 ? tr('insert.hint.internal')
                 : tr('insert.hint.external')}
             </span>

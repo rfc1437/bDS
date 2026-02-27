@@ -215,4 +215,50 @@ describe('AppStore', () => {
       expectTypeOf<TaskProgress>().toEqualTypeOf<SharedTaskProgress>();
     });
   });
+
+  describe('Tab Management', () => {
+    beforeEach(() => {
+      setState({
+        tabs: [],
+        activeTabId: null,
+      });
+    });
+
+    it('should open a tab in the background without changing activeTabId', () => {
+      // Set up an existing active tab
+      getStore().openTab({ type: 'post', id: 'existing-post', isTransient: false });
+      expect(getStore().activeTabId).toBe('existing-post');
+
+      // Open a new tab in the background
+      getStore().openTabInBackground({ type: 'post', id: 'background-post', isTransient: false });
+
+      expect(getStore().tabs).toHaveLength(2);
+      expect(getStore().tabs[1].id).toBe('background-post');
+      expect(getStore().activeTabId).toBe('existing-post');
+    });
+
+    it('should not duplicate a tab when opening in background if it already exists', () => {
+      getStore().openTab({ type: 'post', id: 'post-1', isTransient: false });
+      getStore().openTabInBackground({ type: 'post', id: 'post-1', isTransient: false });
+
+      expect(getStore().tabs).toHaveLength(1);
+    });
+
+    it('should pin an existing transient tab when opening in background as non-transient', () => {
+      getStore().openTab({ type: 'post', id: 'post-1', isTransient: true });
+      getStore().openTabInBackground({ type: 'post', id: 'post-1', isTransient: false });
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().tabs[0].isTransient).toBe(false);
+    });
+
+    it('should preserve null activeTabId when opening background tab with no prior active tab', () => {
+      setState({ activeTabId: null, tabs: [] });
+
+      getStore().openTabInBackground({ type: 'post', id: 'bg-post', isTransient: false });
+
+      expect(getStore().tabs).toHaveLength(1);
+      expect(getStore().activeTabId).toBeNull();
+    });
+  });
 });
