@@ -4,7 +4,7 @@ Contract version: 1.7.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
-`bds_api` is available in both **macro scripts** (executed during preview and page generation) and **transform scripts** (executed during blogmark import). In macro entrypoints, API calls run in the same runtime context as the macro and can be used to fetch posts, media, tags, or other application data.
+`bds_api` is available in **macro scripts** (executed during preview and page generation). Import `bds` and call API methods from an `async def` entrypoint. Transform scripts do not have access to `bds_api`.
 
 ## Usage
 
@@ -375,7 +375,7 @@ result = await bds.posts.create(data={})
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -418,7 +418,7 @@ None  # or
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -485,7 +485,7 @@ None  # or
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -578,7 +578,7 @@ result = await bds.posts.get_by_status(status='status')
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -621,7 +621,7 @@ None  # or
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -663,7 +663,7 @@ None  # or
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -804,7 +804,7 @@ result = await bds.posts.filter(filter={})
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -996,7 +996,7 @@ result = await bds.posts.get_links_to(id='id-1')
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -1038,7 +1038,7 @@ result = await bds.posts.get_linked_by(id='id-1')
     'slug': 'value',
     'excerpt': 'value',
     'content': 'value',
-    'status': None,
+    'status': 'draft',
     'author': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
@@ -1736,7 +1736,7 @@ result = await bds.media.get_tags_with_counts()
 
 ### scripts.create
 
-Create script.
+Create script. data must include: title (str), kind ("macro"|"utility"|"transform"), content (str). Optional: slug (str), entrypoint (str, defaults to "render"), enabled (bool).
 
 **Parameters**
 
@@ -1762,7 +1762,7 @@ result = await bds.scripts.create(data={})
     'projectId': 'value',
     'slug': 'value',
     'title': 'value',
-    'kind': None,
+    'kind': 'macro',
     'entrypoint': 'value',
     'enabled': False,
     'version': 0,
@@ -1775,7 +1775,7 @@ result = await bds.scripts.create(data={})
 
 ### scripts.update
 
-Update script by id.
+Update script by id. data may include any of: title, kind, content, slug, entrypoint, enabled.
 
 **Parameters**
 
@@ -1804,7 +1804,7 @@ None  # or
     'projectId': 'value',
     'slug': 'value',
     'title': 'value',
-    'kind': None,
+    'kind': 'macro',
     'entrypoint': 'value',
     'enabled': False,
     'version': 0,
@@ -1870,7 +1870,7 @@ None  # or
     'projectId': 'value',
     'slug': 'value',
     'title': 'value',
-    'kind': None,
+    'kind': 'macro',
     'entrypoint': 'value',
     'enabled': False,
     'version': 0,
@@ -1910,7 +1910,7 @@ result = await bds.scripts.get_all()
     'projectId': 'value',
     'slug': 'value',
     'title': 'value',
-    'kind': None,
+    'kind': 'macro',
     'entrypoint': 'value',
     'enabled': False,
     'version': 0,
@@ -1985,7 +1985,7 @@ result = await bds.tasks.get_all()
 {
     'taskId': 'value',
     'name': 'value',
-    'status': None,
+    'status': 'pending',
     'progress': 0,
     'message': 'value',
     'startTime': 'value',
@@ -2024,7 +2024,7 @@ result = await bds.tasks.get_running()
 {
     'taskId': 'value',
     'name': 'value',
-    'status': None,
+    'status': 'pending',
     'progress': 0,
     'message': 'value',
     'startTime': 'value',
@@ -2635,7 +2635,7 @@ result = await bds.meta.sync_on_startup()
     'defaultAuthor': 'value',
     'maxPostsPerPage': 0,
     'blogmarkCategory': 'value',
-    'pythonRuntimeMode': None,
+    'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
     'categorySettings': {}
@@ -2677,7 +2677,7 @@ None  # or
     'defaultAuthor': 'value',
     'maxPostsPerPage': 0,
     'blogmarkCategory': 'value',
-    'pythonRuntimeMode': None,
+    'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
     'categorySettings': {}
@@ -2718,7 +2718,7 @@ None  # or
     'defaultAuthor': 'value',
     'maxPostsPerPage': 0,
     'blogmarkCategory': 'value',
-    'pythonRuntimeMode': None,
+    'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
     'categorySettings': {}
@@ -2759,7 +2759,7 @@ None  # or
     'defaultAuthor': 'value',
     'maxPostsPerPage': 0,
     'blogmarkCategory': 'value',
-    'pythonRuntimeMode': None,
+    'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
     'categorySettings': {}

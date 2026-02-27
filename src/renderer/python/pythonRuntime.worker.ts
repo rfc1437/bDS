@@ -189,13 +189,19 @@ async function runMacroV1(request: PythonWorkerRequest): Promise<void> {
 
     const rawJsonResult = await runtime.runPythonAsync(`
 import json as _json
+import inspect as _inspect
 _macro_ep = __bds_macro_entrypoint
 _macro_fn = globals().get(_macro_ep)
 if _macro_fn is None or not callable(_macro_fn):
     raise RuntimeError(f"Macro entrypoint '{_macro_ep}' is not callable")
 _macro_post_json = __bds_macro_post_data_json
 _macro_post = _json.loads(_macro_post_json) if _macro_post_json else None
-_json.dumps(_macro_fn(__bds_context_v1, _macro_post))
+_macro_call = _macro_fn(__bds_context_v1, _macro_post)
+if _inspect.isawaitable(_macro_call):
+    _macro_result = await _macro_call
+else:
+    _macro_result = _macro_call
+_json.dumps(_macro_result)
 `);
 
     const parsedResult = parseMacroResultV1(JSON.parse(toResultString(rawJsonResult)));

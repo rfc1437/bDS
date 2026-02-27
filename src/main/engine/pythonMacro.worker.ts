@@ -192,6 +192,7 @@ async function renderMacro(request: WorkerRenderMacroRequest): Promise<void> {
 
     const rawResult = await runtime.runPythonAsync(`
 import json as _json
+import inspect as _inspect
 
 _macro_ctx = _json.loads(__bds_macro_context_json)
 _macro_ep = __bds_macro_entrypoint
@@ -200,7 +201,11 @@ if _macro_fn is None or not callable(_macro_fn):
     raise RuntimeError(f"Macro entrypoint '{_macro_ep}' is not callable")
 _macro_post_json = __bds_macro_post_data_json
 _macro_post = _json.loads(_macro_post_json) if _macro_post_json else None
-_macro_result = _macro_fn(_macro_ctx, _macro_post)
+_macro_call = _macro_fn(_macro_ctx, _macro_post)
+if _inspect.isawaitable(_macro_call):
+    _macro_result = await _macro_call
+else:
+    _macro_result = _macro_call
 if _macro_result is None:
     raise RuntimeError("Macro function returned None")
 if not isinstance(_macro_result, dict):

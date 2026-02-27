@@ -10,7 +10,7 @@
 - [Working with pages](#working-with-pages)
 - [Working with media](#working-with-media)
 - [Using macros](#using-macros)
-- [Using scripting (early access)](#using-scripting-early-access)
+- [Using scripting](#using-scripting)
 - [Using the AI assistant](#using-the-ai-assistant)
 - [Organizing with tags](#organizing-with-tags)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
@@ -194,53 +194,60 @@ The optional `orientation` parameter supports `horizontal`, `mixed_hv`, and `mix
 
 ---
 
-## Using scripting (early access)
+## Using scripting
 
-The scripting feature is an incremental capability and should currently be treated as early access. Scripts are stored as Python files in the project filesystem, while script metadata is tracked in the project database and embedded in the file metadata docstring block. This keeps scripts portable and inspectable while still allowing reliable indexing in the app.
+Scripts are Python files stored in your project's `scripts/` directory. Each file carries embedded YAML frontmatter in a docstring block at the top, which bDS uses to index the script in its database. This keeps scripts portable, Git-reviewable, and consistently tracked without a separate configuration file.
 
-Each script exposes an **Entrypoint** selector. bDS always provides a synthetic `main` entrypoint. Selecting `main` runs the full script body as before. In addition, bDS inspects your script to list top-level Python function names, which can be selected as entrypoints for upcoming execution modes and integrations.
+Each script has a **Kind** (macro, transform, or utility) and an **Entrypoint** that names the Python function to invoke. bDS inspects your script to list all top-level function names so you can choose which one to call. Keep scripts versioned through your normal Git workflow, review changes carefully, and prefer small, focused scripts.
 
-At this stage, scripting is intended for controlled project workflows where scripts interact with application-provided tools. Keep scripts versioned through your normal Git workflow, review changes carefully, and prefer small, explicit scripts over monolithic utility files.
+### Transform scripts
 
-For transform scripts, bDS provides a built-in Python helper named `toast(message)`. It accepts a single string and emits a UI intent that the app handles on the renderer side. This keeps script ergonomics simple while preserving a controlled bridge between script runtime and user interface.
-
-When transform scripts fail during a pipeline run, bDS automatically surfaces an error toast so users are notified immediately. Detailed transform diagnostics (applied scripts and per-script errors) are also written to the Output panel.
-
-### Example transform script
-
-Use a transform function to modify incoming bookmark/blogmark content before bDS creates the post. The function receives a mutable `post` dictionary and should return that dictionary.
+Transform scripts run during blogmark import to modify incoming content before bDS creates the post. The entrypoint function receives a mutable `post` dict and must return it.
 
 ```python
 def normalize_blogmark(post):
-	# 1) Manipulate title
-	title = (post.get("title") or "").strip()
-	if title and not title.startswith("[Clipped]"):
-		post["title"] = f"[Clipped] {title}"
+    # 1) Manipulate title
+    title = (post.get("title") or "").strip()
+    if title and not title.startswith("[Clipped]"):
+        post["title"] = f"[Clipped] {title}"
 
-	# 2) Manipulate text/content
-	content = (post.get("content") or "").strip()
-	prefix = "Imported from blogmark\n\n"
-	if content and not content.startswith(prefix):
-		post["content"] = prefix + content
+    # 2) Manipulate text/content
+    content = (post.get("content") or "").strip()
+    prefix = "Imported from blogmark\n\n"
+    if content and not content.startswith(prefix):
+        post["content"] = prefix + content
 
-	# 3) Set or replace categories
-	post["categories"] = ["Inbox", "Research"]
+    # 3) Set or replace categories
+    post["categories"] = ["Inbox", "Research"]
 
-	# 4) Add and normalize tags
-	tags = post.get("tags") or []
-	tags.append("blogmark")
-	tags.append("clipped")
-	post["tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
+    # 4) Add and normalize tags
+    tags = post.get("tags") or []
+    tags.append("blogmark")
+    tags.append("clipped")
+    post["tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
 
-	# 5) Optional user notification
-	toast(f"Transform applied: {post.get('title')}")
-	return post
+    # 5) Optional user notification
+    toast(f"Transform applied: {post.get('title')}")
+    return post
 ```
+
+You can also accept an optional `context` argument that bDS passes when importing a blogmark:
+
+```python
+def normalize_blogmark(post, context=None):
+    url = (context or {}).get("url", "")
+    toast(f"Transform applied from: {url}")
+    return post
+```
+
+`context` contains `source` (always `"blogmark"`) and `url` (the original bookmarked URL).
 
 Notes:
 - `title` and `content` are strings.
 - `categories` and `tags` are string lists (e.g., `['News', 'AI']`).
 - Return the mutated `post` dict from your transform function.
+- `toast(message)` is a built-in available in transform scripts to send user-facing notifications.
+- When a transform fails, bDS automatically surfaces an error toast and writes diagnostics to the Output panel.
 - Keep transforms small and deterministic, especially when multiple active transforms run in sequence.
 
 ### Macro scripts
@@ -251,39 +258,47 @@ The entrypoint function always receives two arguments:
 
 ```python
 def render(context, post):
-    params = context["params"]          # dict of macro parameters
-    language = context["language"]      # project language code
-    post_slug = context["post_slug"]    # slug of the host post
+    params = context.get("params") or {}          # key-value pairs from [[slug key="value"]]
+    env = context.get("env") or {}
+    language = env.get("mainLanguage", "en")      # project render language (generation only)
+    is_preview = env.get("isPreview", False)      # True when rendering in the editor preview
 
-    title = post["title"] if post else "Unknown"
-    return {"html": f"<p>Post: {title}</p>"}
+    title = (post or {}).get("title", "Unknown")
+    custom_label = params.get("label", "")
+    return {"html": f"<p>{title}: {custom_label} ({language})</p>"}
 ```
 
-`context` is a dict containing `params` (the key-value pairs from the macro tag), `language`, and `post_slug`. `post` is the full PostData dict for the post containing the macro, or `None` when post data is unavailable. The function must return a dict with an `html` key containing the rendered HTML string.
+`context` is a dict with two keys:
+- `params` — a dict of all key-value attributes from the macro tag. For example, `[[my_macro title="Hello"]]` gives `context["params"]["title"] == "Hello"`.
+- `env` — a dict containing `isPreview` (bool). During generation it also includes `mainLanguage` (the project's render language code) and `hook` (the macro slug as written in Markdown).
 
-Macro scripts can also call the application API through the `bds_api` module:
+`post` is the full PostData dict for the post containing the macro, or `None` when post data is unavailable. The function must return a dict with an `html` key containing the rendered HTML string.
+
+#### Using the application API in macros
+
+Macro scripts can call the application API through the `bds_api` module. Because API calls are asynchronous, the entrypoint must be an `async def`:
 
 ```python
 from bds_api import bds
 
-def render(context, post):
+async def render(context, post):
     tags = await bds.posts.get_tags()
     items = "".join(f"<li>{t}</li>" for t in tags)
     return {"html": f"<ul>{items}</ul>"}
 ```
 
+See [API.md](API.md) for the full reference of available `bds` module calls.
+
 To use the macro in a post, write `[[your_slug param="value"]]` in Markdown. Built-in JS macros (youtube, vimeo, gallery, photo_archive, tag_cloud) always take priority over Python macros with the same slug.
 
 ### Key takeaways
 
-- Scripting is available and intentionally evolving in small steps.
-- `main` is always available and preserves whole-script execution behavior.
-- Script files and metadata remain filesystem-friendly and Git-reviewable.
-- Transform scripts can call `toast("...")` to send user-facing UI notifications.
-- Transform scripts can directly manipulate `title`, `content`, `categories`, and `tags`.
+- Script files and metadata are filesystem-friendly and Git-reviewable.
+- Transform scripts mutate incoming blogmark `post` dicts before creation; `toast()` sends user notifications.
+- Transform scripts can accept an optional `context` arg with `source` and `url` from the blogmark.
 - Transform pipeline failures always trigger automatic error toasts.
-- Macro scripts use a two-argument entrypoint: `def render(context, post)`.
-- Macro scripts can call `bds_api` to access posts, media, tags, and other application data.
+- Macro entrypoints receive `(context, post)` — use `def render` for pure logic, `async def render` when calling `bds_api`.
+- `context["params"]` holds macro tag attributes; `context["env"]` holds runtime metadata including `isPreview` and `mainLanguage`.
 - Built-in JS macros always take priority over Python macros with the same slug.
 
 [↑ Back to In this article](#in-this-article)

@@ -196,10 +196,10 @@ describe('DocumentationView', () => {
       </I18nProvider>
     );
 
-    const targetHeading = await screen.findByRole('heading', { level: 2, name: 'Using scripting (early access)' });
+    const targetHeading = await screen.findByRole('heading', { level: 2, name: 'Using scripting' });
     targetHeading.id = 'unexpected-id';
 
-    const tocLink = container.querySelector('a[href="#using-scripting-early-access"]') as HTMLAnchorElement;
+    const tocLink = container.querySelector('a[href="#using-scripting"]') as HTMLAnchorElement;
     expect(tocLink).not.toBeNull();
 
     const scrollContainer = container.querySelector('.documentation-scroll') as HTMLElement;
@@ -221,7 +221,7 @@ describe('DocumentationView', () => {
     fireEvent.click(tocLink);
 
     expect(scrollContainer.scrollTop).toBe(388);
-    expect(targetHeading.id).toBe('using-scripting-early-access');
+    expect(targetHeading.id).toBe('using-scripting');
   });
 
   it('shows a copy button for fenced code blocks and copies the block content', async () => {

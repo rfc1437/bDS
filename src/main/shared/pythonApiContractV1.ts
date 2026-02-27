@@ -122,8 +122,8 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('media.getTags', 'Get all media tags.', [], 'string[]'),
   method('media.getTagsWithCounts', 'Get media tags with counts.', [], 'TagCount[]'),
 
-  method('scripts.create', 'Create script.', [requiredObject('data')], 'ScriptData'),
-  method('scripts.update', 'Update script by id.', [requiredString('id'), requiredObject('data')], 'ScriptData | null'),
+  method('scripts.create', 'Create script. data must include: title (str), kind ("macro"|"utility"|"transform"), content (str). Optional: slug (str), entrypoint (str, defaults to "render"), enabled (bool).', [requiredObject('data')], 'ScriptData'),
+  method('scripts.update', 'Update script by id. data may include any of: title, kind, content, slug, entrypoint, enabled.', [requiredString('id'), requiredObject('data')], 'ScriptData | null'),
   method('scripts.delete', 'Delete script by id.', [requiredString('id')], 'boolean'),
   method('scripts.get', 'Fetch script by id.', [requiredString('id')], 'ScriptData | null'),
   method('scripts.getAll', 'Fetch all scripts.', [], 'ScriptData[]'),

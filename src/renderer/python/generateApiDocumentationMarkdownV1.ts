@@ -125,6 +125,15 @@ function extractDataStructureNames(typeSignature: string): string[] {
 function sampleValueForField(type: string): string {
   const normalized = type.trim();
 
+  // Handle string literal union types like "'macro' | 'utility' | 'transform'"
+  // These start with a single or double quote and contain literal enum values.
+  if (/^['"]/.test(normalized)) {
+    const firstLiteral = normalized.match(/['"]([^'"]+)['"]/);
+    if (firstLiteral) {
+      return `'${firstLiteral[1]}'`;
+    }
+  }
+
   if (normalized.includes('string')) {
     return "'value'";
   }
@@ -206,7 +215,7 @@ export function generateApiDocumentationMarkdownV1(): string {
   sections.push('');
   sections.push('This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.');
   sections.push('');
-  sections.push('`bds_api` is available in both **macro scripts** (executed during preview and page generation) and **transform scripts** (executed during blogmark import). In macro entrypoints, API calls run in the same runtime context as the macro and can be used to fetch posts, media, tags, or other application data.');
+  sections.push('`bds_api` is available in **macro scripts** (executed during preview and page generation). Import `bds` and call API methods from an `async def` entrypoint. Transform scripts do not have access to `bds_api`.');
   sections.push('');
   sections.push('## Usage');
   sections.push('');
