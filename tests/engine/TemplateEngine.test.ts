@@ -343,4 +343,50 @@ describe('TemplateEngine', () => {
       expect(created.slug).toBe('my_custom_slug');
     });
   });
+
+  describe('getTemplateBySlug', () => {
+    it('retrieves an enabled template by exact slug', async () => {
+      await templateEngine.createTemplate({
+        title: 'Custom Post',
+        kind: 'post',
+        content: '<main>Post</main>',
+        enabled: true,
+      });
+
+      const found = await templateEngine.getTemplateBySlug('custom_post');
+      expect(found).not.toBeNull();
+      expect(found?.slug).toBe('custom_post');
+      expect(found?.title).toBe('Custom Post');
+    });
+
+    it('matches slugs case-insensitively', async () => {
+      await templateEngine.createTemplate({
+        title: 'Custom Post',
+        kind: 'post',
+        content: '<main>Post</main>',
+        enabled: true,
+      });
+
+      const found = await templateEngine.getTemplateBySlug('CUSTOM_POST');
+      expect(found).not.toBeNull();
+      expect(found?.slug).toBe('custom_post');
+    });
+
+    it('returns null for non-existent slug', async () => {
+      const found = await templateEngine.getTemplateBySlug('does_not_exist');
+      expect(found).toBeNull();
+    });
+
+    it('does not return disabled templates', async () => {
+      await templateEngine.createTemplate({
+        title: 'Disabled Template',
+        kind: 'post',
+        content: '<main>Disabled</main>',
+        enabled: false,
+      });
+
+      const found = await templateEngine.getTemplateBySlug('disabled_template');
+      expect(found).toBeNull();
+    });
+  });
 });

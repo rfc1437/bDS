@@ -2786,6 +2786,151 @@ describe('IPC Handlers', () => {
     });
   });
 
+  // ============ Template Handlers ============
+  describe('Template Handlers', () => {
+    describe('templates:create', () => {
+      it('should call TemplateEngine.createTemplate with payload', async () => {
+        const payload = {
+          title: 'Custom Post',
+          kind: 'post',
+          content: '<html>{{ post.title }}</html>',
+        };
+        const expected = {
+          id: 'template-1',
+          projectId: 'default',
+          ...payload,
+          slug: 'custom_post',
+          enabled: true,
+          version: 1,
+          filePath: '/mock/userData/projects/default/templates/custom_post.liquid',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        mockTemplateEngine.createTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:create', payload);
+
+        expect(mockTemplateEngine.createTemplate).toHaveBeenCalledWith(payload);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:update', () => {
+      it('should call TemplateEngine.updateTemplate with id and updates', async () => {
+        const updates = { title: 'Updated Template', content: '<html>{{ post.content }}</html>' };
+        const expected = {
+          id: 'template-1',
+          projectId: 'default',
+          slug: 'updated_template',
+          title: 'Updated Template',
+          kind: 'post',
+          enabled: true,
+          version: 2,
+          filePath: '/mock/userData/projects/default/templates/updated_template.liquid',
+          content: '<html>{{ post.content }}</html>',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        mockTemplateEngine.updateTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:update', 'template-1', updates);
+
+        expect(mockTemplateEngine.updateTemplate).toHaveBeenCalledWith('template-1', updates);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:delete', () => {
+      it('should call TemplateEngine.deleteTemplate with id', async () => {
+        mockTemplateEngine.deleteTemplate.mockResolvedValue(true);
+
+        const result = await invokeHandler('templates:delete', 'template-1');
+
+        expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('template-1');
+        expect(result).toBe(true);
+      });
+    });
+
+    describe('templates:get', () => {
+      it('should call TemplateEngine.getTemplate with id', async () => {
+        const expected = {
+          id: 'template-1',
+          projectId: 'default',
+          slug: 'custom_post',
+          title: 'Custom Post',
+          kind: 'post',
+          enabled: true,
+          version: 1,
+          filePath: '/mock/userData/projects/default/templates/custom_post.liquid',
+          content: '<html>{{ post.title }}</html>',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        mockTemplateEngine.getTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:get', 'template-1');
+
+        expect(mockTemplateEngine.getTemplate).toHaveBeenCalledWith('template-1');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:getAll', () => {
+      it('should call TemplateEngine.getAllTemplates', async () => {
+        const expected = [{ id: 'template-1' }, { id: 'template-2' }];
+        mockTemplateEngine.getAllTemplates.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:getAll');
+
+        expect(mockTemplateEngine.getAllTemplates).toHaveBeenCalled();
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:getEnabledByKind', () => {
+      it('should call TemplateEngine.getEnabledTemplatesByKind with kind', async () => {
+        const expected = [{ id: 'template-1', kind: 'post' }];
+        mockTemplateEngine.getEnabledTemplatesByKind.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:getEnabledByKind', 'post');
+
+        expect(mockTemplateEngine.getEnabledTemplatesByKind).toHaveBeenCalledWith('post');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:validate', () => {
+      it('should call TemplateEngine.validateTemplate with content', async () => {
+        const expected = { valid: true, errors: [] };
+        mockTemplateEngine.validateTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:validate', '<html>{{ post.title }}</html>');
+
+        expect(mockTemplateEngine.validateTemplate).toHaveBeenCalledWith('<html>{{ post.title }}</html>');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:rebuildFromFiles', () => {
+      it('should set project context and trigger TemplateEngine rebuild', async () => {
+        mockProjectEngine.getActiveProject.mockResolvedValue({
+          id: 'project-1',
+          dataPath: '/external/data',
+        });
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/project-data');
+        mockTemplateEngine.rebuildDatabaseFromFiles.mockResolvedValue(undefined);
+
+        const result = await invokeHandler('templates:rebuildFromFiles');
+
+        expect(mockTemplateEngine.setProjectContext).toHaveBeenCalledWith('project-1', '/resolved/project-data');
+        expect(mockTemplateEngine.rebuildDatabaseFromFiles).toHaveBeenCalled();
+        expect(result).toBe(true);
+      });
+    });
+  });
+
   // ============ Error Handling ============
   describe('Error Handling', () => {
     it('should silently handle "Database is closing" errors', async () => {
