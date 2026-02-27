@@ -11,6 +11,12 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 8000,
     rollupOptions: {
+      onLog(level, log, defaultHandler) {
+        if (log.message.includes('has been externalized for browser compatibility') && log.message.includes('pyodide')) {
+          return;
+        }
+        defaultHandler(level, log);
+      },
       input: resolve(__dirname, 'src/renderer/index.html'),
       output: {
         manualChunks(id) {
