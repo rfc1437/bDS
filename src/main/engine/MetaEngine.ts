@@ -33,6 +33,8 @@ export interface ProjectMetadata {
 export interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
+  postTemplateSlug?: string;
+  listTemplateSlug?: string;
 }
 
 /**
@@ -167,6 +169,8 @@ function normalizeCategoryMetadata(value: unknown): Record<string, CategoryMetad
       renderInLists: settings.renderInLists !== false,
       showTitle: settings.showTitle !== false,
       title: sanitizeCategoryTitle(settings.title, category),
+      postTemplateSlug: typeof (settings as any).postTemplateSlug === 'string' ? (settings as any).postTemplateSlug : undefined,
+      listTemplateSlug: typeof (settings as any).listTemplateSlug === 'string' ? (settings as any).listTemplateSlug : undefined,
     };
   }
 
@@ -178,7 +182,12 @@ function normalizeCategorySettings(value: unknown): Record<string, CategoryRende
   return Object.fromEntries(
     Object.entries(metadata).map(([category, data]) => [
       category,
-      { renderInLists: data.renderInLists, showTitle: data.showTitle },
+      {
+        renderInLists: data.renderInLists,
+        showTitle: data.showTitle,
+        postTemplateSlug: data.postTemplateSlug,
+        listTemplateSlug: data.listTemplateSlug,
+      },
     ]),
   );
 }

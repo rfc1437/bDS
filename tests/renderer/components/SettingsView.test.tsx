@@ -61,6 +61,10 @@ describe('SettingsView Diff Preferences', () => {
         getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
         getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
       },
+      templates: {
+        ...(window as any).electronAPI?.templates,
+        getEnabledByKind: vi.fn().mockResolvedValue([]),
+      },
       projects: {
         ...(window as any).electronAPI?.projects,
         update: updateProjectMock,

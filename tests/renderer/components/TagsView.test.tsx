@@ -19,6 +19,9 @@ describe('TagsView subscriptions', () => {
         merge: vi.fn(),
         syncFromPosts: vi.fn(),
       },
+      templates: {
+        getEnabledByKind: vi.fn().mockResolvedValue([]),
+      },
       on: onMock,
     };
   });

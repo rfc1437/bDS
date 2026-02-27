@@ -18,6 +18,7 @@ interface TagData {
   projectId: string;
   name: string;
   color?: string;
+  postTemplateSlug?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -147,6 +148,8 @@ export const TagsView: React.FC = () => {
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
   const [editTagColor, setEditTagColor] = useState<string>('');
   const [editTagName, setEditTagName] = useState('');
+  const [editTagTemplate, setEditTagTemplate] = useState<string>('');
+  const [postTemplates, setPostTemplates] = useState<Array<{ slug: string; title: string }>>([]);
   
   // Merge tags state
   const [mergeTargetName, setMergeTargetName] = useState('');
@@ -187,6 +190,13 @@ export const TagsView: React.FC = () => {
       includeUpdated: true,
     });
   }, [loadTags]);
+
+  // Load post templates on mount
+  useEffect(() => {
+    window.electronAPI?.templates.getEnabledByKind('post').then((templates) => {
+      setPostTemplates(templates.map((t) => ({ slug: t.slug, title: t.title })));
+    });
+  }, []);
 
   // Handle tag selection
   const handleTagSelect = (name: string) => {
@@ -247,6 +257,7 @@ export const TagsView: React.FC = () => {
     setEditingTagId(tag.id);
     setEditTagColor(tag.color || '');
     setEditTagName(tag.name);
+    setEditTagTemplate(tag.postTemplateSlug || '');
   };
 
   // Save tag edit
@@ -254,9 +265,10 @@ export const TagsView: React.FC = () => {
     if (!editingTagId) return;
 
     try {
-      // Update color
+      // Update color and template
       await window.electronAPI?.tags.update(editingTagId, {
         color: editTagColor || null,
+        postTemplateSlug: editTagTemplate || null,
       });
 
       // If name changed, rename the tag
@@ -455,6 +467,7 @@ export const TagsView: React.FC = () => {
             <div className="tag-edit-form">
               <h4>{t('tagsView.edit.title', { name: selectedTagObjects[0].name })}</h4>
               {editingTagId === selectedTagObjects[0].id ? (
+                <>
                 <div className="tag-form-row">
                   <input
                     type="text"
@@ -469,8 +482,8 @@ export const TagsView: React.FC = () => {
                       onChange={(e) => setEditTagColor(e.target.value)}
                     />
                     {editTagColor && (
-                      <button 
-                        className="clear-color" 
+                      <button
+                        className="clear-color"
                         onClick={() => setEditTagColor('')}
                         title={t('tagsView.removeColor')}
                       >
@@ -481,6 +494,14 @@ export const TagsView: React.FC = () => {
                   <button onClick={handleSaveEdit} className="primary">{t('common.save')}</button>
                   <button onClick={() => setEditingTagId(null)}>{t('common.cancel')}</button>
                 </div>
+                <div className="tagsview-field">
+                  <label>{t('tagsView.edit.postTemplate')}</label>
+                  <select value={editTagTemplate} onChange={(e) => setEditTagTemplate(e.target.value)}>
+                    <option value="">{t('editor.field.templateDefault')}</option>
+                    {postTemplates.map(tmpl => <option key={tmpl.slug} value={tmpl.slug}>{tmpl.title}</option>)}
+                  </select>
+                </div>
+                </>
               ) : (
                 <div className="tag-form-row">
                   <span className="tag-preview" style={

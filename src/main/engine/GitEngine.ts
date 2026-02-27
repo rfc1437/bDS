@@ -3,6 +3,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'node:child_process';
 import type { GitScriptFileChange, GitScriptFileChangeStatus } from './ScriptEngine';
+import type { GitTemplateFileChange, GitTemplateFileChangeStatus } from './TemplateEngine';
 
 export interface GitAvailability {
   gitFound: boolean;
@@ -142,6 +143,7 @@ export interface GitPostFileChange {
 }
 
 export type { GitScriptFileChange, GitScriptFileChangeStatus };
+export type { GitTemplateFileChange, GitTemplateFileChangeStatus };
 
 type GitProvider = 'unknown' | 'github' | 'gitlab' | 'gitea-forgejo';
 
@@ -532,6 +534,11 @@ export class GitEngine {
   private isScriptsPythonPath(value: string): boolean {
     const normalized = this.normalizeRepoRelativePath(value);
     return normalized.startsWith('scripts/') && path.extname(normalized).toLowerCase() === '.py';
+  }
+
+  private isTemplatesLiquidPath(value: string): boolean {
+    const normalized = this.normalizeRepoRelativePath(value);
+    return normalized.startsWith('templates/') && path.extname(normalized).toLowerCase() === '.liquid';
   }
 
   private parseNameStatusOutput(raw: string, pathMatcher: (value: string) => boolean): GitPostFileChange[] {
@@ -1380,6 +1387,33 @@ export class GitEngine {
         try {
           const output = await this.runGitCli(projectPath, args);
           return this.parseNameStatusOutput(output, (value) => this.isScriptsPythonPath(value));
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+  }
+
+  async getChangedTemplateFilesBetween(projectPath: string, fromCommit: string, toCommit: string): Promise<GitTemplateFileChange[]> {
+    const fromRef = fromCommit.trim();
+    const toRef = toCommit.trim();
+    if (!fromRef || !toRef || fromRef === toRef) {
+      return [];
+    }
+
+    const git = this.createNonInteractiveGit(projectPath);
+    const args = ['diff', '--name-status', '--find-renames', '-z', `${fromRef}..${toRef}`, '--', 'templates'];
+
+    try {
+      const output = await git.raw(args);
+      return this.parseNameStatusOutput(output, (value) => this.isTemplatesLiquidPath(value));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (this.isSpawnBadFileDescriptorError(message)) {
+        try {
+          const output = await this.runGitCli(projectPath, args);
+          return this.parseNameStatusOutput(output, (value) => this.isTemplatesLiquidPath(value));
         } catch {
           return [];
         }

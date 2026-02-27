@@ -1,7 +1,9 @@
 export const BDS_EVENT_SCRIPTS_CHANGED = 'bds:scripts-changed' as const;
+export const BDS_EVENT_TEMPLATES_CHANGED = 'bds:templates-changed' as const;
 
 export type BdsWindowEventName =
   | typeof BDS_EVENT_SCRIPTS_CHANGED
+  | typeof BDS_EVENT_TEMPLATES_CHANGED
   | 'bds:site-validation-updated';
 
 export function addWindowEventListener<TDetail = unknown>(

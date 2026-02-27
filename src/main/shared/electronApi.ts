@@ -52,6 +52,8 @@ export interface ProjectMetadata {
 export interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
+  postTemplateSlug?: string;
+  listTemplateSlug?: string;
 }
 
 export interface CategoryMetadata extends CategoryRenderSettings {
@@ -90,6 +92,7 @@ export interface PostData {
   publishedAt?: string;
   tags: string[];
   categories: string[];
+  templateSlug?: string;
 }
 
 export interface PostFilter {
@@ -158,6 +161,22 @@ export interface ScriptData {
   updatedAt: string;
 }
 
+export type TemplateKind = 'post' | 'list' | 'not-found' | 'partial';
+
+export interface TemplateData {
+  id: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  kind: TemplateKind;
+  enabled: boolean;
+  version: number;
+  filePath: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TaskProgress {
   taskId: string;
   name: string;
@@ -200,6 +219,7 @@ export interface TagData {
   projectId: string;
   name: string;
   color?: string;
+  postTemplateSlug?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -588,6 +608,28 @@ export interface ElectronAPI {
     getEnabledMacroSlugs: () => Promise<string[]>;
     rebuildFromFiles: () => Promise<void>;
   };
+  templates: {
+    create: (data: {
+      title: string;
+      kind: TemplateKind;
+      content: string;
+      slug?: string;
+      enabled?: boolean;
+    }) => Promise<TemplateData>;
+    update: (id: string, data: {
+      title?: string;
+      kind?: TemplateKind;
+      content?: string;
+      slug?: string;
+      enabled?: boolean;
+    }) => Promise<TemplateData | null>;
+    delete: (id: string) => Promise<boolean>;
+    get: (id: string) => Promise<TemplateData | null>;
+    getAll: () => Promise<TemplateData[]>;
+    getEnabledByKind: (kind: TemplateKind) => Promise<TemplateData[]>;
+    validate: (content: string) => Promise<{ valid: boolean; errors: string[] }>;
+    rebuildFromFiles: () => Promise<void>;
+  };
   postMedia: {
     link: (postId: string, mediaId: string) => Promise<MediaLinkData>;
     unlink: (postId: string, mediaId: string) => Promise<void>;
@@ -654,7 +696,7 @@ export interface ElectronAPI {
     get: (id: string) => Promise<TagData | null>;
     getByName: (name: string) => Promise<TagData | null>;
     create: (data: { name: string; color?: string }) => Promise<TagData>;
-    update: (id: string, data: { name?: string; color?: string | null }) => Promise<TagData | null>;
+    update: (id: string, data: { name?: string; color?: string | null; postTemplateSlug?: string | null }) => Promise<TagData | null>;
     delete: (id: string) => Promise<DeleteTagResult>;
     merge: (sourceTagIds: string[], targetTagId: string) => Promise<MergeTagsResult>;
     rename: (id: string, newName: string) => Promise<RenameTagResult>;

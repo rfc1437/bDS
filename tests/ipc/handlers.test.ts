@@ -170,11 +170,28 @@ const mockScriptEngine = {
   reconcileScriptsFromGitChanges: vi.fn(),
 };
 
+const mockTemplateEngine = {
+  on: vi.fn(),
+  createTemplate: vi.fn(),
+  updateTemplate: vi.fn(),
+  deleteTemplate: vi.fn(),
+  getTemplate: vi.fn(),
+  getAllTemplates: vi.fn(),
+  getEnabledTemplatesByKind: vi.fn(),
+  getTemplateBySlug: vi.fn(),
+  validateTemplate: vi.fn(),
+  rebuildDatabaseFromFiles: vi.fn(),
+  reconcileTemplatesFromGitChanges: vi.fn(),
+  setProjectContext: vi.fn(),
+  getTemplatesDirectory: vi.fn().mockReturnValue('/tmp/templates'),
+};
+
 const mockGitEngine = {
   checkAvailability: vi.fn(),
   getHeadCommit: vi.fn(),
   getChangedPostFilesBetween: vi.fn(),
   getChangedScriptFilesBetween: vi.fn(),
+  getChangedTemplateFilesBetween: vi.fn(),
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
   getDiff: vi.fn(),
@@ -278,6 +295,10 @@ vi.mock('../../src/main/engine/PostMediaEngine', () => ({
 
 vi.mock('../../src/main/engine/ScriptEngine', () => ({
   getScriptEngine: vi.fn(() => mockScriptEngine),
+}));
+
+vi.mock('../../src/main/engine/TemplateEngine', () => ({
+  getTemplateEngine: vi.fn(() => mockTemplateEngine),
 }));
 
 vi.mock('../../src/main/engine/GitEngine', () => ({
@@ -581,6 +602,7 @@ describe('IPC Handlers', () => {
         mockGitEngine.getChangedScriptFilesBetween.mockResolvedValue([
           { status: 'modified', path: 'scripts/transform.py' },
         ]);
+        mockGitEngine.getChangedTemplateFilesBetween.mockResolvedValue([]);
         mockPostEngine.reconcilePublishedPostsFromGitChanges.mockResolvedValue({
           created: 1,
           updated: 1,

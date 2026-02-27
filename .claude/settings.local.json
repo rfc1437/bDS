@@ -13,7 +13,9 @@
       "WebFetch(domain:www.copilotkit.ai)",
       "Bash(grep -l \"A2UIRenderer\\\\|useA2UISurface\\\\|a2ui-surface\" /Users/gb/Projects/bDS/src/renderer/components/**/*.tsx)",
       "Bash(npm test)",
-      "Bash(ls -la /Users/gb/Projects/bDS/*.md)"
+      "Bash(ls -la /Users/gb/Projects/bDS/*.md)",
+      "Bash(grep -n \"templateSlug\\\\|postTemplateSlug\" /Users/gb/Projects/bDS/src/main/engine/*.ts)",
+      "Bash(npm test -- tests/renderer/i18nLocaleCompleteness.test.ts)"
     ]
   }
 }

@@ -34,6 +34,8 @@ interface CategoryMetadata {
   renderInLists: boolean;
   showTitle: boolean;
   title: string;
+  postTemplateSlug?: string;
+  listTemplateSlug?: string;
 }
 
 const RENDER_LANGUAGE_LABEL_KEY: Record<SupportedLanguage, string> = {
@@ -151,6 +153,10 @@ export const SettingsView: React.FC = () => {
   const [categoryMetadata, setCategoryMetadata] = useState<Record<string, CategoryMetadata>>(DEFAULT_CATEGORY_METADATA);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
+  // Available templates for category dropdowns
+  const [postTemplates, setPostTemplates] = useState<Array<{ slug: string; title: string }>>([]);
+  const [listTemplates, setListTemplates] = useState<Array<{ slug: string; title: string }>>([]);
+
   // AI Assistant settings
   const [aiSystemPrompt, setAiSystemPrompt] = useState('');
   const [aiSystemPromptModified, setAiSystemPromptModified] = useState(false);
@@ -221,11 +227,25 @@ export const SettingsView: React.FC = () => {
                 title: typeof (settings as any)?.title === 'string' && (settings as any).title.trim().length > 0
                   ? (settings as any).title.trim()
                   : category,
+                postTemplateSlug: typeof (settings as any)?.postTemplateSlug === 'string' ? (settings as any).postTemplateSlug : undefined,
+                listTemplateSlug: typeof (settings as any)?.listTemplateSlug === 'string' ? (settings as any).listTemplateSlug : undefined,
               };
             }
           }
           return merged;
         });
+      });
+    }
+  }, [activeProject]);
+
+  // Load available templates for category dropdowns
+  useEffect(() => {
+    if (activeProject) {
+      window.electronAPI?.templates.getEnabledByKind('post').then((templates) => {
+        setPostTemplates(templates.map((t) => ({ slug: t.slug, title: t.title })));
+      });
+      window.electronAPI?.templates.getEnabledByKind('list').then((templates) => {
+        setListTemplates(templates.map((t) => ({ slug: t.slug, title: t.title })));
       });
     }
   }, [activeProject]);
@@ -771,6 +791,29 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleCategoryTemplateChange = async (
+    category: string,
+    field: 'postTemplateSlug' | 'listTemplateSlug',
+    value: string,
+  ) => {
+    const nextCategoryMetadata: Record<string, CategoryMetadata> = {
+      ...categoryMetadata,
+      [category]: {
+        ...(categoryMetadata[category] || { renderInLists: true, showTitle: true, title: category }),
+        [field]: value || undefined,
+      },
+    };
+
+    setCategoryMetadata(nextCategoryMetadata);
+
+    try {
+      await window.electronAPI?.meta.updateProjectMetadata({ categoryMetadata: nextCategoryMetadata });
+    } catch (error) {
+      console.error('Failed to update category settings:', error);
+      showToast.error(t('settings.toast.categorySettingsUpdateFailed'));
+    }
+  };
+
   const renderContentSettings = () => (
     <SettingSection
       id="settings-section-content"
@@ -786,6 +829,8 @@ export const SettingsView: React.FC = () => {
                 <th>{t('settings.content.titleColumn')}</th>
                 <th>{t('settings.content.renderInLists')}</th>
                 <th>{t('settings.content.showTitles')}</th>
+                <th>{t('settings.content.postTemplateColumn')}</th>
+                <th>{t('settings.content.listTemplateColumn')}</th>
                 <th>{t('settings.content.actionsColumn')}</th>
               </tr>
             </thead>
@@ -822,6 +867,30 @@ export const SettingsView: React.FC = () => {
                         checked={metadata.showTitle}
                         onChange={(event) => handleCategorySettingToggle(cat, 'showTitle', event.target.checked)}
                       />
+                    </td>
+                    <td>
+                      <select
+                        value={metadata.postTemplateSlug || ''}
+                        onChange={(event) => handleCategoryTemplateChange(cat, 'postTemplateSlug', event.target.value)}
+                        aria-label={t('settings.content.postTemplateAria', { category: cat })}
+                      >
+                        <option value="">{t('editor.field.templateDefault')}</option>
+                        {postTemplates.map((tpl) => (
+                          <option key={tpl.slug} value={tpl.slug}>{tpl.title}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={metadata.listTemplateSlug || ''}
+                        onChange={(event) => handleCategoryTemplateChange(cat, 'listTemplateSlug', event.target.value)}
+                        aria-label={t('settings.content.listTemplateAria', { category: cat })}
+                      >
+                        <option value="">{t('editor.field.templateDefault')}</option>
+                        {listTemplates.map((tpl) => (
+                          <option key={tpl.slug} value={tpl.slug}>{tpl.title}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="category-actions-cell">
                       {!isProtected && (
@@ -1210,6 +1279,29 @@ export const SettingsView: React.FC = () => {
             }}
           >
             {t('settings.data.rebuildScriptsAction')}
+          </button>
+        </SettingRow>
+
+        <SettingRow
+          id="rebuild-templates"
+          label={t('settings.data.rebuildTemplatesLabel')}
+          description={t('settings.data.rebuildTemplatesDescription')}
+        >
+          <button
+            className="secondary"
+            onClick={async () => {
+              showToast.loading(t('settings.toast.rebuildTemplatesLoading'));
+              try {
+                await window.electronAPI?.templates.rebuildFromFiles();
+                showToast.dismiss();
+                showToast.success(t('settings.toast.rebuildTemplatesSuccess'));
+              } catch {
+                showToast.dismiss();
+                showToast.error(t('settings.toast.rebuildTemplatesFailed'));
+              }
+            }}
+          >
+            {t('settings.data.rebuildTemplatesAction')}
           </button>
         </SettingRow>
 

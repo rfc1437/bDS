@@ -112,6 +112,18 @@ export const electronAPI: ElectronAPI = {
     rebuildFromFiles: () => ipcRenderer.invoke('scripts:rebuildFromFiles'),
   },
 
+  // Templates
+  templates: {
+    create: (data: { title: string; kind: import('./shared/electronApi').TemplateKind; content: string; slug?: string; enabled?: boolean }) => ipcRenderer.invoke('templates:create', data),
+    update: (id: string, data: { title?: string; kind?: import('./shared/electronApi').TemplateKind; content?: string; slug?: string; enabled?: boolean }) => ipcRenderer.invoke('templates:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('templates:delete', id),
+    get: (id: string) => ipcRenderer.invoke('templates:get', id),
+    getAll: () => ipcRenderer.invoke('templates:getAll'),
+    getEnabledByKind: (kind: import('./shared/electronApi').TemplateKind) => ipcRenderer.invoke('templates:getEnabledByKind', kind),
+    validate: (content: string) => ipcRenderer.invoke('templates:validate', content),
+    rebuildFromFiles: () => ipcRenderer.invoke('templates:rebuildFromFiles'),
+  },
+
   // Post-Media Links
   postMedia: {
     link: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:link', postId, mediaId),
@@ -189,7 +201,7 @@ export const electronAPI: ElectronAPI = {
     get: (id: string) => ipcRenderer.invoke('tags:get', id),
     getByName: (name: string) => ipcRenderer.invoke('tags:getByName', name),
     create: (data: { name: string; color?: string }) => ipcRenderer.invoke('tags:create', data),
-    update: (id: string, data: { name?: string; color?: string | null }) => ipcRenderer.invoke('tags:update', id, data),
+    update: (id: string, data: { name?: string; color?: string | null; postTemplateSlug?: string | null }) => ipcRenderer.invoke('tags:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('tags:delete', id),
     merge: (sourceTagIds: string[], targetTagId: string) => ipcRenderer.invoke('tags:merge', sourceTagIds, targetTagId),
     rename: (id: string, newName: string) => ipcRenderer.invoke('tags:rename', id, newName),

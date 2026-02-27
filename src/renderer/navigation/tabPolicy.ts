@@ -20,6 +20,7 @@ export interface CanonicalTabSpec {
 export type EntityTabType = 'post' | 'media';
 export type EntityTabOpenIntent = 'preview' | 'pin';
 export type ScriptTabOpenIntent = 'preview' | 'pin';
+export type TemplateTabOpenIntent = 'preview' | 'pin';
 export type GitDiffResourceOpenIntent = 'preview' | 'pin';
 
 const SINGLETON_TOOL_TAB_REGISTRY: Record<SingletonToolTabKey, CanonicalTabSpec> = {
@@ -110,6 +111,22 @@ export function openScriptTab(
   intent: ScriptTabOpenIntent,
 ): void {
   openTab(getScriptTabSpec(scriptId, intent));
+}
+
+export function getTemplateTabSpec(templateId: string, intent: TemplateTabOpenIntent): CanonicalTabSpec {
+  return {
+    type: 'templates',
+    id: templateId,
+    isTransient: intent === 'preview',
+  };
+}
+
+export function openTemplateTab(
+  openTab: (tab: CanonicalTabSpec) => void,
+  templateId: string,
+  intent: TemplateTabOpenIntent,
+): void {
+  openTab(getTemplateTabSpec(templateId, intent));
 }
 
 export function getGitDiffFileTabId(filePath: string): string {

@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { getMetaEngine } from './engine/MetaEngine';
+import { getTemplateEngine } from './engine/TemplateEngine';
 import { getBlogmarkTransformService } from './engine/BlogmarkTransformService';
 import { PreviewServer } from './engine/PreviewServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
@@ -495,6 +496,11 @@ async function initializeActiveProjectContext(): Promise<void> {
     postEngine.setProjectContext?.(project.id, dataDir);
     mediaEngine.setProjectContext?.(project.id, dataDir, dataDir);
     metaEngine.setProjectContext?.(project.id, dataDir);
+
+    const templateEngine = getTemplateEngine() as {
+      setProjectContext?: (projectId: string, dataDir?: string) => void;
+    };
+    templateEngine.setProjectContext?.(project.id, dataDir);
 
     await metaEngine.syncOnStartup?.();
 

@@ -46,6 +46,10 @@ describe('SettingsView i18n', () => {
         getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
         getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
       },
+      templates: {
+        ...(window as Window & { electronAPI: any }).electronAPI?.templates,
+        getEnabledByKind: vi.fn().mockResolvedValue([]),
+      },
     };
   });
 

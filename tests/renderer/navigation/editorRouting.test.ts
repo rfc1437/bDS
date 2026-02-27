@@ -22,6 +22,7 @@ describe('editorRouting', () => {
       'api-documentation': 'api-documentation',
       'site-validation': 'site-validation',
       scripts: 'scripts',
+      templates: 'templates',
     });
   });
 

@@ -16,7 +16,8 @@ export type EditorRoute =
   | 'documentation'
   | 'api-documentation'
   | 'site-validation'
-  | 'scripts';
+  | 'scripts'
+  | 'templates';
 
 export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'dashboard'>> = {
   post: 'post',
@@ -33,6 +34,7 @@ export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'da
   'api-documentation': 'api-documentation',
   'site-validation': 'site-validation',
   scripts: 'scripts',
+  templates: 'templates',
 };
 
 export interface EditorRouteResolution {

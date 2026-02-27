@@ -1,0 +1,54 @@
+.templates-view-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.templates-view {
+  flex: 1;
+  min-height: 0;
+}
+
+.templates-meta-row {
+  margin-bottom: 8px;
+}
+
+.templates-enabled-field {
+  align-self: flex-end;
+}
+
+.templates-enabled-field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.templates-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.templates-toolbar {
+  margin-bottom: 8px;
+}
+
+.templates-monaco {
+  flex: 1;
+  min-height: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--vscode-input-background);
+}
+
+.templates-save-button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.templates-validate-button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}
