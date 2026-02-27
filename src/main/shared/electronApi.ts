@@ -164,18 +164,6 @@ export interface TaskProgress {
   groupName?: string;
 }
 
-export interface SyncConfig {
-  autoSync: boolean;
-  syncInterval: number;
-}
-
-export interface SyncResult {
-  success: boolean;
-  pushed: number;
-  pulled: number;
-  conflicts: number;
-  errors: string[];
-}
 
 export interface PaginatedPostsResult {
   items: PostData[];
@@ -607,13 +595,15 @@ export interface ElectronAPI {
     rebuild: () => Promise<void>;
   };
   sync: {
-    configure: (config: SyncConfig) => Promise<void>;
-    start: (direction?: 'push' | 'pull' | 'bidirectional') => Promise<SyncResult>;
-    getStatus: () => Promise<'idle' | 'syncing' | 'error'>;
-    isConfigured: () => Promise<boolean>;
-    getPendingCount: () => Promise<{ posts: number; media: number }>;
-    getLog: (limit?: number) => Promise<unknown[]>;
-    stopAutoSync: () => Promise<void>;
+    checkAvailability: () => Promise<{ gitFound: boolean; version?: string }>;
+    getRepoState: () => Promise<{ isRepo: boolean; rootPath?: string; currentBranch?: string; hasRemote: boolean }>;
+    getStatus: () => Promise<{ files: Array<{ path: string; status: string; previousPath?: string }>; counts: { untracked: number; modified: number; deleted: number; renamed: number; staged: number } }>;
+    getHistory: (limit?: number) => Promise<Array<{ hash: string; shortHash: string; date: string; subject: string; author: string }>>;
+    getRemoteState: () => Promise<{ localBranch: string | null; upstreamBranch: string | null; hasUpstream: boolean; ahead: number; behind: number }>;
+    fetch: () => Promise<{ success: boolean; code?: string; error?: string; guidance?: string[] }>;
+    pull: () => Promise<{ success: boolean; code?: string; error?: string; guidance?: string[] }>;
+    push: () => Promise<{ success: boolean; code?: string; error?: string; guidance?: string[] }>;
+    commitAll: (message: string) => Promise<{ success: boolean; code?: string; error?: string; guidance?: string[] }>;
   };
   tasks: {
     getAll: () => Promise<TaskProgress[]>;

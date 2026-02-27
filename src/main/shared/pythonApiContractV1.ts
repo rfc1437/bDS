@@ -51,7 +51,6 @@ const optionalNumber = (name: string): PythonApiParamContractV1 => ({ name, type
 const requiredObject = (name: string): PythonApiParamContractV1 => ({ name, type: 'object', required: true });
 const optionalObject = (name: string): PythonApiParamContractV1 => ({ name, type: 'object', required: false });
 const requiredArray = (name: string): PythonApiParamContractV1 => ({ name, type: 'array', required: true });
-const requiredAny = (name: string): PythonApiParamContractV1 => ({ name, type: 'any', required: true });
 const requiredStringOrNull = (name: string): PythonApiParamContractV1 => ({ name, type: 'stringOrNull', required: true });
 
 function method(
@@ -172,34 +171,23 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('tags.getPostsWithTag', 'Get posts using a tag.', [requiredString('tagId')], 'string[]'),
   method('tags.syncFromPosts', 'Sync tag index from posts.', [], 'SyncTagsResult'),
 
-  method('chat.checkReady', 'Check chat backend readiness.', [], 'ChatReadyStatus'),
-  method('chat.validateApiKey', 'Validate chat API key and list available models.', [requiredString('apiKey')], '{ isValid: boolean; models: ChatModel[] }'),
-  method('chat.setApiKey', 'Store chat API key.', [requiredString('apiKey')], '{ success: boolean; error?: string }'),
-  method('chat.getApiKey', 'Get stored chat API key status.', [], 'ChatApiKeyStatus'),
-  method('chat.getAvailableModels', 'Get available chat models and selected default.', [], '{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }'),
-  method('chat.setDefaultModel', 'Set default chat model.', [requiredString('modelId')], '{ success: boolean; error?: string }'),
-  method('chat.getSystemPrompt', 'Get configured system prompt.', [], '{ success: boolean; prompt?: string; error?: string }'),
-  method('chat.setSystemPrompt', 'Set system prompt.', [requiredString('prompt')], '{ success: boolean; error?: string }'),
-  method('chat.getConversations', 'Fetch all chat conversations.', [], 'ChatConversation[]'),
-  method('chat.createConversation', 'Create a chat conversation.', [optionalString('title'), optionalString('model')], 'ChatConversation'),
-  method('chat.getConversation', 'Fetch one chat conversation by id.', [requiredString('id')], 'ChatConversation | null'),
-  method('chat.updateConversation', 'Update chat conversation metadata.', [requiredString('id'), requiredObject('updates')], 'ChatConversation | null'),
-  method('chat.deleteConversation', 'Delete chat conversation by id.', [requiredString('id')], 'boolean'),
-  method('chat.sendMessage', 'Send message to chat conversation.', [requiredString('conversationId'), requiredString('message'), optionalObject('metadata')], '{ success: boolean; message?: string; error?: string }'),
-  method('chat.abortMessage', 'Abort active streaming chat response.', [requiredString('conversationId')], 'void'),
-  method('chat.getHistory', 'Get message history for conversation.', [requiredString('conversationId')], 'ChatMessage[]'),
-  method('chat.clearMessages', 'Clear messages for conversation.', [requiredString('conversationId')], 'void'),
-  method('chat.setConversationModel', 'Set model for a conversation.', [requiredString('conversationId'), requiredString('modelId')], 'void'),
-  method('chat.analyzeTaxonomy', 'Analyze categories and tags using AI.', [requiredArray('categories'), requiredArray('tags'), requiredString('modelId')], '{ success: boolean; categoryMappings?: Record<string, string>; tagMappings?: Record<string, string>; error?: string }'),
-  method('chat.analyzeMediaImage', 'Analyze media image and propose metadata.', [requiredString('mediaId'), optionalString('language')], '{ success: boolean; title?: string; alt?: string; caption?: string; error?: string }'),
+  // NOTE: chat namespace intentionally excluded from Python API.
+  // AI/chat features (sendMessage, analyzeTaxonomy, analyzeMediaImage, etc.) are
+  // expensive external API calls that require user oversight and interactive streaming.
+  // This namespace can be re-added in a future version if AI-from-Python becomes a
+  // supported use case with proper rate limiting and cost controls.
 
-  method('sync.configure', 'Configure sync.', [requiredObject('config')], 'void'),
-  method('sync.start', 'Start sync operation.', [optionalString('direction')], 'SyncResult'),
-  method('sync.getStatus', 'Get sync status.', [], "'idle' | 'syncing' | 'error'"),
-  method('sync.isConfigured', 'Check if sync is configured.', [], 'boolean'),
-  method('sync.getPendingCount', 'Get pending sync item count.', [], '{ posts: number; media: number }'),
-  method('sync.getLog', 'Get sync log.', [optionalNumber('limit')], 'unknown[]'),
-  method('sync.stopAutoSync', 'Stop automatic sync.', [], 'void'),
+  method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
+  method('sync.getRepoState', 'Get repository state for active project.', [], 'RepoState'),
+  method('sync.getStatus', 'Get working tree status for active project.', [], 'GitStatusDto'),
+  method('sync.getHistory', 'Get commit history for active project.', [optionalNumber('limit')], 'GitHistoryEntry[]'),
+  method('sync.getRemoteState', 'Get remote tracking state for active project.', [], 'GitRemoteStateDto'),
+  method('sync.fetch', 'Fetch from remote for active project.', [], 'GitActionResult'),
+  method('sync.pull', 'Pull from remote for active project.', [], 'GitActionResult'),
+  method('sync.push', 'Push to remote for active project.', [], 'GitActionResult'),
+  method('sync.commitAll', 'Stage all changes and commit for active project.', [requiredString('message')], 'GitActionResult'),
+
+  method('publish.uploadSite', 'Upload rendered site to remote server via SSH.', [requiredObject('credentials')], 'PublishSiteResult'),
 ];
 
 const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
@@ -310,60 +298,67 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
-    name: 'ChatConversation',
-    description: 'Chat conversation container.',
+    name: 'GitAvailability',
+    description: 'Git installation availability check result.',
     fields: [
-      { name: 'id', type: 'string', required: true, description: 'Unique conversation identifier.' },
-      { name: 'title', type: 'string', required: true, description: 'Conversation title.' },
-      { name: 'model', type: 'string', required: false, description: 'Optional model id used by this conversation.' },
-      { name: 'createdAt', type: 'string', required: true, description: 'Creation timestamp (ISO string).' },
-      { name: 'updatedAt', type: 'string', required: true, description: 'Last update timestamp (ISO string).' },
+      { name: 'gitFound', type: 'boolean', required: true, description: 'Whether git executable was found.' },
+      { name: 'version', type: 'string', required: false, description: 'Git version string when available.' },
     ],
   },
   {
-    name: 'ChatMessage',
-    description: 'Single message entry in a conversation history.',
+    name: 'RepoState',
+    description: 'Repository state for the active project.',
     fields: [
-      { name: 'id', type: 'string', required: true, description: 'Unique message identifier.' },
-      { name: 'conversationId', type: 'string', required: true, description: 'Owning conversation id.' },
-      { name: 'role', type: "'user' | 'assistant' | 'system' | 'tool'", required: true, description: 'Message author role.' },
-      { name: 'content', type: 'string', required: true, description: 'Message text content.' },
-      { name: 'toolCallId', type: 'string', required: false, description: 'Tool call id when associated with tool output.' },
-      { name: 'toolCalls', type: 'string', required: false, description: 'Serialized tool call payload when present.' },
-      { name: 'createdAt', type: 'string', required: true, description: 'Creation timestamp (ISO string).' },
+      { name: 'isRepo', type: 'boolean', required: true, description: 'Whether the project directory is a git repository.' },
+      { name: 'rootPath', type: 'string', required: false, description: 'Repository root path.' },
+      { name: 'currentBranch', type: 'string', required: false, description: 'Current branch name.' },
+      { name: 'hasRemote', type: 'boolean', required: true, description: 'Whether a remote is configured.' },
     ],
   },
   {
-    name: 'ChatModel',
-    description: 'Available chat model descriptor.',
+    name: 'GitStatusDto',
+    description: 'Working tree status with file list and counts.',
     fields: [
-      { name: 'id', type: 'string', required: true, description: 'Model identifier.' },
-      { name: 'name', type: 'string', required: true, description: 'Human-readable model name.' },
-      { name: 'provider', type: 'string', required: false, description: 'Model provider name.' },
+      { name: 'files', type: 'Array<{ path: string; status: string; previousPath?: string }>', required: true, description: 'List of changed files with status.' },
+      { name: 'counts', type: '{ untracked: number; modified: number; deleted: number; renamed: number; staged: number }', required: true, description: 'Counts by change type.' },
     ],
   },
   {
-    name: 'ChatReadyStatus',
-    description: 'Chat backend readiness status.',
+    name: 'GitRemoteStateDto',
+    description: 'Remote tracking state for the active project branch.',
     fields: [
-      { name: 'ready', type: 'boolean', required: true, description: 'Whether chat backend is ready.' },
-      { name: 'error', type: 'string', required: false, description: 'Error description when not ready.' },
-      { name: 'backend', type: 'string', required: false, description: 'Selected backend identifier.' },
+      { name: 'localBranch', type: 'string | null', required: true, description: 'Local branch name.' },
+      { name: 'upstreamBranch', type: 'string | null', required: true, description: 'Upstream tracking branch name.' },
+      { name: 'hasUpstream', type: 'boolean', required: true, description: 'Whether an upstream is configured.' },
+      { name: 'ahead', type: 'number', required: true, description: 'Commits ahead of upstream.' },
+      { name: 'behind', type: 'number', required: true, description: 'Commits behind upstream.' },
     ],
   },
   {
-    name: 'ChatApiKeyStatus',
-    description: 'Stored API key state for chat provider.',
+    name: 'GitActionResult',
+    description: 'Result from a git operation (fetch, pull, push, commit).',
     fields: [
-      { name: 'hasKey', type: 'boolean', required: true, description: 'Whether a key is configured.' },
-      { name: 'maskedKey', type: 'string', required: true, description: 'Masked key representation for UI display.' },
+      { name: 'success', type: 'boolean', required: true, description: 'Whether the operation succeeded.' },
+      { name: 'code', type: 'string', required: false, description: "Error code when failed ('auth-required', 'conflict', 'network', 'action-failed')." },
+      { name: 'error', type: 'string', required: false, description: 'Error message when failed.' },
+      { name: 'guidance', type: 'string[]', required: false, description: 'Guidance messages for resolving failures.' },
+    ],
+  },
+  {
+    name: 'PublishSiteResult',
+    description: 'Aggregate result from uploading the rendered site.',
+    fields: [
+      { name: 'htmlFilesUploaded', type: 'number', required: true, description: 'Number of HTML files uploaded.' },
+      { name: 'thumbnailFilesUploaded', type: 'number', required: true, description: 'Number of thumbnail files uploaded.' },
+      { name: 'mediaFilesUploaded', type: 'number', required: true, description: 'Number of media files uploaded.' },
+      { name: 'filesSkipped', type: 'number', required: true, description: 'Total files skipped (already up-to-date).' },
     ],
   },
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.6.0',
-  generatedAt: '2026-02-25T00:00:00.000Z',
+  version: '1.7.0',
+  generatedAt: '2026-02-27T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
 };

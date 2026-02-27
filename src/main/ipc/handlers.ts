@@ -11,6 +11,7 @@ import { getTagEngine } from '../engine/TagEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
 import { getScriptEngine, type CreateScriptInput, type UpdateScriptInput } from '../engine/ScriptEngine';
 import { getGitEngine } from '../engine/GitEngine';
+import { getGitApiAdapter } from '../engine/GitApiAdapter';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
@@ -809,6 +810,44 @@ export function registerIpcHandlers(): void {
 
   safeHandle('tasks:clearCompleted', async () => {
     return taskManager.clearCompletedTasks();
+  });
+
+  // ============ Sync Handlers (git operations via GitApiAdapter) ============
+
+  safeHandle('sync:checkAvailability', async () => {
+    return getGitApiAdapter().checkAvailability();
+  });
+
+  safeHandle('sync:getRepoState', async () => {
+    return getGitApiAdapter().getRepoState();
+  });
+
+  safeHandle('sync:getStatus', async () => {
+    return getGitApiAdapter().getStatus();
+  });
+
+  safeHandle('sync:getHistory', async (_, limit?: number) => {
+    return getGitApiAdapter().getHistory(limit);
+  });
+
+  safeHandle('sync:getRemoteState', async () => {
+    return getGitApiAdapter().getRemoteState();
+  });
+
+  safeHandle('sync:fetch', async () => {
+    return getGitApiAdapter().fetch();
+  });
+
+  safeHandle('sync:pull', async () => {
+    return getGitApiAdapter().pull();
+  });
+
+  safeHandle('sync:push', async () => {
+    return getGitApiAdapter().push();
+  });
+
+  safeHandle('sync:commitAll', async (_, message: string) => {
+    return getGitApiAdapter().commitAll(message);
   });
 
   // ============ App Handlers ============

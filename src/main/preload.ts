@@ -127,15 +127,17 @@ export const electronAPI: ElectronAPI = {
     rebuild: () => ipcRenderer.invoke('postMedia:rebuild'),
   },
 
-  // Sync
+  // Sync (git operations via GitApiAdapter)
   sync: {
-    configure: (config: unknown) => ipcRenderer.invoke('sync:configure', config),
-    start: (direction?: 'push' | 'pull' | 'bidirectional') => ipcRenderer.invoke('sync:start', direction),
+    checkAvailability: () => ipcRenderer.invoke('sync:checkAvailability'),
+    getRepoState: () => ipcRenderer.invoke('sync:getRepoState'),
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),
-    isConfigured: () => ipcRenderer.invoke('sync:isConfigured'),
-    getPendingCount: () => ipcRenderer.invoke('sync:getPendingCount'),
-    getLog: (limit?: number) => ipcRenderer.invoke('sync:getLog', limit),
-    stopAutoSync: () => ipcRenderer.invoke('sync:stopAutoSync'),
+    getHistory: (limit?: number) => ipcRenderer.invoke('sync:getHistory', limit),
+    getRemoteState: () => ipcRenderer.invoke('sync:getRemoteState'),
+    fetch: () => ipcRenderer.invoke('sync:fetch'),
+    pull: () => ipcRenderer.invoke('sync:pull'),
+    push: () => ipcRenderer.invoke('sync:push'),
+    commitAll: (message: string) => ipcRenderer.invoke('sync:commitAll', message),
   },
 
   // Tasks

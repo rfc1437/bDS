@@ -94,6 +94,18 @@ export const ENGINE_MAP: Record<string, EngineGetter> = {
     const { taskManager } = require('../engine/TaskManager');
     return taskManager;
   },
+  sync: () => {
+    const { getGitApiAdapter } = require('../engine/GitApiAdapter');
+    return getGitApiAdapter();
+  },
+  publish: () => {
+    const { getPublishApiAdapter } = require('../engine/PublishApiAdapter');
+    return getPublishApiAdapter();
+  },
+  app: () => {
+    const { getAppApiAdapter } = require('../engine/AppApiAdapter');
+    return getAppApiAdapter();
+  },
 };
 
 // Map API method names to engine method names where they differ
@@ -199,10 +211,7 @@ export async function invokeMainProcessPythonApi(method: string, args: Record<st
     'media.importDialog', 'media.replaceFileDialog', 'media.getFilePath',
     'app.openFolder', 'app.selectFolder', 'app.showItemInFolder',
     'app.getTitleBarMetrics', 'app.notifyRendererReady', 'app.triggerMenuAction',
-    'app.getBlogmarkBookmarklet', 'app.copyToClipboard',
-    'chat.sendMessage', 'chat.abortMessage', 'chat.analyzeTaxonomy',
-    'chat.analyzeMediaImage',
-    'sync.configure', 'sync.start', 'sync.stopAutoSync',
+    'app.getBlogmarkBookmarklet', 'app.copyToClipboard', 'app.setPreviewPostTarget',
   ]);
 
   if (unsafeMethods.has(method)) {

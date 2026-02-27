@@ -104,6 +104,29 @@ const mockTaskManager: Record<string, ReturnType<typeof vi.fn>> = {
   clearCompletedTasks: vi.fn().mockResolvedValue(undefined),
 };
 
+const mockGitApiAdapter: Record<string, ReturnType<typeof vi.fn>> = {
+  checkAvailability: vi.fn().mockResolvedValue({ gitFound: true }),
+  getRepoState: vi.fn().mockResolvedValue({ isRepo: true }),
+  getStatus: vi.fn().mockResolvedValue({ files: [], counts: {} }),
+  getHistory: vi.fn().mockResolvedValue([]),
+  getRemoteState: vi.fn().mockResolvedValue({ hasUpstream: false }),
+  fetch: vi.fn().mockResolvedValue({ success: true }),
+  pull: vi.fn().mockResolvedValue({ success: true }),
+  push: vi.fn().mockResolvedValue({ success: true }),
+  commitAll: vi.fn().mockResolvedValue({ success: true }),
+};
+
+const mockPublishApiAdapter: Record<string, ReturnType<typeof vi.fn>> = {
+  uploadSite: vi.fn().mockResolvedValue({ htmlFilesUploaded: 0, thumbnailFilesUploaded: 0, mediaFilesUploaded: 0, filesSkipped: 0 }),
+};
+
+const mockAppApiAdapter: Record<string, ReturnType<typeof vi.fn>> = {
+  getDataPaths: vi.fn().mockResolvedValue({ database: '/db', posts: '/posts', media: '/media' }),
+  getSystemLanguage: vi.fn().mockResolvedValue('en-US'),
+  getDefaultProjectPath: vi.fn().mockResolvedValue('/path'),
+  readProjectMetadata: vi.fn().mockResolvedValue(null),
+};
+
 // ── Override ENGINE_MAP for testing ────────────────────────────────
 
 const originalEngineMap: Record<string, typeof ENGINE_MAP[string]> = {};
@@ -123,6 +146,9 @@ describe('invokeMainProcessPythonApi', () => {
     ENGINE_MAP.tags = () => mockTagEngine as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.scripts = () => mockScriptEngine as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.tasks = () => mockTaskManager as Record<string, (...args: unknown[]) => unknown>;
+    ENGINE_MAP.sync = () => mockGitApiAdapter as Record<string, (...args: unknown[]) => unknown>;
+    ENGINE_MAP.publish = () => mockPublishApiAdapter as Record<string, (...args: unknown[]) => unknown>;
+    ENGINE_MAP.app = () => mockAppApiAdapter as Record<string, (...args: unknown[]) => unknown>;
   });
 
   afterEach(() => {
@@ -203,6 +229,58 @@ describe('invokeMainProcessPythonApi', () => {
       const result = await invokeMainProcessPythonApi('posts.get', { postId: 'p1' });
       expect(result).toEqual({ id: 'p1', title: 'Found' });
     });
+
+    // ── Sync (git) routing ────────────────────────────────────────
+
+    it('routes sync.checkAvailability to GitApiAdapter.checkAvailability', async () => {
+      await invokeMainProcessPythonApi('sync.checkAvailability', {});
+      expect(mockGitApiAdapter.checkAvailability).toHaveBeenCalledWith();
+    });
+
+    it('routes sync.getRepoState to GitApiAdapter.getRepoState', async () => {
+      await invokeMainProcessPythonApi('sync.getRepoState', {});
+      expect(mockGitApiAdapter.getRepoState).toHaveBeenCalledWith();
+    });
+
+    it('routes sync.commitAll to GitApiAdapter.commitAll with message', async () => {
+      await invokeMainProcessPythonApi('sync.commitAll', { message: 'update files' });
+      expect(mockGitApiAdapter.commitAll).toHaveBeenCalledWith('update files');
+    });
+
+    it('routes sync.getHistory with optional limit', async () => {
+      await invokeMainProcessPythonApi('sync.getHistory', { limit: 5 });
+      expect(mockGitApiAdapter.getHistory).toHaveBeenCalledWith(5);
+    });
+
+    // ── Publish routing ────────────────────────────────────────
+
+    it('routes publish.uploadSite to PublishApiAdapter.uploadSite', async () => {
+      const creds = { sshHost: 'example.com', sshUser: 'deploy', sshRemotePath: '/var/www', sshMode: 'rsync' };
+      await invokeMainProcessPythonApi('publish.uploadSite', { credentials: creds });
+      expect(mockPublishApiAdapter.uploadSite).toHaveBeenCalledWith(creds);
+    });
+
+    // ── App routing ────────────────────────────────────────
+
+    it('routes app.getDataPaths to AppApiAdapter.getDataPaths', async () => {
+      await invokeMainProcessPythonApi('app.getDataPaths', {});
+      expect(mockAppApiAdapter.getDataPaths).toHaveBeenCalledWith();
+    });
+
+    it('routes app.getDefaultProjectPath to AppApiAdapter', async () => {
+      await invokeMainProcessPythonApi('app.getDefaultProjectPath', { projectId: 'p1' });
+      expect(mockAppApiAdapter.getDefaultProjectPath).toHaveBeenCalledWith('p1');
+    });
+
+    it('routes app.readProjectMetadata to AppApiAdapter', async () => {
+      await invokeMainProcessPythonApi('app.readProjectMetadata', { folderPath: '/some/path' });
+      expect(mockAppApiAdapter.readProjectMetadata).toHaveBeenCalledWith('/some/path');
+    });
+
+    it('routes app.getSystemLanguage to AppApiAdapter', async () => {
+      await invokeMainProcessPythonApi('app.getSystemLanguage', {});
+      expect(mockAppApiAdapter.getSystemLanguage).toHaveBeenCalledWith();
+    });
   });
 
   // ── Unknown/unsupported methods ──────────────────────────────────
@@ -244,13 +322,7 @@ describe('invokeMainProcessPythonApi', () => {
       'app.triggerMenuAction',
       'app.getBlogmarkBookmarklet',
       'app.copyToClipboard',
-      'chat.sendMessage',
-      'chat.abortMessage',
-      'chat.analyzeTaxonomy',
-      'chat.analyzeMediaImage',
-      'sync.configure',
-      'sync.start',
-      'sync.stopAutoSync',
+      'app.setPreviewPostTarget',
     ];
 
     for (const method of unsafeMethods) {

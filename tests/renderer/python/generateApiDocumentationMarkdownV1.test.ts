@@ -27,14 +27,18 @@ describe('generateApiDocumentationMarkdownV1', () => {
     expect(markdown).toContain('[↑ Back to Table of contents](#table-of-contents)');
   });
 
-  it('documents chat APIs in a dedicated module section', () => {
+  it('documents sync and publish APIs in dedicated module sections', () => {
     const markdown = generateApiDocumentationMarkdownV1();
 
-    expect(markdown).toContain('## chat');
-    expect(markdown).toContain('### chat.getConversations');
-    expect(markdown).toContain('### chat.sendMessage');
-    expect(markdown).toContain('- [chat](#chat)');
-    expect(markdown).toContain('- [chat.sendMessage](#chatsendmessage)');
+    expect(markdown).toContain('## sync');
+    expect(markdown).toContain('### sync.getRepoState');
+    expect(markdown).toContain('### sync.commitAll');
+    expect(markdown).toContain('- [sync](#sync)');
+    expect(markdown).toContain('## publish');
+    expect(markdown).toContain('### publish.uploadSite');
+    expect(markdown).toContain('- [publish](#publish)');
+    // chat namespace should not be present
+    expect(markdown).not.toContain('## chat');
   });
 
   it('includes a dedicated Data Structures section with core object shapes', () => {

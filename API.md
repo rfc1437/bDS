@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.6.0
+Contract version: 1.7.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -25,8 +25,8 @@ project = await bds.meta.get_project_metadata()
 - [app](#app)
 - [meta](#meta)
 - [tags](#tags)
-- [chat](#chat)
 - [sync](#sync)
+- [publish](#publish)
 - [Data Structures](#data-structures)
 
 ## projects
@@ -3067,674 +3067,23 @@ result = await bds.tags.sync_from_posts()
 
 [↑ Back to Table of contents](#table-of-contents)
 
-## chat
-
-**Module APIs**
-
-- [chat.checkReady](#chatcheckready)
-- [chat.validateApiKey](#chatvalidateapikey)
-- [chat.setApiKey](#chatsetapikey)
-- [chat.getApiKey](#chatgetapikey)
-- [chat.getAvailableModels](#chatgetavailablemodels)
-- [chat.setDefaultModel](#chatsetdefaultmodel)
-- [chat.getSystemPrompt](#chatgetsystemprompt)
-- [chat.setSystemPrompt](#chatsetsystemprompt)
-- [chat.getConversations](#chatgetconversations)
-- [chat.createConversation](#chatcreateconversation)
-- [chat.getConversation](#chatgetconversation)
-- [chat.updateConversation](#chatupdateconversation)
-- [chat.deleteConversation](#chatdeleteconversation)
-- [chat.sendMessage](#chatsendmessage)
-- [chat.abortMessage](#chatabortmessage)
-- [chat.getHistory](#chatgethistory)
-- [chat.clearMessages](#chatclearmessages)
-- [chat.setConversationModel](#chatsetconversationmodel)
-- [chat.analyzeTaxonomy](#chatanalyzetaxonomy)
-- [chat.analyzeMediaImage](#chatanalyzemediaimage)
-
-### chat.checkReady
-
-Check chat backend readiness.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `ChatReadyStatus`
-- Data structures: `ChatReadyStatus`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.check_ready()
-```
-
-**Example response**
-
-```python
-{
-    'ready': False,
-    'error': 'value',
-    'backend': 'value'
-}
-```
-
-### chat.validateApiKey
-
-Validate chat API key and list available models.
-
-**Parameters**
-
-- apiKey (str, required)
-
-**Response specification**
-
-- Return type: `{ isValid: boolean; models: ChatModel[] }`
-- Data structures: `ChatModel`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.validate_api_key(api_key='api_key')
-```
-
-**Example response**
-
-```python
-[
-{
-    'id': 'value',
-    'name': 'value',
-    'provider': 'value'
-}
-]
-```
-
-### chat.setApiKey
-
-Store chat API key.
-
-**Parameters**
-
-- apiKey (str, required)
-
-**Response specification**
-
-- Return type: `{ success: boolean; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.set_api_key(api_key='api_key')
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### chat.getApiKey
-
-Get stored chat API key status.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `ChatApiKeyStatus`
-- Data structures: `ChatApiKeyStatus`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_api_key()
-```
-
-**Example response**
-
-```python
-{
-    'hasKey': False,
-    'maskedKey': 'value'
-}
-```
-
-### chat.getAvailableModels
-
-Get available chat models and selected default.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }`
-- Data structures: `ChatModel`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_available_models()
-```
-
-**Example response**
-
-```python
-[
-{
-    'id': 'value',
-    'name': 'value',
-    'provider': 'value'
-}
-]
-```
-
-### chat.setDefaultModel
-
-Set default chat model.
-
-**Parameters**
-
-- modelId (str, required)
-
-**Response specification**
-
-- Return type: `{ success: boolean; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.set_default_model(model_id='model-1')
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### chat.getSystemPrompt
-
-Get configured system prompt.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `{ success: boolean; prompt?: string; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_system_prompt()
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### chat.setSystemPrompt
-
-Set system prompt.
-
-**Parameters**
-
-- prompt (str, required)
-
-**Response specification**
-
-- Return type: `{ success: boolean; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.set_system_prompt(prompt='prompt')
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### chat.getConversations
-
-Fetch all chat conversations.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `ChatConversation[]`
-- Data structures: `ChatConversation`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_conversations()
-```
-
-**Example response**
-
-```python
-[
-{
-    'id': 'value',
-    'title': 'value',
-    'model': 'value',
-    'createdAt': 'value',
-    'updatedAt': 'value'
-}
-]
-```
-
-### chat.createConversation
-
-Create a chat conversation.
-
-**Parameters**
-
-- title (str, optional)
-- model (str, optional)
-
-**Response specification**
-
-- Return type: `ChatConversation`
-- Data structures: `ChatConversation`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.create_conversation()
-```
-
-**Example response**
-
-```python
-{
-    'id': 'value',
-    'title': 'value',
-    'model': 'value',
-    'createdAt': 'value',
-    'updatedAt': 'value'
-}
-```
-
-### chat.getConversation
-
-Fetch one chat conversation by id.
-
-**Parameters**
-
-- id (str, required)
-
-**Response specification**
-
-- Return type: `ChatConversation | null`
-- Nullability: Returns `None` when no matching value exists.
-- Data structures: `ChatConversation`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_conversation(id='id-1')
-```
-
-**Example response**
-
-```python
-None  # or
-{
-    'id': 'value',
-    'title': 'value',
-    'model': 'value',
-    'createdAt': 'value',
-    'updatedAt': 'value'
-}
-```
-
-### chat.updateConversation
-
-Update chat conversation metadata.
-
-**Parameters**
-
-- id (str, required)
-- updates (dict, required)
-
-**Response specification**
-
-- Return type: `ChatConversation | null`
-- Nullability: Returns `None` when no matching value exists.
-- Data structures: `ChatConversation`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.update_conversation(id='id-1', updates={})
-```
-
-**Example response**
-
-```python
-None  # or
-{
-    'id': 'value',
-    'title': 'value',
-    'model': 'value',
-    'createdAt': 'value',
-    'updatedAt': 'value'
-}
-```
-
-### chat.deleteConversation
-
-Delete chat conversation by id.
-
-**Parameters**
-
-- id (str, required)
-
-**Response specification**
-
-- Return type: `boolean`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.delete_conversation(id='id-1')
-```
-
-**Example response**
-
-```python
-True
-```
-
-### chat.sendMessage
-
-Send message to chat conversation.
-
-**Parameters**
-
-- conversationId (str, required)
-- message (str, required)
-- metadata (dict, optional)
-
-**Response specification**
-
-- Return type: `{ success: boolean; message?: string; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.send_message(conversation_id='conversation-1', message='message')
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### chat.abortMessage
-
-Abort active streaming chat response.
-
-**Parameters**
-
-- conversationId (str, required)
-
-**Response specification**
-
-- Return type: `void`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.abort_message(conversation_id='conversation-1')
-```
-
-**Example response**
-
-```python
-None
-```
-
-### chat.getHistory
-
-Get message history for conversation.
-
-**Parameters**
-
-- conversationId (str, required)
-
-**Response specification**
-
-- Return type: `ChatMessage[]`
-- Data structures: `ChatMessage`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.get_history(conversation_id='conversation-1')
-```
-
-**Example response**
-
-```python
-[
-{
-    'id': 'value',
-    'conversationId': 'value',
-    'role': None,
-    'content': 'value',
-    'toolCallId': 'value',
-    'toolCalls': 'value',
-    'createdAt': 'value'
-}
-]
-```
-
-### chat.clearMessages
-
-Clear messages for conversation.
-
-**Parameters**
-
-- conversationId (str, required)
-
-**Response specification**
-
-- Return type: `void`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.clear_messages(conversation_id='conversation-1')
-```
-
-**Example response**
-
-```python
-None
-```
-
-### chat.setConversationModel
-
-Set model for a conversation.
-
-**Parameters**
-
-- conversationId (str, required)
-- modelId (str, required)
-
-**Response specification**
-
-- Return type: `void`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.set_conversation_model(conversation_id='conversation-1', model_id='model-1')
-```
-
-**Example response**
-
-```python
-None
-```
-
-### chat.analyzeTaxonomy
-
-Analyze categories and tags using AI.
-
-**Parameters**
-
-- categories (list, required)
-- tags (list, required)
-- modelId (str, required)
-
-**Response specification**
-
-- Return type: `{ success: boolean; categoryMappings?: Record<string, string>; tagMappings?: Record<string, string>; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.analyze_taxonomy(categories=[], tags=[], model_id='model-1')
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### chat.analyzeMediaImage
-
-Analyze media image and propose metadata.
-
-**Parameters**
-
-- mediaId (str, required)
-- language (str, optional)
-
-**Response specification**
-
-- Return type: `{ success: boolean; title?: string; alt?: string; caption?: string; error?: string }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.chat.analyze_media_image(media_id='media-1')
-```
-
-**Example response**
-
-```python
-{}
-```
-
-[↑ Back to Table of contents](#table-of-contents)
-
 ## sync
 
 **Module APIs**
 
-- [sync.configure](#syncconfigure)
-- [sync.start](#syncstart)
+- [sync.checkAvailability](#synccheckavailability)
+- [sync.getRepoState](#syncgetrepostate)
 - [sync.getStatus](#syncgetstatus)
-- [sync.isConfigured](#syncisconfigured)
-- [sync.getPendingCount](#syncgetpendingcount)
-- [sync.getLog](#syncgetlog)
-- [sync.stopAutoSync](#syncstopautosync)
+- [sync.getHistory](#syncgethistory)
+- [sync.getRemoteState](#syncgetremotestate)
+- [sync.fetch](#syncfetch)
+- [sync.pull](#syncpull)
+- [sync.push](#syncpush)
+- [sync.commitAll](#synccommitall)
 
-### sync.configure
+### sync.checkAvailability
 
-Configure sync.
-
-**Parameters**
-
-- config (dict, required)
-
-**Response specification**
-
-- Return type: `void`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.sync.configure(config={})
-```
-
-**Example response**
-
-```python
-None
-```
-
-### sync.start
-
-Start sync operation.
-
-**Parameters**
-
-- direction (str, optional)
-
-**Response specification**
-
-- Return type: `SyncResult`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.sync.start()
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### sync.getStatus
-
-Get sync status.
+Check if git is available.
 
 **Parameters**
 
@@ -3742,7 +3091,68 @@ Get sync status.
 
 **Response specification**
 
-- Return type: `'idle' | 'syncing' | 'error'`
+- Return type: `GitAvailability`
+- Data structures: `GitAvailability`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.sync.check_availability()
+```
+
+**Example response**
+
+```python
+{
+    'gitFound': False,
+    'version': 'value'
+}
+```
+
+### sync.getRepoState
+
+Get repository state for active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `RepoState`
+- Data structures: `RepoState`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.sync.get_repo_state()
+```
+
+**Example response**
+
+```python
+{
+    'isRepo': False,
+    'rootPath': 'value',
+    'currentBranch': 'value',
+    'hasRemote': False
+}
+```
+
+### sync.getStatus
+
+Get working tree status for active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `GitStatusDto`
+- Data structures: `GitStatusDto`
 
 **Example call**
 
@@ -3754,62 +3164,15 @@ result = await bds.sync.get_status()
 **Example response**
 
 ```python
-{}
+{
+    'files': 'value',
+    'counts': 0
+}
 ```
 
-### sync.isConfigured
+### sync.getHistory
 
-Check if sync is configured.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `boolean`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.sync.is_configured()
-```
-
-**Example response**
-
-```python
-True
-```
-
-### sync.getPendingCount
-
-Get pending sync item count.
-
-**Parameters**
-
-- None
-
-**Response specification**
-
-- Return type: `{ posts: number; media: number }`
-
-**Example call**
-
-```python
-from bds_api import bds
-result = await bds.sync.get_pending_count()
-```
-
-**Example response**
-
-```python
-{}
-```
-
-### sync.getLog
-
-Get sync log.
+Get commit history for active project.
 
 **Parameters**
 
@@ -3817,13 +3180,13 @@ Get sync log.
 
 **Response specification**
 
-- Return type: `unknown[]`
+- Return type: `GitHistoryEntry[]`
 
 **Example call**
 
 ```python
 from bds_api import bds
-result = await bds.sync.get_log()
+result = await bds.sync.get_history()
 ```
 
 **Example response**
@@ -3832,9 +3195,9 @@ result = await bds.sync.get_log()
 []
 ```
 
-### sync.stopAutoSync
+### sync.getRemoteState
 
-Stop automatic sync.
+Get remote tracking state for active project.
 
 **Parameters**
 
@@ -3842,19 +3205,189 @@ Stop automatic sync.
 
 **Response specification**
 
-- Return type: `void`
+- Return type: `GitRemoteStateDto`
+- Data structures: `GitRemoteStateDto`
 
 **Example call**
 
 ```python
 from bds_api import bds
-result = await bds.sync.stop_auto_sync()
+result = await bds.sync.get_remote_state()
 ```
 
 **Example response**
 
 ```python
-None
+{
+    'localBranch': 'value',
+    'upstreamBranch': 'value',
+    'hasUpstream': False,
+    'ahead': 0,
+    'behind': 0
+}
+```
+
+### sync.fetch
+
+Fetch from remote for active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `GitActionResult`
+- Data structures: `GitActionResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.sync.fetch()
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'code': 'value',
+    'error': 'value',
+    'guidance': 'value'
+}
+```
+
+### sync.pull
+
+Pull from remote for active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `GitActionResult`
+- Data structures: `GitActionResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.sync.pull()
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'code': 'value',
+    'error': 'value',
+    'guidance': 'value'
+}
+```
+
+### sync.push
+
+Push to remote for active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `GitActionResult`
+- Data structures: `GitActionResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.sync.push()
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'code': 'value',
+    'error': 'value',
+    'guidance': 'value'
+}
+```
+
+### sync.commitAll
+
+Stage all changes and commit for active project.
+
+**Parameters**
+
+- message (str, required)
+
+**Response specification**
+
+- Return type: `GitActionResult`
+- Data structures: `GitActionResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.sync.commit_all(message='message')
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'code': 'value',
+    'error': 'value',
+    'guidance': 'value'
+}
+```
+
+[↑ Back to Table of contents](#table-of-contents)
+
+## publish
+
+**Module APIs**
+
+- [publish.uploadSite](#publishuploadsite)
+
+### publish.uploadSite
+
+Upload rendered site to remote server via SSH.
+
+**Parameters**
+
+- credentials (dict, required)
+
+**Response specification**
+
+- Return type: `PublishSiteResult`
+- Data structures: `PublishSiteResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.publish.upload_site(credentials={})
+```
+
+**Example response**
+
+```python
+{
+    'htmlFilesUploaded': 0,
+    'thumbnailFilesUploaded': 0,
+    'mediaFilesUploaded': 0,
+    'filesSkipped': 0
+}
 ```
 
 [↑ Back to Table of contents](#table-of-contents)
@@ -3987,71 +3520,81 @@ Extended project metadata from project settings.
 
 [↑ Back to Table of contents](#table-of-contents)
 
-### ChatConversation
+### GitAvailability
 
-Chat conversation container.
+Git installation availability check result.
 
 **Fields**
 
-- id (`string`, required): Unique conversation identifier.
-- title (`string`, required): Conversation title.
-- model (`string`, optional): Optional model id used by this conversation.
-- createdAt (`string`, required): Creation timestamp (ISO string).
-- updatedAt (`string`, required): Last update timestamp (ISO string).
+- gitFound (`boolean`, required): Whether git executable was found.
+- version (`string`, optional): Git version string when available.
 
 [↑ Back to Table of contents](#table-of-contents)
 
-### ChatMessage
+### RepoState
 
-Single message entry in a conversation history.
+Repository state for the active project.
 
 **Fields**
 
-- id (`string`, required): Unique message identifier.
-- conversationId (`string`, required): Owning conversation id.
-- role (`'user' | 'assistant' | 'system' | 'tool'`, required): Message author role.
-- content (`string`, required): Message text content.
-- toolCallId (`string`, optional): Tool call id when associated with tool output.
-- toolCalls (`string`, optional): Serialized tool call payload when present.
-- createdAt (`string`, required): Creation timestamp (ISO string).
+- isRepo (`boolean`, required): Whether the project directory is a git repository.
+- rootPath (`string`, optional): Repository root path.
+- currentBranch (`string`, optional): Current branch name.
+- hasRemote (`boolean`, required): Whether a remote is configured.
 
 [↑ Back to Table of contents](#table-of-contents)
 
-### ChatModel
+### GitStatusDto
 
-Available chat model descriptor.
+Working tree status with file list and counts.
 
 **Fields**
 
-- id (`string`, required): Model identifier.
-- name (`string`, required): Human-readable model name.
-- provider (`string`, optional): Model provider name.
+- files (`Array<{ path: string; status: string; previousPath?: string }>`, required): List of changed files with status.
+- counts (`{ untracked: number; modified: number; deleted: number; renamed: number; staged: number }`, required): Counts by change type.
 
 [↑ Back to Table of contents](#table-of-contents)
 
-### ChatReadyStatus
+### GitRemoteStateDto
 
-Chat backend readiness status.
+Remote tracking state for the active project branch.
 
 **Fields**
 
-- ready (`boolean`, required): Whether chat backend is ready.
-- error (`string`, optional): Error description when not ready.
-- backend (`string`, optional): Selected backend identifier.
+- localBranch (`string | null`, required): Local branch name.
+- upstreamBranch (`string | null`, required): Upstream tracking branch name.
+- hasUpstream (`boolean`, required): Whether an upstream is configured.
+- ahead (`number`, required): Commits ahead of upstream.
+- behind (`number`, required): Commits behind upstream.
 
 [↑ Back to Table of contents](#table-of-contents)
 
-### ChatApiKeyStatus
+### GitActionResult
 
-Stored API key state for chat provider.
+Result from a git operation (fetch, pull, push, commit).
 
 **Fields**
 
-- hasKey (`boolean`, required): Whether a key is configured.
-- maskedKey (`string`, required): Masked key representation for UI display.
+- success (`boolean`, required): Whether the operation succeeded.
+- code (`string`, optional): Error code when failed ('auth-required', 'conflict', 'network', 'action-failed').
+- error (`string`, optional): Error message when failed.
+- guidance (`string[]`, optional): Guidance messages for resolving failures.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### PublishSiteResult
+
+Aggregate result from uploading the rendered site.
+
+**Fields**
+
+- htmlFilesUploaded (`number`, required): Number of HTML files uploaded.
+- thumbnailFilesUploaded (`number`, required): Number of thumbnail files uploaded.
+- mediaFilesUploaded (`number`, required): Number of media files uploaded.
+- filesSkipped (`number`, required): Total files skipped (already up-to-date).
 
 [↑ Back to Table of contents](#table-of-contents)
 
 ---
 
-Generated from contract at 2026-02-25T00:00:00.000Z.
+Generated from contract at 2026-02-27T00:00:00.000Z.
