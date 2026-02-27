@@ -1503,4 +1503,10 @@ export function registerIpcHandlers(): void {
   taskManager.on('taskProgress', forwardEvent('task:progress'));
   taskManager.on('taskCompleted', forwardEvent('task:completed'));
   taskManager.on('taskFailed', forwardEvent('task:failed'));
+
+  const scriptEngine = getScriptEngine();
+  scriptEngine.on('scriptCreated', forwardEvent('script:created'));
+  scriptEngine.on('scriptUpdated', forwardEvent('script:updated'));
+  scriptEngine.on('scriptDeleted', forwardEvent('script:deleted'));
+  scriptEngine.on('scriptsRebuilt', forwardEvent('scripts:rebuilt'));
 }

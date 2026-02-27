@@ -111,13 +111,6 @@ These are current realities and should be treated as authoritative unless we exp
 - [x] Add macro execution counters (count, timeout/error counts) for real render path.
 - [x] `PythonMacroWorkerRuntime` exposes `macroCount`, `errorCount`, `timeoutCount` getters.
 - [x] `resetCounters()` method for clean state between generation runs.
-- [ ] Define regression thresholds based on benchmark trends.
-
-## Out of Scope Until Core Gaps Close
-
-- [ ] AI assistant tooling exposure from Python scripts.
-- [ ] General Python package/dependency policy expansion.
-- [ ] Advanced bridge optimizations (only if metrics prove need).
 
 ## Acceptance Gate Before Marking Python Scripting “Complete”
 

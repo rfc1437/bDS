@@ -411,6 +411,7 @@ const App: React.FC = () => {
           await Promise.all([
             window.electronAPI?.posts.rebuildFromFiles(),
             window.electronAPI?.media.rebuildFromFiles(),
+            window.electronAPI?.scripts.rebuildFromFiles(),
           ]);
           await window.electronAPI?.media.regenerateMissingThumbnails();
         } catch (error) {
