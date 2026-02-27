@@ -2,6 +2,7 @@ import { simpleGit } from 'simple-git';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'node:child_process';
+import type { GitScriptFileChange, GitScriptFileChangeStatus } from './ScriptEngine';
 
 export interface GitAvailability {
   gitFound: boolean;
@@ -140,13 +141,7 @@ export interface GitPostFileChange {
   previousPath?: string;
 }
 
-export type GitScriptFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
-
-export interface GitScriptFileChange {
-  status: GitScriptFileChangeStatus;
-  path: string;
-  previousPath?: string;
-}
+export type { GitScriptFileChange, GitScriptFileChangeStatus };
 
 type GitProvider = 'unknown' | 'github' | 'gitlab' | 'gitea-forgejo';
 

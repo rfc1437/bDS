@@ -286,4 +286,95 @@ describe('ScriptEngine', () => {
     expect(result.deleted).toBe(1);
     expect(result.processedFiles).toBe(3);
   });
+
+  describe('macro resolution', () => {
+    it('getEnabledMacroScripts returns only enabled macro scripts', async () => {
+      await scriptEngine.createScript({
+        title: 'My Macro',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": "<p>hi</p>"}',
+        enabled: true,
+      });
+
+      vi.mocked((await import('uuid')).v4).mockReturnValueOnce('mock-script-id-2');
+
+      await scriptEngine.createScript({
+        title: 'My Transform',
+        kind: 'transform',
+        content: 'def transform(post): return post',
+        enabled: true,
+      });
+
+      vi.mocked((await import('uuid')).v4).mockReturnValueOnce('mock-script-id-3');
+
+      await scriptEngine.createScript({
+        title: 'Disabled Macro',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": ""}',
+        enabled: false,
+      });
+
+      const macros = await scriptEngine.getEnabledMacroScripts();
+      expect(macros).toHaveLength(1);
+      expect(macros[0].kind).toBe('macro');
+      expect(macros[0].enabled).toBe(true);
+      expect(macros[0].title).toBe('My Macro');
+    });
+
+    it('getMacroScriptBySlug finds enabled macro by slug', async () => {
+      await scriptEngine.createScript({
+        title: 'Widget Macro',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": "<div>widget</div>"}',
+        enabled: true,
+      });
+
+      const found = await scriptEngine.getMacroScriptBySlug('widget_macro');
+      expect(found).not.toBeNull();
+      expect(found?.slug).toBe('widget_macro');
+      expect(found?.kind).toBe('macro');
+    });
+
+    it('getMacroScriptBySlug returns null for non-macro scripts', async () => {
+      await scriptEngine.createScript({
+        title: 'My Transform',
+        kind: 'transform',
+        content: 'def transform(post): return post',
+        enabled: true,
+      });
+
+      const found = await scriptEngine.getMacroScriptBySlug('my_transform');
+      expect(found).toBeNull();
+    });
+
+    it('getMacroScriptBySlug returns null for disabled macros', async () => {
+      await scriptEngine.createScript({
+        title: 'Disabled Macro',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": ""}',
+        enabled: false,
+      });
+
+      const found = await scriptEngine.getMacroScriptBySlug('disabled_macro');
+      expect(found).toBeNull();
+    });
+
+    it('getMacroScriptBySlug is case-insensitive', async () => {
+      await scriptEngine.createScript({
+        title: 'Case Test',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": ""}',
+        enabled: true,
+      });
+
+      const found = await scriptEngine.getMacroScriptBySlug('CASE_TEST');
+      expect(found).not.toBeNull();
+      expect(found?.slug).toBe('case_test');
+    });
+
+    it('getMacroScriptBySlug returns null for non-existent slug', async () => {
+      const found = await scriptEngine.getMacroScriptBySlug('nonexistent');
+      expect(found).toBeNull();
+    });
+  });
 });

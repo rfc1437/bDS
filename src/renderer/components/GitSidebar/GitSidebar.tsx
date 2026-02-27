@@ -3,6 +3,7 @@ import { useAppStore } from '../../store';
 import { openGitDiffCommitTab, openGitDiffFileTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import type { GitInitProgress, GitHistoryEntry, GitRemoteStateDto } from '../../../main/shared/electronApi';
+import { BDS_EVENT_SCRIPTS_CHANGED, dispatchWindowEvent } from '../../utils';
 import './GitSidebar.css';
 import '../Sidebar/Sidebar.css';
 
@@ -392,6 +393,9 @@ export const GitSidebar: React.FC = () => {
         setError(result.error || tr('gitSidebar.error.actionFailed', { action }));
         setErrorGuidance('guidance' in result ? result.guidance || [] : []);
         return;
+      }
+      if (action === 'pull') {
+        dispatchWindowEvent(BDS_EVENT_SCRIPTS_CHANGED);
       }
       await loadRepoState();
     } catch {

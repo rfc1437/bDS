@@ -75,3 +75,30 @@ export interface ParsedMacro {
   /** End position in the source text */
   end: number;
 }
+
+/**
+ * Resolved Python macro script information for rendering.
+ */
+export interface PythonMacroInfo {
+  scriptId: string;
+  slug: string;
+  code: string;
+  entrypoint: string;
+  version: number;
+}
+
+/**
+ * Resolver function that checks if a macro name maps to a Python script.
+ * Returns script info if found, null otherwise.
+ */
+export type PythonMacroResolver = (macroName: string) => Promise<PythonMacroInfo | null>;
+
+/**
+ * Renderer function that executes a Python macro with the given context.
+ * Returns the rendered HTML string.
+ */
+export type PythonMacroRendererFn = (
+  info: PythonMacroInfo,
+  params: MacroParams,
+  context: MacroRenderContext,
+) => Promise<string>;

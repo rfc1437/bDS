@@ -1,36 +1,30 @@
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 
-export interface BlogmarkWorkerLike {
-  on(event: string, listener: (...args: unknown[]) => void): void;
-  postMessage(message: unknown): void;
-  terminate(): void;
-  removeAllListeners(): void;
-}
-
-export type BlogmarkWorkerFactory = (workerPath: string) => BlogmarkWorkerLike;
-
-interface WorkerRunTransformRequest {
-  type: 'runTransform';
+interface WorkerRenderMacroRequest {
+  type: 'renderMacro';
   requestId: string;
   scriptContent: string;
   entrypoint: string;
-  payloadJson: string;
+  contextJson: string;
+  postDataJson?: string | null;
+  cacheKey?: string;
 }
 
 interface WorkerReadyMessage {
   type: 'ready';
 }
 
-interface WorkerResultMessage {
-  type: 'transformResult';
+interface WorkerMacroResultMessage {
+  type: 'macroResult';
   requestId: string;
-  output: unknown;
-  toasts: string[];
+  html: string;
+  data?: Record<string, unknown>;
+  warnings?: string[];
 }
 
-interface WorkerErrorMessage {
-  type: 'transformError';
+interface WorkerMacroErrorMessage {
+  type: 'macroError';
   requestId: string;
   error: string;
 }
@@ -40,12 +34,43 @@ interface WorkerFatalErrorMessage {
   error: string;
 }
 
-type WorkerResponseMessage = WorkerReadyMessage | WorkerResultMessage | WorkerErrorMessage | WorkerFatalErrorMessage;
+interface WorkerApiCallMessage {
+  type: 'apiCall';
+  requestId: string;
+  callId: string;
+  method: string;
+  args: Record<string, unknown>;
+}
+
+interface WorkerApiResultMessage {
+  type: 'apiResult';
+  callId: string;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+type WorkerResponseMessage = WorkerReadyMessage | WorkerMacroResultMessage | WorkerMacroErrorMessage | WorkerFatalErrorMessage | WorkerApiCallMessage;
+
+export interface MacroRenderParams {
+  scriptContent: string;
+  entrypoint: string;
+  contextJson: string;
+  postDataJson?: string | null;
+  timeoutMs?: number;
+  cacheKey?: string;
+}
+
+export interface MacroRenderResult {
+  html: string;
+  data?: Record<string, unknown>;
+  warnings?: string[];
+}
 
 interface QueuedRequest {
-  request: WorkerRunTransformRequest;
+  request: WorkerRenderMacroRequest;
   timeoutMs: number;
-  resolve: (value: { output: unknown; toasts: string[] }) => void;
+  resolve: (value: MacroRenderResult) => void;
   reject: (error: Error) => void;
 }
 
@@ -53,8 +78,19 @@ interface ActiveRequest extends QueuedRequest {
   timeoutId: ReturnType<typeof setTimeout> | null;
 }
 
-export class BlogmarkPythonWorkerRuntime {
-  private worker: BlogmarkWorkerLike | null = null;
+export interface WorkerLike {
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  postMessage(message: unknown): void;
+  terminate(): void;
+  removeAllListeners(): void;
+}
+
+export type WorkerFactory = (workerPath: string) => WorkerLike;
+
+export type ApiInvoker = (method: string, args: Record<string, unknown>) => Promise<unknown>;
+
+export class PythonMacroWorkerRuntime {
+  private worker: WorkerLike | null = null;
   private workerReady = false;
   private workerStartPromise: Promise<void> | null = null;
   private workerStartResolve: (() => void) | null = null;
@@ -62,29 +98,31 @@ export class BlogmarkPythonWorkerRuntime {
   private activeRequest: ActiveRequest | null = null;
   private queue: QueuedRequest[] = [];
   private requestCounter = 0;
-  private readonly workerFactory: BlogmarkWorkerFactory;
+  private _macroCount = 0;
+  private _errorCount = 0;
+  private _timeoutCount = 0;
+  private readonly workerFactory: WorkerFactory;
+  private readonly apiInvoker: ApiInvoker | null;
 
-  constructor(workerFactory?: BlogmarkWorkerFactory) {
-    this.workerFactory = workerFactory ?? ((workerPath: string) => new Worker(workerPath) as unknown as BlogmarkWorkerLike);
+  constructor(workerFactory?: WorkerFactory, apiInvoker?: ApiInvoker) {
+    this.workerFactory = workerFactory ?? ((workerPath: string) => new Worker(workerPath) as unknown as WorkerLike);
+    this.apiInvoker = apiInvoker ?? null;
   }
 
-  async executeTransform(params: {
-    scriptContent: string;
-    entrypoint: string;
-    payloadJson: string;
-    timeoutMs?: number;
-  }): Promise<{ output: unknown; toasts: string[] }> {
+  async renderMacro(params: MacroRenderParams): Promise<MacroRenderResult> {
     const requestId = this.nextRequestId();
     const timeoutMs = params.timeoutMs ?? 5000;
 
-    return new Promise<{ output: unknown; toasts: string[] }>((resolve, reject) => {
+    return new Promise<MacroRenderResult>((resolve, reject) => {
       this.queue.push({
         request: {
-          type: 'runTransform',
+          type: 'renderMacro',
           requestId,
           scriptContent: params.scriptContent,
           entrypoint: params.entrypoint,
-          payloadJson: params.payloadJson,
+          contextJson: params.contextJson,
+          postDataJson: params.postDataJson ?? null,
+          cacheKey: params.cacheKey,
         },
         timeoutMs,
         resolve,
@@ -97,9 +135,27 @@ export class BlogmarkPythonWorkerRuntime {
     });
   }
 
+  get macroCount(): number {
+    return this._macroCount;
+  }
+
+  get errorCount(): number {
+    return this._errorCount;
+  }
+
+  get timeoutCount(): number {
+    return this._timeoutCount;
+  }
+
+  resetCounters(): void {
+    this._macroCount = 0;
+    this._errorCount = 0;
+    this._timeoutCount = 0;
+  }
+
   dispose(): void {
-    this.rejectStartPromise(new Error('Python worker runtime disposed'));
-    this.rejectActiveAndQueue(new Error('Python worker runtime disposed'));
+    this.rejectStartPromise(new Error('Python macro worker runtime disposed'));
+    this.rejectActiveAndQueue(new Error('Python macro worker runtime disposed'));
     this.resetWorker();
   }
 
@@ -109,12 +165,6 @@ export class BlogmarkPythonWorkerRuntime {
     }
 
     await this.ensureWorkerStarted();
-
-    // Re-check guard after await — another dispatchNext() may have
-    // activated a request while we were waiting for the worker.
-    if (this.activeRequest || this.queue.length === 0) {
-      return;
-    }
 
     const nextRequest = this.queue.shift();
     if (!nextRequest) {
@@ -126,7 +176,8 @@ export class BlogmarkPythonWorkerRuntime {
         return;
       }
 
-      const timeoutError = new Error(`Python transform timed out after ${nextRequest.timeoutMs}ms`);
+      this._timeoutCount += 1;
+      const timeoutError = new Error(`Python macro timed out after ${nextRequest.timeoutMs}ms`);
       this.activeRequest.reject(timeoutError);
       this.activeRequest = null;
       this.resetWorker();
@@ -150,7 +201,7 @@ export class BlogmarkPythonWorkerRuntime {
       return this.workerStartPromise;
     }
 
-    const workerPath = path.join(__dirname, 'blogmarkPython.worker.js');
+    const workerPath = path.join(__dirname, 'pythonMacro.worker.js');
     this.worker = this.workerFactory(workerPath);
     this.workerReady = false;
 
@@ -166,7 +217,7 @@ export class BlogmarkPythonWorkerRuntime {
     this.worker.on('exit', (...args: unknown[]) => {
       const code = args[0] as number;
       if (code !== 0) {
-        this.handleWorkerCrash(new Error(`Python worker exited with code ${code}`));
+        this.handleWorkerCrash(new Error(`Python macro worker exited with code ${code}`));
       }
     });
 
@@ -190,6 +241,11 @@ export class BlogmarkPythonWorkerRuntime {
       return;
     }
 
+    if (message.type === 'apiCall') {
+      void this.handleApiCall(message);
+      return;
+    }
+
     const active = this.activeRequest;
     if (!active) {
       return;
@@ -204,10 +260,16 @@ export class BlogmarkPythonWorkerRuntime {
     }
 
     this.activeRequest = null;
+    this._macroCount += 1;
 
-    if (message.type === 'transformResult') {
-      active.resolve({ output: message.output, toasts: message.toasts });
+    if (message.type === 'macroResult') {
+      active.resolve({
+        html: message.html,
+        data: message.data,
+        warnings: message.warnings,
+      });
     } else {
+      this._errorCount += 1;
       active.reject(new Error(message.error));
     }
 
@@ -218,6 +280,35 @@ export class BlogmarkPythonWorkerRuntime {
     this.rejectStartPromise(error);
     this.rejectActiveAndQueue(error);
     this.resetWorker();
+  }
+
+  private async handleApiCall(message: WorkerApiCallMessage): Promise<void> {
+    if (!this.worker || !this.apiInvoker) {
+      this.worker?.postMessage({
+        type: 'apiResult',
+        callId: message.callId,
+        ok: false,
+        error: 'API invoker not available',
+      } satisfies WorkerApiResultMessage);
+      return;
+    }
+
+    try {
+      const result = await this.apiInvoker(message.method, message.args);
+      this.worker?.postMessage({
+        type: 'apiResult',
+        callId: message.callId,
+        ok: true,
+        result,
+      } satisfies WorkerApiResultMessage);
+    } catch (error) {
+      this.worker?.postMessage({
+        type: 'apiResult',
+        callId: message.callId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      } satisfies WorkerApiResultMessage);
+    }
   }
 
   private rejectActiveAndQueue(error: Error): void {
@@ -268,16 +359,17 @@ export class BlogmarkPythonWorkerRuntime {
 
   private nextRequestId(): string {
     this.requestCounter += 1;
-    return `blogmark-py-${this.requestCounter}`;
+    return `py-macro-${this.requestCounter}`;
   }
 }
 
-let blogmarkPythonWorkerRuntimeInstance: BlogmarkPythonWorkerRuntime | null = null;
+let pythonMacroWorkerRuntimeInstance: PythonMacroWorkerRuntime | null = null;
 
-export function getBlogmarkPythonWorkerRuntime(): BlogmarkPythonWorkerRuntime {
-  if (!blogmarkPythonWorkerRuntimeInstance) {
-    blogmarkPythonWorkerRuntimeInstance = new BlogmarkPythonWorkerRuntime();
+export function getPythonMacroWorkerRuntime(): PythonMacroWorkerRuntime {
+  if (!pythonMacroWorkerRuntimeInstance) {
+    const { invokeMainProcessPythonApi } = require('./mainProcessPythonApiInvoker') as { invokeMainProcessPythonApi: ApiInvoker };
+    pythonMacroWorkerRuntimeInstance = new PythonMacroWorkerRuntime(undefined, invokeMainProcessPythonApi);
   }
 
-  return blogmarkPythonWorkerRuntimeInstance;
+  return pythonMacroWorkerRuntimeInstance;
 }

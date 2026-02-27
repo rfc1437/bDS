@@ -43,6 +43,7 @@ export interface PythonMacroSourceOptions {
 export interface PythonMacroRenderOptions extends PythonExecuteOptions {
   macroHook?: string;
   macroSource?: PythonMacroSourceOptions;
+  postDataJson?: string | null;
 }
 
 export interface PythonMacroV1Result {
@@ -173,6 +174,8 @@ export class PythonRuntimeManager {
         requestId,
         code,
         context: validatedContext,
+        entrypoint: options?.entrypoint,
+        postDataJson: options?.postDataJson,
         cacheKey: options?.cacheKey,
       };
 

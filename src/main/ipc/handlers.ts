@@ -11,6 +11,7 @@ import { getTagEngine } from '../engine/TagEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
 import { getScriptEngine, type CreateScriptInput, type UpdateScriptInput } from '../engine/ScriptEngine';
 import { getGitEngine } from '../engine/GitEngine';
+import { getGitApiAdapter } from '../engine/GitApiAdapter';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
@@ -772,6 +773,15 @@ export function registerIpcHandlers(): void {
     return engine.getAllScripts();
   });
 
+  // Internal: used by the editor macro plugin to detect known Python macros.
+  // Intentionally excluded from the Python API contract and API.md because
+  // it is an internal renderer helper, not a user-facing scripting API.
+  safeHandle('scripts:getEnabledMacroSlugs', async () => {
+    const engine = getScriptEngine();
+    const scripts = await engine.getEnabledMacroScripts();
+    return scripts.map((s) => s.slug);
+  });
+
   safeHandle('scripts:rebuildFromFiles', async () => {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.getActiveProject();
@@ -800,6 +810,44 @@ export function registerIpcHandlers(): void {
 
   safeHandle('tasks:clearCompleted', async () => {
     return taskManager.clearCompletedTasks();
+  });
+
+  // ============ Sync Handlers (git operations via GitApiAdapter) ============
+
+  safeHandle('sync:checkAvailability', async () => {
+    return getGitApiAdapter().checkAvailability();
+  });
+
+  safeHandle('sync:getRepoState', async () => {
+    return getGitApiAdapter().getRepoState();
+  });
+
+  safeHandle('sync:getStatus', async () => {
+    return getGitApiAdapter().getStatus();
+  });
+
+  safeHandle('sync:getHistory', async (_, limit?: number) => {
+    return getGitApiAdapter().getHistory(limit);
+  });
+
+  safeHandle('sync:getRemoteState', async () => {
+    return getGitApiAdapter().getRemoteState();
+  });
+
+  safeHandle('sync:fetch', async () => {
+    return getGitApiAdapter().fetch();
+  });
+
+  safeHandle('sync:pull', async () => {
+    return getGitApiAdapter().pull();
+  });
+
+  safeHandle('sync:push', async () => {
+    return getGitApiAdapter().push();
+  });
+
+  safeHandle('sync:commitAll', async (_, message: string) => {
+    return getGitApiAdapter().commitAll(message);
   });
 
   // ============ App Handlers ============
@@ -1494,4 +1542,10 @@ export function registerIpcHandlers(): void {
   taskManager.on('taskProgress', forwardEvent('task:progress'));
   taskManager.on('taskCompleted', forwardEvent('task:completed'));
   taskManager.on('taskFailed', forwardEvent('task:failed'));
+
+  const scriptEngine = getScriptEngine();
+  scriptEngine.on('scriptCreated', forwardEvent('script:created'));
+  scriptEngine.on('scriptUpdated', forwardEvent('script:updated'));
+  scriptEngine.on('scriptDeleted', forwardEvent('script:deleted'));
+  scriptEngine.on('scriptsRebuilt', forwardEvent('scripts:rebuilt'));
 }

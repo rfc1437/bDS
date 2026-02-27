@@ -14,6 +14,8 @@ import {
 import { createDeferredEventGate } from './navigation/deferredEventGate';
 import { createAndFocusPost } from './navigation/postCreation';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
+import { addWindowEventListener, BDS_EVENT_SCRIPTS_CHANGED } from './utils/windowEvents';
+import { refreshPythonMacroSlugs, wirePythonMacroPreview, invalidatePythonMacroScriptCache } from './macros';
 import { useI18n } from './i18n';
 import './App.css';
 
@@ -104,6 +106,12 @@ const App: React.FC = () => {
         if (tasks) {
           setTasks(tasks as TaskProgress[]);
         }
+
+        // Load known Python macro slugs for editor detection
+        await refreshPythonMacroSlugs();
+
+        // Wire Python macro resolver/renderer for editor preview
+        wirePythonMacroPreview();
       } catch (error) {
         console.error('Failed to load initial data:', error);
       } finally {
@@ -403,6 +411,7 @@ const App: React.FC = () => {
           await Promise.all([
             window.electronAPI?.posts.rebuildFromFiles(),
             window.electronAPI?.media.rebuildFromFiles(),
+            window.electronAPI?.scripts.rebuildFromFiles(),
           ]);
           await window.electronAPI?.media.regenerateMissingThumbnails();
         } catch (error) {
@@ -555,6 +564,14 @@ const App: React.FC = () => {
           showToast.success(tr('app.importComplete', { posts: importedCount, media: importedMedia }));
         }
       }) || (() => {})
+    );
+
+    // Refresh Python macro slugs when scripts change
+    unsubscribers.push(
+      addWindowEventListener(BDS_EVENT_SCRIPTS_CHANGED, () => {
+        invalidatePythonMacroScriptCache();
+        void refreshPythonMacroSlugs();
+      })
     );
 
     void window.electronAPI?.app.notifyRendererReady?.().catch((error) => {

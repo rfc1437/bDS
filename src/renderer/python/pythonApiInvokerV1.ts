@@ -1,4 +1,4 @@
-import { getPythonApiMethodContract, type PythonApiParamContractV1 } from './pythonApiContractV1';
+import { getPythonApiMethodContract, type PythonApiParamContractV1 } from '../../main/shared/pythonApiContractV1';
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {

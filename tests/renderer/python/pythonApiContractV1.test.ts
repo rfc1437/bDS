@@ -23,8 +23,9 @@ describe('pythonApiContractV1', () => {
       'scripts.getAll',
       'tasks.getAll',
       'app.getSystemLanguage',
-      'chat.getConversations',
-      'chat.sendMessage',
+      'sync.getRepoState',
+      'sync.commitAll',
+      'publish.uploadSite',
     ]));
   });
 
@@ -43,34 +44,30 @@ describe('pythonApiContractV1', () => {
     });
   });
 
-  it('documents chat.sendMessage return contract and metadata input', () => {
-    expect(getPythonApiMethodContract('chat.sendMessage')).toEqual({
-      method: 'chat.sendMessage',
-      description: 'Send message to chat conversation.',
+  it('documents sync.commitAll contract with required message param', () => {
+    expect(getPythonApiMethodContract('sync.commitAll')).toEqual({
+      method: 'sync.commitAll',
+      description: 'Stage all changes and commit for active project.',
       params: [
-        {
-          name: 'conversationId',
-          type: 'string',
-          required: true,
-        },
         {
           name: 'message',
           type: 'string',
           required: true,
         },
-        {
-          name: 'metadata',
-          type: 'object',
-          required: false,
-        },
       ],
-      returns: '{ success: boolean; message?: string; error?: string }',
+      returns: 'GitActionResult',
     });
+  });
+
+  it('does not include chat namespace (removed in v1.7.0)', () => {
+    const methodNames = listPythonApiMethodNames();
+    const chatMethods = methodNames.filter((m) => m.startsWith('chat.'));
+    expect(chatMethods).toHaveLength(0);
   });
 
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.6.0',
+      version: '1.7.0',
       generatedAt: expect.any(String),
     });
   });
@@ -93,15 +90,17 @@ describe('generatePythonApiModuleV1', () => {
     expect(moduleCode).toContain('class PostsApi:');
     expect(moduleCode).toContain('class MediaApi:');
     expect(moduleCode).toContain('class MetaApi:');
-    expect(moduleCode).toContain('class ChatApi:');
+    expect(moduleCode).toContain('class SyncApi:');
+    expect(moduleCode).toContain('class PublishApi:');
     expect(moduleCode).toContain('async def get(self, post_id):');
     expect(moduleCode).toContain('async def get_all(self, options=None):');
     expect(moduleCode).toContain('async def search(self, query):');
     expect(moduleCode).toContain('async def get_project_metadata(self):');
-    expect(moduleCode).toContain('async def get_conversations(self):');
-    expect(moduleCode).toContain('async def send_message(self, conversation_id, message, metadata=None):');
+    expect(moduleCode).toContain('async def commit_all(self, message):');
+    expect(moduleCode).toContain('async def upload_site(self, credentials):');
     expect(moduleCode).toContain('class BdsApi:');
     expect(moduleCode).toContain('bds = BdsApi(_transport)');
+    expect(moduleCode).not.toContain('class ChatApi:');
   });
 
   it('escapes python keyword method names to valid identifiers', () => {

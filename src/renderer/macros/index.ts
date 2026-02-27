@@ -24,6 +24,9 @@ export type {
   MacroParams,
   MacroRenderContext,
   ParsedMacro,
+  PythonMacroInfo,
+  PythonMacroResolver,
+  PythonMacroRendererFn,
 } from './types';
 
 // Re-export registry functions
@@ -39,4 +42,11 @@ export {
   renderMacro,
   renderAllMacros,
   getEditorPreview,
+  setPythonMacroResolver,
+  refreshPythonMacroSlugs,
 } from './registry';
+
+export {
+  wirePythonMacroPreview,
+  invalidatePythonMacroScriptCache,
+} from './pythonMacroPreview';

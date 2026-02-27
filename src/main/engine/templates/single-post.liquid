@@ -17,7 +17,7 @@
       </div>
       {% endif %}
       <article class="single-post" data-template="single-post">
-        <div class="post">{{ post.content | markdown: post.id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}</div>
+        <div class="post">{{ post.content | markdown: post.id, post_data_json_by_id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}</div>
       </article>
     </main>
   </body>
