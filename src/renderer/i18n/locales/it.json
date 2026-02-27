@@ -369,6 +369,7 @@
   "tabBar.error.fetchChatTitle": "Impossibile caricare il titolo della chat:",
   "tabBar.error.fetchImportTitle": "Impossibile caricare il titolo della definizione di importazione:",
   "tabBar.error.fetchScriptTitle": "Impossibile caricare il titolo dello script:",
+  "tabBar.error.fetchTemplateTitle": "Impossibile caricare il titolo del modello:",
   "tabBar.error.fetchCommitTitle": "Impossibile caricare i titoli dei commit:",
   "metadataDiff.title": "Strumento diff metadati",
   "metadataDiff.description": "Confronta i metadati dei post tra database e file markdown. Correggi incongruenze causate da bug o modifiche manuali.",

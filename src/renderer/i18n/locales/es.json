@@ -371,6 +371,7 @@
   "tabBar.error.fetchChatTitle": "No se pudo cargar el título del chat:",
   "tabBar.error.fetchImportTitle": "No se pudo cargar el título de la definición de importación:",
   "tabBar.error.fetchScriptTitle": "No se pudo cargar el título del script:",
+  "tabBar.error.fetchTemplateTitle": "No se pudo cargar el título de la plantilla:",
   "tabBar.error.fetchCommitTitle": "No se pudieron cargar los títulos de los commits:",
   "metadataDiff.title": "Herramienta diff de metadatos",
   "metadataDiff.description": "Compara los metadatos de las entradas entre la base de datos y los archivos Markdown. Corrige inconsistencias causadas por errores o ediciones manuales.",

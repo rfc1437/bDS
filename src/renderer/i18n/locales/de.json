@@ -371,6 +371,7 @@
   "tabBar.error.fetchChatTitle": "Chat-Titel konnte nicht geladen werden:",
   "tabBar.error.fetchImportTitle": "Titel der Importdefinition konnte nicht geladen werden:",
   "tabBar.error.fetchScriptTitle": "Skript-Titel konnte nicht geladen werden:",
+  "tabBar.error.fetchTemplateTitle": "Vorlagen-Titel konnte nicht geladen werden:",
   "tabBar.error.fetchCommitTitle": "Commit-Titel konnten nicht geladen werden:",
   "metadataDiff.title": "Metadaten-Diff-Werkzeug",
   "metadataDiff.description": "Vergleicht Beitragsmetadaten zwischen Datenbank und Markdown-Dateien. Behebt Abweichungen durch Bugs oder manuelle Änderungen.",

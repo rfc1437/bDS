@@ -73,6 +73,10 @@ describe('TabBar', () => {
         ...(window as any).electronAPI?.scripts,
         get: vi.fn(),
       },
+      templates: {
+        ...(window as any).electronAPI?.templates,
+        get: vi.fn(),
+      },
     };
   });
 
@@ -159,5 +163,66 @@ describe('TabBar', () => {
 
     expect(await screen.findByText('Publish Macro')).toBeInTheDocument();
     expect((window as any).electronAPI.scripts.get).toHaveBeenCalledWith('script-1');
+  });
+
+  it('renders template title for template tab', async () => {
+    useAppStore.setState({
+      tabs: [{ type: 'templates', id: 'template-1', isTransient: false }],
+      activeTabId: 'template-1',
+      posts: [],
+      media: [],
+      dirtyPosts: new Set<string>(),
+    });
+
+    (window as any).electronAPI.templates.get = vi.fn().mockResolvedValue({
+      id: 'template-1',
+      title: 'Blog Post Layout',
+    });
+
+    render(<TabBar />);
+
+    expect(await screen.findByText('Blog Post Layout')).toBeInTheDocument();
+    expect((window as any).electronAPI.templates.get).toHaveBeenCalledWith('template-1');
+  });
+
+  it('updates template tab title when template changes', async () => {
+    useAppStore.setState({
+      tabs: [{ type: 'templates', id: 'template-1', isTransient: false }],
+      activeTabId: 'template-1',
+      posts: [],
+      media: [],
+      dirtyPosts: new Set<string>(),
+    });
+
+    (window as any).electronAPI.templates.get = vi.fn().mockResolvedValue({
+      id: 'template-1',
+      title: 'Old Title',
+    });
+
+    // Capture the bds:templates-changed listener
+    let templatesChangedHandler: (() => void) | null = null;
+    (window as any).addEventListener = vi.fn((event: string, handler: () => void) => {
+      if (event === 'bds:templates-changed') {
+        templatesChangedHandler = handler;
+      }
+    });
+    (window as any).removeEventListener = vi.fn();
+
+    render(<TabBar />);
+
+    expect(await screen.findByText('Old Title')).toBeInTheDocument();
+
+    // Now simulate the template being updated
+    (window as any).electronAPI.templates.get = vi.fn().mockResolvedValue({
+      id: 'template-1',
+      title: 'New Title',
+    });
+
+    // Trigger the templates-changed event
+    await act(async () => {
+      templatesChangedHandler?.();
+    });
+
+    expect(await screen.findByText('New Title')).toBeInTheDocument();
   });
 });
