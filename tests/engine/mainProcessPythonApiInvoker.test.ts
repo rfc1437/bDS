@@ -39,6 +39,17 @@ const mockScriptEngine: Record<string, ReturnType<typeof vi.fn>> = {
   rebuildDatabaseFromFiles: vi.fn().mockResolvedValue(undefined),
 };
 
+const mockTemplateEngine: Record<string, ReturnType<typeof vi.fn>> = {
+  createTemplate: vi.fn().mockResolvedValue({ id: 't1' }),
+  updateTemplate: vi.fn().mockResolvedValue(null),
+  deleteTemplate: vi.fn().mockResolvedValue({ deleted: true }),
+  getTemplate: vi.fn().mockResolvedValue(null),
+  getAllTemplates: vi.fn().mockResolvedValue([]),
+  getEnabledTemplatesByKind: vi.fn().mockResolvedValue([]),
+  validateTemplate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
+  rebuildDatabaseFromFiles: vi.fn().mockResolvedValue(undefined),
+};
+
 const mockTagEngine: Record<string, ReturnType<typeof vi.fn>> = {
   getAllTags: vi.fn().mockResolvedValue([]),
   getTagsWithCounts: vi.fn().mockResolvedValue([]),
@@ -145,6 +156,7 @@ describe('invokeMainProcessPythonApi', () => {
     ENGINE_MAP.meta = () => mockMetaEngine as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.tags = () => mockTagEngine as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.scripts = () => mockScriptEngine as Record<string, (...args: unknown[]) => unknown>;
+    ENGINE_MAP.templates = () => mockTemplateEngine as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.tasks = () => mockTaskManager as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.sync = () => mockGitApiAdapter as Record<string, (...args: unknown[]) => unknown>;
     ENGINE_MAP.publish = () => mockPublishApiAdapter as Record<string, (...args: unknown[]) => unknown>;
@@ -186,6 +198,42 @@ describe('invokeMainProcessPythonApi', () => {
     it('routes scripts.delete to ScriptEngine.deleteScript', async () => {
       await invokeMainProcessPythonApi('scripts.delete', { id: 's1' });
       expect(mockScriptEngine.deleteScript).toHaveBeenCalledWith('s1');
+    });
+
+    it('routes templates.create to TemplateEngine.createTemplate', async () => {
+      const data = { title: 'My Template', kind: 'post', content: '<p>hello</p>' };
+      await invokeMainProcessPythonApi('templates.create', { data });
+      expect(mockTemplateEngine.createTemplate).toHaveBeenCalledWith(data);
+    });
+
+    it('routes templates.get to TemplateEngine.getTemplate', async () => {
+      await invokeMainProcessPythonApi('templates.get', { id: 't1' });
+      expect(mockTemplateEngine.getTemplate).toHaveBeenCalledWith('t1');
+    });
+
+    it('routes templates.delete to TemplateEngine.deleteTemplate', async () => {
+      await invokeMainProcessPythonApi('templates.delete', { id: 't1' });
+      expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('t1', undefined);
+    });
+
+    it('routes templates.getAll to TemplateEngine.getAllTemplates', async () => {
+      await invokeMainProcessPythonApi('templates.getAll', {});
+      expect(mockTemplateEngine.getAllTemplates).toHaveBeenCalledWith();
+    });
+
+    it('routes templates.getEnabledByKind to TemplateEngine.getEnabledTemplatesByKind', async () => {
+      await invokeMainProcessPythonApi('templates.getEnabledByKind', { kind: 'post' });
+      expect(mockTemplateEngine.getEnabledTemplatesByKind).toHaveBeenCalledWith('post');
+    });
+
+    it('routes templates.validate to TemplateEngine.validateTemplate', async () => {
+      await invokeMainProcessPythonApi('templates.validate', { content: '<p>{{ title }}</p>' });
+      expect(mockTemplateEngine.validateTemplate).toHaveBeenCalledWith('<p>{{ title }}</p>');
+    });
+
+    it('routes templates.rebuildFromFiles to TemplateEngine.rebuildDatabaseFromFiles', async () => {
+      await invokeMainProcessPythonApi('templates.rebuildFromFiles', {});
+      expect(mockTemplateEngine.rebuildDatabaseFromFiles).toHaveBeenCalledWith();
     });
 
     it('routes tags.getAll to TagEngine.getAllTags', async () => {

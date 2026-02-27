@@ -90,6 +90,10 @@ export const ENGINE_MAP: Record<string, EngineGetter> = {
     const { getScriptEngine } = require('../engine/ScriptEngine');
     return getScriptEngine();
   },
+  templates: () => {
+    const { getTemplateEngine } = require('../engine/TemplateEngine');
+    return getTemplateEngine();
+  },
   tasks: () => {
     const { taskManager } = require('../engine/TaskManager');
     return taskManager;
@@ -190,6 +194,14 @@ const METHOD_NAME_MAP: Record<string, string> = {
   'scripts.get': 'getScript',
   'scripts.getAll': 'getAllScripts',
   'scripts.rebuildFromFiles': 'rebuildDatabaseFromFiles',
+  'templates.create': 'createTemplate',
+  'templates.update': 'updateTemplate',
+  'templates.delete': 'deleteTemplate',
+  'templates.get': 'getTemplate',
+  'templates.getAll': 'getAllTemplates',
+  'templates.getEnabledByKind': 'getEnabledTemplatesByKind',
+  'templates.validate': 'validateTemplate',
+  'templates.rebuildFromFiles': 'rebuildDatabaseFromFiles',
   'tasks.getAll': 'getAllTasks',
   'tasks.getRunning': 'getRunningTasks',
   'tasks.cancel': 'cancelTask',
