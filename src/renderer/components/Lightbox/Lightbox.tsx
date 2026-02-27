@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useI18n } from '../../i18n';
 import './Lightbox.css';
 
@@ -155,10 +155,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
 
 // Hook to extract images from markdown content
 export function useMarkdownImages(content: string): LightboxImage[] {
-  const [images, setImages] = useState<LightboxImage[]>([]);
-
-  useEffect(() => {
-    // Match markdown image syntax: ![alt](src)
+  return useMemo(() => {
     const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
     const matches: LightboxImage[] = [];
     let match;
@@ -170,10 +167,8 @@ export function useMarkdownImages(content: string): LightboxImage[] {
       });
     }
 
-    setImages(matches);
+    return matches;
   }, [content]);
-
-  return images;
 }
 
 // Component to render images with lightbox support

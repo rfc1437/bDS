@@ -30,6 +30,16 @@ import documentationContent from '../../../../DOCUMENTATION.md?raw';
 import apiDocumentationContent from '../../../../API.md?raw';
 import './Editor.css';
 
+/** Debounce a value so it only updates after `delay` ms of inactivity. */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
 const UI_DATE_LOCALE: Record<string, string> = {
   en: 'en-US',
   de: 'de-DE',
@@ -191,6 +201,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [showMediaSearch, setShowMediaSearch] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(true);
   const editorRef = useRef<unknown>(null);
+  // Token incremented to signal Monaco that it should re-read its defaultValue.
+  // This is used instead of controlled `value` to avoid cursor-reset races.
+  const [monacoResetToken, setMonacoResetToken] = useState(0);
 
   const isDirty = checkIsDirty(postId);
 
@@ -211,8 +224,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     window.electronAPI?.posts.hasPublishedVersion(postId).then(setHasPublishedVersion);
   }, [postId]);
 
-  // Resolve media URLs in content for display
-  const resolvedContent = useMemo(() => resolveMediaUrls(content, media), [content, media]);
+  // Debounce content for lightbox-only computations (not time-critical)
+  const debouncedContent = useDebouncedValue(content, 500);
+
+  // Resolve media URLs in content for display (lightbox only)
+  const resolvedContent = useMemo(() => resolveMediaUrls(debouncedContent, media), [debouncedContent, media]);
 
   // Extract images from resolved content for lightbox
   const images = useMarkdownImages(resolvedContent);
@@ -292,38 +308,39 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   }, [postId]);
 
   // Reset when post data is loaded or changes
+  // Only sync local state from post on initial load.
+  // After initialization, local state is the source of truth — this prevents
+  // auto-save or manual-save completions from overwriting the user's in-progress
+  // edits and causing the Monaco editor to reset cursor position.
   useEffect(() => {
-    if (post) {
+    if (post && !isInitialized) {
       setTitle(post.title);
       setContent(post.content);
       setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
-      if (!isInitialized) {
-        setMetadataExpanded(post.title === '');
-      }
+      setMetadataExpanded(post.title === '');
       markClean(postId);
       // Mark as initialized AFTER setting local state
       setIsInitialized(true);
     }
-  }, [post, postId, markClean]);
+  }, [post, postId, markClean, isInitialized]);
 
   // Track changes and notify auto-save manager
   // Only run after form has been initialized from post data
   useEffect(() => {
     if (!post || !isInitialized) return;
-    const tagsChanged = JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort());
-    const categoriesChanged = JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
+
+    // Short-circuit: check cheap comparisons first (content changes on every keystroke)
+    const contentChanged = content !== post.content;
+    const titleChanged = title !== post.title;
     const authorChanged = author !== (post.author || '');
-    const hasChanges = 
-      title !== post.title ||
-      content !== post.content ||
-      authorChanged ||
-      tagsChanged ||
-      categoriesChanged;
-    
+    const hasChanges = contentChanged || titleChanged || authorChanged ||
+      JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort()) ||
+      JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
+
     if (hasChanges) {
-      markDirty(postId);
+      if (!isDirty) markDirty(postId);
       // Notify auto-save manager with accumulated changes
       // Convert tags array to comma-separated string for auto-save compatibility
       autoSaveManager.notifyChange(postId, {
@@ -336,7 +353,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } else {
       markClean(postId);
     }
-  }, [title, content, author, tags, selectedCategories, post, postId, isInitialized, markDirty, markClean]);
+  }, [title, content, author, tags, selectedCategories, post, postId, isInitialized, isDirty, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -419,6 +436,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           setAuthor(reverted.author || '');
           setTags(reverted.tags);
           setSelectedCategories(reverted.categories.length > 0 ? reverted.categories : ['article']);
+          // Force Monaco to remount with the reverted content
+          setMonacoResetToken(prev => prev + 1);
           // Update local post state so UI reflects the published status
           setPost(reverted as PostData);
           updatePost(postId, reverted as Partial<PostData>);
@@ -867,9 +886,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           
           {editorMode === 'markdown' && (
             <MonacoEditor
+              key={monacoResetToken}
               height="100%"
               language="markdown-with-macros"
-              value={content}
+              defaultValue={content}
               onChange={(value) => setContent(value || '')}
               onMount={handleEditorDidMount}
               beforeMount={handleEditorWillMount}

@@ -382,9 +382,10 @@ export const useAppStore = create<AppState>()(
       }),
       
       // Dirty tracking
-      markDirty: (id) => set((state) => ({
-        dirtyPosts: new Set([...state.dirtyPosts, id]),
-      })),
+      markDirty: (id) => set((state) => {
+        if (state.dirtyPosts.has(id)) return state;
+        return { dirtyPosts: new Set([...state.dirtyPosts, id]) };
+      }),
       
       markClean: (id) => set((state) => {
         const newDirtyPosts = new Set(state.dirtyPosts);
