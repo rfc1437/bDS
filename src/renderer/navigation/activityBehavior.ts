@@ -1,7 +1,7 @@
 import type { Tab } from '../store/appStore';
 import type { SidebarView } from './sidebarViewRegistry';
 
-export type ActivityId = 'posts' | 'pages' | 'media' | 'scripts' | 'tags' | 'chat' | 'import' | 'git' | 'settings';
+export type ActivityId = 'posts' | 'pages' | 'media' | 'scripts' | 'templates' | 'tags' | 'chat' | 'import' | 'git' | 'settings';
 
 export interface ActivitySnapshot {
   activeView: SidebarView;
@@ -47,6 +47,13 @@ const ACTIVITY_CONFIG: Record<ActivityId, ActivityConfig> = {
     id: 'scripts',
     view: 'scripts',
     labelKey: 'activity.scripts',
+    activeStrategy: 'sidebar-owner',
+    clickStrategy: 'sidebar-toggle',
+  },
+  templates: {
+    id: 'templates',
+    view: 'templates',
+    labelKey: 'activity.templates',
     activeStrategy: 'sidebar-owner',
     clickStrategy: 'sidebar-toggle',
   },

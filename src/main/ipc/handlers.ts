@@ -10,6 +10,7 @@ import { getMenuEngine, type MenuDocument } from '../engine/MenuEngine';
 import { getTagEngine } from '../engine/TagEngine';
 import { getPostMediaEngine } from '../engine/PostMediaEngine';
 import { getScriptEngine, type CreateScriptInput, type UpdateScriptInput } from '../engine/ScriptEngine';
+import { getTemplateEngine, type CreateTemplateInput, type UpdateTemplateInput } from '../engine/TemplateEngine';
 import { getGitEngine } from '../engine/GitEngine';
 import { getGitApiAdapter } from '../engine/GitApiAdapter';
 import { taskManager, TaskProgress } from '../engine/TaskManager';
@@ -191,11 +192,12 @@ export function registerIpcHandlers(): void {
       return pullResult;
     }
 
-    const [changedPostFiles, changedScriptFiles] = await Promise.all([
+    const [changedPostFiles, changedScriptFiles, changedTemplateFiles] = await Promise.all([
       engine.getChangedPostFilesBetween(projectPath, beforeHead, afterHead),
       engine.getChangedScriptFilesBetween(projectPath, beforeHead, afterHead),
+      engine.getChangedTemplateFilesBetween(projectPath, beforeHead, afterHead),
     ]);
-    if (changedPostFiles.length === 0 && changedScriptFiles.length === 0) {
+    if (changedPostFiles.length === 0 && changedScriptFiles.length === 0 && changedTemplateFiles.length === 0) {
       return pullResult;
     }
 
@@ -204,11 +206,13 @@ export function registerIpcHandlers(): void {
       const project = await projectEngine.getActiveProject();
       const postEngine = getPostEngine();
       const scriptEngine = getScriptEngine();
+      const templateEngine = getTemplateEngine();
 
       if (project) {
         const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
         postEngine.setProjectContext(project.id, dataDir);
         scriptEngine.setProjectContext(project.id, dataDir);
+        templateEngine.setProjectContext(project.id, dataDir);
       }
 
       await Promise.all([
@@ -218,9 +222,12 @@ export function registerIpcHandlers(): void {
         changedScriptFiles.length > 0
           ? scriptEngine.reconcileScriptsFromGitChanges(projectPath, changedScriptFiles)
           : Promise.resolve(),
+        changedTemplateFiles.length > 0
+          ? templateEngine.reconcileTemplatesFromGitChanges(projectPath, changedTemplateFiles)
+          : Promise.resolve(),
       ]);
     } catch (error) {
-      console.error('Failed to reconcile published posts/scripts after git pull:', error);
+      console.error('Failed to reconcile published posts/scripts/templates after git pull:', error);
     }
 
     return pullResult;
@@ -304,12 +311,14 @@ export function registerIpcHandlers(): void {
       const menuEngine = getMenuEngine();
       const tagEngine = getTagEngine();
       const scriptEngine = getScriptEngine();
+      const templateEngine = getTemplateEngine();
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
       menuEngine.setProjectContext(project.id, dataDir);
       tagEngine.setProjectContext(project.id, dataDir);
       scriptEngine.setProjectContext(project.id, dataDir);
+      templateEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
 
@@ -344,12 +353,14 @@ export function registerIpcHandlers(): void {
       const menuEngine = getMenuEngine();
       const tagEngine = getTagEngine();
       const scriptEngine = getScriptEngine();
+      const templateEngine = getTemplateEngine();
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
       menuEngine.setProjectContext(project.id, dataDir);
       tagEngine.setProjectContext(project.id, dataDir);
       scriptEngine.setProjectContext(project.id, dataDir);
+      templateEngine.setProjectContext(project.id, dataDir);
       const postMediaEngine = getPostMediaEngine();
       postMediaEngine.setProjectContext(project.id);
 
@@ -794,6 +805,55 @@ export function registerIpcHandlers(): void {
     return true;
   });
 
+  // ============ Template Handlers ============
+
+  safeHandle('templates:create', async (_, data: CreateTemplateInput) => {
+    const engine = getTemplateEngine();
+    return engine.createTemplate(data);
+  });
+
+  safeHandle('templates:update', async (_, id: string, data: UpdateTemplateInput) => {
+    const engine = getTemplateEngine();
+    return engine.updateTemplate(id, data);
+  });
+
+  safeHandle('templates:delete', async (_, id: string, options?: { force?: boolean }) => {
+    const engine = getTemplateEngine();
+    return engine.deleteTemplate(id, options);
+  });
+
+  safeHandle('templates:get', async (_, id: string) => {
+    const engine = getTemplateEngine();
+    return engine.getTemplate(id);
+  });
+
+  safeHandle('templates:getAll', async () => {
+    const engine = getTemplateEngine();
+    return engine.getAllTemplates();
+  });
+
+  safeHandle('templates:getEnabledByKind', async (_, kind: string) => {
+    const engine = getTemplateEngine();
+    return engine.getEnabledTemplatesByKind(kind as 'post' | 'list' | 'not-found' | 'partial');
+  });
+
+  safeHandle('templates:validate', async (_, content: string) => {
+    const engine = getTemplateEngine();
+    return engine.validateTemplate(content);
+  });
+
+  safeHandle('templates:rebuildFromFiles', async () => {
+    const projectEngine = getProjectEngine();
+    const project = await projectEngine.getActiveProject();
+    const engine = getTemplateEngine();
+    if (project) {
+      const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
+      engine.setProjectContext(project.id, dataDir);
+    }
+    await engine.rebuildDatabaseFromFiles();
+    return true;
+  });
+
   // ============ Task Handlers ============
 
   safeHandle('tasks:getAll', async () => {
@@ -1135,7 +1195,7 @@ export function registerIpcHandlers(): void {
     return engine.createTag(data);
   });
 
-  safeHandle('tags:update', async (_, id: string, data: { name?: string; color?: string | null }) => {
+  safeHandle('tags:update', async (_, id: string, data: { name?: string; color?: string | null; postTemplateSlug?: string | null }) => {
     const engine = getTagEngine();
     return engine.updateTag(id, data);
   });
@@ -1566,4 +1626,10 @@ export function registerIpcHandlers(): void {
   scriptEngine.on('scriptUpdated', forwardEvent('script:updated'));
   scriptEngine.on('scriptDeleted', forwardEvent('script:deleted'));
   scriptEngine.on('scriptsRebuilt', forwardEvent('scripts:rebuilt'));
+
+  const templateEngine = getTemplateEngine();
+  templateEngine.on('templateCreated', forwardEvent('template:created'));
+  templateEngine.on('templateUpdated', forwardEvent('template:updated'));
+  templateEngine.on('templateDeleted', forwardEvent('template:deleted'));
+  templateEngine.on('templatesRebuilt', forwardEvent('templates:rebuilt'));
 }

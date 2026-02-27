@@ -18,6 +18,7 @@ export interface TagData {
   projectId: string;
   name: string;
   color?: string;
+  postTemplateSlug?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +46,7 @@ export interface CreateTagInput {
 export interface UpdateTagInput {
   name?: string;
   color?: string | null;
+  postTemplateSlug?: string | null;
 }
 
 /**
@@ -110,6 +112,7 @@ function isValidHexColor(color: string): boolean {
 interface SerializedTag {
   name: string;
   color?: string;
+  postTemplateSlug?: string;
 }
 
 /**
@@ -400,19 +403,27 @@ export class TagEngine extends EventEmitter {
       throw new Error('Invalid color format. Use hex format like #ff0000 or #f00');
     }
 
-    if (input.color === undefined) {
+    const hasColorUpdate = input.color !== undefined;
+    const hasTemplateUpdate = input.postTemplateSlug !== undefined;
+
+    if (!hasColorUpdate && !hasTemplateUpdate) {
       // No updates
       return this.rowToTagData(row);
     }
 
     const now = new Date();
 
+    const setFields: Record<string, unknown> = { updatedAt: now };
+    if (hasColorUpdate) {
+      setFields.color = input.color;
+    }
+    if (hasTemplateUpdate) {
+      setFields.postTemplateSlug = input.postTemplateSlug;
+    }
+
     await db
       .update(tags)
-      .set({
-        color: input.color,
-        updatedAt: now,
-      })
+      .set(setFields)
       .where(and(
         eq(tags.id, id),
         eq(tags.projectId, this.currentProjectId)
@@ -422,7 +433,8 @@ export class TagEngine extends EventEmitter {
       id: row.id,
       projectId: row.projectId,
       name: row.name,
-      color: input.color !== undefined ? input.color || undefined : row.color || undefined,
+      color: hasColorUpdate ? input.color || undefined : row.color || undefined,
+      postTemplateSlug: hasTemplateUpdate ? input.postTemplateSlug || undefined : row.postTemplateSlug || undefined,
       createdAt: row.createdAt,
       updatedAt: now,
     };
@@ -817,6 +829,7 @@ export class TagEngine extends EventEmitter {
       projectId: row.projectId,
       name: row.name,
       color: row.color || undefined,
+      postTemplateSlug: row.postTemplateSlug || undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -837,6 +850,9 @@ export class TagEngine extends EventEmitter {
         const entry: SerializedTag = { name: tag.name };
         if (tag.color) {
           entry.color = tag.color;
+        }
+        if (tag.postTemplateSlug) {
+          entry.postTemplateSlug = tag.postTemplateSlug;
         }
         return entry;
       });
@@ -867,6 +883,7 @@ export class TagEngine extends EventEmitter {
         if (!name) continue;
 
         const color = tag.color || null;
+        const postTemplateSlug = typeof tag.postTemplateSlug === 'string' ? tag.postTemplateSlug : null;
 
         // Check if tag with this name already exists
         const existing = await db
@@ -884,17 +901,22 @@ export class TagEngine extends EventEmitter {
             projectId: this.currentProjectId,
             name,
             color,
+            postTemplateSlug,
             createdAt: now,
             updatedAt: now,
           });
-        } else if (color) {
-          // Update color if provided and tag exists
+        } else if (color || postTemplateSlug) {
+          // Update color/postTemplateSlug if provided and tag exists
+          const setFields: Record<string, unknown> = { updatedAt: now };
+          if (color) {
+            setFields.color = color;
+          }
+          if (postTemplateSlug) {
+            setFields.postTemplateSlug = postTemplateSlug;
+          }
           await db
             .update(tags)
-            .set({
-              color,
-              updatedAt: now,
-            })
+            .set(setFields)
             .where(and(
               eq(tags.projectId, this.currentProjectId),
               sql`LOWER(${tags.name}) = LOWER(${name})`

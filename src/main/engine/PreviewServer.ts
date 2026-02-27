@@ -22,6 +22,7 @@ import {
   type PythonMacroRendererContract,
 } from './PageRenderer';
 import { getScriptEngine } from './ScriptEngine';
+import { getTemplateEngine } from './TemplateEngine';
 import { getPythonMacroWorkerRuntime } from './PythonMacroWorkerRuntime';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
@@ -69,6 +70,7 @@ interface PreviewServerDependencies {
   settingsEngine: MetaEngineContract;
   menuEngine: MenuEngineContract;
   getActiveProjectContext: () => Promise<ActiveProjectContext>;
+  userTemplatesDir?: string;
 }
 
 interface SerializedTag {
@@ -106,7 +108,13 @@ export class PreviewServer {
         projectDescription: activeProject?.description ?? undefined,
       };
     });
-    this.pageRenderer = new PageRenderer(this.mediaEngine, this.postMediaEngine, this.postEngine, buildPythonMacroRenderer());
+    this.pageRenderer = new PageRenderer(
+      this.mediaEngine,
+      this.postMediaEngine,
+      this.postEngine,
+      buildPythonMacroRenderer(),
+      dependencies?.userTemplatesDir ?? getTemplateEngine().getTemplatesDirectory(),
+    );
   }
 
   async start(preferredPort = 0): Promise<number> {
@@ -197,6 +205,7 @@ export class PreviewServer {
       resolveListExcludedCategories: (settings) => this.resolveListExcludedCategories(settings),
       buildHtmlRewriteContext: () => this.buildHtmlRewriteContext(),
       resolveTagColorByName: (projectContext) => this.resolveTagColorByName(projectContext),
+      resolveTagTemplateSettings: (projectContext) => this.resolveTagTemplateSettings(projectContext),
       pageRenderer: this.pageRenderer,
       postEngineForMacros: this.postEngine,
       loadPublishedSnapshotsPage: (filter, pagination) => loadPublishedSnapshotsPage(this.postEngine, filter, pagination),
@@ -432,6 +441,39 @@ export class PreviewServer {
     }
   }
 
+  private async resolveTagTemplateSettings(projectContext: ActiveProjectContext): Promise<Record<string, { postTemplateSlug?: string | null }>> {
+    if (!projectContext.dataDir) {
+      return {};
+    }
+
+    const tagsPath = path.join(projectContext.dataDir, 'meta', 'tags.json');
+
+    try {
+      const source = await readFile(tagsPath, 'utf-8');
+      const parsed = JSON.parse(source);
+      if (!Array.isArray(parsed)) {
+        return {};
+      }
+
+      const settings: Record<string, { postTemplateSlug?: string | null }> = {};
+      for (const rawEntry of parsed as SerializedTag[]) {
+        const name = typeof rawEntry?.name === 'string' ? rawEntry.name.trim() : '';
+        const postTemplateSlug = typeof (rawEntry as Record<string, unknown>)?.postTemplateSlug === 'string'
+          ? ((rawEntry as Record<string, unknown>).postTemplateSlug as string).trim()
+          : undefined;
+        if (!name || !postTemplateSlug) {
+          continue;
+        }
+
+        settings[name] = { postTemplateSlug };
+      }
+
+      return settings;
+    } catch {
+      return {};
+    }
+  }
+
   private async resolveAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {
     const match = pathname.match(/^\/assets\/([^/]+)$/);
     if (!match) return null;
@@ -592,6 +634,8 @@ export class PreviewServer {
       mergedSettings[category] = {
         renderInLists: value.renderInLists,
         showTitle: value.showTitle,
+        postTemplateSlug: value.postTemplateSlug,
+        listTemplateSlug: value.listTemplateSlug,
       };
     }
     return mergedSettings;

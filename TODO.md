@@ -6,7 +6,7 @@ independently.
 
 ---
 
-## 1. Template Editor & Per-Entity Template Selection
+## ~~1. Template Editor & Per-Entity Template Selection~~ ✅ Done
 
 ### Goal
 

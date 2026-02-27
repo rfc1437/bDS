@@ -3,6 +3,7 @@ export const SIDEBAR_VIEW_REGISTRY = [
   'pages',
   'media',
   'scripts',
+  'templates',
   'settings',
   'tags',
   'chat',

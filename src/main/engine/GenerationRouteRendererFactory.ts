@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { CategoryRenderSettings } from './PageRenderer';
 import { buildCanonicalPostPath } from './PageRenderer';
 import type { MenuDocument } from './MenuEngine';
@@ -210,6 +211,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       getMenu: async () => menu,
     },
     getActiveProjectContext: async () => projectContext,
+    userTemplatesDir: path.join(params.options.dataDir, 'templates'),
   });
 
   const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string> }> = (async () => {

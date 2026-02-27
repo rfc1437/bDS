@@ -6,6 +6,7 @@ import {
   getGitDiffFileTabSpec,
   getImportTabSpec,
   getScriptTabSpec,
+  getTemplateTabSpec,
   parseGitDiffTabId,
   openChatTab,
   getSingletonToolTabSpec,
@@ -14,6 +15,7 @@ import {
   openGitDiffFileTab,
   openImportTab,
   openScriptTab,
+  openTemplateTab,
   openSingletonToolTab,
 } from '../../../src/renderer/navigation/tabPolicy';
 
@@ -161,6 +163,35 @@ describe('tabPolicy', () => {
     expect(opened).toEqual([
       { type: 'git-diff', id: 'git-diff:posts/second.md', isTransient: true },
       { type: 'git-diff', id: 'git-diff:commit:def456', isTransient: false },
+    ]);
+  });
+
+  it('provides canonical template tab spec for preview and pin intents', () => {
+    expect(getTemplateTabSpec('template-1', 'preview')).toEqual({
+      type: 'templates',
+      id: 'template-1',
+      isTransient: true,
+    });
+
+    expect(getTemplateTabSpec('template-1', 'pin')).toEqual({
+      type: 'templates',
+      id: 'template-1',
+      isTransient: false,
+    });
+  });
+
+  it('opens template tabs from shared policy', () => {
+    const opened: Array<{ type: string; id: string; isTransient: boolean }> = [];
+    const openTab = (tab: { type: string; id: string; isTransient: boolean }) => {
+      opened.push(tab);
+    };
+
+    openTemplateTab(openTab, 'template-preview', 'preview');
+    openTemplateTab(openTab, 'template-pin', 'pin');
+
+    expect(opened).toEqual([
+      { type: 'templates', id: 'template-preview', isTransient: true },
+      { type: 'templates', id: 'template-pin', isTransient: false },
     ]);
   });
 });

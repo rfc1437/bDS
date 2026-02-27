@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppStore, PostData, MediaData } from '../../store';
 import { showToast } from '../Toast';
-import { BDS_EVENT_SCRIPTS_CHANGED, dispatchWindowEvent, getContrastColor, groupPostsByStatus, loadTagColorMap } from '../../utils';
+import { BDS_EVENT_SCRIPTS_CHANGED, BDS_EVENT_TEMPLATES_CHANGED, dispatchWindowEvent, getContrastColor, groupPostsByStatus, loadTagColorMap } from '../../utils';
 import type { ChatConversation, ImportDefinitionData } from '../../types/electron';
 import { GitSidebar } from '../GitSidebar/GitSidebar';
 import { scrollToSettingsSection, SettingsCategory } from '../SettingsView/SettingsView';
 import { scrollToTagsSection, TagsCategory } from '../TagsView';
 import { activateSidebarSection } from '../../navigation/sectionActivation';
 import { getPersistedSidebarSection, setPersistedSidebarSection } from '../../navigation/sidebarUiPersistence';
-import { openChatTab, openEntityTab, openImportTab, openScriptTab, openSingletonToolTab } from '../../navigation/tabPolicy';
+import { openChatTab, openEntityTab, openImportTab, openScriptTab, openTemplateTab, openSingletonToolTab } from '../../navigation/tabPolicy';
 import { createAndFocusPost } from '../../navigation/postCreation';
 import type { SidebarView } from '../../navigation/sidebarViewRegistry';
 import { useI18n } from '../../i18n';
@@ -1702,6 +1702,139 @@ const ScriptsList: React.FC = () => {
   );
 };
 
+const TemplatesList: React.FC = () => {
+  const { t, language } = useI18n();
+  const { openTab, activeTabId, closeTab } = useAppStore();
+  const activeProjectId = useAppStore((state) => state.activeProject?.id);
+
+  const loadTemplates = useCallback(async (): Promise<Array<{ id: string; title: string; updatedAt: string }>> => {
+    const items = await window.electronAPI?.templates.getAll();
+    return (items ?? []).map((item) => ({ id: item.id, title: item.title, updatedAt: item.updatedAt }));
+  }, []);
+
+  const {
+    items: templates,
+    setItems: setTemplates,
+    isLoading,
+    reload: reloadTemplates,
+  } = useProjectScopedSidebarData<Array<{ id: string; title: string; updatedAt: string }>[number]>({
+    load: loadTemplates,
+    activeProjectId,
+    refreshEventName: BDS_EVENT_TEMPLATES_CHANGED,
+  });
+
+  const handleCreateTemplate = async () => {
+    try {
+      const created = await window.electronAPI?.templates.create({
+        title: t('sidebar.templates.newTemplate'),
+        kind: 'post',
+        content: '',
+        enabled: true,
+      });
+
+      if (!created) {
+        return;
+      }
+
+      setTemplates((prev) => [
+        { id: created.id, title: created.title, updatedAt: created.updatedAt },
+        ...prev.filter((tmpl) => tmpl.id !== created.id),
+      ]);
+      dispatchWindowEvent(BDS_EVENT_TEMPLATES_CHANGED);
+      openTemplateTab(openTab, created.id, 'pin');
+      void reloadTemplates();
+    } catch (error) {
+      console.error('Failed to create template:', error);
+      showToast.error(t('sidebar.templates.createFailed'));
+    }
+  };
+
+  const handleDeleteTemplate = async (event: React.MouseEvent, templateId: string) => {
+    event.stopPropagation();
+    try {
+      const result = await window.electronAPI?.templates.delete(templateId);
+      if (!result) {
+        showToast.error(t('sidebar.templates.deleteFailed'));
+        return;
+      }
+
+      if (!result.deleted && result.references) {
+        const { postIds, tagIds } = result.references;
+        const confirmed = window.confirm(
+          t('sidebar.templates.deleteConfirmWithRefs', {
+            postCount: String(postIds.length),
+            tagCount: String(tagIds.length),
+          }),
+        );
+        if (!confirmed) {
+          return;
+        }
+        const forceResult = await window.electronAPI?.templates.delete(templateId, { force: true });
+        if (!forceResult?.deleted) {
+          showToast.error(t('sidebar.templates.deleteFailed'));
+          return;
+        }
+      }
+
+      setTemplates((prev) => prev.filter((tmpl) => tmpl.id !== templateId));
+      closeTab(templateId);
+      dispatchWindowEvent(BDS_EVENT_TEMPLATES_CHANGED);
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      showToast.error(t('sidebar.templates.deleteFailed'));
+    }
+  };
+
+  return (
+    <SidebarEntityList
+      header={t('sidebar.templates.header')}
+      createTitle={t('sidebar.templates.newTemplate')}
+      onCreate={handleCreateTemplate}
+      isLoading={isLoading}
+      loadingLabel={t('sidebar.loading')}
+      emptyMessage={t('sidebar.templates.none')}
+      emptyActionLabel={t('sidebar.templates.createTemplate')}
+      onEmptyAction={handleCreateTemplate}
+      items={templates}
+      getItemKey={(tmpl) => tmpl.id}
+      renderItem={(tmpl) => (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={tmpl.title}
+          className={`chat-list-item ${activeTabId === tmpl.id ? 'active' : ''}`}
+          onClick={() => openTemplateTab(openTab, tmpl.id, 'preview')}
+          onDoubleClick={() => openTemplateTab(openTab, tmpl.id, 'pin')}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              openTemplateTab(openTab, tmpl.id, 'pin');
+              return;
+            }
+            if (event.key === ' ') {
+              event.preventDefault();
+              openTemplateTab(openTab, tmpl.id, 'preview');
+            }
+          }}
+        >
+          <div className="chat-item-content">
+            <div className="chat-item-title">{tmpl.title}</div>
+            <div className="chat-item-date">
+              {formatSidebarRelativeDate({ dateString: tmpl.updatedAt, language, t })}
+            </div>
+          </div>
+          <button
+            className="chat-item-delete"
+            onClick={(event) => handleDeleteTemplate(event, tmpl.id)}
+            title={t('sidebar.templates.deleteTemplate')}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    />
+  );
+};
+
 export const Sidebar: React.FC = () => {
   const { activeView, sidebarVisible } = useAppStore();
 
@@ -1714,6 +1847,7 @@ export const Sidebar: React.FC = () => {
     pages: <PostsList mode="pages" isActive={true} />,
     media: <MediaList />,
     scripts: <ScriptsList />,
+    templates: <TemplatesList />,
     settings: <SettingsNav />,
     tags: <TagsNav />,
     chat: <ChatList />,

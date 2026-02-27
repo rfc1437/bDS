@@ -20,6 +20,7 @@ import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { SiteValidationView } from '../SiteValidationView';
 import { ScriptsView } from '../ScriptsView/ScriptsView';
+import { TemplatesView } from '../TemplatesView/TemplatesView';
 import { AutoSaveManager, getContrastColor, loadTagColorMap } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
@@ -70,6 +71,9 @@ const autoSaveManager = new AutoSaveManager({
     }
     if ('categories' in changes) {
       update.categories = changes.categories as string[];
+    }
+    if ('templateSlug' in changes) {
+      (update as Record<string, unknown>).templateSlug = changes.templateSlug as string || null;
     }
 
     const updated = await window.electronAPI?.posts.update(id, update);
@@ -191,6 +195,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [author, setAuthor] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
+  const [templateSlug, setTemplateSlug] = useState('');
+  const [availablePostTemplates, setAvailablePostTemplates] = useState<Array<{ slug: string; title: string }>>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
@@ -319,10 +325,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
+      setTemplateSlug((post as PostData & { templateSlug?: string }).templateSlug || '');
       setMetadataExpanded(post.title === '');
       markClean(postId);
       // Mark as initialized AFTER setting local state
       setIsInitialized(true);
+      // Load available post templates for the dropdown
+      window.electronAPI?.templates.getEnabledByKind('post').then((templates) => {
+        setAvailablePostTemplates((templates ?? []).map((tmpl) => ({ slug: tmpl.slug, title: tmpl.title })));
+      });
     }
   }, [post, postId, markClean, isInitialized]);
 
@@ -335,7 +346,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     const contentChanged = content !== post.content;
     const titleChanged = title !== post.title;
     const authorChanged = author !== (post.author || '');
-    const hasChanges = contentChanged || titleChanged || authorChanged ||
+    const templateSlugChanged = templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '');
+    const hasChanges = contentChanged || titleChanged || authorChanged || templateSlugChanged ||
       JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort()) ||
       JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
 
@@ -349,11 +361,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         author,
         tags: tags.join(', '),
         categories: selectedCategories,
+        templateSlug: templateSlug || undefined,
       });
     } else {
       markClean(postId);
     }
-  }, [title, content, author, tags, selectedCategories, post, postId, isInitialized, isDirty, markDirty, markClean]);
+  }, [title, content, author, tags, selectedCategories, templateSlug, post, postId, isInitialized, isDirty, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -375,7 +388,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         author: author || undefined,
         tags,
         categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
-      });
+        templateSlug: templateSlug || null,
+      } as Parameters<typeof window.electronAPI.posts.update>[1]);
       
       if (updated) {
         updatePost(postId, updated as Partial<PostData>);
@@ -799,6 +813,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 />
               </div>
             </div>
+            {availablePostTemplates.length > 0 && (
+              <div className="editor-field">
+                <label>{tr('editor.field.template')}</label>
+                <select
+                  value={templateSlug}
+                  onChange={(e) => setTemplateSlug(e.target.value)}
+                >
+                  <option value="">{tr('editor.field.templateDefault')}</option>
+                  {availablePostTemplates.map((tmpl) => (
+                    <option key={tmpl.slug} value={tmpl.slug}>{tmpl.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <PostLinks
               postId={postId}
@@ -1836,6 +1864,7 @@ export const Editor: React.FC = () => {
     ),
     'site-validation': () => <SiteValidationView />,
     scripts: () => <ScriptsView scriptId={editorRoute.tabId} />,
+    templates: () => <TemplatesView templateId={editorRoute.tabId} />,
     post: () => (editorRoute.tabId ? <PostEditor key={editorRoute.tabId} postId={editorRoute.tabId} /> : <Dashboard />),
     media: () => (editorRoute.tabId ? <MediaEditor key={editorRoute.tabId} mediaId={editorRoute.tabId} /> : <Dashboard />),
     dashboard: () => <Dashboard />,

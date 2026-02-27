@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.7.0
+Contract version: 1.9.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -21,6 +21,7 @@ project = await bds.meta.get_project_metadata()
 - [posts](#posts)
 - [media](#media)
 - [scripts](#scripts)
+- [templates](#templates)
 - [tasks](#tasks)
 - [app](#app)
 - [meta](#meta)
@@ -1949,6 +1950,300 @@ None
 
 [↑ Back to Table of contents](#table-of-contents)
 
+## templates
+
+**Module APIs**
+
+- [templates.create](#templatescreate)
+- [templates.update](#templatesupdate)
+- [templates.delete](#templatesdelete)
+- [templates.get](#templatesget)
+- [templates.getAll](#templatesgetall)
+- [templates.getEnabledByKind](#templatesgetenabledbykind)
+- [templates.validate](#templatesvalidate)
+- [templates.rebuildFromFiles](#templatesrebuildfromfiles)
+
+### templates.create
+
+Create template. data must include: title (str), kind ("post"|"list"|"not-found"|"partial"), content (str). Optional: slug (str), enabled (bool).
+
+**Parameters**
+
+- data (dict, required)
+
+**Response specification**
+
+- Return type: `TemplateData`
+- Data structures: `TemplateData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.create(data={})
+```
+
+**Example response**
+
+```python
+{
+    'id': 'value',
+    'projectId': 'value',
+    'slug': 'value',
+    'title': 'value',
+    'kind': 'post',
+    'enabled': False,
+    'version': 0,
+    'filePath': 'value',
+    'content': 'value',
+    'createdAt': 'value',
+    'updatedAt': 'value'
+}
+```
+
+### templates.update
+
+Update template by id. data may include any of: title, kind, content, slug, enabled.
+
+**Parameters**
+
+- id (str, required)
+- data (dict, required)
+
+**Response specification**
+
+- Return type: `TemplateData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `TemplateData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.update(id='id-1', data={})
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'slug': 'value',
+    'title': 'value',
+    'kind': 'post',
+    'enabled': False,
+    'version': 0,
+    'filePath': 'value',
+    'content': 'value',
+    'createdAt': 'value',
+    'updatedAt': 'value'
+}
+```
+
+### templates.delete
+
+Delete template by id. Without options, returns references if the template is in use. Pass options={"force": True} to clear references and delete.
+
+**Parameters**
+
+- id (str, required)
+- options (dict, optional)
+
+**Response specification**
+
+- Return type: `TemplateDeleteResult`
+- Data structures: `TemplateDeleteResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.delete(id='id-1')
+```
+
+**Example response**
+
+```python
+{
+    'deleted': False,
+    'references': 'value'
+}
+```
+
+### templates.get
+
+Fetch template by id.
+
+**Parameters**
+
+- id (str, required)
+
+**Response specification**
+
+- Return type: `TemplateData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `TemplateData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.get(id='id-1')
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'slug': 'value',
+    'title': 'value',
+    'kind': 'post',
+    'enabled': False,
+    'version': 0,
+    'filePath': 'value',
+    'content': 'value',
+    'createdAt': 'value',
+    'updatedAt': 'value'
+}
+```
+
+### templates.getAll
+
+Fetch all templates.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `TemplateData[]`
+- Data structures: `TemplateData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.get_all()
+```
+
+**Example response**
+
+```python
+[
+{
+    'id': 'value',
+    'projectId': 'value',
+    'slug': 'value',
+    'title': 'value',
+    'kind': 'post',
+    'enabled': False,
+    'version': 0,
+    'filePath': 'value',
+    'content': 'value',
+    'createdAt': 'value',
+    'updatedAt': 'value'
+}
+]
+```
+
+### templates.getEnabledByKind
+
+Fetch enabled templates filtered by kind.
+
+**Parameters**
+
+- kind (str, required)
+
+**Response specification**
+
+- Return type: `TemplateData[]`
+- Data structures: `TemplateData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.get_enabled_by_kind(kind='kind')
+```
+
+**Example response**
+
+```python
+[
+{
+    'id': 'value',
+    'projectId': 'value',
+    'slug': 'value',
+    'title': 'value',
+    'kind': 'post',
+    'enabled': False,
+    'version': 0,
+    'filePath': 'value',
+    'content': 'value',
+    'createdAt': 'value',
+    'updatedAt': 'value'
+}
+]
+```
+
+### templates.validate
+
+Validate Liquid template syntax.
+
+**Parameters**
+
+- content (str, required)
+
+**Response specification**
+
+- Return type: `{ valid: boolean; errors: string[] }`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.validate(content='content')
+```
+
+**Example response**
+
+```python
+{}
+```
+
+### templates.rebuildFromFiles
+
+Rebuild templates from files.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `void`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.templates.rebuild_from_files()
+```
+
+**Example response**
+
+```python
+None
+```
+
+[↑ Back to Table of contents](#table-of-contents)
+
 ## tasks
 
 **Module APIs**
@@ -3576,6 +3871,37 @@ Script definition for Python macros, utilities, and transforms.
 - content (`string`, required): Script source code.
 - createdAt (`string`, required): Creation timestamp (ISO string).
 - updatedAt (`string`, required): Last update timestamp (ISO string).
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### TemplateData
+
+Liquid template definition for posts, lists, not-found pages, and partials.
+
+**Fields**
+
+- id (`string`, required): Unique template identifier.
+- projectId (`string`, required): Owning project id.
+- slug (`string`, required): Stable template slug.
+- title (`string`, required): Human-readable template title.
+- kind (`'post' | 'list' | 'not-found' | 'partial'`, required): Template category.
+- enabled (`boolean`, required): Whether template is enabled.
+- version (`number`, required): Incrementing template version.
+- filePath (`string`, required): Filesystem path to template file.
+- content (`string`, required): Liquid template source code.
+- createdAt (`string`, required): Creation timestamp (ISO string).
+- updatedAt (`string`, required): Last update timestamp (ISO string).
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### TemplateDeleteResult
+
+Result of a template delete operation. If the template is referenced by posts or tags, deleted is false and references lists the referencing IDs.
+
+**Fields**
+
+- deleted (`boolean`, required): Whether the template was deleted.
+- references (`{ postIds: string[]; tagIds: string[] }`, optional): Post and tag IDs referencing this template (present when deleted is false and references exist).
 
 [↑ Back to Table of contents](#table-of-contents)
 

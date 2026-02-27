@@ -33,6 +33,7 @@ export const posts = sqliteTable('posts', {
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
   categories: text('categories'), // JSON array stored as text
+  templateSlug: text('template_slug'), // Optional user template override for this post
   // Legacy columns (kept for migration compatibility, no longer written)
   publishedTitle: text('published_title'),
   publishedContent: text('published_content'),
@@ -111,6 +112,7 @@ export const tags = sqliteTable('tags', {
   projectId: text('project_id').notNull(),
   name: text('name').notNull(),
   color: text('color'), // Optional hex color like #ff0000
+  postTemplateSlug: text('post_template_slug'), // Optional user template override for posts with this tag
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
@@ -169,6 +171,23 @@ export const scripts = sqliteTable('scripts', {
   projectSlugIdx: uniqueIndex('scripts_project_slug_idx').on(table.projectId, table.slug),
 }));
 
+// Templates table - stores metadata for Liquid templates persisted in templates/*.liquid
+export const templates = sqliteTable('templates', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  slug: text('slug').notNull(),
+  title: text('title').notNull(),
+  kind: text('kind', { enum: ['post', 'list', 'not-found', 'partial'] }).notNull().default('post'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  version: integer('version').notNull().default(1),
+  filePath: text('file_path').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  // Composite unique index: slug must be unique within each project
+  projectSlugIdx: uniqueIndex('templates_project_slug_idx').on(table.projectId, table.slug),
+}));
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -194,3 +213,5 @@ export type ImportDefinition = typeof importDefinitions.$inferSelect;
 export type NewImportDefinition = typeof importDefinitions.$inferInsert;
 export type Script = typeof scripts.$inferSelect;
 export type NewScript = typeof scripts.$inferInsert;
+export type Template = typeof templates.$inferSelect;
+export type NewTemplate = typeof templates.$inferInsert;

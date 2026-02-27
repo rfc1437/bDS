@@ -59,6 +59,7 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
   resolveListExcludedCategories: (settings: Record<string, CategoryRenderSettings>) => string[];
   buildHtmlRewriteContext: () => Promise<HtmlRewriteContext>;
   resolveTagColorByName: (projectContext: SharedActiveProjectContext) => Promise<Record<string, string>>;
+  resolveTagTemplateSettings?: (projectContext: SharedActiveProjectContext) => Promise<Record<string, { postTemplateSlug?: string | null }>>;
   pageRenderer: Pick<PageRenderer, 'renderPostList' | 'renderSinglePost'>;
   postEngineForMacros?: PostEngineContract;
   loadPublishedSnapshotsPage: (
@@ -96,6 +97,7 @@ async function resolveRouteWithSharedServices(
   categorySettings: Record<string, CategoryRenderSettings>,
   categoryMetadata: Record<string, CategoryMetadata>,
   tagColorByName: Record<string, string>,
+  tagTemplateSettings: Record<string, { postTemplateSlug?: string | null }>,
   listExcludedCategories: string[],
   services: SharedRouteRenderServices<CategoryMetadata>,
   allowEmptyArchiveRender: boolean,
@@ -187,6 +189,8 @@ async function resolveRouteWithSharedServices(
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
       tag_color_by_name: tagColorByName,
+      tagSettings: tagTemplateSettings,
+      categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
     }, services.postEngineForMacros);
   }
 
@@ -270,6 +274,8 @@ async function resolveRouteWithSharedServices(
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
       tag_color_by_name: tagColorByName,
+      tagSettings: tagTemplateSettings,
+      categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
     }, services.postEngineForMacros);
   }
 
@@ -310,6 +316,7 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
   const htmlRewriteContext = options.htmlRewriteContext ?? await services.buildHtmlRewriteContext();
   const tagColorByName = await services.resolveTagColorByName(options.projectContext);
+  const tagTemplateSettings = await services.resolveTagTemplateSettings?.(options.projectContext) ?? {};
   const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
 
   return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {
@@ -318,5 +325,5 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
     menuItems,
     picoStylesheetHref,
     htmlThemeAttribute: options.htmlThemeAttribute,
-  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, tagColorByName, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.allowEmptyArchiveRender === true, options.singlePostOptions);
+  }, categorySettings, categoryMetadata as Record<string, CategoryMetadata>, tagColorByName, tagTemplateSettings, listExcludedCategories, services as SharedRouteRenderServices<CategoryMetadata>, options.allowEmptyArchiveRender === true, options.singlePostOptions);
 }

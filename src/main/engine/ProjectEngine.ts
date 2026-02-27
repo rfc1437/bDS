@@ -81,12 +81,73 @@ export class ProjectEngine extends EventEmitter {
     // - If custom dataPath is provided, all project data lives there (allows cloud storage backup)
     // - If no dataPath (default project), use internal userData storage
     const dataDir = this.getDataDir(projectId, dataPath);
-    
+
     // Create all project directories in the data directory
     await fs.mkdir(path.join(dataDir, 'posts'), { recursive: true });
     await fs.mkdir(path.join(dataDir, 'media'), { recursive: true });
     await fs.mkdir(path.join(dataDir, 'meta'), { recursive: true });
     await fs.mkdir(path.join(dataDir, 'thumbnails'), { recursive: true });
+    await fs.mkdir(path.join(dataDir, 'templates'), { recursive: true });
+  }
+
+  private async copyStarterTemplates(projectId: string, dataPath?: string | null): Promise<void> {
+    const dataDir = this.getDataDir(projectId, dataPath);
+    const destDir = path.join(dataDir, 'templates');
+
+    // Resolve the bundled templates directory
+    const bundledRoots = [
+      path.resolve(__dirname, 'templates'),
+      path.resolve(process.cwd(), 'dist', 'main', 'engine', 'templates'),
+      path.resolve(process.cwd(), 'src', 'main', 'engine', 'templates'),
+    ];
+
+    if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+      bundledRoots.unshift(path.resolve(process.resourcesPath, 'templates'));
+    }
+
+    let sourceDir: string | null = null;
+    for (const root of bundledRoots) {
+      try {
+        const stat = await fs.stat(root);
+        if (stat.isDirectory()) {
+          sourceDir = root;
+          break;
+        }
+      } catch {
+        // Directory doesn't exist, try next
+      }
+    }
+
+    if (!sourceDir) {
+      return;
+    }
+
+    try {
+      await this.copyDirectoryRecursive(sourceDir, destDir);
+    } catch (error) {
+      console.error('[ProjectEngine] Failed to copy starter templates:', error);
+    }
+  }
+
+  private async copyDirectoryRecursive(src: string, dest: string): Promise<void> {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+
+      if (entry.isDirectory()) {
+        await this.copyDirectoryRecursive(srcPath, destPath);
+      } else if (entry.name.endsWith('.liquid')) {
+        try {
+          await fs.access(destPath);
+          // File already exists, skip
+        } catch {
+          await fs.copyFile(srcPath, destPath);
+        }
+      }
+    }
   }
 
   async createProject(data: { name: string; description?: string; slug?: string; dataPath?: string }): Promise<ProjectData> {
@@ -118,6 +179,9 @@ export class ProjectEngine extends EventEmitter {
 
     // Create directories using project ID (not slug)
     await this.ensureProjectDirectories(id, data.dataPath);
+
+    // Copy bundled templates as starter templates
+    await this.copyStarterTemplates(id, data.dataPath);
 
     // Insert into database
     const dbProject: NewProject = {

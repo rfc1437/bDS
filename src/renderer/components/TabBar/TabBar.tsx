@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore, Tab } from '../../store';
 import { parseGitDiffTabId } from '../../navigation/tabPolicy';
+import { BDS_EVENT_TEMPLATES_CHANGED, addWindowEventListener } from '../../utils';
 import { useI18n } from '../../i18n';
 import './TabBar.css';
 
@@ -14,6 +15,7 @@ const getTabTitle = (
   chatTitles: Map<string, string>,
   importDefTitles: Map<string, string>,
   commitTitles: Map<string, string>,
+  templateTitles: Map<string, string>,
   tr: (key: string, vars?: Record<string, string | number>) => string,
 ): string => {
   if (tab.type === 'git-diff') {
@@ -87,6 +89,10 @@ const getTabTitle = (
 
   if (tab.type === 'scripts') {
     return scriptTitles.get(tab.id) || tr('tabBar.scripts');
+  }
+
+  if (tab.type === 'templates') {
+    return templateTitles.get(tab.id) || tr('editor.untitled');
   }
 
   return tr('tabBar.unknown');
@@ -180,6 +186,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
           <path d="M20 3H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7v2H8v2h8v-2h-3v-2h7a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zM5 14V5h14v9H5zm2-7.5L9.5 9 7 11.5l1.4 1.4L12.3 9 8.4 5.1 7 6.5zm6.5 5.5h4v-2h-4v2z"/>
         </svg>
       );
+    case 'templates':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M14 2H2v4h12V2zM3 3h10v2H3V3zm-1 5h5v7H2V8zm1 1v5h3V9H3zm5-1h6v3H8V8zm1 1v1h4V9H9zm0 3h6v3H9v-3zm1 1v1h4v-1h-4z"/>
+        </svg>
+      );
     default:
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -230,6 +242,7 @@ export const TabBar: React.FC = () => {
   const [chatTitles, setChatTitles] = useState<Map<string, string>>(new Map());
   const [importDefTitles, setImportDefTitles] = useState<Map<string, string>>(new Map());
   const [commitTitles, setCommitTitles] = useState<Map<string, string>>(new Map());
+  const [templateTitles, setTemplateTitles] = useState<Map<string, string>>(new Map());
 
   // Fetch post titles from database for post tabs
   useEffect(() => {
@@ -552,6 +565,94 @@ export const TabBar: React.FC = () => {
     };
   }, [tabs, activeProject, tr]);
 
+  // Fetch template titles for template tabs
+  useEffect(() => {
+    const templateTabs = tabs.filter((t) => t.type === 'templates');
+    const templateTabIds = new Set(templateTabs.map((t) => t.id));
+
+    setTemplateTitles((previous) => {
+      const next = new Map(previous);
+      let changed = false;
+
+      for (const id of Array.from(next.keys())) {
+        if (!templateTabIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+
+    if (templateTabs.length === 0) {
+      return;
+    }
+
+    const fetchTemplateTitles = async () => {
+      const newTitles = new Map(templateTitles);
+      let changed = false;
+
+      for (const tab of templateTabs) {
+        if (templateTitles.has(tab.id)) {
+          continue;
+        }
+
+        try {
+          const tmpl = await window.electronAPI?.templates.get(tab.id);
+          if (tmpl) {
+            const title = tmpl.title || tr('editor.untitled');
+            if (newTitles.get(tab.id) !== title) {
+              newTitles.set(tab.id, title);
+              changed = true;
+            }
+          }
+        } catch (error) {
+          console.error(tr('tabBar.error.fetchTemplateTitle'), error);
+        }
+      }
+
+      if (changed) {
+        setTemplateTitles(newTitles);
+      }
+    };
+
+    void fetchTemplateTitles();
+  }, [tabs, tr]); // Note: intentionally not including templateTitles to avoid infinite loops
+
+  // Listen for template updates to refresh titles
+  useEffect(() => {
+    const handleTemplatesChanged = async () => {
+      const templateTabs = tabs.filter((t) => t.type === 'templates');
+      if (templateTabs.length === 0) {
+        return;
+      }
+
+      const updated = new Map(templateTitles);
+      let changed = false;
+
+      for (const tab of templateTabs) {
+        try {
+          const tmpl = await window.electronAPI?.templates.get(tab.id);
+          if (tmpl) {
+            const title = tmpl.title || tr('editor.untitled');
+            if (updated.get(tab.id) !== title) {
+              updated.set(tab.id, title);
+              changed = true;
+            }
+          }
+        } catch (error) {
+          console.error(tr('tabBar.error.fetchTemplateTitle'), error);
+        }
+      }
+
+      if (changed) {
+        setTemplateTitles(updated);
+      }
+    };
+
+    return addWindowEventListener(BDS_EVENT_TEMPLATES_CHANGED, handleTemplatesChanged);
+  }, [tabs, templateTitles, tr]);
+
   // Check if arrows are needed based on scroll position
   const updateArrowVisibility = useCallback(() => {
     const container = tabsContainerRef.current;
@@ -674,7 +775,7 @@ export const TabBar: React.FC = () => {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDirty = tab.type === 'post' && dirtyPosts.has(tab.id);
-          const title = getTabTitle(tab, postTitles, media, scriptTitles, chatTitles, importDefTitles, commitTitles, tr);
+          const title = getTabTitle(tab, postTitles, media, scriptTitles, chatTitles, importDefTitles, commitTitles, templateTitles, tr);
           const icon = getTabIcon(tab);
           
           return (

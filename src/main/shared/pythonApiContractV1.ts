@@ -129,6 +129,15 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('scripts.getAll', 'Fetch all scripts.', [], 'ScriptData[]'),
   method('scripts.rebuildFromFiles', 'Rebuild scripts from files.', [], 'void'),
 
+  method('templates.create', 'Create template. data must include: title (str), kind ("post"|"list"|"not-found"|"partial"), content (str). Optional: slug (str), enabled (bool).', [requiredObject('data')], 'TemplateData'),
+  method('templates.update', 'Update template by id. data may include any of: title, kind, content, slug, enabled.', [requiredString('id'), requiredObject('data')], 'TemplateData | null'),
+  method('templates.delete', 'Delete template by id. Without options, returns references if the template is in use. Pass options={"force": True} to clear references and delete.', [requiredString('id'), optionalObject('options')], 'TemplateDeleteResult'),
+  method('templates.get', 'Fetch template by id.', [requiredString('id')], 'TemplateData | null'),
+  method('templates.getAll', 'Fetch all templates.', [], 'TemplateData[]'),
+  method('templates.getEnabledByKind', 'Fetch enabled templates filtered by kind.', [requiredString('kind')], 'TemplateData[]'),
+  method('templates.validate', 'Validate Liquid template syntax.', [requiredString('content')], '{ valid: boolean; errors: string[] }'),
+  method('templates.rebuildFromFiles', 'Rebuild templates from files.', [], 'void'),
+
   method('tasks.getAll', 'Fetch all tasks.', [], 'TaskProgress[]'),
   method('tasks.getRunning', 'Fetch running tasks.', [], 'TaskProgress[]'),
   method('tasks.cancel', 'Cancel task by id.', [requiredString('taskId')], 'boolean'),
@@ -277,6 +286,31 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
+    name: 'TemplateData',
+    description: 'Liquid template definition for posts, lists, not-found pages, and partials.',
+    fields: [
+      { name: 'id', type: 'string', required: true, description: 'Unique template identifier.' },
+      { name: 'projectId', type: 'string', required: true, description: 'Owning project id.' },
+      { name: 'slug', type: 'string', required: true, description: 'Stable template slug.' },
+      { name: 'title', type: 'string', required: true, description: 'Human-readable template title.' },
+      { name: 'kind', type: "'post' | 'list' | 'not-found' | 'partial'", required: true, description: 'Template category.' },
+      { name: 'enabled', type: 'boolean', required: true, description: 'Whether template is enabled.' },
+      { name: 'version', type: 'number', required: true, description: 'Incrementing template version.' },
+      { name: 'filePath', type: 'string', required: true, description: 'Filesystem path to template file.' },
+      { name: 'content', type: 'string', required: true, description: 'Liquid template source code.' },
+      { name: 'createdAt', type: 'string', required: true, description: 'Creation timestamp (ISO string).' },
+      { name: 'updatedAt', type: 'string', required: true, description: 'Last update timestamp (ISO string).' },
+    ],
+  },
+  {
+    name: 'TemplateDeleteResult',
+    description: 'Result of a template delete operation. If the template is referenced by posts or tags, deleted is false and references lists the referencing IDs.',
+    fields: [
+      { name: 'deleted', type: 'boolean', required: true, description: 'Whether the template was deleted.' },
+      { name: 'references', type: '{ postIds: string[]; tagIds: string[] }', required: false, description: 'Post and tag IDs referencing this template (present when deleted is false and references exist).' },
+    ],
+  },
+  {
     name: 'TaskProgress',
     description: 'Task queue status object for long-running operations.',
     fields: [
@@ -370,7 +404,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.7.0',
+  version: '1.9.0',
   generatedAt: '2026-02-27T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

@@ -47,6 +47,8 @@ export interface TemplatePostEntry {
 export interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
+  postTemplateSlug?: string;
+  listTemplateSlug?: string;
 }
 
 export interface DayBlockContext {
@@ -1021,6 +1023,7 @@ export function resolvePageRendererTemplateRoots(options?: {
   moduleDir?: string;
   cwd?: string;
   resourcesPath?: string;
+  userTemplatesDir?: string;
 }): string[] {
   const moduleDir = options?.moduleDir ?? __dirname;
   const cwd = options?.cwd ?? process.cwd();
@@ -1036,7 +1039,65 @@ export function resolvePageRendererTemplateRoots(options?: {
     roots.unshift(path.resolve(resourcesPath, 'templates'));
   }
 
+  // User templates directory takes highest priority so user templates override built-ins
+  if (options?.userTemplatesDir) {
+    roots.unshift(options.userTemplatesDir);
+  }
+
   return Array.from(new Set(roots));
+}
+
+/**
+ * Resolve which template to use for rendering a single post.
+ * Priority: post.templateSlug -> first matching tag.postTemplateSlug -> category.postTemplateSlug -> default.
+ */
+export function resolvePostTemplateName(
+  post: { templateSlug?: string | null; tags?: string[]; categories?: string[] },
+  tagSettings?: Record<string, { postTemplateSlug?: string | null }>,
+  categorySettings?: Record<string, { postTemplateSlug?: string | null }>,
+): string {
+  if (post.templateSlug) {
+    return post.templateSlug;
+  }
+
+  if (tagSettings && post.tags) {
+    for (const tag of post.tags) {
+      const normalizedTag = tag.toLowerCase().trim();
+      const setting = tagSettings[normalizedTag] || tagSettings[tag];
+      if (setting?.postTemplateSlug) {
+        return setting.postTemplateSlug;
+      }
+    }
+  }
+
+  if (categorySettings && post.categories) {
+    for (const category of post.categories) {
+      const setting = categorySettings[category];
+      if (setting?.postTemplateSlug) {
+        return setting.postTemplateSlug;
+      }
+    }
+  }
+
+  return 'single-post';
+}
+
+/**
+ * Resolve which template to use for rendering a post list.
+ * Priority: category.listTemplateSlug -> default.
+ */
+export function resolveListTemplateName(
+  routeCategory?: string,
+  categorySettings?: Record<string, { listTemplateSlug?: string | null }>,
+): string {
+  if (routeCategory && categorySettings) {
+    const setting = categorySettings[routeCategory];
+    if (setting?.listTemplateSlug) {
+      return setting.listTemplateSlug;
+    }
+  }
+
+  return 'post-list';
 }
 
 export class PageRenderer {
@@ -1051,13 +1112,14 @@ export class PageRenderer {
     postMediaEngine: PostMediaEngineContract,
     postEngineForMacros?: PostEngineContract,
     pythonMacroRenderer?: PythonMacroRendererContract,
+    userTemplatesDir?: string,
   ) {
     this.mediaEngine = mediaEngine;
     this.postMediaEngine = postMediaEngine;
     this.postEngineForMacros = postEngineForMacros;
     this.pythonMacroRenderer = pythonMacroRenderer;
 
-    const templateRoots = resolvePageRendererTemplateRoots();
+    const templateRoots = resolvePageRendererTemplateRoots({ userTemplatesDir });
 
     this.liquid = new Liquid({
       root: templateRoots,
@@ -1355,13 +1417,27 @@ export class PageRenderer {
       options,
     );
 
-    return this.liquid.renderFile('post-list', templateContext);
+    const routeCategory = options.archiveContext?.kind === 'category' ? options.archiveContext.name : undefined;
+    const listTemplateName = resolveListTemplateName(
+      routeCategory ?? undefined,
+      options.categorySettings as Record<string, { listTemplateSlug?: string | null }> | undefined,
+    );
+    return this.liquid.renderFile(listTemplateName, templateContext);
   }
 
   async renderSinglePost(
     post: PostData,
     rewriteContext: HtmlRewriteContext,
-    pageContext: { page_title: string; language: string; menu_items?: TemplateMenuItem[]; pico_stylesheet_href?: string; html_theme_attribute?: string; tag_color_by_name?: Record<string, string> },
+    pageContext: {
+      page_title: string;
+      language: string;
+      menu_items?: TemplateMenuItem[];
+      pico_stylesheet_href?: string;
+      html_theme_attribute?: string;
+      tag_color_by_name?: Record<string, string>;
+      tagSettings?: Record<string, { postTemplateSlug?: string | null }>;
+      categorySettings?: Record<string, { postTemplateSlug?: string | null }>;
+    },
     postEngine?: PostEngineContract,
   ): Promise<string> {
     const renderablePost = postEngine
@@ -1397,7 +1473,12 @@ export class PageRenderer {
       },
     };
 
-    return this.liquid.renderFile('single-post', context);
+    const postTemplateName = resolvePostTemplateName(
+      renderablePost as { templateSlug?: string | null; tags?: string[]; categories?: string[] },
+      pageContext.tagSettings,
+      pageContext.categorySettings,
+    );
+    return this.liquid.renderFile(postTemplateName, context);
   }
 
   async renderNotFound(context: NotFoundTemplateContext): Promise<string> {

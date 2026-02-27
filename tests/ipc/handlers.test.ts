@@ -170,11 +170,28 @@ const mockScriptEngine = {
   reconcileScriptsFromGitChanges: vi.fn(),
 };
 
+const mockTemplateEngine = {
+  on: vi.fn(),
+  createTemplate: vi.fn(),
+  updateTemplate: vi.fn(),
+  deleteTemplate: vi.fn(),
+  getTemplate: vi.fn(),
+  getAllTemplates: vi.fn(),
+  getEnabledTemplatesByKind: vi.fn(),
+  getTemplateBySlug: vi.fn(),
+  validateTemplate: vi.fn(),
+  rebuildDatabaseFromFiles: vi.fn(),
+  reconcileTemplatesFromGitChanges: vi.fn(),
+  setProjectContext: vi.fn(),
+  getTemplatesDirectory: vi.fn().mockReturnValue('/tmp/templates'),
+};
+
 const mockGitEngine = {
   checkAvailability: vi.fn(),
   getHeadCommit: vi.fn(),
   getChangedPostFilesBetween: vi.fn(),
   getChangedScriptFilesBetween: vi.fn(),
+  getChangedTemplateFilesBetween: vi.fn(),
   getRepoState: vi.fn(),
   getStatus: vi.fn(),
   getDiff: vi.fn(),
@@ -278,6 +295,10 @@ vi.mock('../../src/main/engine/PostMediaEngine', () => ({
 
 vi.mock('../../src/main/engine/ScriptEngine', () => ({
   getScriptEngine: vi.fn(() => mockScriptEngine),
+}));
+
+vi.mock('../../src/main/engine/TemplateEngine', () => ({
+  getTemplateEngine: vi.fn(() => mockTemplateEngine),
 }));
 
 vi.mock('../../src/main/engine/GitEngine', () => ({
@@ -581,6 +602,9 @@ describe('IPC Handlers', () => {
         mockGitEngine.getChangedScriptFilesBetween.mockResolvedValue([
           { status: 'modified', path: 'scripts/transform.py' },
         ]);
+        mockGitEngine.getChangedTemplateFilesBetween.mockResolvedValue([
+          { status: 'added', path: 'templates/custom_post.liquid' },
+        ]);
         mockPostEngine.reconcilePublishedPostsFromGitChanges.mockResolvedValue({
           created: 1,
           updated: 1,
@@ -593,6 +617,12 @@ describe('IPC Handlers', () => {
           deleted: 0,
           processedFiles: 1,
         });
+        mockTemplateEngine.reconcileTemplatesFromGitChanges.mockResolvedValue({
+          created: 1,
+          updated: 0,
+          deleted: 0,
+          processedFiles: 1,
+        });
 
         const result = await invokeHandler('git:pull', '/repo');
 
@@ -601,12 +631,16 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.getHeadCommit).toHaveBeenNthCalledWith(2, '/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
         expect(mockGitEngine.getChangedScriptFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
+        expect(mockGitEngine.getChangedTemplateFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).toHaveBeenCalledWith('/repo', [
           { status: 'modified', path: 'posts/2026/02/existing.md' },
           { status: 'added', path: 'posts/2026/02/new-post.md' },
         ]);
         expect(mockScriptEngine.reconcileScriptsFromGitChanges).toHaveBeenCalledWith('/repo', [
           { status: 'modified', path: 'scripts/transform.py' },
+        ]);
+        expect(mockTemplateEngine.reconcileTemplatesFromGitChanges).toHaveBeenCalledWith('/repo', [
+          { status: 'added', path: 'templates/custom_post.liquid' },
         ]);
         expect(result).toEqual({ success: true });
       });
@@ -620,8 +654,10 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
         expect(mockGitEngine.getChangedScriptFilesBetween).not.toHaveBeenCalled();
+        expect(mockGitEngine.getChangedTemplateFilesBetween).not.toHaveBeenCalled();
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
         expect(mockScriptEngine.reconcileScriptsFromGitChanges).not.toHaveBeenCalled();
+        expect(mockTemplateEngine.reconcileTemplatesFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: false, code: 'conflict' });
       });
 
@@ -636,8 +672,10 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
         expect(mockGitEngine.getChangedScriptFilesBetween).not.toHaveBeenCalled();
+        expect(mockGitEngine.getChangedTemplateFilesBetween).not.toHaveBeenCalled();
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
         expect(mockScriptEngine.reconcileScriptsFromGitChanges).not.toHaveBeenCalled();
+        expect(mockTemplateEngine.reconcileTemplatesFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true });
       });
     });
@@ -2759,6 +2797,160 @@ describe('IPC Handlers', () => {
 
         expect(mockScriptEngine.setProjectContext).toHaveBeenCalledWith('project-1', '/resolved/project-data');
         expect(mockScriptEngine.rebuildDatabaseFromFiles).toHaveBeenCalled();
+        expect(result).toBe(true);
+      });
+    });
+  });
+
+  // ============ Template Handlers ============
+  describe('Template Handlers', () => {
+    describe('templates:create', () => {
+      it('should call TemplateEngine.createTemplate with payload', async () => {
+        const payload = {
+          title: 'Custom Post',
+          kind: 'post',
+          content: '<html>{{ post.title }}</html>',
+        };
+        const expected = {
+          id: 'template-1',
+          projectId: 'default',
+          ...payload,
+          slug: 'custom_post',
+          enabled: true,
+          version: 1,
+          filePath: '/mock/userData/projects/default/templates/custom_post.liquid',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        mockTemplateEngine.createTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:create', payload);
+
+        expect(mockTemplateEngine.createTemplate).toHaveBeenCalledWith(payload);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:update', () => {
+      it('should call TemplateEngine.updateTemplate with id and updates', async () => {
+        const updates = { title: 'Updated Template', content: '<html>{{ post.content }}</html>' };
+        const expected = {
+          id: 'template-1',
+          projectId: 'default',
+          slug: 'updated_template',
+          title: 'Updated Template',
+          kind: 'post',
+          enabled: true,
+          version: 2,
+          filePath: '/mock/userData/projects/default/templates/updated_template.liquid',
+          content: '<html>{{ post.content }}</html>',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        mockTemplateEngine.updateTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:update', 'template-1', updates);
+
+        expect(mockTemplateEngine.updateTemplate).toHaveBeenCalledWith('template-1', updates);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:delete', () => {
+      it('should call TemplateEngine.deleteTemplate with id', async () => {
+        mockTemplateEngine.deleteTemplate.mockResolvedValue({ deleted: true });
+
+        const result = await invokeHandler('templates:delete', 'template-1');
+
+        expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('template-1', undefined);
+        expect(result).toEqual({ deleted: true });
+      });
+
+      it('should forward force option to TemplateEngine.deleteTemplate', async () => {
+        mockTemplateEngine.deleteTemplate.mockResolvedValue({ deleted: true });
+
+        const result = await invokeHandler('templates:delete', 'template-1', { force: true });
+
+        expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('template-1', { force: true });
+        expect(result).toEqual({ deleted: true });
+      });
+    });
+
+    describe('templates:get', () => {
+      it('should call TemplateEngine.getTemplate with id', async () => {
+        const expected = {
+          id: 'template-1',
+          projectId: 'default',
+          slug: 'custom_post',
+          title: 'Custom Post',
+          kind: 'post',
+          enabled: true,
+          version: 1,
+          filePath: '/mock/userData/projects/default/templates/custom_post.liquid',
+          content: '<html>{{ post.title }}</html>',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        mockTemplateEngine.getTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:get', 'template-1');
+
+        expect(mockTemplateEngine.getTemplate).toHaveBeenCalledWith('template-1');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:getAll', () => {
+      it('should call TemplateEngine.getAllTemplates', async () => {
+        const expected = [{ id: 'template-1' }, { id: 'template-2' }];
+        mockTemplateEngine.getAllTemplates.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:getAll');
+
+        expect(mockTemplateEngine.getAllTemplates).toHaveBeenCalled();
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:getEnabledByKind', () => {
+      it('should call TemplateEngine.getEnabledTemplatesByKind with kind', async () => {
+        const expected = [{ id: 'template-1', kind: 'post' }];
+        mockTemplateEngine.getEnabledTemplatesByKind.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:getEnabledByKind', 'post');
+
+        expect(mockTemplateEngine.getEnabledTemplatesByKind).toHaveBeenCalledWith('post');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:validate', () => {
+      it('should call TemplateEngine.validateTemplate with content', async () => {
+        const expected = { valid: true, errors: [] };
+        mockTemplateEngine.validateTemplate.mockResolvedValue(expected);
+
+        const result = await invokeHandler('templates:validate', '<html>{{ post.title }}</html>');
+
+        expect(mockTemplateEngine.validateTemplate).toHaveBeenCalledWith('<html>{{ post.title }}</html>');
+        expect(result).toEqual(expected);
+      });
+    });
+
+    describe('templates:rebuildFromFiles', () => {
+      it('should set project context and trigger TemplateEngine rebuild', async () => {
+        mockProjectEngine.getActiveProject.mockResolvedValue({
+          id: 'project-1',
+          dataPath: '/external/data',
+        });
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/project-data');
+        mockTemplateEngine.rebuildDatabaseFromFiles.mockResolvedValue(undefined);
+
+        const result = await invokeHandler('templates:rebuildFromFiles');
+
+        expect(mockTemplateEngine.setProjectContext).toHaveBeenCalledWith('project-1', '/resolved/project-data');
+        expect(mockTemplateEngine.rebuildDatabaseFromFiles).toHaveBeenCalled();
         expect(result).toBe(true);
       });
     });
