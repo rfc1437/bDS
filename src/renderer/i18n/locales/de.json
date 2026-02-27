@@ -780,6 +780,7 @@
   "sidebar.templates.createFailed": "Vorlage konnte nicht erstellt werden",
   "sidebar.templates.deleteTemplate": "Vorlage löschen",
   "sidebar.templates.deleteFailed": "Vorlage konnte nicht gelöscht werden",
+  "sidebar.templates.deleteConfirmWithRefs": "Diese Vorlage wird von {postCount} Beitrag/Beiträgen und {tagCount} Tag(s) referenziert. Trotzdem löschen? Die Referenzen werden entfernt.",
   "sidebar.import.none": "Noch keine Importdefinitionen",
   "sidebar.import.createDefinition": "Eine Importdefinition erstellen",
   "sidebar.import.deleteDefinition": "Importdefinition löschen",

@@ -780,6 +780,7 @@
   "sidebar.templates.createFailed": "Failed to create template",
   "sidebar.templates.deleteTemplate": "Delete template",
   "sidebar.templates.deleteFailed": "Failed to delete template",
+  "sidebar.templates.deleteConfirmWithRefs": "This template is referenced by {postCount} post(s) and {tagCount} tag(s). Delete anyway? References will be cleared.",
   "sidebar.import.none": "No import definitions yet",
   "sidebar.import.createDefinition": "Create an import definition",
   "sidebar.import.deleteDefinition": "Delete import definition",

@@ -131,7 +131,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
 
   method('templates.create', 'Create template. data must include: title (str), kind ("post"|"list"|"not-found"|"partial"), content (str). Optional: slug (str), enabled (bool).', [requiredObject('data')], 'TemplateData'),
   method('templates.update', 'Update template by id. data may include any of: title, kind, content, slug, enabled.', [requiredString('id'), requiredObject('data')], 'TemplateData | null'),
-  method('templates.delete', 'Delete template by id.', [requiredString('id')], 'boolean'),
+  method('templates.delete', 'Delete template by id. Without options, returns references if the template is in use. Pass options={"force": True} to clear references and delete.', [requiredString('id'), optionalObject('options')], 'TemplateDeleteResult'),
   method('templates.get', 'Fetch template by id.', [requiredString('id')], 'TemplateData | null'),
   method('templates.getAll', 'Fetch all templates.', [], 'TemplateData[]'),
   method('templates.getEnabledByKind', 'Fetch enabled templates filtered by kind.', [requiredString('kind')], 'TemplateData[]'),
@@ -303,6 +303,14 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
+    name: 'TemplateDeleteResult',
+    description: 'Result of a template delete operation. If the template is referenced by posts or tags, deleted is false and references lists the referencing IDs.',
+    fields: [
+      { name: 'deleted', type: 'boolean', required: true, description: 'Whether the template was deleted.' },
+      { name: 'references', type: '{ postIds: string[]; tagIds: string[] }', required: false, description: 'Post and tag IDs referencing this template (present when deleted is false and references exist).' },
+    ],
+  },
+  {
     name: 'TaskProgress',
     description: 'Task queue status object for long-running operations.',
     fields: [
@@ -396,7 +404,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.8.0',
+  version: '1.9.0',
   generatedAt: '2026-02-27T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

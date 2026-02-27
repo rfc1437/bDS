@@ -1,33 +1,53 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TemplateEngine } from '../../src/main/engine/TemplateEngine';
+import { posts, tags, templates } from '../../src/main/database/schema';
 
 const mockTemplates = new Map<string, any>();
+const mockPosts = new Map<string, any>();
+const mockTags = new Map<string, any>();
 const mockFiles = new Map<string, string>();
 
-function createSelectChain() {
+function createSelectChain(dataSource: () => any[]) {
   return {
-    from: vi.fn().mockReturnThis(),
+    from: vi.fn(function (this: any, table: any) {
+      if (table === posts) {
+        this.all = vi.fn(() => Promise.resolve(Array.from(mockPosts.values())));
+      } else if (table === tags) {
+        this.all = vi.fn(() => Promise.resolve(Array.from(mockTags.values())));
+      }
+      return this;
+    }),
     where: vi.fn().mockReturnThis(),
     orderBy: vi.fn().mockReturnThis(),
-    all: vi.fn().mockImplementation(() => Promise.resolve(Array.from(mockTemplates.values()))),
+    all: vi.fn().mockImplementation(() => Promise.resolve(dataSource())),
     get: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
   };
 }
 
 function createDrizzleMock() {
   return {
-    select: vi.fn(() => createSelectChain()),
+    select: vi.fn(() => createSelectChain(() => Array.from(mockTemplates.values()))),
     insert: vi.fn(() => ({
       values: vi.fn((data: any) => {
         mockTemplates.set(data.id, data);
         return Promise.resolve();
       }),
     })),
-    update: vi.fn(() => ({
+    update: vi.fn((table?: any) => ({
       set: vi.fn((updates: any) => ({
         where: vi.fn(async () => {
-          for (const [templateId, existing] of mockTemplates.entries()) {
-            mockTemplates.set(templateId, { ...existing, ...updates });
+          if (table === posts) {
+            for (const [postId, existing] of mockPosts.entries()) {
+              mockPosts.set(postId, { ...existing, ...updates });
+            }
+          } else if (table === tags) {
+            for (const [tagId, existing] of mockTags.entries()) {
+              mockTags.set(tagId, { ...existing, ...updates });
+            }
+          } else {
+            for (const [templateId, existing] of mockTemplates.entries()) {
+              mockTemplates.set(templateId, { ...existing, ...updates });
+            }
           }
         }),
       })),
@@ -101,9 +121,11 @@ describe('TemplateEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTemplates.clear();
+    mockPosts.clear();
+    mockTags.clear();
     mockFiles.clear();
     (globalThis as any).__mockTemplateFiles = mockFiles;
-    vi.mocked(mockLocalDb.select).mockImplementation(() => createSelectChain());
+    vi.mocked(mockLocalDb.select).mockImplementation(() => createSelectChain(() => Array.from(mockTemplates.values())));
 
     templateEngine = new TemplateEngine();
     templateEngine.setProjectContext('default', '/mock/userData/projects/default');
@@ -170,9 +192,9 @@ describe('TemplateEngine', () => {
       content: '<footer>Footer</footer>',
     });
 
-    const deleted = await templateEngine.deleteTemplate(created.id);
+    const result = await templateEngine.deleteTemplate(created.id);
 
-    expect(deleted).toBe(true);
+    expect(result).toEqual({ deleted: true });
     expect(mockTemplates.has(created.id)).toBe(false);
     expect(mockFiles.has('/mock/userData/projects/default/templates/delete_me.liquid')).toBe(false);
   });
@@ -387,6 +409,112 @@ describe('TemplateEngine', () => {
 
       const found = await templateEngine.getTemplateBySlug('disabled_template');
       expect(found).toBeNull();
+    });
+  });
+
+  describe('referential integrity', () => {
+    it('getTemplateReferences returns empty arrays when no references exist', async () => {
+      const refs = await templateEngine.getTemplateReferences('custom_post');
+      expect(refs).toEqual({ postIds: [], tagIds: [] });
+    });
+
+    it('getTemplateReferences returns referencing post and tag IDs', async () => {
+      mockPosts.set('post-1', { id: 'post-1', projectId: 'default', templateSlug: 'custom_post' });
+      mockTags.set('tag-1', { id: 'tag-1', projectId: 'default', postTemplateSlug: 'custom_post' });
+
+      const refs = await templateEngine.getTemplateReferences('custom_post');
+      expect(refs.postIds).toContain('post-1');
+      expect(refs.tagIds).toContain('tag-1');
+    });
+
+    it('deleteTemplate blocks deletion when references exist and force is not set', async () => {
+      const created = await templateEngine.createTemplate({
+        title: 'Referenced Template',
+        kind: 'post',
+        content: '<main>Referenced</main>',
+      });
+
+      mockPosts.set('post-1', { id: 'post-1', projectId: 'default', templateSlug: created.slug });
+
+      const result = await templateEngine.deleteTemplate(created.id);
+
+      expect(result.deleted).toBe(false);
+      expect(result.references?.postIds).toContain('post-1');
+      expect(mockTemplates.has(created.id)).toBe(true);
+    });
+
+    it('deleteTemplate with force clears references and deletes', async () => {
+      const created = await templateEngine.createTemplate({
+        title: 'Force Delete',
+        kind: 'post',
+        content: '<main>Force</main>',
+      });
+
+      mockPosts.set('post-1', { id: 'post-1', projectId: 'default', templateSlug: created.slug });
+      mockTags.set('tag-1', { id: 'tag-1', projectId: 'default', postTemplateSlug: created.slug });
+
+      const result = await templateEngine.deleteTemplate(created.id, { force: true });
+
+      expect(result.deleted).toBe(true);
+      expect(mockTemplates.has(created.id)).toBe(false);
+      expect(mockPosts.get('post-1').templateSlug).toBeNull();
+      expect(mockTags.get('tag-1').postTemplateSlug).toBeNull();
+    });
+  });
+
+  describe('slug cascade on rename', () => {
+    it('cascades slug changes to posts.templateSlug on template rename', async () => {
+      const created = await templateEngine.createTemplate({
+        title: 'Original Name',
+        kind: 'post',
+        content: '<main>Content</main>',
+      });
+
+      mockPosts.set('post-1', { id: 'post-1', projectId: 'default', templateSlug: created.slug });
+
+      await templateEngine.updateTemplate(created.id, { title: 'Renamed Template' });
+
+      expect(mockPosts.get('post-1').templateSlug).toBe('renamed_template');
+    });
+
+    it('cascades slug changes to tags.postTemplateSlug on template rename', async () => {
+      const created = await templateEngine.createTemplate({
+        title: 'Original Name',
+        kind: 'post',
+        content: '<main>Content</main>',
+      });
+
+      mockTags.set('tag-1', { id: 'tag-1', projectId: 'default', postTemplateSlug: created.slug });
+
+      await templateEngine.updateTemplate(created.id, { title: 'Renamed Template' });
+
+      expect(mockTags.get('tag-1').postTemplateSlug).toBe('renamed_template');
+    });
+  });
+
+  describe('race condition protection', () => {
+    it('rolls back DB on file operation failure during update', async () => {
+      const created = await templateEngine.createTemplate({
+        title: 'Rollback Test',
+        kind: 'post',
+        content: '<main>Original</main>',
+      });
+
+      const originalSlug = created.slug;
+      const originalTitle = created.title;
+
+      // Make fs.rename throw to simulate file operation failure
+      const fsModule = await import('fs/promises');
+      vi.mocked(fsModule.rename).mockRejectedValueOnce(new Error('EPERM'));
+
+      await expect(
+        templateEngine.updateTemplate(created.id, { title: 'Should Fail' }),
+      ).rejects.toThrow('EPERM');
+
+      // DB should have been rolled back to original values
+      const row = mockTemplates.get(created.id);
+      expect(row.slug).toBe(originalSlug);
+      expect(row.title).toBe(originalTitle);
     });
   });
 });

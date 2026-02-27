@@ -2844,12 +2844,21 @@ describe('IPC Handlers', () => {
 
     describe('templates:delete', () => {
       it('should call TemplateEngine.deleteTemplate with id', async () => {
-        mockTemplateEngine.deleteTemplate.mockResolvedValue(true);
+        mockTemplateEngine.deleteTemplate.mockResolvedValue({ deleted: true });
 
         const result = await invokeHandler('templates:delete', 'template-1');
 
-        expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('template-1');
-        expect(result).toBe(true);
+        expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('template-1', undefined);
+        expect(result).toEqual({ deleted: true });
+      });
+
+      it('should forward force option to TemplateEngine.deleteTemplate', async () => {
+        mockTemplateEngine.deleteTemplate.mockResolvedValue({ deleted: true });
+
+        const result = await invokeHandler('templates:delete', 'template-1', { force: true });
+
+        expect(mockTemplateEngine.deleteTemplate).toHaveBeenCalledWith('template-1', { force: true });
+        expect(result).toEqual({ deleted: true });
       });
     });
 

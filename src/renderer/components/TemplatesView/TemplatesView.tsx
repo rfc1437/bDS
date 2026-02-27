@@ -182,11 +182,30 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ templateId }) => {
     }
 
     try {
-      const deleted = await window.electronAPI?.templates.delete(template.id);
-      if (!deleted) {
+      const result = await window.electronAPI?.templates.delete(template.id);
+      if (!result) {
         showToast.error(t('sidebar.templates.deleteFailed'));
         return;
       }
+
+      if (!result.deleted && result.references) {
+        const { postIds, tagIds } = result.references;
+        const confirmed = window.confirm(
+          t('sidebar.templates.deleteConfirmWithRefs', {
+            postCount: String(postIds.length),
+            tagCount: String(tagIds.length),
+          }),
+        );
+        if (!confirmed) {
+          return;
+        }
+        const forceResult = await window.electronAPI?.templates.delete(template.id, { force: true });
+        if (!forceResult?.deleted) {
+          showToast.error(t('sidebar.templates.deleteFailed'));
+          return;
+        }
+      }
+
       closeTab(template.id);
       dispatchWindowEvent(BDS_EVENT_TEMPLATES_CHANGED);
     } catch (error) {

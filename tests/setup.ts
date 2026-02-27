@@ -152,7 +152,7 @@ Object.defineProperty(globalThis, 'window', {
         get: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue(null),
         update: vi.fn().mockResolvedValue(null),
-        delete: vi.fn().mockResolvedValue(false),
+        delete: vi.fn().mockResolvedValue({ deleted: true }),
         validate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
         rebuildFromFiles: vi.fn().mockResolvedValue(undefined),
       },

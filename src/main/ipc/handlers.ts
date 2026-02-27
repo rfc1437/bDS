@@ -817,9 +817,9 @@ export function registerIpcHandlers(): void {
     return engine.updateTemplate(id, data);
   });
 
-  safeHandle('templates:delete', async (_, id: string) => {
+  safeHandle('templates:delete', async (_, id: string, options?: { force?: boolean }) => {
     const engine = getTemplateEngine();
-    return engine.deleteTemplate(id);
+    return engine.deleteTemplate(id, options);
   });
 
   safeHandle('templates:get', async (_, id: string) => {

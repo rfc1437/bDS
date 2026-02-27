@@ -780,6 +780,7 @@
   "sidebar.templates.createFailed": "No se pudo crear la plantilla",
   "sidebar.templates.deleteTemplate": "Eliminar plantilla",
   "sidebar.templates.deleteFailed": "No se pudo eliminar la plantilla",
+  "sidebar.templates.deleteConfirmWithRefs": "Esta plantilla está referenciada por {postCount} entrada(s) y {tagCount} etiqueta(s). ¿Eliminar de todos modos? Las referencias serán eliminadas.",
   "sidebar.import.none": "Sin definiciones de importación",
   "sidebar.import.createDefinition": "Crear definición",
   "sidebar.import.deleteDefinition": "Eliminar definición",

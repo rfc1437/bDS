@@ -1752,11 +1752,30 @@ const TemplatesList: React.FC = () => {
   const handleDeleteTemplate = async (event: React.MouseEvent, templateId: string) => {
     event.stopPropagation();
     try {
-      const deleted = await window.electronAPI?.templates.delete(templateId);
-      if (!deleted) {
+      const result = await window.electronAPI?.templates.delete(templateId);
+      if (!result) {
         showToast.error(t('sidebar.templates.deleteFailed'));
         return;
       }
+
+      if (!result.deleted && result.references) {
+        const { postIds, tagIds } = result.references;
+        const confirmed = window.confirm(
+          t('sidebar.templates.deleteConfirmWithRefs', {
+            postCount: String(postIds.length),
+            tagCount: String(tagIds.length),
+          }),
+        );
+        if (!confirmed) {
+          return;
+        }
+        const forceResult = await window.electronAPI?.templates.delete(templateId, { force: true });
+        if (!forceResult?.deleted) {
+          showToast.error(t('sidebar.templates.deleteFailed'));
+          return;
+        }
+      }
+
       setTemplates((prev) => prev.filter((tmpl) => tmpl.id !== templateId));
       closeTab(templateId);
       dispatchWindowEvent(BDS_EVENT_TEMPLATES_CHANGED);

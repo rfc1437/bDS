@@ -6,7 +6,7 @@ import { app } from 'electron';
 import { and, desc, eq } from 'drizzle-orm';
 import { Liquid } from 'liquidjs';
 import { getDatabase } from '../database';
-import { templates, type NewTemplate, type Template } from '../database/schema';
+import { posts, tags, templates, type NewTemplate, type Template } from '../database/schema';
 
 export type TemplateKind = 'post' | 'list' | 'not-found' | 'partial';
 
@@ -58,6 +58,11 @@ export interface TemplateReconcileResult {
 export interface TemplateValidationResult {
   valid: boolean;
   errors: string[];
+}
+
+export interface TemplateDeleteResult {
+  deleted: boolean;
+  references?: { postIds: string[]; tagIds: string[] };
 }
 
 interface ParsedTemplateFile {
@@ -139,18 +144,13 @@ export class TemplateEngine extends EventEmitter {
     const nextFilePath = this.getTemplateFilePath(nextSlug);
     const now = new Date();
 
-    if (existing.filePath !== nextFilePath) {
-      await fs.mkdir(this.getTemplatesDir(), { recursive: true });
-      await fs.rename(existing.filePath, nextFilePath);
-    }
-
     const nextTitle = updates.title ?? existing.title;
     const nextKind = updates.kind ?? existing.kind;
     const nextEnabled = updates.enabled ?? existing.enabled;
     const nextVersion = existing.version + 1;
     const nextContent = typeof updates.content === 'string'
       ? updates.content
-      : await this.readTemplateBody(nextFilePath);
+      : await this.readTemplateBody(existing.filePath);
 
     const nextRow = {
       ...existing,
@@ -163,20 +163,57 @@ export class TemplateEngine extends EventEmitter {
       updatedAt: now,
     };
 
-    await fs.writeFile(nextFilePath, this.serializeTemplateFile(nextRow, nextContent), 'utf-8');
+    const dbUpdates = {
+      title: nextTitle,
+      slug: nextSlug,
+      kind: nextKind,
+      enabled: nextEnabled,
+      filePath: nextFilePath,
+      version: nextVersion,
+      updatedAt: now,
+    };
 
+    // DB-first: update the database row before touching the filesystem
     await getDatabase().getLocal()
       .update(templates)
-      .set({
-        title: nextTitle,
-        slug: nextSlug,
-        kind: nextKind,
-        enabled: nextEnabled,
-        filePath: nextFilePath,
-        version: nextVersion,
-        updatedAt: now,
-      })
+      .set(dbUpdates)
       .where(and(eq(templates.id, existing.id), eq(templates.projectId, this.currentProjectId)));
+
+    try {
+      if (existing.filePath !== nextFilePath) {
+        await fs.mkdir(this.getTemplatesDir(), { recursive: true });
+        await fs.rename(existing.filePath, nextFilePath);
+      }
+
+      await fs.writeFile(nextFilePath, this.serializeTemplateFile(nextRow, nextContent), 'utf-8');
+    } catch (fileError) {
+      // Roll back the DB row to previous values on file operation failure
+      await getDatabase().getLocal()
+        .update(templates)
+        .set({
+          title: existing.title,
+          slug: existing.slug,
+          kind: existing.kind,
+          enabled: existing.enabled,
+          filePath: existing.filePath,
+          version: existing.version,
+          updatedAt: existing.updatedAt,
+        })
+        .where(and(eq(templates.id, existing.id), eq(templates.projectId, this.currentProjectId)));
+      throw fileError;
+    }
+
+    // Cascade slug updates to referencing posts and tags
+    if (existing.slug !== nextSlug) {
+      await getDatabase().getLocal()
+        .update(posts)
+        .set({ templateSlug: nextSlug })
+        .where(and(eq(posts.templateSlug, existing.slug), eq(posts.projectId, this.currentProjectId)));
+      await getDatabase().getLocal()
+        .update(tags)
+        .set({ postTemplateSlug: nextSlug })
+        .where(and(eq(tags.postTemplateSlug, existing.slug), eq(tags.projectId, this.currentProjectId)));
+    }
 
     const updatedRow = await this.getTemplateRow(existing.id);
     if (!updatedRow) {
@@ -188,10 +225,47 @@ export class TemplateEngine extends EventEmitter {
     return updated;
   }
 
-  async deleteTemplate(id: string): Promise<boolean> {
+  async getTemplateReferences(slug: string): Promise<{ postIds: string[]; tagIds: string[] }> {
+    const db = getDatabase().getLocal();
+    const referencingPosts = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(eq(posts.templateSlug, slug), eq(posts.projectId, this.currentProjectId)))
+      .all();
+    const referencingTags = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(eq(tags.postTemplateSlug, slug), eq(tags.projectId, this.currentProjectId)))
+      .all();
+    return {
+      postIds: referencingPosts.map((row) => row.id),
+      tagIds: referencingTags.map((row) => row.id),
+    };
+  }
+
+  async deleteTemplate(id: string, options?: { force?: boolean }): Promise<TemplateDeleteResult> {
     const existing = await this.getTemplateRow(id);
     if (!existing) {
-      return false;
+      return { deleted: false };
+    }
+
+    const refs = await this.getTemplateReferences(existing.slug);
+    const hasReferences = refs.postIds.length > 0 || refs.tagIds.length > 0;
+
+    if (hasReferences && !options?.force) {
+      return { deleted: false, references: refs };
+    }
+
+    if (hasReferences && options?.force) {
+      const db = getDatabase().getLocal();
+      await db
+        .update(posts)
+        .set({ templateSlug: null })
+        .where(and(eq(posts.templateSlug, existing.slug), eq(posts.projectId, this.currentProjectId)));
+      await db
+        .update(tags)
+        .set({ postTemplateSlug: null })
+        .where(and(eq(tags.postTemplateSlug, existing.slug), eq(tags.projectId, this.currentProjectId)));
     }
 
     await getDatabase().getLocal()
@@ -208,7 +282,7 @@ export class TemplateEngine extends EventEmitter {
     }
 
     this.emit('templateDeleted', id);
-    return true;
+    return { deleted: true };
   }
 
   async getTemplate(id: string): Promise<TemplateData | null> {

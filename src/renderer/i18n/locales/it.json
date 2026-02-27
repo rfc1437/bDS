@@ -778,6 +778,7 @@
   "sidebar.templates.createFailed": "Impossibile creare il modello",
   "sidebar.templates.deleteTemplate": "Elimina modello",
   "sidebar.templates.deleteFailed": "Impossibile eliminare il modello",
+  "sidebar.templates.deleteConfirmWithRefs": "Questo modello è referenziato da {postCount} articolo/i e {tagCount} tag. Eliminare comunque? I riferimenti verranno rimossi.",
   "sidebar.import.none": "Nessuna definizione di importazione",
   "sidebar.import.createDefinition": "Crea definizione",
   "sidebar.import.deleteDefinition": "Elimina definizione",

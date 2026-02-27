@@ -778,6 +778,7 @@
   "sidebar.templates.createFailed": "Impossible de créer le modèle",
   "sidebar.templates.deleteTemplate": "Supprimer le modèle",
   "sidebar.templates.deleteFailed": "Impossible de supprimer le modèle",
+  "sidebar.templates.deleteConfirmWithRefs": "Ce modèle est référencé par {postCount} article(s) et {tagCount} tag(s). Supprimer quand même ? Les références seront supprimées.",
   "sidebar.import.none": "Aucune définition d’import",
   "sidebar.import.createDefinition": "Créer une définition",
   "sidebar.import.deleteDefinition": "Supprimer la définition",

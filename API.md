@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.8.0
+Contract version: 1.9.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -2044,15 +2044,17 @@ None  # or
 
 ### templates.delete
 
-Delete template by id.
+Delete template by id. Without options, returns references if the template is in use. Pass options={"force": True} to clear references and delete.
 
 **Parameters**
 
 - id (str, required)
+- options (dict, optional)
 
 **Response specification**
 
-- Return type: `boolean`
+- Return type: `TemplateDeleteResult`
+- Data structures: `TemplateDeleteResult`
 
 **Example call**
 
@@ -2064,7 +2066,10 @@ result = await bds.templates.delete(id='id-1')
 **Example response**
 
 ```python
-True
+{
+    'deleted': False,
+    'references': 'value'
+}
 ```
 
 ### templates.get
@@ -3886,6 +3891,17 @@ Liquid template definition for posts, lists, not-found pages, and partials.
 - content (`string`, required): Liquid template source code.
 - createdAt (`string`, required): Creation timestamp (ISO string).
 - updatedAt (`string`, required): Last update timestamp (ISO string).
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### TemplateDeleteResult
+
+Result of a template delete operation. If the template is referenced by posts or tags, deleted is false and references lists the referencing IDs.
+
+**Fields**
+
+- deleted (`boolean`, required): Whether the template was deleted.
+- references (`{ postIds: string[]; tagIds: string[] }`, optional): Post and tag IDs referencing this template (present when deleted is false and references exist).
 
 [↑ Back to Table of contents](#table-of-contents)
 

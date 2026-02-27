@@ -47,7 +47,7 @@ describe('TemplatesView', () => {
       templates: {
         create: vi.fn(),
         update: vi.fn(),
-        delete: vi.fn(),
+        delete: vi.fn().mockResolvedValue({ deleted: true }),
         get: vi.fn().mockResolvedValue({ ...mockTemplate }),
         getAll: vi.fn().mockResolvedValue([]),
         getEnabledByKind: vi.fn().mockResolvedValue([]),
@@ -180,7 +180,7 @@ describe('TemplatesView', () => {
   });
 
   it('deletes template and closes tab', async () => {
-    const deleteMock = vi.fn().mockResolvedValue(true);
+    const deleteMock = vi.fn().mockResolvedValue({ deleted: true });
     (window as any).electronAPI.templates.delete = deleteMock;
 
     useAppStore.setState({

@@ -116,7 +116,7 @@ export const electronAPI: ElectronAPI = {
   templates: {
     create: (data: { title: string; kind: import('./shared/electronApi').TemplateKind; content: string; slug?: string; enabled?: boolean }) => ipcRenderer.invoke('templates:create', data),
     update: (id: string, data: { title?: string; kind?: import('./shared/electronApi').TemplateKind; content?: string; slug?: string; enabled?: boolean }) => ipcRenderer.invoke('templates:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('templates:delete', id),
+    delete: (id: string, options?: { force?: boolean }) => ipcRenderer.invoke('templates:delete', id, options),
     get: (id: string) => ipcRenderer.invoke('templates:get', id),
     getAll: () => ipcRenderer.invoke('templates:getAll'),
     getEnabledByKind: (kind: import('./shared/electronApi').TemplateKind) => ipcRenderer.invoke('templates:getEnabledByKind', kind),

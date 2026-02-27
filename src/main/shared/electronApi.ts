@@ -177,6 +177,11 @@ export interface TemplateData {
   updatedAt: string;
 }
 
+export interface TemplateDeleteResult {
+  deleted: boolean;
+  references?: { postIds: string[]; tagIds: string[] };
+}
+
 export interface TaskProgress {
   taskId: string;
   name: string;
@@ -623,7 +628,7 @@ export interface ElectronAPI {
       slug?: string;
       enabled?: boolean;
     }) => Promise<TemplateData | null>;
-    delete: (id: string) => Promise<boolean>;
+    delete: (id: string, options?: { force?: boolean }) => Promise<TemplateDeleteResult>;
     get: (id: string) => Promise<TemplateData | null>;
     getAll: () => Promise<TemplateData[]>;
     getEnabledByKind: (kind: TemplateKind) => Promise<TemplateData[]>;
