@@ -3,6 +3,7 @@ import {
   buildBlogmarkTransformOutputEntries,
   buildBlogmarkTransformToastNotifications,
   parseBlogmarkCreatedEventPayload,
+  shouldAutoOpenPanelForOutputEntries,
 } from '../../../src/renderer/navigation/blogmarkTransformOutput';
 
 describe('parseBlogmarkCreatedEventPayload', () => {
@@ -121,5 +122,44 @@ describe('buildBlogmarkTransformToastNotifications', () => {
       { kind: 'success', message: 'Saved one item' },
       { kind: 'error', message: 'error-toast:1' },
     ]);
+  });
+});
+
+describe('shouldAutoOpenPanelForOutputEntries', () => {
+  it('returns false for empty entries', () => {
+    expect(shouldAutoOpenPanelForOutputEntries([])).toBe(false);
+  });
+
+  it('returns false when all entries are result kind', () => {
+    expect(shouldAutoOpenPanelForOutputEntries([
+      { kind: 'result', message: 'summary:2:0' },
+      { kind: 'result', message: 'applied:alpha, beta' },
+    ])).toBe(false);
+  });
+
+  it('returns true when entries contain an error', () => {
+    expect(shouldAutoOpenPanelForOutputEntries([
+      { kind: 'result', message: 'summary:1:1' },
+      { kind: 'error', message: 'failed:broken:boom' },
+    ])).toBe(true);
+  });
+
+  it('returns true when entries contain stdout', () => {
+    expect(shouldAutoOpenPanelForOutputEntries([
+      { kind: 'result', message: 'summary:1:0' },
+      { kind: 'stdout', message: 'hello from python' },
+    ])).toBe(true);
+  });
+
+  it('returns true when entries contain only errors', () => {
+    expect(shouldAutoOpenPanelForOutputEntries([
+      { kind: 'error', message: 'uncaught exception' },
+    ])).toBe(true);
+  });
+
+  it('returns true when entries contain only stdout', () => {
+    expect(shouldAutoOpenPanelForOutputEntries([
+      { kind: 'stdout', message: 'debug output' },
+    ])).toBe(true);
   });
 });

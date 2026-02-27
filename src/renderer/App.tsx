@@ -10,6 +10,7 @@ import {
   buildBlogmarkTransformOutputEntries,
   buildBlogmarkTransformToastNotifications,
   parseBlogmarkCreatedEventPayload,
+  shouldAutoOpenPanelForOutputEntries,
 } from './navigation/blogmarkTransformOutput';
 import { createDeferredEventGate } from './navigation/deferredEventGate';
 import { createAndFocusPost } from './navigation/postCreation';
@@ -288,10 +289,12 @@ const App: React.FC = () => {
             });
           });
 
-          useAppStore.setState({
-            panelVisible: true,
-            panelActiveTab: 'output',
-          });
+          if (shouldAutoOpenPanelForOutputEntries(outputEntries)) {
+            useAppStore.setState({
+              panelVisible: true,
+              panelActiveTab: 'output',
+            });
+          }
         }
 
         blogmarkEventGateRef.current.push(created, processBlogmarkCreated);

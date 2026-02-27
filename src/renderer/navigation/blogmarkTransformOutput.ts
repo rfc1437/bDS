@@ -142,6 +142,12 @@ export function buildBlogmarkTransformOutputEntries(
   return entries;
 }
 
+export function shouldAutoOpenPanelForOutputEntries(
+  entries: Array<Omit<PanelOutputEntry, 'id' | 'createdAt'>>,
+): boolean {
+  return entries.some((entry) => entry.kind === 'error' || entry.kind === 'stdout');
+}
+
 export function buildBlogmarkTransformToastNotifications(
   transform: BlogmarkTransformDebugInfo | undefined,
   t: (key: string, values?: Record<string, string | number>) => string,
