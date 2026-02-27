@@ -1090,6 +1090,24 @@ export function registerIpcHandlers(): void {
     return engine.getProjectMetadata();
   });
 
+  safeHandle('meta:getPublishingPreferences', async () => {
+    const engine = getMetaEngine();
+    await ensureMetaReady(engine);
+    return engine.getPublishingPreferences();
+  });
+
+  safeHandle('meta:setPublishingPreferences', async (_, prefs: { sshHost: string; sshUser: string; sshRemotePath: string; sshMode: 'scp' | 'rsync' }) => {
+    const engine = getMetaEngine();
+    await ensureMetaContext(engine);
+    await engine.setPublishingPreferences(prefs);
+  });
+
+  safeHandle('meta:clearPublishingPreferences', async () => {
+    const engine = getMetaEngine();
+    await ensureMetaContext(engine);
+    await engine.clearPublishingPreferences();
+  });
+
   // ============ Tag Management Handlers ============
 
   safeHandle('tags:getAll', async () => {

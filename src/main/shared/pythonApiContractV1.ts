@@ -158,6 +158,9 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('meta.getProjectMetadata', 'Read active project metadata.', [], 'ProjectMetadata | null'),
   method('meta.setProjectMetadata', 'Set project metadata.', [requiredObject('metadata')], 'ProjectMetadata | null'),
   method('meta.updateProjectMetadata', 'Update project metadata.', [requiredObject('updates')], 'ProjectMetadata | null'),
+  method('meta.getPublishingPreferences', 'Get publishing preferences for the active project.', [], 'PublishingPreferences | null'),
+  method('meta.setPublishingPreferences', 'Set publishing preferences for the active project.', [requiredObject('prefs')], 'void'),
+  method('meta.clearPublishingPreferences', 'Clear publishing preferences for the active project.', [], 'void'),
 
   method('tags.getAll', 'Fetch all tags.', [], 'TagData[]'),
   method('tags.getWithCounts', 'Fetch tags with counts.', [], 'TagWithCount[]'),
@@ -191,6 +194,16 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
 ];
 
 const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
+  {
+    name: 'PublishingPreferences',
+    description: 'Publishing connection preferences stored in meta/publishing.json (shareable, no secrets).',
+    fields: [
+      { name: 'sshHost', type: 'string', required: true, description: 'SSH hostname for publishing.' },
+      { name: 'sshUser', type: 'string', required: true, description: 'SSH username for publishing.' },
+      { name: 'sshRemotePath', type: 'string', required: true, description: 'Remote path on the server.' },
+      { name: 'sshMode', type: "'scp' | 'rsync'", required: true, description: 'Upload mode (scp or rsync).' },
+    ],
+  },
   {
     name: 'ProjectData',
     description: 'Project metadata stored in the app database.',

@@ -35,6 +35,17 @@ export interface CategoryRenderSettings {
   showTitle: boolean;
 }
 
+/**
+ * Publishing preferences stored in meta/publishing.json.
+ * Contains only non-secret connection details that can be shared among collaborators.
+ */
+export interface PublishingPreferences {
+  sshHost: string;
+  sshUser: string;
+  sshRemotePath: string;
+  sshMode: 'scp' | 'rsync';
+}
+
 export interface CategoryMetadata extends CategoryRenderSettings {
   title: string;
 }
@@ -71,6 +82,15 @@ function sanitizePublicUrl(value: unknown): string | undefined {
 
   const trimmed = String(value).trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizePublishingPreferences(prefs: PublishingPreferences): PublishingPreferences {
+  return {
+    sshHost: String(prefs.sshHost ?? '').trim(),
+    sshUser: String(prefs.sshUser ?? '').trim(),
+    sshRemotePath: String(prefs.sshRemotePath ?? '').trim(),
+    sshMode: prefs.sshMode === 'rsync' ? 'rsync' : 'scp',
+  };
 }
 
 function sanitizeCategoryTitle(value: unknown, fallback: string): string {
@@ -183,6 +203,7 @@ export class MetaEngine extends EventEmitter {
   private tags: Set<string> = new Set();
   private categories: Set<string> = new Set();
   private projectMetadata: ProjectMetadata | null = null;
+  private publishingPreferences: PublishingPreferences | null = null;
   private initialized: boolean = false;
   private startupSyncPromise: Promise<void> | null = null;
 
@@ -226,6 +247,10 @@ export class MetaEngine extends EventEmitter {
     return path.join(this.getMetaDir(), 'category-meta.json');
   }
 
+  private getPublishingPreferencesFilePath(): string {
+    return path.join(this.getMetaDir(), 'publishing.json');
+  }
+
   setProjectContext(projectId: string, dataDir?: string): void {
     const nextDataDir = dataDir || null;
     if (this.currentProjectId === projectId && this.dataDir === nextDataDir) {
@@ -238,6 +263,7 @@ export class MetaEngine extends EventEmitter {
     this.tags.clear();
     this.categories.clear();
     this.projectMetadata = null;
+    this.publishingPreferences = null;
     this.initialized = false;
     this.startupSyncPromise = null;
   }
@@ -325,6 +351,43 @@ export class MetaEngine extends EventEmitter {
     await this.saveProjectMetadata();
     await this.saveCategoryMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
+  }
+
+  // ── Publishing Preferences ───────────────────────────────────────────
+
+  /**
+   * Get publishing preferences for the current project.
+   */
+  async getPublishingPreferences(): Promise<PublishingPreferences | null> {
+    return this.publishingPreferences;
+  }
+
+  /**
+   * Set publishing preferences for the current project.
+   * Persists to meta/publishing.json so they can be shared across collaborators.
+   */
+  async setPublishingPreferences(prefs: PublishingPreferences): Promise<void> {
+    this.publishingPreferences = normalizePublishingPreferences(prefs);
+    await this.savePublishingPreferences();
+    this.emit('publishingPreferencesChanged', this.publishingPreferences);
+  }
+
+  /**
+   * Clear publishing preferences for the current project.
+   * Removes meta/publishing.json.
+   */
+  async clearPublishingPreferences(): Promise<void> {
+    this.publishingPreferences = null;
+    try {
+      const filePath = this.getPublishingPreferencesFilePath();
+      await fs.unlink(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[MetaEngine] Failed to delete publishing preferences:', error);
+        throw error;
+      }
+    }
+    this.emit('publishingPreferencesChanged', null);
   }
 
   /**
@@ -452,6 +515,47 @@ export class MetaEngine extends EventEmitter {
     } catch (error) {
       console.error('[MetaEngine] Failed to save category metadata:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Save publishing preferences to the filesystem.
+   */
+  private async savePublishingPreferences(): Promise<void> {
+    if (!this.publishingPreferences) {
+      return;
+    }
+    try {
+      await this.ensureMetaDirExists();
+      const filePath = this.getPublishingPreferencesFilePath();
+      await this.writeJsonFileAtomically(filePath, this.publishingPreferences);
+    } catch (error) {
+      console.error('[MetaEngine] Failed to save publishing preferences:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load publishing preferences from the filesystem.
+   */
+  private async loadPublishingPreferences(): Promise<void> {
+    try {
+      const filePath = this.getPublishingPreferencesFilePath();
+      const content = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content) as PublishingPreferences;
+      this.publishingPreferences = normalizePublishingPreferences(parsed);
+    } catch (error) {
+      if (isJsonParseError(error)) {
+        console.warn('[MetaEngine] Failed to parse publishing preferences JSON, using null:', error);
+        this.publishingPreferences = null;
+        return;
+      }
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[MetaEngine] Failed to load publishing preferences:', error);
+        throw error;
+      }
+      // File doesn't exist, that's OK
+      this.publishingPreferences = null;
     }
   }
 
@@ -772,6 +876,9 @@ export class MetaEngine extends EventEmitter {
       await this.saveProjectMetadata();
       await this.saveCategoryMetadata();
     }
+
+    // Handle publishing preferences (load from file if it exists)
+    await this.loadPublishingPreferences();
     
     this.initialized = true;
     console.log(`[MetaEngine] Sync complete. Tags: ${this.tags.size}, Categories: ${this.categories.size}`);

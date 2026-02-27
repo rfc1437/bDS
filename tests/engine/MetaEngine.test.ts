@@ -1076,12 +1076,197 @@ describe('MetaEngine', () => {
       expect(collectTagsSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('should normalize sshMode to scp when publishing.json has invalid sshMode', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/publishing.json`), JSON.stringify({
+        sshHost: 'example.com',
+        sshUser: 'deploy',
+        sshRemotePath: '/var/www',
+        sshMode: 'invalid-mode',
+      }));
+
+      await metaEngine.syncOnStartup();
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs?.sshMode).toBe('scp');
+    });
+  });
+
+  describe('Publishing Preferences', () => {
+    beforeEach(async () => {
+      await metaEngine.syncOnStartup();
+    });
+
+    it('should save and load publishing preferences', async () => {
+      await metaEngine.setPublishingPreferences({
+        sshHost: 'myserver.com',
+        sshUser: 'webmaster',
+        sshRemotePath: '/srv/blog',
+        sshMode: 'rsync',
+      });
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs).toEqual({
+        sshHost: 'myserver.com',
+        sshUser: 'webmaster',
+        sshRemotePath: '/srv/blog',
+        sshMode: 'rsync',
+      });
+    });
+
+    it('should persist publishing preferences to meta/publishing.json', async () => {
+      const metaDir = metaEngine.getMetaDir();
+
+      await metaEngine.setPublishingPreferences({
+        sshHost: 'host.example.com',
+        sshUser: 'user',
+        sshRemotePath: '/var/www',
+        sshMode: 'scp',
+      });
+
+      const publishingPath = normalizePath(`${metaDir}/publishing.json`);
+      expect(mockFiles.has(publishingPath)).toBe(true);
+      const parsed = JSON.parse(mockFiles.get(publishingPath)!);
+      expect(parsed.sshHost).toBe('host.example.com');
+      expect(parsed.sshUser).toBe('user');
+      expect(parsed.sshRemotePath).toBe('/var/www');
+      expect(parsed.sshMode).toBe('scp');
+    });
+
+    it('should clear publishing preferences by removing the file', async () => {
+      const metaDir = metaEngine.getMetaDir();
+
+      await metaEngine.setPublishingPreferences({
+        sshHost: 'example.com',
+        sshUser: 'user',
+        sshRemotePath: '/var/www',
+        sshMode: 'scp',
+      });
+
+      await metaEngine.clearPublishingPreferences();
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs).toBeNull();
+
+      const publishingPath = normalizePath(`${metaDir}/publishing.json`);
+      expect(mockFiles.has(publishingPath)).toBe(false);
+    });
+
+    it('should trim whitespace from string fields', async () => {
+      await metaEngine.setPublishingPreferences({
+        sshHost: '  example.com  ',
+        sshUser: '  user  ',
+        sshRemotePath: '  /var/www  ',
+        sshMode: 'rsync',
+      });
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs?.sshHost).toBe('example.com');
+      expect(prefs?.sshUser).toBe('user');
+      expect(prefs?.sshRemotePath).toBe('/var/www');
+    });
+
+    it('should default sshMode to scp when invalid', async () => {
+      await metaEngine.setPublishingPreferences({
+        sshHost: 'example.com',
+        sshUser: 'user',
+        sshRemotePath: '/var/www',
+        sshMode: 'invalid' as any,
+      });
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs?.sshMode).toBe('scp');
+    });
+
+    it('should emit publishingPreferencesChanged event on set', async () => {
+      const listener = vi.fn();
+      metaEngine.on('publishingPreferencesChanged', listener);
+
+      await metaEngine.setPublishingPreferences({
+        sshHost: 'example.com',
+        sshUser: 'user',
+        sshRemotePath: '/var/www',
+        sshMode: 'scp',
+      });
+
+      expect(listener).toHaveBeenCalledWith({
+        sshHost: 'example.com',
+        sshUser: 'user',
+        sshRemotePath: '/var/www',
+        sshMode: 'scp',
+      });
+    });
+
+    it('should emit publishingPreferencesChanged with null on clear', async () => {
+      await metaEngine.setPublishingPreferences({
+        sshHost: 'example.com',
+        sshUser: 'user',
+        sshRemotePath: '/var/www',
+        sshMode: 'scp',
+      });
+
+      const listener = vi.fn();
+      metaEngine.on('publishingPreferencesChanged', listener);
+
+      await metaEngine.clearPublishingPreferences();
+
+      expect(listener).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe('Sync on Startup (continued)', () => {
     it('should use custom dataDir when provided in setProjectContext', () => {
       const customDataDir = path.join('custom', 'data', 'path');
       metaEngine.setProjectContext('project-with-custom-dir', customDataDir);
       
       const metaDir = metaEngine.getMetaDir();
       expect(normalizePath(metaDir)).toContain(normalizePath(customDataDir));
+    });
+
+    it('should load publishing preferences from publishing.json during syncOnStartup', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Synced Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/publishing.json`), JSON.stringify({
+        sshHost: 'example.com',
+        sshUser: 'deploy',
+        sshRemotePath: '/var/www/blog',
+        sshMode: 'rsync',
+      }));
+
+      await metaEngine.syncOnStartup();
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs).toEqual({
+        sshHost: 'example.com',
+        sshUser: 'deploy',
+        sshRemotePath: '/var/www/blog',
+        sshMode: 'rsync',
+      });
+    });
+
+    it('should return null publishing preferences when publishing.json does not exist', async () => {
+      await metaEngine.syncOnStartup();
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs).toBeNull();
+    });
+
+    it('should handle malformed publishing.json gracefully during syncOnStartup', async () => {
+      const metaDir = metaEngine.getMetaDir();
+      mockFiles.set(normalizePath(`${metaDir}/project.json`), JSON.stringify({
+        name: 'Synced Project',
+      }));
+      mockFiles.set(normalizePath(`${metaDir}/publishing.json`), '{"sshHost":');
+
+      await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+
+      const prefs = await metaEngine.getPublishingPreferences();
+      expect(prefs).toBeNull();
     });
 
     it('should ignore and remove dataPath from project.json during syncOnStartup', async () => {

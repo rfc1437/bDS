@@ -507,17 +507,16 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('menu:uploadSite', async () => {
         try {
-          const stored = localStorage.getItem('bds-credentials');
-          if (!stored) {
+          const prefs = await window.electronAPI?.meta.getPublishingPreferences();
+          if (!prefs) {
             showToast.error(tr('app.uploadSiteNoCredentials'));
             return;
           }
-          const credentials = JSON.parse(stored);
-          if (!credentials.sshHost || !credentials.sshUser || !credentials.sshRemotePath) {
+          if (!prefs.sshHost || !prefs.sshUser || !prefs.sshRemotePath) {
             showToast.error(tr('app.uploadSiteNoCredentials'));
             return;
           }
-          await window.electronAPI?.publish.uploadSite(credentials);
+          await window.electronAPI?.publish.uploadSite(prefs);
         } catch (error) {
           console.error('Site upload failed:', error);
           showToast.error(tr('app.uploadSiteFailed'));

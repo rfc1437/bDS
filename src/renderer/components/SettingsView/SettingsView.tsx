@@ -234,9 +234,27 @@ export const SettingsView: React.FC = () => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const savedCreds = localStorage.getItem('bds-credentials');
-        if (savedCreds) {
-          setCredentials({ ...defaultCredentials, ...JSON.parse(savedCreds) });
+        // Load publishing preferences from project meta (shareable)
+        const publishingPrefs = await window.electronAPI?.meta.getPublishingPreferences();
+        if (publishingPrefs) {
+          setCredentials({
+            sshHost: publishingPrefs.sshHost || '',
+            sshUser: publishingPrefs.sshUser || '',
+            sshRemotePath: publishingPrefs.sshRemotePath || '',
+            sshMode: publishingPrefs.sshMode || 'scp',
+          });
+        } else {
+          // Migrate from localStorage if meta file doesn't exist yet
+          const savedCreds = localStorage.getItem('bds-credentials');
+          if (savedCreds) {
+            const parsed = { ...defaultCredentials, ...JSON.parse(savedCreds) };
+            setCredentials(parsed);
+            // Migrate to meta file and remove from localStorage
+            if (parsed.sshHost || parsed.sshRemotePath) {
+              await window.electronAPI?.meta.setPublishingPreferences(parsed);
+              localStorage.removeItem('bds-credentials');
+            }
+          }
         }
 
         // Load categories from backend (project-scoped)
@@ -290,7 +308,7 @@ export const SettingsView: React.FC = () => {
 
   const handleSavePublishing = async () => {
     try {
-      localStorage.setItem('bds-credentials', JSON.stringify(credentials));
+      await window.electronAPI?.meta.setPublishingPreferences(credentials);
       showToast.success(t('settings.toast.publishingSaved'));
     } catch (error) {
       console.error('Failed to save publishing credentials:', error);
@@ -298,10 +316,10 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleClearCredentials = () => {
+  const handleClearCredentials = async () => {
     const newCreds = { ...credentials, sshHost: '', sshUser: '', sshRemotePath: '', sshMode: 'scp' as const };
     setCredentials(newCreds);
-    localStorage.setItem('bds-credentials', JSON.stringify(newCreds));
+    await window.electronAPI?.meta.clearPublishingPreferences();
     showToast.success(t('settings.toast.credentialsCleared', { type: 'SSH' }));
   };
 

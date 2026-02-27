@@ -2450,6 +2450,9 @@ None
 - [meta.getProjectMetadata](#metagetprojectmetadata)
 - [meta.setProjectMetadata](#metasetprojectmetadata)
 - [meta.updateProjectMetadata](#metaupdateprojectmetadata)
+- [meta.getPublishingPreferences](#metagetpublishingpreferences)
+- [meta.setPublishingPreferences](#metasetpublishingpreferences)
+- [meta.clearPublishingPreferences](#metaclearpublishingpreferences)
 
 ### meta.getTags
 
@@ -2764,6 +2767,89 @@ None  # or
     'categoryMetadata': {},
     'categorySettings': {}
 }
+```
+
+### meta.getPublishingPreferences
+
+Get publishing preferences for the active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `PublishingPreferences | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `PublishingPreferences`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.meta.get_publishing_preferences()
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'sshHost': 'value',
+    'sshUser': 'value',
+    'sshRemotePath': 'value',
+    'sshMode': 'scp'
+}
+```
+
+### meta.setPublishingPreferences
+
+Set publishing preferences for the active project.
+
+**Parameters**
+
+- prefs (dict, required)
+
+**Response specification**
+
+- Return type: `void`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.meta.set_publishing_preferences(prefs={})
+```
+
+**Example response**
+
+```python
+None
+```
+
+### meta.clearPublishingPreferences
+
+Clear publishing preferences for the active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `void`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.meta.clear_publishing_preferences()
+```
+
+**Example response**
+
+```python
+None
 ```
 
 [↑ Back to Table of contents](#table-of-contents)
@@ -3395,6 +3481,19 @@ result = await bds.publish.upload_site(credentials={})
 ## Data Structures
 
 Shared structures referenced by response types are defined once here.
+
+### PublishingPreferences
+
+Publishing connection preferences stored in meta/publishing.json (shareable, no secrets).
+
+**Fields**
+
+- sshHost (`string`, required): SSH hostname for publishing.
+- sshUser (`string`, required): SSH username for publishing.
+- sshRemotePath (`string`, required): Remote path on the server.
+- sshMode (`'scp' | 'rsync'`, required): Upload mode (scp or rsync).
+
+[↑ Back to Table of contents](#table-of-contents)
 
 ### ProjectData
 

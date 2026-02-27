@@ -58,6 +58,13 @@ export interface CategoryMetadata extends CategoryRenderSettings {
   title: string;
 }
 
+export interface PublishingPreferences {
+  sshHost: string;
+  sshUser: string;
+  sshRemotePath: string;
+  sshMode: 'scp' | 'rsync';
+}
+
 export interface ProjectData {
   id: string;
   name: string;
@@ -637,6 +644,9 @@ export interface ElectronAPI {
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
     updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
+    getPublishingPreferences: () => Promise<PublishingPreferences | null>;
+    setPublishingPreferences: (prefs: PublishingPreferences) => Promise<void>;
+    clearPublishingPreferences: () => Promise<void>;
   };
   tags: {
     getAll: () => Promise<TagData[]>;
