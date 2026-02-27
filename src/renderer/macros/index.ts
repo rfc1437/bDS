@@ -43,4 +43,5 @@ export {
   renderAllMacros,
   getEditorPreview,
   setPythonMacroResolver,
+  refreshPythonMacroSlugs,
 } from './registry';

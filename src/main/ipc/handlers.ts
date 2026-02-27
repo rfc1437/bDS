@@ -772,6 +772,12 @@ export function registerIpcHandlers(): void {
     return engine.getAllScripts();
   });
 
+  safeHandle('scripts:getEnabledMacroSlugs', async () => {
+    const engine = getScriptEngine();
+    const scripts = await engine.getEnabledMacroScripts();
+    return scripts.map((s) => s.slug);
+  });
+
   safeHandle('scripts:rebuildFromFiles', async () => {
     const projectEngine = getProjectEngine();
     const project = await projectEngine.getActiveProject();

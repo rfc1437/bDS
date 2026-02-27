@@ -25,6 +25,7 @@ export interface PythonMacroRendererContract {
     scriptContent: string;
     entrypoint: string;
     contextJson: string;
+    postDataJson?: string | null;
     cacheKey?: string;
     timeoutMs?: number;
   }): Promise<{ html: string; data?: Record<string, unknown>; warnings?: string[] }>;
@@ -99,6 +100,7 @@ export interface PostListTemplateContext {
   next_page_href: string;
   canonical_post_path_by_slug: Record<string, string>;
   canonical_media_path_by_source_path: Record<string, string>;
+  post_data_json_by_id: Record<string, string>;
   day_blocks: DayBlockContext[];
 }
 
@@ -116,6 +118,7 @@ export interface SinglePostTemplateContext {
   calendar_initial_month: number | null;
   canonical_post_path_by_slug: Record<string, string>;
   canonical_media_path_by_source_path: Record<string, string>;
+  post_data_json_by_id: Record<string, string>;
 }
 
 export interface NotFoundTemplateContext {
@@ -826,6 +829,24 @@ export function isBuiltInMacro(name: string): boolean {
   return JS_BUILTIN_MACROS.has(normalizeMacroName(name));
 }
 
+export function serializePostDataForMacro(post: PostData): Record<string, unknown> {
+  return {
+    id: post.id,
+    projectId: post.projectId,
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt ?? null,
+    content: post.content,
+    status: post.status,
+    author: post.author ?? null,
+    createdAt: post.createdAt instanceof Date ? post.createdAt.toISOString() : String(post.createdAt),
+    updatedAt: post.updatedAt instanceof Date ? post.updatedAt.toISOString() : String(post.updatedAt),
+    publishedAt: post.publishedAt instanceof Date ? post.publishedAt.toISOString() : (post.publishedAt ?? null),
+    tags: Array.isArray(post.tags) ? post.tags : [],
+    categories: Array.isArray(post.categories) ? post.categories : [],
+  };
+}
+
 export async function replaceAllMacrosAsync(
   content: string,
   postId: string,
@@ -834,6 +855,7 @@ export async function replaceAllMacrosAsync(
   tagUsage: TagUsageEntry[],
   renderLanguage: string,
   pythonMacroRenderer?: PythonMacroRendererContract | null,
+  postDataJson?: string | null,
 ): Promise<string> {
   const macroRegex = /\[\[(\w+)(?:\s+([^\]]+))?\]\]/g;
   const matches: Array<{ fullMatch: string; name: string; rawParams: string | undefined; start: number; end: number }> = [];
@@ -900,6 +922,7 @@ export async function replaceAllMacrosAsync(
           scriptContent: pythonScript.content,
           entrypoint: pythonScript.entrypoint,
           contextJson: JSON.stringify(context),
+          postDataJson: postDataJson ?? null,
           cacheKey: `${pythonScript.id}:${pythonScript.version}`,
           timeoutMs: 10000,
         });
@@ -1055,10 +1078,14 @@ export class PageRenderer {
       return translateRender(resolved, key);
     });
 
-    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown) => {
+    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, postDataJsonByIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown) => {
       const content = typeof value === 'string' ? value : '';
       const postId = typeof postIdArg === 'string' ? postIdArg : '';
       const renderLanguage = typeof renderLanguageArg === 'string' ? renderLanguageArg : 'en';
+      const postDataJsonById = (postDataJsonByIdArg && typeof postDataJsonByIdArg === 'object' && !Array.isArray(postDataJsonByIdArg))
+        ? postDataJsonByIdArg as Record<string, string>
+        : {};
+      const postDataJson = postId ? (postDataJsonById[postId] ?? null) : null;
       const rewriteContext: HtmlRewriteContext = {
         canonicalPostPathBySlug: recordToMap(canonicalPostsArg),
         canonicalMediaPathBySourcePath: recordToMap(canonicalMediaArg),
@@ -1081,7 +1108,7 @@ export class PageRenderer {
         : null;
 
       const withMacros = await replaceAllMacrosAsync(
-        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer,
+        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer, postDataJson,
       );
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
@@ -1280,6 +1307,9 @@ export class PageRenderer {
       next_page_href: nextPageHref,
       canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
       canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
+      post_data_json_by_id: Object.fromEntries(
+        posts.map((post) => [post.id, JSON.stringify(serializePostDataForMacro(post))]),
+      ),
       day_blocks: dayBlocks,
     };
   }
@@ -1362,6 +1392,9 @@ export class PageRenderer {
       calendar_initial_month: renderablePost.createdAt.getMonth() + 1,
       canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
       canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
+      post_data_json_by_id: {
+        [renderablePost.id]: JSON.stringify(serializePostDataForMacro(renderablePost)),
+      },
     };
 
     return this.liquid.renderFile('single-post', context);

@@ -21,6 +21,8 @@ export type PythonWorkerRequest =
       requestId: string;
       code: string;
       context: MacroContextV1;
+      entrypoint?: string;
+      postDataJson?: string | null;
       cacheKey?: string;
     }
   | {

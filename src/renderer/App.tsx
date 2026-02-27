@@ -14,6 +14,8 @@ import {
 import { createDeferredEventGate } from './navigation/deferredEventGate';
 import { createAndFocusPost } from './navigation/postCreation';
 import { ensureRendererPicoThemeStylesheet, getRendererPicoTheme } from './utils/picoTheme';
+import { addWindowEventListener, BDS_EVENT_SCRIPTS_CHANGED } from './utils/windowEvents';
+import { refreshPythonMacroSlugs } from './macros';
 import { useI18n } from './i18n';
 import './App.css';
 
@@ -104,6 +106,9 @@ const App: React.FC = () => {
         if (tasks) {
           setTasks(tasks as TaskProgress[]);
         }
+
+        // Load known Python macro slugs for editor detection
+        await refreshPythonMacroSlugs();
       } catch (error) {
         console.error('Failed to load initial data:', error);
       } finally {
@@ -555,6 +560,13 @@ const App: React.FC = () => {
           showToast.success(tr('app.importComplete', { posts: importedCount, media: importedMedia }));
         }
       }) || (() => {})
+    );
+
+    // Refresh Python macro slugs when scripts change
+    unsubscribers.push(
+      addWindowEventListener(BDS_EVENT_SCRIPTS_CHANGED, () => {
+        void refreshPythonMacroSlugs();
+      })
     );
 
     void window.electronAPI?.app.notifyRendererReady?.().catch((error) => {

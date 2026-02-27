@@ -108,6 +108,7 @@ export const electronAPI: ElectronAPI = {
     delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
     get: (id: string) => ipcRenderer.invoke('scripts:get', id),
     getAll: () => ipcRenderer.invoke('scripts:getAll'),
+    getEnabledMacroSlugs: () => ipcRenderer.invoke('scripts:getEnabledMacroSlugs'),
     rebuildFromFiles: () => ipcRenderer.invoke('scripts:rebuildFromFiles'),
   },
 

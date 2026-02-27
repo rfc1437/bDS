@@ -7,6 +7,7 @@ interface WorkerRenderMacroRequest {
   scriptContent: string;
   entrypoint: string;
   contextJson: string;
+  postDataJson?: string | null;
   cacheKey?: string;
 }
 
@@ -33,12 +34,29 @@ interface WorkerFatalErrorMessage {
   error: string;
 }
 
-type WorkerResponseMessage = WorkerReadyMessage | WorkerMacroResultMessage | WorkerMacroErrorMessage | WorkerFatalErrorMessage;
+interface WorkerApiCallMessage {
+  type: 'apiCall';
+  requestId: string;
+  callId: string;
+  method: string;
+  args: Record<string, unknown>;
+}
+
+interface WorkerApiResultMessage {
+  type: 'apiResult';
+  callId: string;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+type WorkerResponseMessage = WorkerReadyMessage | WorkerMacroResultMessage | WorkerMacroErrorMessage | WorkerFatalErrorMessage | WorkerApiCallMessage;
 
 export interface MacroRenderParams {
   scriptContent: string;
   entrypoint: string;
   contextJson: string;
+  postDataJson?: string | null;
   timeoutMs?: number;
   cacheKey?: string;
 }
@@ -69,6 +87,8 @@ export interface WorkerLike {
 
 export type WorkerFactory = (workerPath: string) => WorkerLike;
 
+export type ApiInvoker = (method: string, args: Record<string, unknown>) => Promise<unknown>;
+
 export class PythonMacroWorkerRuntime {
   private worker: WorkerLike | null = null;
   private workerReady = false;
@@ -82,9 +102,11 @@ export class PythonMacroWorkerRuntime {
   private _errorCount = 0;
   private _timeoutCount = 0;
   private readonly workerFactory: WorkerFactory;
+  private readonly apiInvoker: ApiInvoker | null;
 
-  constructor(workerFactory?: WorkerFactory) {
+  constructor(workerFactory?: WorkerFactory, apiInvoker?: ApiInvoker) {
     this.workerFactory = workerFactory ?? ((workerPath: string) => new Worker(workerPath) as unknown as WorkerLike);
+    this.apiInvoker = apiInvoker ?? null;
   }
 
   async renderMacro(params: MacroRenderParams): Promise<MacroRenderResult> {
@@ -99,6 +121,7 @@ export class PythonMacroWorkerRuntime {
           scriptContent: params.scriptContent,
           entrypoint: params.entrypoint,
           contextJson: params.contextJson,
+          postDataJson: params.postDataJson ?? null,
           cacheKey: params.cacheKey,
         },
         timeoutMs,
@@ -218,6 +241,11 @@ export class PythonMacroWorkerRuntime {
       return;
     }
 
+    if (message.type === 'apiCall') {
+      void this.handleApiCall(message);
+      return;
+    }
+
     const active = this.activeRequest;
     if (!active) {
       return;
@@ -252,6 +280,35 @@ export class PythonMacroWorkerRuntime {
     this.rejectStartPromise(error);
     this.rejectActiveAndQueue(error);
     this.resetWorker();
+  }
+
+  private async handleApiCall(message: WorkerApiCallMessage): Promise<void> {
+    if (!this.worker || !this.apiInvoker) {
+      this.worker?.postMessage({
+        type: 'apiResult',
+        callId: message.callId,
+        ok: false,
+        error: 'API invoker not available',
+      } satisfies WorkerApiResultMessage);
+      return;
+    }
+
+    try {
+      const result = await this.apiInvoker(message.method, message.args);
+      this.worker?.postMessage({
+        type: 'apiResult',
+        callId: message.callId,
+        ok: true,
+        result,
+      } satisfies WorkerApiResultMessage);
+    } catch (error) {
+      this.worker?.postMessage({
+        type: 'apiResult',
+        callId: message.callId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      } satisfies WorkerApiResultMessage);
+    }
   }
 
   private rejectActiveAndQueue(error: Error): void {
@@ -310,7 +367,8 @@ let pythonMacroWorkerRuntimeInstance: PythonMacroWorkerRuntime | null = null;
 
 export function getPythonMacroWorkerRuntime(): PythonMacroWorkerRuntime {
   if (!pythonMacroWorkerRuntimeInstance) {
-    pythonMacroWorkerRuntimeInstance = new PythonMacroWorkerRuntime();
+    const { invokeMainProcessPythonApi } = require('./mainProcessPythonApiInvoker') as { invokeMainProcessPythonApi: ApiInvoker };
+    pythonMacroWorkerRuntimeInstance = new PythonMacroWorkerRuntime(undefined, invokeMainProcessPythonApi);
   }
 
   return pythonMacroWorkerRuntimeInstance;

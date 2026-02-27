@@ -6,8 +6,19 @@ interface WorkerRenderMacroRequest {
   scriptContent: string;
   entrypoint: string;
   contextJson: string;
+  postDataJson?: string | null;
   cacheKey?: string;
 }
+
+interface WorkerApiResultMessage {
+  type: 'apiResult';
+  callId: string;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+type WorkerIncomingMessage = WorkerRenderMacroRequest | WorkerApiResultMessage;
 
 interface WorkerReadyMessage {
   type: 'ready';
@@ -32,27 +43,131 @@ interface WorkerFatalErrorMessage {
   error: string;
 }
 
-type WorkerResponseMessage = WorkerReadyMessage | WorkerMacroResultMessage | WorkerMacroErrorMessage | WorkerFatalErrorMessage;
+interface WorkerApiCallMessage {
+  type: 'apiCall';
+  requestId: string;
+  callId: string;
+  method: string;
+  args: Record<string, unknown>;
+}
+
+type WorkerResponseMessage = WorkerReadyMessage | WorkerMacroResultMessage | WorkerMacroErrorMessage | WorkerFatalErrorMessage | WorkerApiCallMessage;
 
 type PyodideRuntime = {
   globals: {
     set: (name: string, value: unknown) => void;
   } | any;
   runPythonAsync: (code: string) => Promise<unknown>;
+  registerJsModule: (name: string, module: Record<string, unknown>) => void;
 };
 
 let runtimePromise: Promise<PyodideRuntime> | null = null;
 let lastCacheKey: string | null = null;
+let activeRequestId: string | null = null;
+let apiCallCounter = 0;
 
-function postMessage(message: WorkerResponseMessage): void {
+interface PendingApiCall {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+}
+
+const pendingApiCalls = new Map<string, PendingApiCall>();
+
+function postWorkerMessage(message: WorkerResponseMessage): void {
   parentPort?.postMessage(message);
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function requestHostApi(requestId: string, method: string, args: Record<string, unknown>): Promise<unknown> {
+  apiCallCounter += 1;
+  const callId = `api-${apiCallCounter}`;
+
+  return new Promise((resolve, reject) => {
+    pendingApiCalls.set(callId, { resolve, reject });
+
+    postWorkerMessage({
+      type: 'apiCall',
+      requestId,
+      callId,
+      method,
+      args,
+    });
+  });
+}
+
+function handleApiResultMessage(message: WorkerApiResultMessage): void {
+  const pendingCall = pendingApiCalls.get(message.callId);
+  if (!pendingCall) {
+    return;
+  }
+
+  pendingApiCalls.delete(message.callId);
+
+  if (message.ok) {
+    pendingCall.resolve(message.result);
+    return;
+  }
+
+  pendingCall.reject(new Error(message.error ?? 'Host API call failed'));
+}
+
+function rejectPendingApiCalls(message: string): void {
+  for (const [callId, pendingCall] of pendingApiCalls.entries()) {
+    pendingApiCalls.delete(callId);
+    pendingCall.reject(new Error(message));
+  }
 }
 
 async function getRuntime(): Promise<PyodideRuntime> {
   if (!runtimePromise) {
     runtimePromise = (async () => {
       const pyodideModule = await import('pyodide');
-      return (await pyodideModule.loadPyodide()) as unknown as PyodideRuntime;
+      const runtime = (await pyodideModule.loadPyodide()) as unknown as PyodideRuntime;
+
+      // Register bds_api transport bridge
+      runtime.registerJsModule('__bds_transport', {
+        call_host_api: async (method: unknown, argsJson: unknown) => {
+          if (!activeRequestId) {
+            throw new Error('No active Python request for host API bridge');
+          }
+
+          if (typeof method !== 'string' || method.length === 0) {
+            throw new Error('Host API method must be a non-empty string');
+          }
+
+          let parsedArgs: Record<string, unknown> = {};
+          if (typeof argsJson === 'string' && argsJson.length > 0) {
+            const decoded = JSON.parse(argsJson);
+            parsedArgs = toRecord(decoded);
+          }
+
+          const result = await requestHostApi(activeRequestId, method, parsedArgs);
+          return JSON.stringify(result ?? null);
+        },
+      });
+
+      // Install bds_api module
+      const { generatePythonApiModuleV1 } = await import('../shared/generatePythonApiModuleV1');
+      runtime.globals.set('__bds_api_module_source', generatePythonApiModuleV1());
+      await runtime.runPythonAsync(`
+import sys
+import types
+
+__bds_api_module = types.ModuleType("bds_api")
+exec(__bds_api_module_source, __bds_api_module.__dict__)
+
+from __bds_transport import call_host_api as __bds_call_host_api
+__bds_api_module.bds = __bds_api_module.install_bds_api(__bds_call_host_api)
+sys.modules["bds_api"] = __bds_api_module
+`);
+
+      return runtime;
     })();
   }
 
@@ -60,6 +175,7 @@ async function getRuntime(): Promise<PyodideRuntime> {
 }
 
 async function renderMacro(request: WorkerRenderMacroRequest): Promise<void> {
+  activeRequestId = request.requestId;
   try {
     const runtime = await getRuntime();
 
@@ -72,6 +188,7 @@ async function renderMacro(request: WorkerRenderMacroRequest): Promise<void> {
 
     runtime.globals.set('__bds_macro_context_json', request.contextJson);
     runtime.globals.set('__bds_macro_entrypoint', request.entrypoint);
+    runtime.globals.set('__bds_macro_post_data_json', request.postDataJson ?? '');
 
     const rawResult = await runtime.runPythonAsync(`
 import json as _json
@@ -81,7 +198,9 @@ _macro_ep = __bds_macro_entrypoint
 _macro_fn = globals().get(_macro_ep)
 if _macro_fn is None or not callable(_macro_fn):
     raise RuntimeError(f"Macro entrypoint '{_macro_ep}' is not callable")
-_macro_result = _macro_fn(_macro_ctx)
+_macro_post_json = __bds_macro_post_data_json
+_macro_post = _json.loads(_macro_post_json) if _macro_post_json else None
+_macro_result = _macro_fn(_macro_ctx, _macro_post)
 if _macro_result is None:
     raise RuntimeError("Macro function returned None")
 if not isinstance(_macro_result, dict):
@@ -93,7 +212,7 @@ _json.dumps(_macro_result)
 
     const parsed = JSON.parse(String(rawResult));
 
-    postMessage({
+    postWorkerMessage({
       type: 'macroResult',
       requestId: request.requestId,
       html: typeof parsed.html === 'string' ? parsed.html : '',
@@ -101,12 +220,21 @@ _json.dumps(_macro_result)
       warnings: Array.isArray(parsed.warnings) ? parsed.warnings : undefined,
     });
   } catch (error) {
+    rejectPendingApiCalls('Python macro execution failed');
     const message = error instanceof Error ? error.message : String(error);
-    postMessage({ type: 'macroError', requestId: request.requestId, error: message });
+    postWorkerMessage({ type: 'macroError', requestId: request.requestId, error: message });
+  } finally {
+    rejectPendingApiCalls('Python macro execution finished');
+    activeRequestId = null;
   }
 }
 
-parentPort?.on('message', (message: WorkerRenderMacroRequest) => {
+parentPort?.on('message', (message: WorkerIncomingMessage) => {
+  if (message.type === 'apiResult') {
+    handleApiResultMessage(message);
+    return;
+  }
+
   if (message.type !== 'renderMacro') {
     return;
   }
@@ -116,9 +244,9 @@ parentPort?.on('message', (message: WorkerRenderMacroRequest) => {
 
 void getRuntime()
   .then(() => {
-    postMessage({ type: 'ready' });
+    postWorkerMessage({ type: 'ready' });
   })
   .catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    postMessage({ type: 'error', error: message });
+    postWorkerMessage({ type: 'error', error: message });
   });

@@ -589,6 +589,7 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<ScriptData | null>;
     getAll: () => Promise<ScriptData[]>;
+    getEnabledMacroSlugs: () => Promise<string[]>;
     rebuildFromFiles: () => Promise<void>;
   };
   postMedia: {

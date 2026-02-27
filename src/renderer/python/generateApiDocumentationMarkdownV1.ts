@@ -2,7 +2,7 @@ import {
   BDS_PYTHON_API_CONTRACT_V1,
   type PythonApiDataStructureContractV1,
   type PythonApiParamContractV1,
-} from './pythonApiContractV1';
+} from '../../main/shared/pythonApiContractV1';
 
 function toSnakeCase(value: string): string {
   return value
@@ -205,6 +205,8 @@ export function generateApiDocumentationMarkdownV1(): string {
   sections.push(`Contract version: ${BDS_PYTHON_API_CONTRACT_V1.version}`);
   sections.push('');
   sections.push('This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.');
+  sections.push('');
+  sections.push('`bds_api` is available in both **macro scripts** (executed during preview and page generation) and **transform scripts** (executed during blogmark import). In macro entrypoints, API calls run in the same runtime context as the macro and can be used to fetch posts, media, tags, or other application data.');
   sections.push('');
   sections.push('## Usage');
   sections.push('');

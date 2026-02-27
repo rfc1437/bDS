@@ -3,7 +3,7 @@ import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol
 import { parseMacroContextV1, parseMacroResultV1 } from './abiV1';
 import { resolvePyodideIndexURL } from './pyodideAssetUrl';
 import { runPythonSyntaxCheck } from './pythonSyntaxCheck';
-import { generatePythonApiModuleV1 } from './generatePythonApiModuleV1';
+import { generatePythonApiModuleV1 } from '../../main/shared/generatePythonApiModuleV1';
 
 let runtime: PyodideInterface | null = null;
 let activeRequestId: string | null = null;
@@ -181,11 +181,21 @@ async function runMacroV1(request: PythonWorkerRequest): Promise<void> {
     const validatedContext = parseMacroContextV1(request.context);
     runtime.globals.set('__bds_context_v1', validatedContext);
 
+    const macroEntrypoint = request.entrypoint || 'render';
+    runtime.globals.set('__bds_macro_entrypoint', macroEntrypoint);
+    runtime.globals.set('__bds_macro_post_data_json', request.postDataJson ?? '');
+
     await runPythonCode(request.code, request.cacheKey);
 
     const rawJsonResult = await runtime.runPythonAsync(`
-import json
-json.dumps(render(__bds_context_v1))
+import json as _json
+_macro_ep = __bds_macro_entrypoint
+_macro_fn = globals().get(_macro_ep)
+if _macro_fn is None or not callable(_macro_fn):
+    raise RuntimeError(f"Macro entrypoint '{_macro_ep}' is not callable")
+_macro_post_json = __bds_macro_post_data_json
+_macro_post = _json.loads(_macro_post_json) if _macro_post_json else None
+_json.dumps(_macro_fn(__bds_context_v1, _macro_post))
 `);
 
     const parsedResult = parseMacroResultV1(JSON.parse(toResultString(rawJsonResult)));

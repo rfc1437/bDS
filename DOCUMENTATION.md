@@ -243,6 +243,37 @@ Notes:
 - Return the mutated `post` dict from your transform function.
 - Keep transforms small and deterministic, especially when multiple active transforms run in sequence.
 
+### Macro scripts
+
+Macro scripts let you create custom `[[macro_name ...]]` blocks that expand during preview and page generation. Create a script with kind set to **macro** and pick a slug — the slug becomes the macro name used in Markdown.
+
+The entrypoint function always receives two arguments:
+
+```python
+def render(context, post):
+    params = context["params"]          # dict of macro parameters
+    language = context["language"]      # project language code
+    post_slug = context["post_slug"]    # slug of the host post
+
+    title = post["title"] if post else "Unknown"
+    return {"html": f"<p>Post: {title}</p>"}
+```
+
+`context` is a dict containing `params` (the key-value pairs from the macro tag), `language`, and `post_slug`. `post` is the full PostData dict for the post containing the macro, or `None` when post data is unavailable. The function must return a dict with an `html` key containing the rendered HTML string.
+
+Macro scripts can also call the application API through the `bds_api` module:
+
+```python
+from bds_api import bds
+
+def render(context, post):
+    tags = await bds.posts.get_tags()
+    items = "".join(f"<li>{t}</li>" for t in tags)
+    return {"html": f"<ul>{items}</ul>"}
+```
+
+To use the macro in a post, write `[[your_slug param="value"]]` in Markdown. Built-in JS macros (youtube, vimeo, gallery, photo_archive, tag_cloud) always take priority over Python macros with the same slug.
+
 ### Key takeaways
 
 - Scripting is available and intentionally evolving in small steps.
@@ -251,6 +282,9 @@ Notes:
 - Transform scripts can call `toast("...")` to send user-facing UI notifications.
 - Transform scripts can directly manipulate `title`, `content`, `categories`, and `tags`.
 - Transform pipeline failures always trigger automatic error toasts.
+- Macro scripts use a two-argument entrypoint: `def render(context, post)`.
+- Macro scripts can call `bds_api` to access posts, media, tags, and other application data.
+- Built-in JS macros always take priority over Python macros with the same slug.
 
 [↑ Back to In this article](#in-this-article)
 
