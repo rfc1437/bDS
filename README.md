@@ -167,14 +167,6 @@ npm run dist:linux
     - `APPLE_APP_SPECIFIC_PASSWORD`
     - `APPLE_TEAM_ID`
 
-### Database Utilities
-
-```bash
-npm run db:generate
-npm run db:migrate
-npm run db:studio
-```
-
 ## Further Documentation
 
 - [DOCUMENTATION.md](DOCUMENTATION.md) — end-user guide covering workflows, macros, scripting, AI assistant, and editorial best practices
