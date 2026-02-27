@@ -18,8 +18,8 @@ const UI_DATE_LOCALE: Record<string, string> = {
 const toTemplateSlug = (value: string) => {
   const normalized = value
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
   return normalized || 'template';
 };
 

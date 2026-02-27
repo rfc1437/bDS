@@ -602,7 +602,9 @@ describe('IPC Handlers', () => {
         mockGitEngine.getChangedScriptFilesBetween.mockResolvedValue([
           { status: 'modified', path: 'scripts/transform.py' },
         ]);
-        mockGitEngine.getChangedTemplateFilesBetween.mockResolvedValue([]);
+        mockGitEngine.getChangedTemplateFilesBetween.mockResolvedValue([
+          { status: 'added', path: 'templates/custom_post.liquid' },
+        ]);
         mockPostEngine.reconcilePublishedPostsFromGitChanges.mockResolvedValue({
           created: 1,
           updated: 1,
@@ -615,6 +617,12 @@ describe('IPC Handlers', () => {
           deleted: 0,
           processedFiles: 1,
         });
+        mockTemplateEngine.reconcileTemplatesFromGitChanges.mockResolvedValue({
+          created: 1,
+          updated: 0,
+          deleted: 0,
+          processedFiles: 1,
+        });
 
         const result = await invokeHandler('git:pull', '/repo');
 
@@ -623,12 +631,16 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.getHeadCommit).toHaveBeenNthCalledWith(2, '/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
         expect(mockGitEngine.getChangedScriptFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
+        expect(mockGitEngine.getChangedTemplateFilesBetween).toHaveBeenCalledWith('/repo', 'before-head', 'after-head');
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).toHaveBeenCalledWith('/repo', [
           { status: 'modified', path: 'posts/2026/02/existing.md' },
           { status: 'added', path: 'posts/2026/02/new-post.md' },
         ]);
         expect(mockScriptEngine.reconcileScriptsFromGitChanges).toHaveBeenCalledWith('/repo', [
           { status: 'modified', path: 'scripts/transform.py' },
+        ]);
+        expect(mockTemplateEngine.reconcileTemplatesFromGitChanges).toHaveBeenCalledWith('/repo', [
+          { status: 'added', path: 'templates/custom_post.liquid' },
         ]);
         expect(result).toEqual({ success: true });
       });
@@ -642,8 +654,10 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
         expect(mockGitEngine.getChangedScriptFilesBetween).not.toHaveBeenCalled();
+        expect(mockGitEngine.getChangedTemplateFilesBetween).not.toHaveBeenCalled();
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
         expect(mockScriptEngine.reconcileScriptsFromGitChanges).not.toHaveBeenCalled();
+        expect(mockTemplateEngine.reconcileTemplatesFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: false, code: 'conflict' });
       });
 
@@ -658,8 +672,10 @@ describe('IPC Handlers', () => {
         expect(mockGitEngine.pull).toHaveBeenCalledWith('/repo');
         expect(mockGitEngine.getChangedPostFilesBetween).not.toHaveBeenCalled();
         expect(mockGitEngine.getChangedScriptFilesBetween).not.toHaveBeenCalled();
+        expect(mockGitEngine.getChangedTemplateFilesBetween).not.toHaveBeenCalled();
         expect(mockPostEngine.reconcilePublishedPostsFromGitChanges).not.toHaveBeenCalled();
         expect(mockScriptEngine.reconcileScriptsFromGitChanges).not.toHaveBeenCalled();
+        expect(mockTemplateEngine.reconcileTemplatesFromGitChanges).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true });
       });
     });

@@ -27,12 +27,12 @@ vi.mock('@monaco-editor/react', () => ({
 const mockTemplate = {
   id: 'template-1',
   projectId: 'default',
-  slug: 'custom-post',
+  slug: 'custom_post',
   title: 'Custom Post',
   kind: 'post' as const,
   enabled: true,
   version: 1,
-  filePath: '/tmp/custom-post.liquid',
+  filePath: '/tmp/custom_post.liquid',
   content: '<main>{{ post.title }}</main>',
   createdAt: '2026-02-22T00:00:00.000Z',
   updatedAt: '2026-02-22T00:00:00.000Z',
@@ -67,7 +67,7 @@ describe('TemplatesView', () => {
 
     await vi.waitFor(() => {
       expect(titleInput.value).toBe('Custom Post');
-      expect(slugInput.value).toBe('custom-post');
+      expect(slugInput.value).toBe('custom_post');
     });
     expect(kindSelect.value).toBe('post');
     expect(enabledInput.checked).toBe(true);
@@ -125,7 +125,7 @@ describe('TemplatesView', () => {
         'template-1',
         expect.objectContaining({
           title: 'Custom Post',
-          slug: 'custom-post',
+          slug: 'custom_post',
           kind: 'list',
           enabled: false,
           content: '<main>{{ post.title }}</main>',

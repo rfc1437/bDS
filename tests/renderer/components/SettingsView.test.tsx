@@ -182,6 +182,107 @@ describe('SettingsView Diff Preferences', () => {
     expect(rebuildScriptsMock).toHaveBeenCalledTimes(1);
   });
 
+  it('triggers templates rebuild from data maintenance section', async () => {
+    const rebuildTemplatesMock = vi.fn().mockResolvedValue(undefined);
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      templates: {
+        ...(window as any).electronAPI?.templates,
+        getEnabledByKind: vi.fn().mockResolvedValue([]),
+        rebuildFromFiles: rebuildTemplatesMock,
+      },
+    };
+
+    render(<SettingsView />);
+
+    const rebuildTemplatesButton = await screen.findByRole('button', { name: /rebuild templates/i });
+    fireEvent.click(rebuildTemplatesButton);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rebuildTemplatesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders category template dropdowns populated with enabled templates', async () => {
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      templates: {
+        ...(window as any).electronAPI?.templates,
+        getEnabledByKind: vi.fn().mockImplementation((kind: string) => {
+          if (kind === 'post') {
+            return Promise.resolve([
+              { slug: 'custom_post', title: 'Custom Post' },
+            ]);
+          }
+          if (kind === 'list') {
+            return Promise.resolve([
+              { slug: 'custom_list', title: 'Custom List' },
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+      },
+    };
+
+    render(<SettingsView />);
+
+    const postTemplateSelect = await screen.findByLabelText(/article post template/i);
+    expect(postTemplateSelect).toBeInTheDocument();
+
+    await vi.waitFor(() => {
+      const options = postTemplateSelect.querySelectorAll('option');
+      const optionTexts = Array.from(options).map((o) => o.textContent);
+      expect(optionTexts).toContain('Custom Post');
+    });
+
+    const listTemplateSelect = screen.getByLabelText(/article list template/i);
+    expect(listTemplateSelect).toBeInTheDocument();
+
+    await vi.waitFor(() => {
+      const options = listTemplateSelect.querySelectorAll('option');
+      const optionTexts = Array.from(options).map((o) => o.textContent);
+      expect(optionTexts).toContain('Custom List');
+    });
+  });
+
+  it('persists category template selection via project metadata update', async () => {
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      templates: {
+        ...(window as any).electronAPI?.templates,
+        getEnabledByKind: vi.fn().mockImplementation((kind: string) => {
+          if (kind === 'post') {
+            return Promise.resolve([
+              { slug: 'custom_post', title: 'Custom Post' },
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+      },
+    };
+
+    render(<SettingsView />);
+
+    const postTemplateSelect = await screen.findByLabelText(/article post template/i);
+
+    await vi.waitFor(() => {
+      const options = postTemplateSelect.querySelectorAll('option');
+      expect(Array.from(options).map((o) => o.textContent)).toContain('Custom Post');
+    });
+
+    fireEvent.change(postTemplateSelect, { target: { value: 'custom_post' } });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoryMetadata: expect.objectContaining({
+          article: expect.objectContaining({ postTemplateSlug: 'custom_post' }),
+        }),
+      })
+    );
+  });
+
   it('persists category settings changes via project metadata update', async () => {
     render(<SettingsView />);
 
