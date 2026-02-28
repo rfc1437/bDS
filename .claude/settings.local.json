@@ -15,7 +15,8 @@
       "Bash(npm test)",
       "Bash(ls -la /Users/gb/Projects/bDS/*.md)",
       "Bash(grep -n \"templateSlug\\\\|postTemplateSlug\" /Users/gb/Projects/bDS/src/main/engine/*.ts)",
-      "Bash(npm test -- tests/renderer/i18nLocaleCompleteness.test.ts)"
+      "Bash(npm test -- tests/renderer/i18nLocaleCompleteness.test.ts)",
+      "WebFetch(domain:ricmac.org)"
     ]
   }
 }

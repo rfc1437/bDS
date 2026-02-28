@@ -10,6 +10,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "paths": {
+      "@modelcontextprotocol/ext-apps/server": ["./node_modules/@modelcontextprotocol/ext-apps/dist/src/server/index.d.ts"]
+    },
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

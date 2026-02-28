@@ -11,6 +11,7 @@ import { getMetaEngine } from './engine/MetaEngine';
 import { getTemplateEngine } from './engine/TemplateEngine';
 import { getBlogmarkTransformService } from './engine/BlogmarkTransformService';
 import { PreviewServer } from './engine/PreviewServer';
+import { getMCPServer } from './engine/MCPServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from './shared/i18n';
 import { buildBlogmarkMarkdownLink, extractBlogmarkPayloadFromDeepLink, normalizeBlogmarkCategory } from './shared/blogmark';
@@ -24,6 +25,7 @@ let blogmarkQueueProcessing = false;
 let pendingBlogmarkCreatedEvents: unknown[] = [];
 let rendererReady = false;
 const PREVIEW_SERVER_PORT = 4123;
+const MCP_SERVER_PORT = 4124;
 const BLOG_PREVIEW_POST_MENU_ID = APP_MENU_ITEM_IDS.previewPost;
 const BLOGMARK_PROTOCOL = 'bds';
 const BLOGMARK_NEW_POST_PREFIX = `${BLOGMARK_PROTOCOL}://new-post`;
@@ -864,6 +866,12 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('Failed to start preview server on app startup:', error);
   }
+  try {
+    const mcpServer = getMCPServer();
+    await mcpServer.start(MCP_SERVER_PORT);
+  } catch (error) {
+    console.error('Failed to start MCP server on app startup:', error);
+  }
   createWindow();
 
   await activeProjectContextReady;
@@ -895,6 +903,13 @@ app.on('before-quit', async () => {
   if (previewServer) {
     await previewServer.stop();
     previewServer = null;
+  }
+
+  try {
+    const mcpServer = getMCPServer();
+    await mcpServer.cleanup();
+  } catch (error) {
+    console.error('Failed to cleanup MCP server:', error);
   }
 
   const db = getDatabase();
