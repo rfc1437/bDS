@@ -25,7 +25,7 @@ Ship a bundled CLI tool (`bds-mcp`) alongside the Electron app that:
 │  ScriptEngine               │   │     │      db_notifications  ← new       │
 │  TemplateEngine             │   │     └────────────────────────────────────┘
 │  MCPServer (tools/res)      │   │                    ▲
-│  ProposalStore (in-memory)  │   │           fs.watch(-wal) + 100 ms debounce
+│  ProposalStore (in-memory)  │   │           chokidar(-wal) + 100 ms debounce
 └─────────────────────────────┘   │           invalidate engines + IPC to renderer
                                   │
 agent (Claude Desktop, VS Code…) ─┘
@@ -51,15 +51,16 @@ CREATE TABLE db_notifications (
   entity    TEXT NOT NULL,    -- 'post' | 'media' | 'script' | 'template'
   entityId  TEXT NOT NULL,
   action    TEXT NOT NULL,    -- 'created' | 'updated' | 'deleted'
-  origin    TEXT NOT NULL,    -- 'cli' | 'app'
+  fromCli   INTEGER NOT NULL DEFAULT 1,  -- 1 = written by CLI; reserved for future app→CLI signalling
   seenAt    INTEGER,          -- NULL = unprocessed by app
   createdAt INTEGER NOT NULL
 );
 ```
 
-The CLI writes a row after every mutation. The app's `NotificationWatcher` polls for
-`seenAt IS NULL AND origin = 'cli'`, refreshes the relevant engine cache, emits IPC
-events to the renderer, then stamps `seenAt`.
+The CLI writes a row after every mutation. The app's `NotificationWatcher` queries for
+`seenAt IS NULL AND fromCli = 1`, invalidates the relevant engine cache, emits IPC events
+to the renderer, stamps `seenAt`, then **prunes rows whose `seenAt` is older than 1 hour**
+to prevent unbounded table growth.
 
 ---
 
@@ -102,14 +103,35 @@ Refactor `DatabaseConnection` to accept explicit constructor arguments:
 interface DatabaseConnectionConfig {
   dbPath: string;           // absolute path to bds.db
   migrationsFolder: string; // absolute path to the drizzle/ migrations dir
-  createDirs?: string[];    // extra directories to mkdir at startup
+  dataDirs?: string[];      // extra directories to mkdir at startup (posts/, media/, etc.)
 }
 ```
 
-The Electron `main.ts` constructs it as today (computing paths via `app.getPath` before
-passing them in). The CLI computes the same paths via `platformConfigPath()` and
-`__dirname`-relative resolution from the bundle. All Electron imports are removed from
-`connection.ts` itself.
+Four things must move out of `connection.ts` into `main.ts` (or equivalent callers):
+
+1. `app.getPath('userData')` in the constructor — replaced by the explicit `dbPath`
+2. `app.isPackaged` + `process.resourcesPath` in `runMigrations()` — replaced by
+   the explicit `migrationsFolder`
+3. The `posts/` and `media/` `mkdirSync` calls in the constructor — absorbed into  
+   the new `dataDirs` option (caller supplies the list)
+4. **`getDataPaths()`** — this method also calls `app.getPath('userData')` directly and
+   must be removed from `DatabaseConnection` entirely. Move callers to compute data
+   paths themselves (they already have `userData` in scope in `main.ts`).
+
+The Electron `main.ts` constructs it as today, computing paths via `app.getPath` before
+passing them in. The CLI uses `platformConfigPath()` and `__dirname`-relative resolution.
+All Electron imports are removed from `connection.ts` itself.
+
+**WAL mode and synchronous pragma** — add to `initializeLocal()` immediately after
+creating the client, before running migrations:
+
+```typescript
+await this.localClient.execute('PRAGMA journal_mode=WAL');
+await this.localClient.execute('PRAGMA synchronous=NORMAL');
+```
+
+This must be done for **both** the app and CLI connections. It ensures the `-wal` file
+exists (enabling chokidar to watch it) and gives consistent write performance.
 
 This is a prerequisite for every CLI section that follows.
 
@@ -163,14 +185,17 @@ Engines to update: `PostEngine`, `MediaEngine`, `ScriptEngine`, `TemplateEngine`
 
 `src/main/engine/NotificationWatcher.ts`
 
-Uses `fs.watch()` on the SQLite WAL file (`bds.db-wal`) for near-instant change
-detection instead of polling. When a write lands in WAL mode, the `-wal` file is modified
-before a checkpoint; watching it gives sub-100 ms latency.
+Uses **chokidar** (already in `dependencies`) to watch both `bds.db` and `bds.db-wal`.
+This gives sub-100 ms latency with zero boilerplate: chokidar handles missing files (the
+`-wal` file doesn't exist until the first write after WAL mode is enabled), platform
+differences (FSEvents on macOS, inotify on Linux, FSWatch on Windows), and
+`add` events for when the WAL file is created for the first time.
 
 ```typescript
+import chokidar, { FSWatcher } from 'chokidar';
+
 export class NotificationWatcher {
-  private dbWatcher: FSWatcher | null = null;
-  private walWatcher: FSWatcher | null = null;
+  private watcher: FSWatcher | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -182,26 +207,20 @@ export class NotificationWatcher {
   ) {}
 
   start(): void {
-    // Watch the main db file (catches checkpoints)
-    this.dbWatcher = watch(this.dbPath, { persistent: false },
-      () => this.schedule());
-
-    // Watch the WAL file (catches every write in WAL mode)
-    // The WAL file may not exist yet if no writes have occurred; we create
-    // a short-lived retry watcher that tries once per second until the file
-    // appears, at which point walWatcher is assigned and the retry cancels.
-    this.attachWalWatcher();
-  }
-
-  private attachWalWatcher(): void {
-    const walPath = this.dbPath + '-wal';
-    try {
-      this.walWatcher = watch(walPath, { persistent: false },
-        () => this.schedule());
-    } catch {
-      // -wal does not exist yet; retry in 1 s
-      setTimeout(() => this.attachWalWatcher(), 1000);
-    }
+    // Watch both the main db file (catches checkpoints) and the WAL file
+    // (catches every write before checkpoint). chokidar handles the case
+    // where bds.db-wal does not yet exist — it fires 'add' when it appears.
+    this.watcher = chokidar.watch(
+      [this.dbPath, `${this.dbPath}-wal`],
+      {
+        persistent: false,
+        ignoreInitial: true,   // don't fire on startup for pre-existing files
+        usePolling: false,     // rely on native FSEvents/inotify/kqueue
+        awaitWriteFinish: false,
+      },
+    );
+    this.watcher.on('change', () => this.schedule());
+    this.watcher.on('add',    () => this.schedule()); // WAL created for first time
   }
 
   private schedule(): void {
@@ -215,7 +234,7 @@ export class NotificationWatcher {
       .from(dbNotifications)
       .where(and(
         isNull(dbNotifications.seenAt),
-        eq(dbNotifications.origin, 'cli'),
+        eq(dbNotifications.fromCli, 1),
       ));
 
     for (const row of rows) {
@@ -229,12 +248,16 @@ export class NotificationWatcher {
         .set({ seenAt: Date.now() })
         .where(eq(dbNotifications.id, row.id));
     }
+
+    // Prune rows processed more than 1 hour ago to prevent unbounded growth.
+    await this.db
+      .delete(dbNotifications)
+      .where(lt(dbNotifications.seenAt, Date.now() - 3_600_000));
   }
 
   stop(): void {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.dbWatcher?.close();
-    this.walWatcher?.close();
+    this.watcher?.close().catch(() => {});
   }
 }
 ```
@@ -257,11 +280,11 @@ async startCli(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Keep alive until the host closes stdin or the process receives a signal
+  // Block until the MCP host closes stdin (normal session end).
+  // Signal-based shutdown is the caller's responsibility: do NOT register
+  // signal handlers here or they will race with the bds-mcp.ts handlers.
   await new Promise<void>((resolve) => {
     process.stdin.on('close', resolve);
-    process.once('SIGTERM', resolve);
-    process.once('SIGINT', resolve);
   });
 
   await server.close();
@@ -277,34 +300,55 @@ the single `MCPServer` instance as before.
 
 ```
 1. platformConfigPath() → userData dir
-2. migrationsFolder = path.join(__dirname, '../drizzle')  // bundled alongside .cjs
-3. new DatabaseConnection({ dbPath, migrationsFolder })
-4. await db.initializeLocal()
-5. SELECT active project (isActive = 1); exit with message if none
-6. instantiate engines with CliNotifier DB writer
-7. new MCPServer({ postEngine, mediaEngine, … })
-8. await mcpServer.startCli()
+2. dbPath = path.join(userData, 'bds.db')
+3. migrationsFolder = path.join(__dirname, 'drizzle')  // Contents/Resources/drizzle/
+4. new DatabaseConnection({ dbPath, migrationsFolder, dataDirs: [postsDir, mediaDir] })
+5. await db.initializeLocal()  // runs WAL + synchronous pragmas, then migrations
+6. SELECT active project (isActive = 1); exit with message if none
+7. instantiate engines with CliNotifier DB writer
+8. new MCPServer({ postEngine, mediaEngine, … }, { proposalTtlMs: 8 * 60 * 60 * 1000 })
+9. await mcpServer.startCli()   // blocks until stdin closes
+10. await shutdown()            // graceful post-stdin exit
 ```
+
+`MCPServer` should accept an optional `proposalTtlMs` to override the default 30-minute
+TTL. CLI sessions can last hours (overnight agent runs), so **8 hours** is the appropriate
+default. Pass `proposalTtlMs` through to the `ProposalStore` constructor.
 
 No `electron` imports. Fully standalone Node process.
 
-**Graceful shutdown** — register handlers *before* `startCli()` so cleanup runs on both
-normal exit and forced signals:
+**Graceful shutdown** — two paths, no racing:
 
 ```typescript
-async function shutdown(db: DatabaseConnection, store: ProposalStore): Promise<void> {
-  store.destroy();
+// Called both by signal handlers (forced) and after normal stdin-close (graceful).
+// process.exit() makes it non-reentrant even without the once guards.
+async function shutdown(): Promise<never> {
+  mcpServer.proposalStore.destroy();
   await db.close();   // flushes any in-flight @libsql writes
   process.exit(0);
 }
 
-process.once('SIGTERM', () => shutdown(db, mcpServer.proposalStore));
-process.once('SIGINT',  () => shutdown(db, mcpServer.proposalStore));
-process.once('beforeExit', () => shutdown(db, mcpServer.proposalStore));
+// Signal handlers own interruption; registered before startCli() so they are
+// active during the entire session.  Do NOT register signals inside startCli().
+process.once('SIGTERM', shutdown);
+process.once('SIGINT',  shutdown);
+
+// Normal path: stdin closes → startCli() resolves → server.close() runs → shutdown()
+await mcpServer.startCli();
+await shutdown();
 ```
 
-(`startCli()` awaits `process.stdin` close / signal and then falls through to the same
-cleanup, so shutdown runs exactly once with the `once` guards.)
+When SIGTERM fires, `shutdown()` runs and calls `process.exit(0)` — `startCli()` never
+resumes, `server.close()` is skipped (safe: the process is exiting anyway). When stdin
+closes cleanly, `startCli()` resumes, `server.close()` runs first, then `shutdown()`
+exits. The `once` guards and `process.exit` together make the function non-reentrant.
+
+**Native module resolution** — When launched as `ELECTRON_RUN_AS_NODE=1`, Electron's
+ASAR patching is still active, so `require('@libsql/client')` resolves into
+`app.asar/node_modules`. This is a documented side-effect of `ELECTRON_RUN_AS_NODE` that
+has been stable since Electron 20. Add an integration test that verifies the module
+resolves and the DB opens successfully from the bundled path; if a future Electron major
+breaks this, the test will catch it early.
 
 ---
 
@@ -319,15 +363,18 @@ target: node, format: cjs, bundle: true
 
 The project uses `@libsql/client` with platform-specific native binaries (e.g.
 `@libsql/darwin-arm64`). These **cannot** be bundled by esbuild. Externalize all
-`@libsql/*` packages and ensure the platform binary directories are included alongside
-the `.cjs` file in `extraResources`:
+`@libsql/*` and `chokidar`-related native packages, and ensure they resolve at runtime
+from the app bundle (see the ASAR resolution note in section H):
 
 ```
-externals: ['@libsql/client', '@libsql/darwin-arm64', '@libsql/linux-x64-gnu', …]
+externals: ['@libsql/client', '@libsql/darwin-arm64', '@libsql/linux-x64-gnu',
+            'chokidar', 'fsevents', …]
 ```
 
-Also bundle the `drizzle/` migrations folder next to `bds-mcp.cjs` so the path resolution
-in section H (`path.join(__dirname, '../drizzle')`) works at runtime inside the app bundle.
+The `drizzle/` migrations folder does **not** need to be re-bundled alongside the `.cjs`
+file — it is already included in `extraResources` (see J). The path resolution
+`path.join(__dirname, 'drizzle')` resolves correctly when `bds-mcp.cjs` sits at
+`Contents/Resources/bds-mcp.cjs` and `drizzle/` is at `Contents/Resources/drizzle/`.
 
 Runs as part of `npm run build` before the Electron build.
 
@@ -335,18 +382,21 @@ Runs as part of `npm run build` before the Electron build.
 
 ### J — electron-builder `extraResources`
 
+The `{ "from": "drizzle", "to": "drizzle" }` entry **already exists** in `package.json`.
+Only the CLI bundle itself needs to be added:
+
 ```json
 "build": {
   "extraResources": [
-    { "from": "dist/cli/bds-mcp.cjs",  "to": "bds-mcp.cjs" },
-    { "from": "drizzle",               "to": "drizzle"    }
+    { "from": "dist/cli/bds-mcp.cjs",  "to": "bds-mcp.cjs" }
+    // { "from": "drizzle", "to": "drizzle" }  ← already present, do not duplicate
   ]
 }
 ```
 
-`bds-mcp.cjs` is placed at `Contents/Resources/bds-mcp.cjs`; the `drizzle/` migrations
-folder is placed at `Contents/Resources/drizzle/` so the CLI migration resolver
-(`path.join(__dirname, '../drizzle')`) resolves correctly from `Contents/Resources/`.
+`bds-mcp.cjs` lands at `Contents/Resources/bds-mcp.cjs`; `drizzle/` is already at
+`Contents/Resources/drizzle/`. The CLI migration resolver `path.join(__dirname, 'drizzle')`
+resolves `Contents/Resources/drizzle/` correctly from that location.
 
 ---
 
@@ -391,6 +441,10 @@ Config file path:
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 - Linux: `~/.config/Claude/claude_desktop_config.json`
+
+> **Note:** Verify the current OpenCode config schema before implementing the `opencode`
+> entry — the format has changed between releases. Check the live spec at
+> https://opencode.ai/docs before writing the `buildEntry` case.
 
 #### Remove from config (new method)
 
@@ -450,35 +504,77 @@ proposals lightweight (no DB rows, no filesystem side effects).
 
 ---
 
+### N — Renderer: subscribe to `entity:changed` IPC events
+
+The app's UI must reflect changes the CLI makes while the app is open. `NotificationWatcher`
+fires `entity:changed` IPC events (section F), but nothing currently handles them in the
+renderer.
+
+**`preload.ts`** — expose the channel alongside existing IPC listeners:
+
+```typescript
+onEntityChanged: (cb: (payload: EntityChangedPayload) => void) =>
+  ipcRenderer.on('entity:changed', (_, payload) => cb(payload)),
+```
+
+**Renderer subscription** — in the top-level app component (or a dedicated `IpcListener`
+component that mounts once), subscribe on mount and unsubscribe on unmount:
+
+```typescript
+useEffect(() => {
+  const unsub = window.api.onEntityChanged(({ entity, entityId, action }) => {
+    // Dispatch store invalidation so the next render fetches fresh data
+    if (entity === 'post')     postsStore.getState().invalidate(entityId);
+    if (entity === 'media')    mediaStore.getState().invalidate(entityId);
+    if (entity === 'script')   scriptsStore.getState().invalidate(entityId);
+    if (entity === 'template') templatesStore.getState().invalidate(entityId);
+  });
+  return () => unsub();
+}, []);
+```
+
+Store `invalidate()` methods should clear the cached entry and, if the entity is
+currently displayed, trigger an immediate refetch — consistent with how other
+IPC-driven refreshes work in the app.
+
+---
+
 ## Design Decisions
 
 | Question | Decision |
 |---|---|
 | Active project in CLI | Use `isActive = 1` from DB; fail fast if none |
 | Proposal durability | Scripts/templates use DB draft rows; metadata proposals stay in-memory (failure mode documented in M) |
+| Proposal TTL | 30 min default in app; **8 hours** in CLI (overnight agent sessions) |
 | App View tool calls in CLI mode | `app.callServerTool()` routes through the MCP host, not a direct HTTP call — no secondary port needed |
-| Claude Desktop support | stdio via bundled `bds-mcp.cjs` + `ELECTRON_RUN_AS_NODE=1` |
+| Claude Desktop support | stdio via bundled `bds-mcp.cjs` + `ELECTRON_RUN_AS_NODE=1` (entitlements already set) |
 | Remove from config | New `removeFromConfig()` method + Remove buttons in UI |
-| DB change detection | `fs.watch()` on `-wal` file + 100 ms debounce; falls back to watching main db file on checkpoint |
-| DB coupling to Electron | `DatabaseConnection` accepts explicit paths; Electron-specific path resolution stays in `main.ts` |
+| DB change detection | **chokidar** on both `bds.db` and `bds.db-wal`; 100 ms debounce; handles missing WAL via `add` events |
+| WAL mode | Explicit `PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL` in `initializeLocal()` for both app and CLI |
+| `db_notifications` growth | Rows pruned after `seenAt` is 1 hour old, inside each `process()` call |
+| DB coupling to Electron | `DatabaseConnection` accepts explicit paths; `getDataPaths()` removed; Electron path resolution stays in `main.ts` |
+| Native module resolution | `ELECTRON_RUN_AS_NODE` inherits Electron ASAR require-hooking; integration test guards against regression |
+| Signal handling | Signal handlers in `bds-mcp.ts` only; `startCli()` only listens to stdin-close — no competing handlers |
+| Renderer live updates | Section N: `entity:changed` IPC → store `invalidate()` → refetch |
 
 ---
 
 ## Implementation Order (TDD per AGENTS.md)
 
 1. **Migrations** (A + B) — schema changes first, all other work builds on them
-2. **Decouple `DatabaseConnection` from Electron** (C0) — prerequisite for all CLI code; update existing DB tests to pass explicit paths
+2. **Decouple `DatabaseConnection` from Electron** (C0) — remove `app` import, move `getDataPaths()` to callers, add WAL pragmas; update existing DB tests to pass explicit paths
 3. **`platformConfigPath()`** (C) — pure function, easy to test
 4. **`CliNotifier` + DB writer** (D) — unit tests with mock DB
 5. **Engine `invalidate()` API** (E) — add and test on each engine before NotificationWatcher
 6. **`ScriptEngine`/`TemplateEngine` draft lifecycle** (L) — tests first
-7. **`ProposalStore` DB mapping** (M) — extend existing tests
-8. **`NotificationWatcher`** (F) — test with mock DB rows + mock `fs.watch` emitter
-9. **`MCPAgentConfigEngine` — `claude-desktop` + `removeFromConfig`** (K) — extend existing tests
+7. **`ProposalStore` TTL option + DB mapping** (M) — extend existing tests; add `proposalTtlMs` constructor arg
+8. **`NotificationWatcher`** (F) — test with mock DB rows + mock chokidar emitter (emit `'change'` / `'add'` events on a fake `FSWatcher`)
+9. **`MCPAgentConfigEngine` — `claude-desktop` + `removeFromConfig`** (K) — extend existing tests; verify opencode format before writing its case
 10. **`MCPServer.startCli()`** (G) — test with in-process `StdioServerTransport`
-11. **`src/cli/bds-mcp.ts`** (H) — integration test: spawn process, send `initialize`, assert response, assert clean shutdown on SIGTERM
-12. **Build target + `extraResources`** (I + J) — verify `npm run build` produces bundle and `drizzle/` is co-located
+11. **`src/cli/bds-mcp.ts`** (H) — integration test: spawn process, send `initialize`, assert response, assert clean shutdown on SIGTERM and on stdin-close
+12. **Build target + `extraResources`** (I + J) — verify `npm run build` produces `dist/cli/bds-mcp.cjs`; `drizzle/` entry already in `extraResources`, only add `bds-mcp.cjs`
 13. **UI: Remove buttons** — renderer component changes, follows K
 14. **`NotificationWatcher` wired in `main.ts`** (F, app side) + stopped in `before-quit`
+15. **Renderer `entity:changed` subscription** (N) — `preload.ts` exposure + store `invalidate()` hookup + component subscription
 
 Each step: write failing test → implement → green → next.
