@@ -1,28 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MCPServer, type MCPServerDependencies, DEFAULT_PAGE_SIZE, encodeCursor, decodeCursor } from '../../src/main/engine/MCPServer';
 
-// Mock all engine singletons
-vi.mock('../../src/main/engine/PostEngine', () => ({
-  getPostEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/MediaEngine', () => ({
-  getMediaEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/ScriptEngine', () => ({
-  getScriptEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/TemplateEngine', () => ({
-  getTemplateEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/MetaEngine', () => ({
-  getMetaEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/PostMediaEngine', () => ({
-  getPostMediaEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/TagEngine', () => ({
-  getTagEngine: vi.fn(),
-}));
+
 
 function createMockPostEngine() {
   return {

@@ -517,4 +517,142 @@ describe('TemplateEngine', () => {
       expect(row.title).toBe(originalTitle);
     });
   });
+
+  describe('draft lifecycle', () => {
+    it('createDraftTemplate inserts a row with status draft and content in DB', async () => {
+      const created = await templateEngine.createDraftTemplate({
+        title: 'Draft Post Layout',
+        kind: 'post',
+        content: '<main>{{ post.title }}</main>',
+      });
+
+      expect(created.status).toBe('draft');
+      expect(created.content).toBe('<main>{{ post.title }}</main>');
+      expect(created.slug).toBe('draft_post_layout');
+      expect(mockTemplates.has(created.id)).toBe(true);
+
+      const row = mockTemplates.get(created.id);
+      expect(row.status).toBe('draft');
+      expect(row.content).toBe('<main>{{ post.title }}</main>');
+    });
+
+    it('createDraftTemplate does not write a file to disk', async () => {
+      const fsModule = await import('fs/promises');
+      vi.mocked(fsModule.writeFile).mockClear();
+
+      await templateEngine.createDraftTemplate({
+        title: 'No File Draft',
+        kind: 'list',
+        content: '<main>{{ day_blocks }}</main>',
+      });
+
+      expect(fsModule.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('createDraftTemplate generates a unique slug', async () => {
+      await templateEngine.createDraftTemplate({
+        title: 'Unique Slug',
+        kind: 'post',
+        content: '<main>first</main>',
+      });
+
+      vi.mocked((await import('uuid')).v4).mockReturnValueOnce('mock-template-id-2');
+
+      const second = await templateEngine.createDraftTemplate({
+        title: 'Unique Slug',
+        kind: 'post',
+        content: '<main>second</main>',
+      });
+
+      expect(second.slug).toBe('unique_slug_2');
+    });
+
+    it('publishTemplate writes file and sets status to published', async () => {
+      const draft = await templateEngine.createDraftTemplate({
+        title: 'Publish Me',
+        kind: 'post',
+        content: '<main>{{ post.content }}</main>',
+      });
+
+      const published = await templateEngine.publishTemplate(draft.id);
+
+      expect(published).not.toBeNull();
+      expect(published!.status).toBe('published');
+
+      const row = mockTemplates.get(draft.id);
+      expect(row.status).toBe('published');
+      expect(row.content).toBeNull();
+
+      const fileContent = mockFiles.get(draft.filePath);
+      expect(fileContent).toBeDefined();
+      expect(fileContent).toContain('title: "Publish Me"');
+      expect(fileContent).toContain('{{ post.content }}');
+    });
+
+    it('publishTemplate returns null for non-existent template', async () => {
+      const result = await templateEngine.publishTemplate('nonexistent-id');
+      expect(result).toBeNull();
+    });
+
+    it('publishTemplate calls notifier with updated action', async () => {
+      const mockNotifier = { notify: vi.fn().mockResolvedValue(undefined) };
+      const notifiedEngine = new TemplateEngine(mockNotifier);
+      notifiedEngine.setProjectContext('default', '/mock/userData/projects/default');
+
+      const draft = await notifiedEngine.createDraftTemplate({
+        title: 'Notified Publish',
+        kind: 'post',
+        content: '<main>notify</main>',
+      });
+
+      await notifiedEngine.publishTemplate(draft.id);
+
+      expect(mockNotifier.notify).toHaveBeenCalledWith('template', draft.id, 'updated');
+    });
+
+    it('deleteDraftTemplate removes a draft row from the database', async () => {
+      const draft = await templateEngine.createDraftTemplate({
+        title: 'Delete Draft',
+        kind: 'partial',
+        content: '<footer>draft</footer>',
+      });
+
+      const deleted = await templateEngine.deleteDraftTemplate(draft.id);
+
+      expect(deleted).toBe(true);
+      expect(mockTemplates.size).toBe(0);
+    });
+
+    it('deleteDraftTemplate returns false for non-existent template', async () => {
+      const result = await templateEngine.deleteDraftTemplate('no-such-id');
+      expect(result).toBe(false);
+    });
+
+    it('deleteDraftTemplate returns false for published templates', async () => {
+      const created = await templateEngine.createTemplate({
+        title: 'Published Template',
+        kind: 'post',
+        content: '<main>published</main>',
+      });
+
+      const result = await templateEngine.deleteDraftTemplate(created.id);
+      expect(result).toBe(false);
+    });
+
+    it('deleteDraftTemplate calls notifier with deleted action', async () => {
+      const mockNotifier = { notify: vi.fn().mockResolvedValue(undefined) };
+      const notifiedEngine = new TemplateEngine(mockNotifier);
+      notifiedEngine.setProjectContext('default', '/mock/userData/projects/default');
+
+      const draft = await notifiedEngine.createDraftTemplate({
+        title: 'Notified Delete',
+        kind: 'partial',
+        content: '<footer>notify</footer>',
+      });
+
+      await notifiedEngine.deleteDraftTemplate(draft.id);
+
+      expect(mockNotifier.notify).toHaveBeenCalledWith('template', draft.id, 'deleted');
+    });
+  });
 });

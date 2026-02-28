@@ -445,4 +445,142 @@ describe('ScriptEngine', () => {
       expect(endFn).toHaveBeenCalled();
     });
   });
+
+  describe('draft lifecycle', () => {
+    it('createDraftScript inserts a row with status draft and content in DB', async () => {
+      const created = await scriptEngine.createDraftScript({
+        title: 'Draft Macro',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": "<p>draft</p>"}',
+      });
+
+      expect(created.status).toBe('draft');
+      expect(created.content).toBe('def render(ctx): return {"html": "<p>draft</p>"}');
+      expect(created.slug).toBe('draft_macro');
+      expect(mockScripts.has(created.id)).toBe(true);
+
+      const row = mockScripts.get(created.id);
+      expect(row.status).toBe('draft');
+      expect(row.content).toBe('def render(ctx): return {"html": "<p>draft</p>"}');
+    });
+
+    it('createDraftScript does not write a file to disk', async () => {
+      const fsModule = await import('fs/promises');
+      vi.mocked(fsModule.writeFile).mockClear();
+
+      await scriptEngine.createDraftScript({
+        title: 'No File Draft',
+        kind: 'utility',
+        content: 'print("no file")',
+      });
+
+      expect(fsModule.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('createDraftScript generates a unique slug', async () => {
+      await scriptEngine.createDraftScript({
+        title: 'Unique Slug',
+        kind: 'macro',
+        content: 'pass',
+      });
+
+      vi.mocked((await import('uuid')).v4).mockReturnValueOnce('mock-script-id-2');
+
+      const second = await scriptEngine.createDraftScript({
+        title: 'Unique Slug',
+        kind: 'macro',
+        content: 'pass',
+      });
+
+      expect(second.slug).toBe('unique_slug_2');
+    });
+
+    it('publishScript writes file and sets status to published', async () => {
+      const draft = await scriptEngine.createDraftScript({
+        title: 'Publish Me',
+        kind: 'macro',
+        content: 'def render(ctx): return {"html": "<p>publish</p>"}',
+      });
+
+      const published = await scriptEngine.publishScript(draft.id);
+
+      expect(published).not.toBeNull();
+      expect(published!.status).toBe('published');
+
+      const row = mockScripts.get(draft.id);
+      expect(row.status).toBe('published');
+      expect(row.content).toBeNull();
+
+      const fileContent = mockFiles.get(draft.filePath);
+      expect(fileContent).toBeDefined();
+      expect(fileContent).toContain('title: "Publish Me"');
+      expect(fileContent).toContain('def render');
+    });
+
+    it('publishScript returns null for non-existent script', async () => {
+      const result = await scriptEngine.publishScript('nonexistent-id');
+      expect(result).toBeNull();
+    });
+
+    it('publishScript calls notifier with updated action', async () => {
+      const mockNotifier = { notify: vi.fn().mockResolvedValue(undefined) };
+      const notifiedEngine = new ScriptEngine(mockNotifier);
+      notifiedEngine.setProjectContext('default', '/mock/userData/projects/default');
+
+      const draft = await notifiedEngine.createDraftScript({
+        title: 'Notified Publish',
+        kind: 'macro',
+        content: 'def render(ctx): pass',
+      });
+
+      await notifiedEngine.publishScript(draft.id);
+
+      expect(mockNotifier.notify).toHaveBeenCalledWith('script', draft.id, 'updated');
+    });
+
+    it('deleteDraftScript removes a draft row from the database', async () => {
+      const draft = await scriptEngine.createDraftScript({
+        title: 'Delete Draft',
+        kind: 'utility',
+        content: 'pass',
+      });
+
+      const deleted = await scriptEngine.deleteDraftScript(draft.id);
+
+      expect(deleted).toBe(true);
+      expect(mockScripts.size).toBe(0);
+    });
+
+    it('deleteDraftScript returns false for non-existent script', async () => {
+      const result = await scriptEngine.deleteDraftScript('no-such-id');
+      expect(result).toBe(false);
+    });
+
+    it('deleteDraftScript returns false for published scripts', async () => {
+      const created = await scriptEngine.createScript({
+        title: 'Published Script',
+        kind: 'macro',
+        content: 'def render(ctx): pass',
+      });
+
+      const result = await scriptEngine.deleteDraftScript(created.id);
+      expect(result).toBe(false);
+    });
+
+    it('deleteDraftScript calls notifier with deleted action', async () => {
+      const mockNotifier = { notify: vi.fn().mockResolvedValue(undefined) };
+      const notifiedEngine = new ScriptEngine(mockNotifier);
+      notifiedEngine.setProjectContext('default', '/mock/userData/projects/default');
+
+      const draft = await notifiedEngine.createDraftScript({
+        title: 'Notified Delete',
+        kind: 'utility',
+        content: 'pass',
+      });
+
+      await notifiedEngine.deleteDraftScript(draft.id);
+
+      expect(mockNotifier.notify).toHaveBeenCalledWith('script', draft.id, 'deleted');
+    });
+  });
 });
