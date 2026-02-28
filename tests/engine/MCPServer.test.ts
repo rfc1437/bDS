@@ -446,6 +446,38 @@ describe('MCPServer', () => {
     });
   });
 
+  // ── Tool visibility ─────────────────────────────────────────────────
+
+  describe('tool visibility', () => {
+    function getToolMeta(toolName: string): Record<string, unknown> | undefined {
+      const mcpServer = server.createMcpServer();
+      const tool = (mcpServer as Record<string, Record<string, { _meta?: Record<string, unknown> }>>)._registeredTools[toolName];
+      return tool?._meta;
+    }
+
+    it('accept_proposal has app-only visibility', () => {
+      const meta = getToolMeta('accept_proposal');
+      expect(meta).toBeDefined();
+      const ui = (meta as Record<string, unknown>).ui as Record<string, unknown>;
+      expect(ui?.visibility).toEqual(['app']);
+    });
+
+    it('discard_proposal has app-only visibility', () => {
+      const meta = getToolMeta('discard_proposal');
+      expect(meta).toBeDefined();
+      const ui = (meta as Record<string, unknown>).ui as Record<string, unknown>;
+      expect(ui?.visibility).toEqual(['app']);
+    });
+
+    it('draft_post has model+app visibility (default)', () => {
+      const meta = getToolMeta('draft_post');
+      expect(meta).toBeDefined();
+      const ui = (meta as Record<string, unknown>).ui as Record<string, unknown>;
+      // no explicit visibility = default ["model", "app"]
+      expect(ui?.visibility).toBeUndefined();
+    });
+  });
+
   // ── Resource handler behavior ───────────────────────────────────────
 
   describe('resource handlers', () => {
@@ -543,6 +575,28 @@ describe('MCPServer', () => {
       expect(JSON.parse(result.content[0].text)).toEqual(searchResults);
     });
 
+    it('search_posts with query applies offset and limit', async () => {
+      const searchResults = Array.from({ length: 10 }, (_, i) => ({ id: `p${i}`, title: `Post ${i}`, slug: `post-${i}` }));
+      mockPostEngine.searchPosts.mockResolvedValue(searchResults);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ query: 'test', offset: 2, limit: 3 }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed).toHaveLength(3);
+      expect(parsed[0].id).toBe('p2');
+      expect(parsed[2].id).toBe('p4');
+    });
+
+    it('search_posts defaults to limit 50 when not specified', async () => {
+      const searchResults = Array.from({ length: 60 }, (_, i) => ({ id: `p${i}`, title: `Post ${i}`, slug: `post-${i}` }));
+      mockPostEngine.searchPosts.mockResolvedValue(searchResults);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ query: 'test' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed).toHaveLength(50);
+    });
+
     it('search_posts with filters only calls getPostsFiltered', async () => {
       const filtered = [{ id: 'p2', title: 'Filtered' }];
       mockPostEngine.getPostsFiltered.mockResolvedValue(filtered);
@@ -551,6 +605,17 @@ describe('MCPServer', () => {
       const result = await tool.handler({ category: 'tech', status: 'published' }, {}) as { content: Array<{ text: string }> };
       expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith({ categories: ['tech'], status: 'published' });
       expect(JSON.parse(result.content[0].text)).toEqual(filtered);
+    });
+
+    it('search_posts with filters applies offset and limit', async () => {
+      const filtered = Array.from({ length: 10 }, (_, i) => ({ id: `p${i}`, title: `Post ${i}` }));
+      mockPostEngine.getPostsFiltered.mockResolvedValue(filtered);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ category: 'tech', offset: 3, limit: 2 }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0].id).toBe('p3');
     });
 
     it('search_posts with query + filters uses getPostsFiltered and client-side text filter', async () => {

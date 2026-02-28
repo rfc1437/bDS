@@ -24,7 +24,7 @@ MCPServer (HTTP on 127.0.0.1:4124)           ← NEW, standalone
        └── ui:// resources → MCP App review Views (via ext-apps)
 ```
 
-The MCP SDK provides `createMcpExpressApp` which sets up Express with the correct Streamable HTTP handling. We use stateless mode (new `McpServer` per request) to avoid session management complexity.
+The MCP SDK provides `StreamableHTTPServerTransport` for HTTP handling. We use Node's `http.createServer` directly with stateless mode (new `McpServer` per request) to avoid session management complexity and the Express dependency.
 
 `MCPServer` is a new engine class that owns the `McpServer` factory, tool/resource/prompt registration, and the `ProposalStore`. It runs independently of PreviewServer.
 
@@ -44,7 +44,7 @@ npm install @modelcontextprotocol/sdk @modelcontextprotocol/ext-apps
 ### Step 3: MCPServer engine (`src/main/engine/MCPServer.ts`)
 - Constructor: inject engine getters (PostEngine, MediaEngine, ScriptEngine, TemplateEngine, MetaEngine, PostMediaEngine, TagEngine)
 - `createServer()` → factory that instantiates a fresh `McpServer` and registers all tools/resources/prompts (stateless mode — one per request)
-- `start(port)` → uses `createMcpExpressApp` + `StreamableHTTPServerTransport` in stateless mode, listens on `127.0.0.1:port`
+- `start(port)` → uses `http.createServer` + `StreamableHTTPServerTransport` in stateless mode, listens on `127.0.0.1:port`, validates Origin header
 - `stop()` → close HTTP server
 - `cleanup()` → discard proposals, stop intervals, stop server
 - Singleton pattern with `getMCPServer()` getter
@@ -65,6 +65,7 @@ Register MCP resources mapping to existing engine methods:
 | `bds://posts/{id}/outlinks` | PostEngine.getLinksTo(id) |
 | `bds://posts/{id}/media` | PostMediaEngine.getLinkedMediaDataForPost(id) |
 | `bds://media/{id}/posts` | PostMediaEngine.getLinkedPostsForMedia(id) |
+| `bds://media/{id}/image` | MediaEngine.getThumbnailDataUrl(id, 'medium') |
 
 ### Step 5: Read tools
 - `search_posts` — annotations: `{ readOnlyHint: true, openWorldHint: false }`
@@ -88,6 +89,7 @@ Resource registration uses `registerAppResource` from `@modelcontextprotocol/ext
 ### Step 7: Accept/discard tools
 - `accept_proposal({ proposalId })` — dispatch by type, commit change
 - `discard_proposal({ proposalId })` — dispatch by type, clean up
+- Registered via `registerAppTool` with `visibility: ["app"]` (app-only, hidden from agent LLM)
 - Annotations: idempotentHint: true
 
 ### Step 8: MCP Prompts
@@ -109,7 +111,7 @@ Each View:
 3. On accept/discard: calls `app.callServerTool({ name: 'accept_proposal' | 'discard_proposal', arguments: { proposalId } })`
 4. Updates UI to show outcome
 
-Build step: `vite build` with `vite-plugin-singlefile` bundles each into a self-contained HTML string. These are read at runtime by `registerAppResource` handlers.
+Build step: Review Views are inline HTML template strings in `mcp-views.ts` — no separate build step needed.
 
 ### Step 10: Lifecycle in main.ts
 - MCPServer starts independently alongside PreviewServer during app init
@@ -136,12 +138,8 @@ Each step above is preceded by failing tests:
 |---|---|
 | `src/main/engine/ProposalStore.ts` | NEW — in-memory proposal storage |
 | `src/main/engine/MCPServer.ts` | NEW — standalone MCP server engine |
-| `src/main/mcp-apps/review-post.html` | NEW — post review View |
-| `src/main/mcp-apps/review-script.html` | NEW — script review View |
-| `src/main/mcp-apps/review-template.html` | NEW — template review View |
-| `src/main/mcp-apps/review-metadata.html` | NEW — metadata diff View |
-| `src/main/mcp-apps/src/*.ts` | NEW — View scripts using `App` class |
-| `src/main/mcp-apps/vite.config.ts` | NEW — builds Views into single HTML files |
+| `src/main/engine/mcp-views.ts` | NEW — inline review View HTML templates |
+| `tests/engine/mcp-views.test.ts` | NEW |
 | `src/main/main.ts` | MODIFY — start/cleanup MCPServer |
 | `tests/engine/ProposalStore.test.ts` | NEW |
 | `tests/engine/MCPServer.test.ts` | NEW |

@@ -109,8 +109,51 @@ describe('MCPServer integration', () => {
       method: 'OPTIONS',
     });
     expect(response.status).toBe(204);
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeTruthy();
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+  });
+
+  it('rejects requests from non-local origins', async () => {
+    const port = await server.start(0);
+    const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://evil-site.com',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } },
+      }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('allows requests from localhost origins', async () => {
+    const port = await server.start(0);
+    const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'Origin': `http://localhost:${port}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } },
+      }),
+    });
+    expect(response.status).not.toBe(403);
+  });
+
+  it('allows requests without Origin header', async () => {
+    const port = await server.start(0);
+    const result = await initializeSession(port) as { result?: { serverInfo?: { name: string } } };
+    expect(result.result?.serverInfo?.name).toBe('Blogging Desktop Server');
   });
 
   it('lists tools via tools/list after initialize', async () => {

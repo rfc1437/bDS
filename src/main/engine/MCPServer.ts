@@ -17,6 +17,14 @@ import {
 
 // ── Dependency contracts ──────────────────────────────────────────────
 
+export interface PostFilter {
+  status?: 'draft' | 'published' | 'archived';
+  tags?: string[];
+  categories?: string[];
+  year?: number;
+  month?: number;
+}
+
 interface PostEngineContract {
   getAllPosts: (options?: { limit?: number; offset?: number }) => Promise<{ items: Array<Record<string, unknown>>; hasMore: boolean; total: number }>;
   getPost: (id: string) => Promise<Record<string, unknown> | null>;
@@ -30,7 +38,7 @@ interface PostEngineContract {
   getBlogStats: () => Promise<Record<string, unknown>>;
   getLinkedBy: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
   getLinksTo: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
-  getPostsFiltered: (filter: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
+  getPostsFiltered: (filter: PostFilter) => Promise<Array<Record<string, unknown>>>;
 }
 
 interface MediaEngineContract {
@@ -109,8 +117,26 @@ export class MCPServer {
     }
 
     const app = createHttpServer(async (req, res) => {
+      // Origin validation — reject requests from non-localhost origins
+      // to prevent DNS rebinding attacks
+      const origin = req.headers['origin'];
+      if (origin) {
+        try {
+          const originUrl = new URL(origin);
+          if (originUrl.hostname !== '127.0.0.1' && originUrl.hostname !== 'localhost') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Forbidden: non-local origin' }));
+            return;
+          }
+        } catch {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Forbidden: invalid origin' }));
+          return;
+        }
+      }
+
       // CORS headers
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Origin', origin ?? 'http://127.0.0.1');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
@@ -347,15 +373,18 @@ export class MCPServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     }, async (args) => {
       const hasFilters = args.category || args.tags || args.year || args.month || args.status;
+      const offset = args.offset ?? 0;
+      const limit = args.limit ?? 50;
 
       if (args.query && !hasFilters) {
         // Pure text search — use FTS
         const results = await this.deps.getPostEngine().searchPosts(args.query);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
+        const paginated = results.slice(offset, offset + limit);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
       }
 
       // Filter-based query (optionally narrowed by text search)
-      const filter: Record<string, unknown> = {};
+      const filter: PostFilter = {};
       if (args.category) filter.categories = [args.category];
       if (args.tags) filter.tags = args.tags;
       if (args.year) filter.year = args.year;
@@ -374,7 +403,8 @@ export class MCPServer {
         });
       }
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
+      const paginated = results.slice(offset, offset + limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
     });
   }
 
@@ -536,26 +566,28 @@ export class MCPServer {
   }
 
   private registerAcceptDiscardTools(server: McpServer): void {
-    server.registerTool('accept_proposal', {
+    registerAppTool(server, 'accept_proposal', {
       title: 'Accept Proposal',
       description: 'Accept a pending proposal, committing the proposed change.',
       inputSchema: {
         proposalId: z.string().describe('ID of the proposal to accept'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    }, async (args) => {
+      _meta: { ui: { visibility: ['app'] } },
+    }, async (args: { proposalId: string }) => {
       const result = await this.acceptProposal(args.proposalId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     });
 
-    server.registerTool('discard_proposal', {
+    registerAppTool(server, 'discard_proposal', {
       title: 'Discard Proposal',
       description: 'Discard a pending proposal, rolling back any draft changes.',
       inputSchema: {
         proposalId: z.string().describe('ID of the proposal to discard'),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-    }, async (args) => {
+      _meta: { ui: { visibility: ['app'] } },
+    }, async (args: { proposalId: string }) => {
       const result = await this.discardProposal(args.proposalId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     });

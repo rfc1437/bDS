@@ -284,14 +284,18 @@ anything enters the system.
 - **`@modelcontextprotocol/sdk` v1.27.1 and `@modelcontextprotocol/ext-apps`
   v1.1.2 are installed.**
 - **`ProposalStore` engine is implemented and tested (18 tests).**
-- **`MCPServer` engine is implemented and tested (37 tests).** Standalone HTTP
+- **`MCPServer` engine is implemented and tested (70 tests).** Standalone HTTP
   server on port 4124, stateless mode (new `McpServer` per request), registers
-  5 static resources, 6 resource templates, 8 tools, 3 prompts, and 4
-  `ui://` review-app resources.
+  5 static resources, 7 resource templates, 8 tools (6 model-facing +
+  2 app-only), 3 prompts, and 4 `ui://` review-app resources.
 - **`mcp-views.ts` provides review HTML** for posts, scripts, templates, and
   metadata diffs via `@modelcontextprotocol/ext-apps` App class.
 - **Lifecycle integrated in `main.ts`** — MCP server starts on app ready and
   cleans up on before-quit.
+- **Origin validation** — rejects requests from non-localhost origins to
+  prevent DNS rebinding attacks.
+- **`accept_proposal` / `discard_proposal` use app-only visibility** via
+  `registerAppTool` with `visibility: ["app"]` — hidden from the agent LLM.
 
 ### Design Principles
 
@@ -352,10 +356,9 @@ anything enters the system.
    accordingly (structured preview data for Apps-capable hosts, formatted
    text for others).
 
-7. **Input validation and rate limiting** — all tool inputs are validated
-   at the MCP boundary before forwarding to engine methods. The server
-   rate-limits tool invocations to prevent abuse. Do not rely solely on
-   downstream engine validation.
+7. **Input validation** — all tool inputs are validated at the MCP
+   boundary (via Zod schemas in `inputSchema`) before forwarding to
+   engine methods. Do not rely solely on downstream engine validation.
 
 ### Implementation Plan
 
@@ -413,9 +416,12 @@ actions. Each resource is registered via `resources/list` and read via
 | `bds://media/{id}/image`         | OpenCodeManager.view_image       | Image binary (for visual context)  |
 
 Use `bds://` as the custom URI scheme. Parameterized URIs use MCP resource
-templates (`resources/templates/list`). Emit `notifications/resources/
-list_changed` when posts, media, or tags are created/updated/deleted so
-the host can refresh cached data.
+templates (`resources/templates/list`).
+
+Note: `notifications/resources/list_changed` is not emitted because the
+server runs in stateless mode (new `McpServer` per request, no persistent
+connection). If the server moves to session-based mode in the future,
+change notifications should be added.
 
 List resources (`bds://posts`, `bds://media`) support cursor-based
 pagination following the MCP pagination spec. The initial response
@@ -565,9 +571,10 @@ Stages metadata changes for an existing post (title, excerpt, slug, tags).
 #### 3.6 App-Internal Tools (Accept / Discard)
 
 These tools are called by the MCP App (via the App Bridge's `tools/call`
-mechanism), **not** by the agent LLM. The host forwards the call from the
-sandboxed iframe to the MCP server. They are not listed in `tools/list`
-responses to agents.
+mechanism), **not** by the agent LLM. They are registered with
+`registerAppTool` from `@modelcontextprotocol/ext-apps` using
+`visibility: ["app"]`, which signals to compliant hosts that these tools
+should not be shown to or invoked by the model.
 
 ##### `accept_proposal`
 
@@ -656,32 +663,19 @@ tools know to call PostEngine rather than look in the store.
 
 #### 3.9 Transport
 
-Support two transports:
+**Streamable HTTP** — standalone HTTP server on port 4124 using
+`StreamableHTTPServerTransport` in stateless mode (new `McpServer` per
+request). A single HTTP endpoint at `/mcp` accepts JSON-RPC POST
+requests and responds with `application/json` or `text/event-stream`
+(SSE).
 
-- **stdio** — for local integration (agent runs `bds --mcp` or connects via
-  named pipe). This is the standard for MCP in coding agents. Credentials
-  come from the environment.
-- **Streamable HTTP** — for network access, running alongside PreviewServer
-  on a different port (e.g., 5174). Uses the current MCP Streamable HTTP
-  transport: a single HTTP endpoint that accepts JSON-RPC POST requests and
-  responds with either `application/json` (single response) or
-  `text/event-stream` (SSE stream for multiple messages). Supports session
-  management via `Mcp-Session-Id` headers and requires
-  `MCP-Protocol-Version` headers after initialization.
+**Security:**
 
-Start with stdio since that is what Claude Code and Cursor use.
-
-**Security requirements for Streamable HTTP:**
-
-- Bind to `127.0.0.1` (localhost only) when running locally.
-- Validate the `Origin` header on all requests to prevent DNS rebinding
-  attacks.
-- Use cryptographically random, non-deterministic session IDs.
-- Implement a session token or shared secret for authentication (generated
-  on server start, displayed in the settings UI for the user to configure
-  in their agent).
-- Rate-limit incoming requests.
-- Set appropriate timeouts for tool invocations.
+- Bind to `127.0.0.1` (localhost only).
+- Validate the `Origin` header on all requests — reject non-localhost
+  origins to prevent DNS rebinding attacks.
+- Requests without an `Origin` header are allowed (CLI tools like curl
+  and local MCP clients typically do not send one).
 
 #### 3.10 Lifecycle Integration
 
