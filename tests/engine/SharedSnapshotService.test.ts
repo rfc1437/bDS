@@ -59,7 +59,7 @@ function makeEngine(posts: PostData[], snapshotsById: Record<string, PostData | 
       }
 
       if (filter.month !== undefined && filter.year !== undefined) {
-        result = result.filter((post) => post.createdAt.getMonth() === filter.month);
+        result = result.filter((post) => post.createdAt.getMonth() === filter.month - 1);
       }
 
       if (filter.startDate) {
@@ -110,7 +110,7 @@ describe('SharedSnapshotService', () => {
       engine,
       'my-post',
       { useDraftContent: true, draftPostId: 'draft-1' },
-      { year: 2025, month: 2, day: 21 },
+      { year: 2025, month: 3, day: 21 },
     );
 
     expect(result?.id).toBe('draft-1');
@@ -125,7 +125,7 @@ describe('SharedSnapshotService', () => {
       findPublishedBySlug,
     };
 
-    const result = await findSinglePostBySlug(engineWithShortcut, 'shortcut', undefined, { year: 2025, month: 0, day: 2 });
+    const result = await findSinglePostBySlug(engineWithShortcut, 'shortcut', undefined, { year: 2025, month: 1, day: 2 });
 
     expect(result?.id).toBe('x1');
     expect(findPublishedBySlug).toHaveBeenCalled();

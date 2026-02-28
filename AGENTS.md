@@ -1,16 +1,11 @@
-# GitHub Copilot Instructions for Blogging Desktop Server (bDS)
+# Agents Instructions for Blogging Desktop Server (bDS)
 
 This document provides context and best practices for GitHub Copilot when working on this Electron + TypeScript + SQLite blogging application.
 
-## Project Overview
+## Plan Mode
 
-**Blogging Desktop Server (bDS)** is a desktop blogging application built with:
-- **Electron** v28+ for cross-platform desktop
-- **TypeScript** for all code (strict mode)
-- **React** for the renderer UI
-- **Drizzle ORM** for type-safe database access
-- **@libsql/client** for SQLite (local database)
-- **Zustand** for React state management
+- Make the plan extremely concise. Sacrifice grammar for the sake of concision.
+- At the end of each plan, give me a list of unresolved questions to answer, if any.
 
 ---
 
@@ -143,7 +138,3 @@ This document provides context and best practices for GitHub Copilot when workin
 - Store Dropbox auth tokens in secure storage, not in code
 - Sanitize user input before rendering (XSS prevention)
 
-## Plan Mode
-
-- Make the plan extremely concise. Sacrifice grammar for the sake of concision.
-- At the end of each plan, give me a list of unresolved questions to answer, if any.

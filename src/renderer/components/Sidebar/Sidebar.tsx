@@ -167,7 +167,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onDateSelect, selectedYear,
                       onDateSelect(year, month);
                     }}
                   >
-                    <span className="month-label">{MONTH_NAMES[month]}</span>
+                    <span className="month-label">{MONTH_NAMES[month - 1]}</span>
                     <span className="month-count">{count}</span>
                   </div>
                 ))}
@@ -374,7 +374,7 @@ const MediaCalendarView: React.FC<MediaCalendarViewProps> = ({ onDateSelect, sel
                       onDateSelect(year, month);
                     }}
                   >
-                    <span className="month-label">{MONTH_NAMES[month]}</span>
+                    <span className="month-label">{MONTH_NAMES[month - 1]}</span>
                     <span className="month-count">{count}</span>
                   </div>
                 ))}
@@ -1261,7 +1261,7 @@ const SettingsNav: React.FC = () => {
   const { tabs, activeTabId, openTab } = useAppStore();
   const [activeSection, setActiveSection] = useState<SettingsCategory | null>(() => {
     const persisted = getPersistedSidebarSection('settings');
-    if (persisted === 'project' || persisted === 'editor' || persisted === 'content' || persisted === 'ai' || persisted === 'technology' || persisted === 'publishing' || persisted === 'data') {
+    if (persisted === 'project' || persisted === 'editor' || persisted === 'content' || persisted === 'ai' || persisted === 'technology' || persisted === 'publishing' || persisted === 'data' || persisted === 'mcp') {
       return persisted;
     }
     return null;
@@ -1342,6 +1342,13 @@ const SettingsNav: React.FC = () => {
         >
           <span className="settings-nav-entry-icon">🗄️</span>
           <span>{t('sidebar.nav.data')}</span>
+        </button>
+        <button 
+          className={`settings-nav-entry ${activeSection === 'mcp' ? 'active' : ''}`}
+          onClick={() => handleNavClick('mcp')}
+        >
+          <span className="settings-nav-entry-icon">🔌</span>
+          <span>{t('sidebar.nav.mcp')}</span>
         </button>
         <button
           className={`settings-nav-entry ${isStyleTabActive ? 'active' : ''}`}

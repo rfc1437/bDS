@@ -818,9 +818,9 @@ export class MediaEngine extends EventEmitter {
     }
 
     if (filter.month !== undefined && filter.year !== undefined) {
-      // Use UTC dates to avoid timezone issues
-      const startOfMonth = new Date(Date.UTC(filter.year, filter.month, 1));
-      const endOfMonth = new Date(Date.UTC(filter.year, filter.month + 1, 1));
+      // Use UTC dates to avoid timezone issues (filter.month is 1-indexed)
+      const startOfMonth = new Date(Date.UTC(filter.year, filter.month - 1, 1));
+      const endOfMonth = new Date(Date.UTC(filter.year, filter.month, 1));
       console.log(`[MediaEngine] Month filter: ${startOfMonth.toISOString()} to ${endOfMonth.toISOString()}`);
       conditions.push(gte(media.createdAt, startOfMonth));
       conditions.push(lt(media.createdAt, endOfMonth));
@@ -912,7 +912,7 @@ export class MediaEngine extends EventEmitter {
 
     for (const item of allMedia) {
       const year = item.createdAt.getFullYear();
-      const month = item.createdAt.getMonth();
+      const month = item.createdAt.getMonth() + 1; // 1-indexed
       const key = `${year}-${month}`;
       const current = counts.get(key) || { year, month, count: 0 };
       current.count++;

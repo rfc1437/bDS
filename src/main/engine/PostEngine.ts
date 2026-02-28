@@ -770,8 +770,8 @@ export class PostEngine extends EventEmitter {
     }
 
     if (filter.month !== undefined && filter.year !== undefined) {
-      const startOfMonth = new Date(filter.year, filter.month, 1);
-      const endOfMonth = new Date(filter.year, filter.month + 1, 1);
+      const startOfMonth = new Date(filter.year, filter.month - 1, 1);
+      const endOfMonth = new Date(filter.year, filter.month, 1);
       conditions.push(gte(posts.createdAt, startOfMonth));
       conditions.push(lte(posts.createdAt, endOfMonth));
     }
@@ -857,6 +857,107 @@ export class PostEngine extends EventEmitter {
       return searchResults;
     } catch (error) {
       console.error('Search failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Combined FTS search + structural filters in a single SQL query.
+   * Returns full PostData ordered by FTS rank, filtered by the given criteria.
+   * Both MCP and internal AI tools use this for query+filter combinations.
+   */
+  async searchPostsFiltered(
+    query: string,
+    filter: PostFilter,
+    pagination?: PaginationOptions,
+  ): Promise<PostData[]> {
+    if (!query.trim()) return [];
+
+    const client = getDatabase().getLocalClient();
+    if (!client) return [];
+
+    try {
+      const stemmedQuery = stemQuery(query, this.searchLanguage);
+
+      // Build WHERE clauses and args for the joined query
+      const conditions: string[] = [
+        'posts_fts.project_id = ?',
+        'posts_fts.MATCH ?',
+      ];
+      const args: (string | number | Date)[] = [this.currentProjectId, stemmedQuery];
+
+      if (filter.status) {
+        conditions.push('posts.status = ?');
+        args.push(filter.status);
+      }
+      if (filter.year !== undefined) {
+        const startOfYear = new Date(filter.year, 0, 1);
+        const endOfYear = new Date(filter.year + 1, 0, 1);
+        conditions.push('posts.created_at >= ?');
+        args.push(startOfYear);
+        conditions.push('posts.created_at <= ?');
+        args.push(endOfYear);
+      }
+      if (filter.month !== undefined && filter.year !== undefined) {
+        const startOfMonth = new Date(filter.year, filter.month - 1, 1);
+        const endOfMonth = new Date(filter.year, filter.month, 1);
+        conditions.push('posts.created_at >= ?');
+        args.push(startOfMonth);
+        conditions.push('posts.created_at <= ?');
+        args.push(endOfMonth);
+      }
+      if (filter.categories && filter.categories.length > 0) {
+        const catClauses = filter.categories.map(() =>
+          `EXISTS (SELECT 1 FROM json_each(posts.categories) AS c WHERE c.value = ?)`
+        );
+        conditions.push(`(${catClauses.join(' OR ')})`);
+        args.push(...filter.categories);
+      }
+      if (filter.excludeCategories && filter.excludeCategories.length > 0) {
+        const exClauses = filter.excludeCategories.map(() =>
+          `EXISTS (SELECT 1 FROM json_each(posts.categories) AS c WHERE c.value = ?)`
+        );
+        conditions.push(`NOT (${exClauses.join(' OR ')})`);
+        args.push(...filter.excludeCategories);
+      }
+      if (filter.startDate) {
+        conditions.push('posts.created_at >= ?');
+        args.push(filter.startDate);
+      }
+      if (filter.endDate) {
+        conditions.push('posts.created_at <= ?');
+        args.push(filter.endDate);
+      }
+
+      const whereClause = conditions.join(' AND ');
+      const sqlQuery = `
+        SELECT posts.*
+        FROM posts_fts
+        JOIN posts ON posts_fts.id = posts.id
+        WHERE ${whereClause}
+        ORDER BY posts_fts.rank
+        LIMIT 500
+      `;
+
+      const result = await client.execute({ sql: sqlQuery, args });
+
+      let postDataList: PostData[] = result.rows.map((row) =>
+        this.dbRowToPostData(row as unknown as Post, (row.content as string) || '')
+      );
+
+      // Tag filtering is done client-side (tags are stored as JSON arrays)
+      if (filter.tags && filter.tags.length > 0) {
+        postDataList = postDataList.filter((p) =>
+          filter.tags!.every((tag) => p.tags.includes(tag))
+        );
+      }
+
+      // Apply pagination
+      const offset = pagination?.offset ?? 0;
+      const limit = pagination?.limit ?? postDataList.length;
+      return postDataList.slice(offset, offset + limit);
+    } catch (error) {
+      console.error('Search with filters failed:', error);
       return [];
     }
   }
@@ -1025,7 +1126,7 @@ export class PostEngine extends EventEmitter {
 
     for (const post of allPosts) {
       const year = post.createdAt.getFullYear();
-      const month = post.createdAt.getMonth();
+      const month = post.createdAt.getMonth() + 1; // 1-indexed
       const key = `${year}-${month}`;
       const current = counts.get(key) || { year, month, count: 0 };
       current.count++;

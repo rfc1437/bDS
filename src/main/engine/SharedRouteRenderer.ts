@@ -180,7 +180,7 @@ async function resolveRouteWithSharedServices(
     const month = Number(daySlugMatch[2]);
     const day = Number(daySlugMatch[3]);
     const slug = daySlugMatch[4];
-    const post = await services.findSinglePostBySlug(slug, singlePostOptions, { year, month: month - 1, day });
+    const post = await services.findSinglePostBySlug(slug, singlePostOptions, { year, month, day });
     if (!post) return null;
     return services.pageRenderer.renderSinglePost(post, rewriteContext, {
       page_title: pageContext.pageTitle,
@@ -224,7 +224,7 @@ async function resolveRouteWithSharedServices(
     const year = Number(monthMatch[1]);
     const month = Number(monthMatch[2]);
     if (month < 1 || month > 12) return null;
-    const result = await services.loadPublishedSnapshotsPage({ status: 'published', year, month: month - 1, excludeCategories: listExcludedCategories }, pageOptions);
+    const result = await services.loadPublishedSnapshotsPage({ status: 'published', year, month, excludeCategories: listExcludedCategories }, pageOptions);
     return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
       archiveGrouping: true,
       routeKind: 'date',

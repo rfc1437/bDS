@@ -975,5 +975,21 @@
   "importAnalysis.macroUses": "{count} usos",
   "importAnalysis.usedIn": "Usado en: {items}{more}",
   "importAnalysis.moreSuffix": ", +{count} más",
-  "importAnalysis.noParameters": "(sin parámetros)"
+  "importAnalysis.noParameters": "(sin parámetros)",
+
+  "sidebar.nav.mcp": "Servidor MCP",
+
+  "settings.mcp.title": "Servidor MCP",
+  "settings.mcp.description": "Configure el servidor Model Context Protocol que permite a los agentes de programación IA interactuar con su blog.",
+  "settings.mcp.statusLabel": "Estado del servidor",
+  "settings.mcp.statusDescription": "Estado actual del servidor MCP.",
+  "settings.mcp.portRunning": "Ejecutándose en el puerto {port}",
+  "settings.mcp.portStopped": "No está en ejecución",
+  "settings.mcp.agentsTitle": "Configuración de agentes",
+  "settings.mcp.agentsDescription": "Añada el servidor MCP de bDS a la configuración de su agente de programación. Las configuraciones existentes se conservan.",
+  "settings.mcp.addToAgent": "Añadir a {agent}",
+  "settings.mcp.alreadyConfigured": "Configurado",
+  "settings.toast.mcpConfigSuccess": "Servidor MCP de bDS añadido a la configuración de {agent}",
+  "settings.toast.mcpConfigFailed": "Error al configurar {agent}: {error}",
+  "settings.toast.mcpConfigPath": "Configuración escrita en {path}"
 }

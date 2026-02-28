@@ -2418,6 +2418,69 @@ Published snapshot content`);
     });
   });
 
+  describe('searchPostsFiltered', () => {
+    it('should return empty array for empty query', async () => {
+      const result = await postEngine.searchPostsFiltered('', {});
+      expect(result).toEqual([]);
+    });
+
+    it('should use FTS JOIN with posts table to combine search and filters', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { id: 'p1', projectId: 'test-project', title: 'Found', slug: 'found', excerpt: 'Excerpt', content: 'Content', status: 'published', author: null, createdAt: new Date(), updatedAt: new Date(), publishedAt: null, tags: '["js"]', categories: '["tech"]', filePath: null, version: 1, stemmedTitle: '', stemmedContent: '', language: 'en', translationOfId: null, templateSlug: null },
+        ],
+      });
+
+      const result = await postEngine.searchPostsFiltered('search term', { status: 'published' });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('p1');
+
+      // Verify SQL includes both MATCH and status filter
+      const call = vi.mocked(mockLocalClient.execute).mock.calls[0]?.[0] as { sql?: string } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('match');
+      expect(sql).toContain('status');
+      expect(sql).toContain('order by');
+      expect(sql).toContain('rank');
+    });
+
+    it('should apply category filter in SQL', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.searchPostsFiltered('term', { categories: ['tech'] });
+
+      const call = vi.mocked(mockLocalClient.execute).mock.calls[0]?.[0] as { sql?: string } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('match');
+      expect(sql).toContain('json_each');
+    });
+
+    it('should apply tag filter client-side after SQL query', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { id: 'p1', projectId: 'test-project', title: 'Has Tag', slug: 'has-tag', excerpt: null, content: '', status: 'published', author: null, createdAt: new Date(), updatedAt: new Date(), publishedAt: null, tags: '["js", "react"]', categories: '[]', filePath: null, version: 1, stemmedTitle: '', stemmedContent: '', language: 'en', translationOfId: null, templateSlug: null },
+          { id: 'p2', projectId: 'test-project', title: 'No Tag', slug: 'no-tag', excerpt: null, content: '', status: 'published', author: null, createdAt: new Date(), updatedAt: new Date(), publishedAt: null, tags: '["python"]', categories: '[]', filePath: null, version: 1, stemmedTitle: '', stemmedContent: '', language: 'en', translationOfId: null, templateSlug: null },
+        ],
+      });
+
+      const result = await postEngine.searchPostsFiltered('term', { tags: ['js'] });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('p1');
+    });
+
+    it('should apply pagination with offset and limit', async () => {
+      const rows = Array.from({ length: 5 }, (_, i) => ({
+        id: `p${i}`, projectId: 'test-project', title: `Post ${i}`, slug: `post-${i}`, excerpt: null, content: '', status: 'published', author: null, createdAt: new Date(), updatedAt: new Date(), publishedAt: null, tags: '[]', categories: '[]', filePath: null, version: 1, stemmedTitle: '', stemmedContent: '', language: 'en', translationOfId: null, templateSlug: null,
+      }));
+      mockLocalClient.execute.mockResolvedValueOnce({ rows });
+
+      const result = await postEngine.searchPostsFiltered('term', {}, { offset: 1, limit: 2 });
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('p1');
+      expect(result[1].id).toBe('p2');
+    });
+  });
+
   describe('getTagsWithCounts', () => {
     it('should return empty array when no posts have tags', async () => {
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
@@ -2590,10 +2653,10 @@ Published snapshot content`);
 
       const result = await postEngine.getPostsByYearMonth();
 
-      // Note: getMonth() returns 0-11, so January is 0, February is 1, etc.
-      expect(result).toContainEqual({ year: 2024, month: 0, count: 2 }); // January
-      expect(result).toContainEqual({ year: 2024, month: 1, count: 1 }); // February
-      expect(result).toContainEqual({ year: 2023, month: 11, count: 1 }); // December
+      // months are 1-indexed (January=1, February=2, etc.)
+      expect(result).toContainEqual({ year: 2024, month: 1, count: 2 }); // January
+      expect(result).toContainEqual({ year: 2024, month: 2, count: 1 }); // February
+      expect(result).toContainEqual({ year: 2023, month: 12, count: 1 }); // December
     });
 
     it('should sort by year and month descending', async () => {
@@ -2614,7 +2677,7 @@ Published snapshot content`);
       const result = await postEngine.getPostsByYearMonth();
 
       expect(result[0].year).toBe(2024);
-      expect(result[0].month).toBe(2); // March (0-indexed)
+      expect(result[0].month).toBe(3); // March (1-indexed)
       expect(result[result.length - 1].year).toBe(2023);
     });
   });

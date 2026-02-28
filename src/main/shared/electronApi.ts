@@ -836,5 +836,11 @@ export interface ElectronAPI {
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;
+  mcp: {
+    getAgents: () => Promise<Array<{ id: string; label: string }>>;
+    addToAgentConfig: (agentId: string) => Promise<{ success: boolean; configPath: string; error?: string }>;
+    isConfigured: (agentId: string) => Promise<boolean>;
+    getPort: () => Promise<number | null>;
+  };
 }
 

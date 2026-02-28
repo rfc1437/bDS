@@ -1380,7 +1380,7 @@ tags: ["nature", "sunset"]`;
         return chain;
       });
 
-      const result = await mediaEngine.getMediaFiltered({ year: 2024, month: 5 }); // June (0-indexed)
+      const result = await mediaEngine.getMediaFiltered({ year: 2024, month: 6 }); // June (1-indexed)
       expect(result).toHaveLength(1);
     });
 
@@ -1452,9 +1452,9 @@ tags: ["nature", "sunset"]`;
 
       const result = await mediaEngine.getMediaByYearMonth();
 
-      // Note: month is 0-indexed from Date.getMonth()
-      expect(result).toContainEqual({ year: 2024, month: 0, count: 2 }); // January
-      expect(result).toContainEqual({ year: 2024, month: 1, count: 1 }); // February
+      // month is 1-indexed
+      expect(result).toContainEqual({ year: 2024, month: 1, count: 2 }); // January
+      expect(result).toContainEqual({ year: 2024, month: 2, count: 1 }); // February
     });
 
     it('should sort by year and month descending', async () => {
@@ -1479,7 +1479,7 @@ tags: ["nature", "sunset"]`;
       const result = await mediaEngine.getMediaByYearMonth();
 
       expect(result[0].year).toBe(2024);
-      expect(result[0].month).toBe(2); // March is month 2 (0-indexed)
+      expect(result[0].month).toBe(3); // March is month 3 (1-indexed)
     });
   });
 

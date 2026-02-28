@@ -125,6 +125,16 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
   }
 }
 
+function buildMcpUrl(): string {
+  try {
+    const { getMCPServer } = require('../engine/MCPServer');
+    const port = getMCPServer().getPort() ?? 4124;
+    return `http://127.0.0.1:${port}/mcp`;
+  } catch {
+    return 'http://127.0.0.1:4124/mcp';
+  }
+}
+
 export function registerIpcHandlers(): void {
   // ============ Git Handlers ============
 
@@ -1562,9 +1572,55 @@ export function registerIpcHandlers(): void {
   registerBlogHandlers(safeHandle);
   registerPublishHandlers(safeHandle);
 
-  // ============ Event Forwarding ============
-  
-  // Forward engine events to renderer
+  // ============ MCP Config Handlers ============
+
+  safeHandle('mcp:getAgents', async () => {
+    const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
+    const engine = new MCPAgentConfigEngine({
+      homeDir: require('os').homedir(),
+      platform: process.platform,
+      mcpUrl: buildMcpUrl(),
+    });
+    return engine.getAgents();
+  });
+
+  safeHandle('mcp:addToAgentConfig', async (_event: unknown, agentId: string) => {
+    const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
+    const engine = new MCPAgentConfigEngine({
+      homeDir: require('os').homedir(),
+      platform: process.platform,
+      mcpUrl: buildMcpUrl(),
+    });
+    return engine.addToConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
+  });
+
+  safeHandle('mcp:isConfigured', async (_event: unknown, agentId: string) => {
+    const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
+    const engine = new MCPAgentConfigEngine({
+      homeDir: require('os').homedir(),
+      platform: process.platform,
+      mcpUrl: buildMcpUrl(),
+    });
+    return engine.isConfigured(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
+  });
+
+  safeHandle('mcp:getPort', async () => {
+    try {
+      const { getMCPServer } = await import('../engine/MCPServer');
+      return getMCPServer().getPort();
+    } catch {
+      return null;
+    }
+  });
+}
+
+/**
+ * Register event forwarding from engine EventEmitters to the renderer via IPC.
+ * Must be called after the database is initialized (engines require DB access).
+ * Separated from registerIpcHandlers() so that handler registration can happen
+ * synchronously before any async work, eliminating startup race conditions.
+ */
+export function registerEventForwarding(): void {
   const postEngine = getPostEngine();
   const mediaEngine = getMediaEngine();
   const projectEngine = getProjectEngine();

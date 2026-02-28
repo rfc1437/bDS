@@ -83,6 +83,8 @@
     "@milkdown/plugin-trailing": "^7.18.0",
     "@milkdown/react": "^7.18.0",
     "@milkdown/theme-nord": "^7.18.0",
+    "@modelcontextprotocol/ext-apps": "^1.1.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@monaco-editor/react": "^4.7.0",
     "@picocss/pico": "^2.1.1",
     "@xmldom/xmldom": "^0.8.11",

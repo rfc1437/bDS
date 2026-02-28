@@ -2,15 +2,19 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase } from './database';
-import { registerIpcHandlers, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
+import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { getMetaEngine } from './engine/MetaEngine';
 import { getTemplateEngine } from './engine/TemplateEngine';
+import { getScriptEngine } from './engine/ScriptEngine';
+import { getPostMediaEngine } from './engine/PostMediaEngine';
+import { getTagEngine } from './engine/TagEngine';
 import { getBlogmarkTransformService } from './engine/BlogmarkTransformService';
 import { PreviewServer } from './engine/PreviewServer';
+import { getMCPServer } from './engine/MCPServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from './shared/i18n';
 import { buildBlogmarkMarkdownLink, extractBlogmarkPayloadFromDeepLink, normalizeBlogmarkCategory } from './shared/blogmark';
@@ -24,6 +28,7 @@ let blogmarkQueueProcessing = false;
 let pendingBlogmarkCreatedEvents: unknown[] = [];
 let rendererReady = false;
 const PREVIEW_SERVER_PORT = 4123;
+const MCP_SERVER_PORT = 4124;
 const BLOG_PREVIEW_POST_MENU_ID = APP_MENU_ITEM_IDS.previewPost;
 const BLOGMARK_PROTOCOL = 'bds';
 const BLOGMARK_NEW_POST_PREFIX = `${BLOGMARK_PROTOCOL}://new-post`;
@@ -709,9 +714,18 @@ function createApplicationMenu(): Menu {
 }
 
 async function initialize(): Promise<void> {
+  // Register IPC handlers immediately (synchronous) so they are available
+  // before any async work. This eliminates race conditions where the renderer
+  // calls handlers before the database is ready.
+  registerIpcHandlers();
+
   // Initialize database
   const db = getDatabase();
   await db.initializeLocal();
+
+  // Now that the database is ready, register event forwarding from engines
+  // to the renderer (engines need DB access at registration time).
+  registerEventForwarding();
 
   // Register custom protocol for serving media files
   // URLs like bds-media://media-id will be resolved to the actual file
@@ -811,9 +825,6 @@ async function initialize(): Promise<void> {
     }
   });
 
-  // Register IPC handlers
-  registerIpcHandlers();
-
   ipcMain.handle('app:setPreviewPostTarget', async (_, postId: string | null) => {
     activePreviewPostId = typeof postId === 'string' && postId.length > 0 ? postId : null;
     setPreviewPostMenuEnabled(Boolean(activePreviewPostId));
@@ -864,6 +875,20 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('Failed to start preview server on app startup:', error);
   }
+  try {
+    const mcpServer = getMCPServer({
+      getPostEngine: () => getPostEngine(),
+      getMediaEngine: () => getMediaEngine(),
+      getScriptEngine: () => getScriptEngine(),
+      getTemplateEngine: () => getTemplateEngine(),
+      getMetaEngine: () => getMetaEngine(),
+      getPostMediaEngine: () => getPostMediaEngine(),
+      getTagEngine: () => getTagEngine(),
+    });
+    await mcpServer.start(MCP_SERVER_PORT);
+  } catch (error) {
+    console.error('Failed to start MCP server on app startup:', error);
+  }
   createWindow();
 
   await activeProjectContextReady;
@@ -895,6 +920,13 @@ app.on('before-quit', async () => {
   if (previewServer) {
     await previewServer.stop();
     previewServer = null;
+  }
+
+  try {
+    const mcpServer = getMCPServer();
+    await mcpServer.cleanup();
+  } catch (error) {
+    console.error('Failed to cleanup MCP server:', error);
   }
 
   const db = getDatabase();
