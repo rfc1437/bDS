@@ -8,6 +8,24 @@
  * `electron` — those imports are satisfied because we run as ELECTRON_RUN_AS_NODE.
  */
 
+// ── Redirect console to stderr ──────────────────────────────────────────────
+// MCP stdio transport reserves stdout for JSON-RPC messages.  Any stray
+// console.log from engine code would corrupt the protocol stream, so we
+// redirect all console output to stderr before importing anything else.
+const _origLog = console.log;
+const _origErr = console.error;
+const _origWarn = console.warn;
+const _origInfo = console.info;
+const _origDebug = console.debug;
+const _write = (args: unknown[]): void => {
+  process.stderr.write(args.map(String).join(' ') + '\n');
+};
+console.log = (...args: unknown[]) => _write(args);
+console.error = (...args: unknown[]) => _write(args);
+console.warn = (...args: unknown[]) => _write(args);
+console.info = (...args: unknown[]) => _write(args);
+console.debug = (...args: unknown[]) => _write(args);
+
 import * as path from 'path';
 import * as fs from 'fs';
 import { eq } from 'drizzle-orm';
