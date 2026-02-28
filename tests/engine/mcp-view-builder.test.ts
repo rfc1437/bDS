@@ -29,10 +29,16 @@ describe('mcp-view-builder', () => {
       expect(html).toContain('Waiting for data...');
     });
 
-    it('contains the App import from ext-apps', () => {
+    it('inlines the ext-apps bundle and exposes App globally', () => {
       const html = buildMcpView(minimalConfig);
-      expect(html).toContain('@modelcontextprotocol/ext-apps/app-with-deps');
+      // The bundle is inlined (no external import URLs) — the loader strips the
+      // ESM export block and exposes App on globalThis.__bdsExtApp so the page
+      // script can instantiate it without a module specifier.
+      expect(html).toContain('__bdsExtApp');
       expect(html).toContain('new App(');
+      // Must NOT reference an external CDN for the bundle (distribution isolation).
+      expect(html).not.toMatch(/<script[^>]+src=["']https?:/i);
+      expect(html).not.toMatch(/<link[^>]+href=["']https?:/i);
     });
 
     it('contains accept and discard proposal handlers', () => {
