@@ -131,7 +131,20 @@ await this.localClient.execute('PRAGMA synchronous=NORMAL');
 ```
 
 This must be done for **both** the app and CLI connections. It ensures the `-wal` file
-exists (enabling chokidar to watch it) and gives consistent write performance.
+exists (enabling chokidar to watch it) and gives consistent write performance. Note that
+`PRAGMA journal_mode=WAL` is a one-way change — SQLite persists the mode in the database
+file itself. Existing users upgrading from a non-WAL build will have their `bds.db`
+converted automatically on first launch of the new version. This is safe and desirable.
+
+**Engines also import Electron directly** — `PostEngine`, `MediaEngine`, `ScriptEngine`,
+`TemplateEngine`, `TagEngine`, `MetaEngine`, `MenuEngine` all call `app.getPath('userData')`
+directly. These imports are **not** removed as part of C0. When the CLI runs under
+`ELECTRON_RUN_AS_NODE=1`, the `electron` module is available and `app.getPath('userData')`
+returns the correct platform path without requiring `app.whenReady()`. Full decoupling of
+individual engines from Electron is a separate future refactor; it is not a prerequisite
+for the CLI. The reason this works is that the app name is embedded in the Electron binary,
+so the path derivation is purely a function of the OS and binary name — no GUI subsystem
+is needed.
 
 This is a prerequisite for every CLI section that follows.
 
@@ -151,7 +164,7 @@ Used by the CLI entrypoint to find the SQLite database without loading Electron.
 
 ---
 
-### D — `CliNotifier` interface + injected DB writer
+### D — `CliNotifier` interface + explicit engine construction
 
 ```typescript
 interface CliNotifier {
@@ -159,12 +172,49 @@ interface CliNotifier {
 }
 ```
 
-- Electron app passes a no-op implementation (keeps engines clean, no code change needed
-  in the app path)
-- CLI passes a DB writer implementation that inserts into `db_notifications`
+`CliNotifier` has two implementations:
+- **`NoopNotifier`** — used by the Electron app; all mutations are no-ops
+- **`DbNotifier`** — used by the CLI; inserts a row into `db_notifications`
 
-Injected as an optional constructor argument on `PostEngine`, `ScriptEngine`,
-`TemplateEngine`, `MediaEngine`.
+#### Replacing singletons with explicit construction
+
+The current `getPostEngine()`, `getScriptEngine()`, `getTemplateEngine()`,
+`getMediaEngine()` etc. are module-level singletons constructed on first access. There is
+no mechanism to pass constructor-time options (such as a `CliNotifier`) into them, which
+makes clean DI impossible without global mutation.
+
+This section replaces those factories with **explicit construction** at the two entry
+points (`main.ts` for the app, `bds-mcp.ts` for the CLI):
+
+1. Each engine class gains an optional `notifier?: CliNotifier` constructor parameter
+   (default: `NoopNotifier`). Every mutating method calls `this.notifier.notify(...)` after
+   its DB write.
+
+2. The module-level singleton variables (`let postEngine: PostEngine | null = null`) and
+   their associated `getPostEngine()` factory functions are **removed** from each engine
+   file.
+
+3. **`main.ts`** constructs all engines explicitly, passing `NoopNotifier`, then passes
+   them into `registerIpcHandlers()` and `MCPServer` as explicit arguments (already the
+   pattern for `MCPServerDependencies`).
+
+4. **`src/cli/bds-mcp.ts`** constructs its own engine instances, passing `DbNotifier`,
+   and passes them into `MCPServer`.
+
+5. **`src/main/ipc/handlers.ts`** `registerIpcHandlers()` signature gains an engine
+   bundle parameter (same shape as `MCPServerDependencies`, or a shared type
+   `EngineBundle`). All `getXxxEngine()` calls inside handlers are replaced by accesses to
+   the injected bundle.
+
+This is the architecturally sound path: it eliminates hidden global state, makes the
+engine lifecycle explicit and testable, and removes the need for the global `electron` mock
+in `tests/setup.ts` for engines that no longer import it.
+
+> **Scope note:** `ProjectEngine`, `MenuEngine`, `TagEngine`, `MetaEngine`,
+> `PostMediaEngine`, `GitEngine`, `ImportExecutionEngine`, `TaskManager`, and
+> `AppApiAdapter` are **not** required by the CLI and do not need `CliNotifier`. They
+> follow the same explicit-construction refactor only to be consistent (they lose their
+> singleton factories too), but their `CliNotifier` parameter is omitted.
 
 ---
 
@@ -266,6 +316,14 @@ export class NotificationWatcher {
 `template`) mapping to objects that expose `invalidate()`. Started in `main.ts` alongside
 `PreviewServer` and `MCPServer`; stopped in the `app.on('before-quit')` handler.
 
+**The watcher fires on every DB write, not only CLI writes.** chokidar sees all changes to
+`bds.db` / `bds.db-wal`, including writes the Electron app makes itself (UI post creation,
+media import, etc.). Each write triggers the 100 ms debounce and then `process()`, which
+queries `db_notifications` for `seenAt IS NULL AND fromCli = 1`. When no CLI is running
+that query returns zero rows and the function exits immediately — this is a single cheap
+indexed SELECT. Do not try to "optimise" the watcher by making it conditional on CLI
+presence; that would break notification delivery.
+
 ---
 
 ### G — `MCPServer.startCli()` (extend existing `MCPServer.ts`)
@@ -323,8 +381,8 @@ No `electron` imports. Fully standalone Node process.
 // Called both by signal handlers (forced) and after normal stdin-close (graceful).
 // process.exit() makes it non-reentrant even without the once guards.
 async function shutdown(): Promise<never> {
-  mcpServer.proposalStore.destroy();
-  await db.close();   // flushes any in-flight @libsql writes
+  await mcpServer.cleanup();  // proposalStore.destroy() + stop() (no-op for stdio, safe)
+  await db.close();           // flushes any in-flight @libsql writes
   process.exit(0);
 }
 
@@ -420,11 +478,16 @@ export interface MCPAgentConfigOptions {
   homeDir: string;
   platform: NodeJS.Platform;
   mcpUrl: string;
-  // stdio agents (set from app at runtime)
-  execPath: string;    // process.execPath (packaged) or 'node' (dev)
-  scriptPath: string;  // path to bds-mcp.cjs
+  // stdio agents only — required when agentId is 'claude-desktop', unused otherwise
+  execPath?: string;    // process.execPath (packaged) or 'node' (dev)
+  scriptPath?: string;  // path to bds-mcp.cjs
 }
 ```
+
+Both fields are optional so all existing callers (which only pass `homeDir`, `platform`,
+`mcpUrl`) continue to compile without changes. `buildEntry('claude-desktop')` asserts
+both are truthy and throws a descriptive error if called without them — this is a
+programmer error, not a user error.
 
 #### Claude Desktop entry
 
@@ -494,6 +557,16 @@ this consistently:
 `accept_proposal` dispatches to `publishScript` / `publishTemplate` / `publishPost` etc.
 `discard_proposal` dispatches to `deleteDraftScript` / `deleteDraftTemplate` / `deletePost`.
 
+**Impact on `MCPServer.acceptProposal()` and `discardProposal()`:** the current
+implementations read the full `CreateScriptInput` / `CreateTemplateInput` payload from the
+in-memory `ProposalStore` then call `createScript()` / `createTemplate()`. After this
+change, `ProposalStore` for those types holds only `{ scriptId }` / `{ templateId }`
+(the DB row ID), and the dispatch must call `publishScript(scriptId)` /
+`publishTemplate(templateId)` instead. Similarly, `discardProposal` for these types must
+call `deleteDraftScript(scriptId)` / `deleteDraftTemplate(templateId)` to clean up the DB
+row — not just `proposalStore.remove()`. These updates to `MCPServer.ts` are part of this
+step, not a separate one.
+
 **Known failure mode for in-memory metadata proposals:** if the CLI process is killed after
 a `propose_media_metadata` or `propose_post_metadata` call but before accept/discard, the
 `proposalId` no longer exists in any `ProposalStore`. The App View buttons will call
@@ -537,6 +610,16 @@ Store `invalidate()` methods should clear the cached entry and, if the entity is
 currently displayed, trigger an immediate refetch — consistent with how other
 IPC-driven refreshes work in the app.
 
+**These `invalidate()` methods do not currently exist in any Zustand store.** The
+renderer's stores today are push-based: the main process fires granular IPC events
+(`post:created`, `post:updated`, `post:deleted`, etc.) that the renderer applies directly.
+The `entity:changed` channel carries only `{ entity, entityId, action }` — enough to
+route, but not the full object. Each store therefore needs:
+1. An `invalidate(id: string)` action that removes the stale item from local state
+2. A subsequent IPC fetch call (e.g. `window.electronAPI.posts.get(id)`) to reload it
+
+This is non-trivial cross-cutting work and should be its own implementation step.
+
 ---
 
 ## Design Decisions
@@ -553,9 +636,13 @@ IPC-driven refreshes work in the app.
 | WAL mode | Explicit `PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL` in `initializeLocal()` for both app and CLI |
 | `db_notifications` growth | Rows pruned after `seenAt` is 1 hour old, inside each `process()` call |
 | DB coupling to Electron | `DatabaseConnection` accepts explicit paths; `getDataPaths()` removed; Electron path resolution stays in `main.ts` |
+| Engine Electron coupling | Engines retain `app.getPath('userData')` calls — safe under `ELECTRON_RUN_AS_NODE=1`; full decoupling is a future task |
+| Engine singletons | Replaced with explicit construction at `main.ts` / `bds-mcp.ts`; `getXxxEngine()` factories removed (section D) |
 | Native module resolution | `ELECTRON_RUN_AS_NODE` inherits Electron ASAR require-hooking; integration test guards against regression |
 | Signal handling | Signal handlers in `bds-mcp.ts` only; `startCli()` only listens to stdin-close — no competing handlers |
-| Renderer live updates | Section N: `entity:changed` IPC → store `invalidate()` → refetch |
+| CLI shutdown | `mcpServer.cleanup()` (not direct `proposalStore.destroy()`) then `db.close()` then `process.exit(0)` |
+| Renderer live updates | Section N: `entity:changed` IPC → store `invalidate()` + refetch; `invalidate()` methods must be added to each store |
+| Watcher fire rate | chokidar fires on every DB write (app + CLI); `process()` no-ops with a cheap indexed SELECT when no CLI rows are pending |
 
 ---
 
@@ -564,17 +651,19 @@ IPC-driven refreshes work in the app.
 1. **Migrations** (A + B) — schema changes first, all other work builds on them
 2. **Decouple `DatabaseConnection` from Electron** (C0) — remove `app` import, move `getDataPaths()` to callers, add WAL pragmas; update existing DB tests to pass explicit paths
 3. **`platformConfigPath()`** (C) — pure function, easy to test
-4. **`CliNotifier` + DB writer** (D) — unit tests with mock DB
+4. **Explicit engine construction + `CliNotifier`** (D) — remove all `getXxxEngine()` singletons; add explicit construction in `main.ts`; update `registerIpcHandlers()` signature; add `CliNotifier` constructor arg to the four mutating engines; unit-test `DbNotifier` with mock DB. This is the largest single step — sequence it early because every later step depends on the new construction pattern.
 5. **Engine `invalidate()` API** (E) — add and test on each engine before NotificationWatcher
-6. **`ScriptEngine`/`TemplateEngine` draft lifecycle** (L) — tests first
-7. **`ProposalStore` TTL option + DB mapping** (M) — extend existing tests; add `proposalTtlMs` constructor arg
-8. **`NotificationWatcher`** (F) — test with mock DB rows + mock chokidar emitter (emit `'change'` / `'add'` events on a fake `FSWatcher`)
-9. **`MCPAgentConfigEngine` — `claude-desktop` + `removeFromConfig`** (K) — extend existing tests; verify opencode format before writing its case
-10. **`MCPServer.startCli()`** (G) — test with in-process `StdioServerTransport`
-11. **`src/cli/bds-mcp.ts`** (H) — integration test: spawn process, send `initialize`, assert response, assert clean shutdown on SIGTERM and on stdin-close
-12. **Build target + `extraResources`** (I + J) — verify `npm run build` produces `dist/cli/bds-mcp.cjs`; `drizzle/` entry already in `extraResources`, only add `bds-mcp.cjs`
-13. **UI: Remove buttons** — renderer component changes, follows K
-14. **`NotificationWatcher` wired in `main.ts`** (F, app side) + stopped in `before-quit`
-15. **Renderer `entity:changed` subscription** (N) — `preload.ts` exposure + store `invalidate()` hookup + component subscription
+6. **`ProposalStore` TTL option** (M, partial) — add `proposalTtlMs` constructor arg and extend existing tests; the DB mapping part of M comes after L
+7. **`ScriptEngine`/`TemplateEngine` draft lifecycle** (L) — tests first; produces `publishScript`, `deleteDraftScript`, `publishTemplate`, `deleteDraftTemplate`
+8. **`ProposalStore` DB mapping + `MCPServer` accept/discard update** (M, remainder) — map `proposeScript`/`proposeTemplate` proposals to DB row IDs; update `acceptProposal()` and `discardProposal()` in `MCPServer.ts` to call publish/delete methods; extend existing MCPServer accept/discard tests
+9. **`NotificationWatcher`** (F) — test with mock DB rows + mock chokidar emitter (emit `'change'` / `'add'` events on a fake `FSWatcher`)
+10. **`MCPAgentConfigEngine` — `claude-desktop` + `removeFromConfig`** (K) — extend existing tests; `execPath`/`scriptPath` optional; verify opencode format before writing its case
+11. **`MCPServer.startCli()`** (G) — test with in-process `StdioServerTransport`
+12. **`src/cli/bds-mcp.ts`** (H) — integration test: spawn process, send `initialize`, assert response, assert clean shutdown on SIGTERM and on stdin-close
+13. **Build target + `extraResources`** (I + J) — verify `npm run build` produces `dist/cli/bds-mcp.cjs`; `drizzle/` entry already in `extraResources`, only add `bds-mcp.cjs`
+14. **UI: Remove buttons** — renderer component changes, follows K
+15. **`NotificationWatcher` wired in `main.ts`** (F, app side) + stopped in `before-quit`
+16. **Renderer store `invalidate()` methods** — add `invalidate(id)` + IPC refetch action to `postsStore`, `mediaStore`, `scriptsStore`, `templatesStore`; each requires both a store action and a corresponding IPC call to reload the single entity
+17. **Renderer `entity:changed` subscription** (N) — `preload.ts` channel exposure + component subscription wired to the store `invalidate()` methods from step 16
 
 Each step: write failing test → implement → green → next.
