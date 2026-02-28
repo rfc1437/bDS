@@ -1,18 +1,17 @@
-import { getProjectEngine } from '../engine/ProjectEngine';
-import { getPublishEngine, type PublishCredentials } from '../engine/PublishEngine';
-import { taskManager } from '../engine/TaskManager';
+import type { PublishCredentials } from '../engine/PublishEngine';
+import type { EngineBundle } from '../engine/EngineBundle';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
-export function registerPublishHandlers(safeHandle: SafeHandle): void {
+export function registerPublishHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   safeHandle('publish:uploadSite', async (_event: unknown, credentials: PublishCredentials) => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
     if (!project) {
       throw new Error('No active project');
     }
 
-    const publishEngine = getPublishEngine();
+    const publishEngine = bundle.publishEngine;
     publishEngine.setProjectContext(project.id, project.dataPath!);
 
     const ts = Date.now();
@@ -20,7 +19,7 @@ export function registerPublishHandlers(safeHandle: SafeHandle): void {
     const groupName = 'Site Publishing';
 
     // Launch three parallel tasks, one per directory
-    const htmlTask = taskManager.runTask({
+    const htmlTask = bundle.taskManager.runTask({
       id: `publish-html-${ts}`,
       name: 'Upload HTML',
       groupId,
@@ -28,7 +27,7 @@ export function registerPublishHandlers(safeHandle: SafeHandle): void {
       execute: (onProgress) => publishEngine.uploadHtml(credentials, onProgress),
     });
 
-    const thumbsTask = taskManager.runTask({
+    const thumbsTask = bundle.taskManager.runTask({
       id: `publish-thumbnails-${ts}`,
       name: 'Upload Thumbnails',
       groupId,
@@ -36,7 +35,7 @@ export function registerPublishHandlers(safeHandle: SafeHandle): void {
       execute: (onProgress) => publishEngine.uploadThumbnails(credentials, onProgress),
     });
 
-    const mediaTask = taskManager.runTask({
+    const mediaTask = bundle.taskManager.runTask({
       id: `publish-media-${ts}`,
       name: 'Upload Media',
       groupId,

@@ -351,7 +351,12 @@ describe('WXR Reference Comparison E2E Tests', () => {
     vi.clearAllMocks();
 
     // Create engine instances
-    executionEngine = new ImportExecutionEngine();
+    executionEngine = new ImportExecutionEngine({
+      tagEngine: mockTagEngine as any,
+      postEngine: mockPostEngine as any,
+      mediaEngine: mockMediaEngine as any,
+      postMediaEngine: mockPostMediaEngine as any,
+    });
     executionEngine.setProjectContext('test-project', '/mock/test/data');
 
     analysisEngine = new ImportAnalysisEngine();

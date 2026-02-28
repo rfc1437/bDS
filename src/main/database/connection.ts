@@ -4,12 +4,20 @@ import { migrate } from 'drizzle-orm/libsql/migrator';
 import { eq, sql } from 'drizzle-orm';
 import * as schema from './schema';
 import { projects } from './schema';
-import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export interface DatabaseConfig {
-  localPath: string;
+export interface DatabaseConnectionConfig {
+  /** Absolute path to the bds.db SQLite file. */
+  dbPath: string;
+  /** Absolute path to the drizzle/ migrations folder. */
+  migrationsFolder: string;
+  /**
+   * Extra directories to create on startup (e.g. posts/, media/ inside userData).
+   * Caller is responsible for providing these; connection.ts no longer computes
+   * paths via app.getPath().
+   */
+  dataDirs?: string[];
 }
 
 type DrizzleDB = ReturnType<typeof drizzle>;
@@ -17,31 +25,27 @@ type DrizzleDB = ReturnType<typeof drizzle>;
 export class DatabaseConnection {
   private localDb: DrizzleDB | null = null;
   private localClient: Client | null = null;
-  private config: DatabaseConfig;
+  private readonly dbPath: string;
+  private readonly migrationsFolder: string;
+  private readonly dataDirs: string[];
   private _closing = false;
 
-  constructor(config?: Partial<DatabaseConfig>) {
-    const userDataPath = app.getPath('userData');
-    
-    this.config = {
-      localPath: config?.localPath || path.join(userDataPath, 'bds.db'),
-    };
+  constructor(config: DatabaseConnectionConfig) {
+    this.dbPath = config.dbPath;
+    this.migrationsFolder = config.migrationsFolder;
+    this.dataDirs = config.dataDirs ?? [];
 
-    // Ensure user data directory exists
-    const dataDir = path.dirname(this.config.localPath);
+    // Ensure the directory containing the DB file exists.
+    const dataDir = path.dirname(this.dbPath);
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    // Ensure posts and media directories exist
-    const postsDir = path.join(userDataPath, 'posts');
-    const mediaDir = path.join(userDataPath, 'media');
-    
-    if (!fs.existsSync(postsDir)) {
-      fs.mkdirSync(postsDir, { recursive: true });
-    }
-    if (!fs.existsSync(mediaDir)) {
-      fs.mkdirSync(mediaDir, { recursive: true });
+    // Ensure caller-supplied extra directories exist.
+    for (const dir of this.dataDirs) {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
     }
   }
 
@@ -52,12 +56,55 @@ export class DatabaseConnection {
 
     // Use file: URL for local SQLite database via libsql
     this.localClient = createClient({
-      url: `file:${this.config.localPath}`,
+      url: `file:${this.dbPath}`,
     });
     this.localDb = drizzle(this.localClient, { schema });
 
-    // Run migrations
-    await this.runMigrations();
+    // Enable WAL mode and set synchronous=NORMAL for better concurrency and
+    // performance.  WAL mode is a database-level, one-way change — SQLite
+    // persists it in the file header so subsequent opens keep it automatically.
+    await this.localClient.execute('PRAGMA journal_mode=WAL');
+    await this.localClient.execute('PRAGMA synchronous=NORMAL');
+
+    // Run Drizzle migrations (creates __drizzle_migrations table automatically)
+    await migrate(this.localDb, { migrationsFolder: this.migrationsFolder });
+
+    // Create FTS5 virtual tables (not supported by Drizzle schema).
+    // These use IF NOT EXISTS so they're safe to run every time.
+    await this.localClient.execute(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
+        id UNINDEXED,
+        project_id UNINDEXED,
+        content,
+        content_rowid=rowid
+      )
+    `);
+
+    await this.localClient.execute(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
+        id UNINDEXED,
+        project_id UNINDEXED,
+        content,
+        content_rowid=rowid
+      )
+    `);
+
+    // Create a default project if none exists.
+    const existingProjects = await this.localDb
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(projects);
+    if (existingProjects[0] && existingProjects[0].count === 0) {
+      const now = new Date();
+      await this.localDb.insert(projects).values({
+        id: 'default',
+        name: 'Default Project',
+        slug: 'default',
+        description: 'Your first blog project',
+        createdAt: now,
+        updatedAt: now,
+        isActive: true,
+      });
+    }
 
     return this.localDb;
   }
@@ -77,6 +124,11 @@ export class DatabaseConnection {
 
   getLocalClient(): Client | null {
     return this.localClient;
+  }
+
+  /** Returns the absolute path to the SQLite database file. */
+  getDbPath(): string {
+    return this.dbPath;
   }
 
   async getActiveProject(): Promise<{ id: string; name: string; slug: string } | null> {
@@ -103,57 +155,6 @@ export class DatabaseConnection {
       .where(eq(projects.id, projectId));
   }
 
-  private async runMigrations(): Promise<void> {
-    if (!this.localClient || !this.localDb) return;
-
-    // Determine migrations folder path (works in both dev and production)
-    // In production, migrations are bundled in the app resources
-    const isDev = !app.isPackaged;
-    const migrationsFolder = isDev
-      ? path.join(app.getAppPath(), 'drizzle')
-      : path.join(process.resourcesPath, 'drizzle');
-
-    // Run Drizzle migrations (creates __drizzle_migrations table automatically)
-    await migrate(this.localDb, { migrationsFolder });
-
-    // Create FTS5 virtual tables (not supported by Drizzle schema)
-    // These use IF NOT EXISTS so they're safe to run every time
-    await this.localClient.execute(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
-        id UNINDEXED,
-        project_id UNINDEXED,
-        content,
-        content_rowid=rowid
-      )
-    `);
-
-    await this.localClient.execute(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
-        id UNINDEXED,
-        project_id UNINDEXED,
-        content,
-        content_rowid=rowid
-      )
-    `);
-
-    // Create default project if none exists
-    const existingProjects = await this.localDb
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(projects);
-    if (existingProjects[0] && existingProjects[0].count === 0) {
-      const now = new Date();
-      await this.localDb.insert(projects).values({
-        id: 'default',
-        name: 'Default Project',
-        slug: 'default',
-        description: 'Your first blog project',
-        createdAt: now,
-        updatedAt: now,
-        isActive: true,
-      });
-    }
-  }
-
   async close(): Promise<void> {
     this._closing = true;
     if (this.localClient) {
@@ -162,28 +163,26 @@ export class DatabaseConnection {
       this.localDb = null;
     }
   }
-
-  getDataPaths() {
-    const userDataPath = app.getPath('userData');
-    return {
-      database: this.config.localPath,
-      posts: path.join(userDataPath, 'posts'),
-      media: path.join(userDataPath, 'media'),
-    };
-  }
 }
 
-// Singleton instance
+// ── Singleton ─────────────────────────────────────────────────────────────────
+// The singleton is initialised by main.ts (Electron app) or bds-mcp.ts (CLI)
+// via initDatabase() before any engine code runs.  Calling getDatabase() before
+// initDatabase() throws so bugs are caught early.
+
 let dbConnection: DatabaseConnection | null = null;
 
 export function getDatabase(): DatabaseConnection {
   if (!dbConnection) {
-    dbConnection = new DatabaseConnection();
+    throw new Error(
+      'DatabaseConnection has not been initialised. ' +
+      'Call initDatabase() before calling getDatabase().',
+    );
   }
   return dbConnection;
 }
 
-export function initDatabase(config?: Partial<DatabaseConfig>): DatabaseConnection {
+export function initDatabase(config: DatabaseConnectionConfig): DatabaseConnection {
   dbConnection = new DatabaseConnection(config);
   return dbConnection;
 }

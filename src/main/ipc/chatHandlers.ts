@@ -5,20 +5,21 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { ChatEngine } from '../engine/ChatEngine';
 import { OpenCodeManager } from '../engine/OpenCodeManager';
-import { getPostEngine } from '../engine/PostEngine';
-import { getMediaEngine } from '../engine/MediaEngine';
 import { getDatabase } from '../database';
+import type { EngineBundle } from '../engine/EngineBundle';
 
 let chatEngine: ChatEngine | null = null;
 let openCodeManager: OpenCodeManager | null = null;
 let openCodeManagerInitPromise: Promise<void> | null = null;
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
+let engineBundle: EngineBundle | null = null;
 
 /**
  * Initialize chat handlers with the main window reference
  */
-export function initializeChatHandlers(getMainWindow: () => BrowserWindow | null): void {
+export function initializeChatHandlers(getMainWindow: () => BrowserWindow | null, bundle: EngineBundle): void {
   mainWindowGetter = getMainWindow;
+  engineBundle = bundle;
 }
 
 /**
@@ -40,8 +41,9 @@ async function getOpenCodeManager(): Promise<OpenCodeManager> {
   if (!openCodeManager) {
     openCodeManager = new OpenCodeManager(
       getChatEngine(),
-      getPostEngine(),
-      getMediaEngine(),
+      engineBundle!.postEngine,
+      engineBundle!.mediaEngine,
+      engineBundle!.postMediaEngine,
       () => mainWindowGetter?.() || null
     );
 

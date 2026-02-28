@@ -233,7 +233,12 @@ describe('ImportExecutionEngine E2E Tests', () => {
     vi.clearAllMocks();
 
     // Create engine instance
-    engine = new ImportExecutionEngine();
+    engine = new ImportExecutionEngine({
+      tagEngine: mockTagEngine as any,
+      postEngine: mockPostEngine as any,
+      mediaEngine: mockMediaEngine as any,
+      postMediaEngine: mockPostMediaEngine as any,
+    });
     engine.setProjectContext('test-project', '/mock/test/data');
 
     // Parse the WXR content (mocked readFile will return our pre-loaded content)

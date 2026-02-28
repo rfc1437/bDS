@@ -164,6 +164,9 @@ export const scripts = sqliteTable('scripts', {
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   version: integer('version').notNull().default(1),
   filePath: text('file_path').notNull(),
+  // Draft lifecycle columns (added in 0007)
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('published'),
+  content: text('content'), // draft body; NULL when on-disk (published)
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
@@ -181,12 +184,27 @@ export const templates = sqliteTable('templates', {
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   version: integer('version').notNull().default(1),
   filePath: text('file_path').notNull(),
+  // Draft lifecycle columns (added in 0007)
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('published'),
+  content: text('content'), // draft body; NULL when on-disk (published)
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
   // Composite unique index: slug must be unique within each project
   projectSlugIdx: uniqueIndex('templates_project_slug_idx').on(table.projectId, table.slug),
 }));
+
+// DB notifications table - CLI writes a row after every mutation; app's NotificationWatcher
+// queries for seenAt IS NULL AND fromCli = 1, invalidates engine caches, emits IPC events.
+export const dbNotifications = sqliteTable('db_notifications', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  entity: text('entity').notNull(), // 'post' | 'media' | 'script' | 'template'
+  entityId: text('entity_id').notNull(),
+  action: text('action').notNull(), // 'created' | 'updated' | 'deleted'
+  fromCli: integer('from_cli').notNull().default(1), // 1 = written by CLI; reserved for future app→CLI
+  seenAt: integer('seen_at'), // NULL = unprocessed by app
+  createdAt: integer('created_at').notNull(),
+});
 
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
@@ -215,3 +233,5 @@ export type Script = typeof scripts.$inferSelect;
 export type NewScript = typeof scripts.$inferInsert;
 export type Template = typeof templates.$inferSelect;
 export type NewTemplate = typeof templates.$inferInsert;
+export type DbNotification = typeof dbNotifications.$inferSelect;
+export type NewDbNotification = typeof dbNotifications.$inferInsert;

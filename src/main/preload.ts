@@ -383,9 +383,16 @@ export const electronAPI: ElectronAPI = {
     ipcRenderer.once(channel, (_event, ...args) => callback(...args));
   },
 
+  onEntityChanged: (callback: (payload: import('./shared/electronApi').EntityChangedPayload) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, payload: import('./shared/electronApi').EntityChangedPayload) => callback(payload);
+    ipcRenderer.on('entity:changed', subscription);
+    return () => ipcRenderer.removeListener('entity:changed', subscription);
+  },
+
   mcp: {
     getAgents: () => ipcRenderer.invoke('mcp:getAgents'),
     addToAgentConfig: (agentId: string) => ipcRenderer.invoke('mcp:addToAgentConfig', agentId),
+    removeFromAgentConfig: (agentId: string) => ipcRenderer.invoke('mcp:removeFromAgentConfig', agentId),
     isConfigured: (agentId: string) => ipcRenderer.invoke('mcp:isConfigured', agentId),
     getPort: () => ipcRenderer.invoke('mcp:getPort'),
   },

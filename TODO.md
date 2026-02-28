@@ -256,7 +256,7 @@ In `PageRenderer` and `BlogGenerationEngine`:
 
 ---
 
-## 3. MCP Server — Agent-Assisted Content Creation
+## 3. MCP Server — Agent-Assisted Content Creation - done
 
 ### Goal
 

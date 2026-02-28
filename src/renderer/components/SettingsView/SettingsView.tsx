@@ -138,7 +138,7 @@ const MCPStatusBadge: React.FC = () => {
   );
 };
 
-/** Button to add bDS MCP server to an agent's config. Shows "Configured" if already present. */
+/** Button to add/remove bDS MCP server to/from an agent's config. */
 const MCPAgentButton: React.FC<{ agentId: string; agentLabel: string }> = ({ agentId, agentLabel }) => {
   const { t } = useI18n();
   const [configured, setConfigured] = React.useState(false);
@@ -149,7 +149,30 @@ const MCPAgentButton: React.FC<{ agentId: string; agentLabel: string }> = ({ age
   }, [agentId]);
 
   if (configured) {
-    return <span className="badge badge-success">{t('settings.mcp.alreadyConfigured')}</span>;
+    return (
+      <button
+        className="secondary danger"
+        disabled={loading}
+        onClick={async () => {
+          setLoading(true);
+          try {
+            const result = await window.electronAPI?.mcp?.removeFromAgentConfig(agentId);
+            if (result?.success) {
+              showToast.success(t('settings.toast.mcpConfigRemoveSuccess', { agent: agentLabel }));
+              setConfigured(false);
+            } else {
+              showToast.error(t('settings.toast.mcpConfigRemoveFailed', { agent: agentLabel, error: result?.error ?? 'Unknown error' }));
+            }
+          } catch {
+            showToast.error(t('settings.toast.mcpConfigRemoveFailed', { agent: agentLabel, error: 'Unexpected error' }));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      >
+        {t('settings.mcp.removeFromAgent', { agent: agentLabel })}
+      </button>
+    );
   }
 
   return (
@@ -1257,6 +1280,7 @@ export const SettingsView: React.FC = () => {
   const renderMCPSettings = () => {
     const agents = [
       { id: 'claude-code', label: 'Claude Code' },
+      { id: 'claude-desktop', label: 'Claude Desktop' },
       { id: 'github-copilot', label: 'GitHub Copilot' },
       { id: 'gemini-cli', label: 'Gemini CLI' },
       { id: 'opencode', label: 'OpenCode' },

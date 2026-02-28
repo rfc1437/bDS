@@ -15,7 +15,7 @@ import { BrowserWindow } from 'electron';
 import { ChatEngine } from './ChatEngine';
 import { PostEngine, type PostData } from './PostEngine';
 import { MediaEngine, type MediaData } from './MediaEngine';
-import { getPostMediaEngine } from './PostMediaEngine';
+import type { PostMediaEngine } from './PostMediaEngine';
 import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
 import type { A2UIServerMessage } from '../a2ui/types';
 
@@ -155,6 +155,7 @@ export class OpenCodeManager {
   private chatEngine: ChatEngine;
   private postEngine: PostEngine;
   private mediaEngine: MediaEngine;
+  private postMediaEngine: PostMediaEngine;
   private getMainWindow: () => BrowserWindow | null;
   private apiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
@@ -172,11 +173,13 @@ export class OpenCodeManager {
     chatEngine: ChatEngine,
     postEngine: PostEngine,
     mediaEngine: MediaEngine,
+    postMediaEngine: PostMediaEngine,
     getMainWindow: () => BrowserWindow | null
   ) {
     this.chatEngine = chatEngine;
     this.postEngine = postEngine;
     this.mediaEngine = mediaEngine;
+    this.postMediaEngine = postMediaEngine;
     this.getMainWindow = getMainWindow;
   }
 
@@ -1522,7 +1525,7 @@ export class OpenCodeManager {
         }
 
         case 'get_post_media': {
-          const postMediaEngine = getPostMediaEngine();
+          const postMediaEngine = this.postMediaEngine;
           const linkedMedia = await postMediaEngine.getLinkedMediaDataForPost(args.postId as string);
           return {
             success: true,
@@ -1544,7 +1547,7 @@ export class OpenCodeManager {
         }
 
         case 'get_media_posts': {
-          const postMediaEngine = getPostMediaEngine();
+          const postMediaEngine = this.postMediaEngine;
           const linkedPosts = await postMediaEngine.getLinkedPostsForMedia(args.mediaId as string);
           
           // Fetch full post data for each linked post

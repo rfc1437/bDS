@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { eq, and, asc } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { postMedia, PostMediaLink, NewPostMediaLink } from '../database/schema';
-import { getMediaEngine, MediaData } from './MediaEngine';
+import type { MediaEngine, MediaData } from './MediaEngine';
 
 export interface PostMediaLinkData {
   id: string;
@@ -25,13 +25,12 @@ export interface PostMediaLinkData {
   createdAt: Date;
 }
 
-// Singleton instance
-let postMediaEngineInstance: PostMediaEngine | null = null;
+// Singleton instance — removed in favour of explicit construction (see EngineBundle)
 
 export class PostMediaEngine extends EventEmitter {
   private currentProjectId: string = 'default';
 
-  constructor() {
+  constructor(private readonly mediaEngine: MediaEngine) {
     super();
   }
 
@@ -44,7 +43,7 @@ export class PostMediaEngine extends EventEmitter {
   }
 
   private async addPostToMediaSidecar(mediaId: string, postId: string): Promise<void> {
-    const media = await getMediaEngine().getMedia(mediaId);
+    const media = await this.mediaEngine.getMedia(mediaId);
     if (!media) {
       return;
     }
@@ -54,19 +53,19 @@ export class PostMediaEngine extends EventEmitter {
       return;
     }
 
-    await getMediaEngine().updateMedia(mediaId, {
+    await this.mediaEngine.updateMedia(mediaId, {
       linkedPostIds: [...linkedPostIds, postId],
     });
   }
 
   private async removePostFromMediaSidecar(mediaId: string, postId: string): Promise<void> {
-    const media = await getMediaEngine().getMedia(mediaId);
+    const media = await this.mediaEngine.getMedia(mediaId);
     if (!media) {
       return;
     }
 
     const linkedPostIds = (media.linkedPostIds || []).filter(id => id !== postId);
-    await getMediaEngine().updateMedia(mediaId, { linkedPostIds });
+    await this.mediaEngine.updateMedia(mediaId, { linkedPostIds });
   }
 
   private createLinkData(link: NewPostMediaLink): PostMediaLinkData {
@@ -319,7 +318,7 @@ export class PostMediaEngine extends EventEmitter {
     await db.delete(postMedia).where(eq(postMedia.projectId, this.currentProjectId));
 
     // Get all media with their linkedPostIds
-    const allMedia = await getMediaEngine().getAllMedia();
+    const allMedia = await this.mediaEngine.getAllMedia();
     
     let linksCreated = 0;
     for (const media of allMedia) {
@@ -352,7 +351,7 @@ export class PostMediaEngine extends EventEmitter {
    */
   async importMediaForPost(postId: string, sourcePath: string): Promise<PostMediaLinkData> {
     // Import the media file
-    const importedMedia = await getMediaEngine().importMedia(sourcePath);
+    const importedMedia = await this.mediaEngine.importMedia(sourcePath);
     
     // Link it to the post
     return this.linkMediaToPost(postId, importedMedia.id);
@@ -366,7 +365,7 @@ export class PostMediaEngine extends EventEmitter {
     
     const result: Array<PostMediaLinkData & { media: MediaData }> = [];
     for (const link of links) {
-      const media = await getMediaEngine().getMedia(link.mediaId);
+      const media = await this.mediaEngine.getMedia(link.mediaId);
       if (media) {
         result.push({ ...link, media });
       }
@@ -410,15 +409,4 @@ export class PostMediaEngine extends EventEmitter {
   }
 }
 
-/**
- * Get the singleton PostMediaEngine instance
- */
-export function getPostMediaEngine(): PostMediaEngine {
-  if (!postMediaEngineInstance) {
-    postMediaEngineInstance = new PostMediaEngine();
-  }
-  return postMediaEngineInstance;
-}
 
-// Export singleton for convenience
-export const postMediaEngine = getPostMediaEngine();

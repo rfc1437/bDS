@@ -585,6 +585,39 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Subscribe to entity:changed events fired by the CLI NotificationWatcher.
+  // When the CLI mutates posts or media while the app is open, refresh the
+  // affected entry in the local store so the UI stays in sync.
+  useEffect(() => {
+    const unsub = window.electronAPI?.onEntityChanged(async ({ entity, entityId, action }) => {
+      if (entity === 'post') {
+        if (action === 'deleted') {
+          removePost(entityId);
+          useAppStore.getState().closeTab(entityId);
+        } else {
+          const post = await window.electronAPI?.posts.get(entityId);
+          if (post) {
+            const p = post as PostData;
+            action === 'created' ? addPost(p) : updatePost(p.id, p);
+          }
+        }
+      } else if (entity === 'media') {
+        if (action === 'deleted') {
+          removeMedia(entityId);
+        } else {
+          const media = await window.electronAPI?.media.get(entityId);
+          if (media) {
+            const m = media as MediaData;
+            action === 'created' ? addMedia(m) : updateMedia(m.id, m);
+          }
+        }
+      }
+      // script and template entities have no cached store state — they are
+      // loaded on demand and will reflect CLI changes on next navigation.
+    });
+    return () => unsub?.();
+  }, [addPost, updatePost, removePost, addMedia, updateMedia, removeMedia]);
+
   const { sidebarVisible, assistantSidebarVisible } = useAppStore();
 
   return (

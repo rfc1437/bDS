@@ -2,18 +2,14 @@ import { app, BrowserWindow, ipcMain, dialog, shell, clipboard } from 'electron'
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
-import { getPostEngine, PostData, PostFilter, PaginationOptions } from '../engine/PostEngine';
-import { getMediaEngine, MediaData } from '../engine/MediaEngine';
-import { getProjectEngine, ProjectData } from '../engine/ProjectEngine';
-import { getMetaEngine } from '../engine/MetaEngine';
-import { getMenuEngine, type MenuDocument } from '../engine/MenuEngine';
-import { getTagEngine } from '../engine/TagEngine';
-import { getPostMediaEngine } from '../engine/PostMediaEngine';
-import { getScriptEngine, type CreateScriptInput, type UpdateScriptInput } from '../engine/ScriptEngine';
-import { getTemplateEngine, type CreateTemplateInput, type UpdateTemplateInput } from '../engine/TemplateEngine';
-import { getGitEngine } from '../engine/GitEngine';
-import { getGitApiAdapter } from '../engine/GitApiAdapter';
-import { taskManager, TaskProgress } from '../engine/TaskManager';
+import type { PostData, PostFilter, PaginationOptions } from '../engine/PostEngine';
+import type { MediaData } from '../engine/MediaEngine';
+import type { ProjectData } from '../engine/ProjectEngine';
+import { MetaEngine } from '../engine/MetaEngine';
+import type { MenuDocument } from '../engine/MenuEngine';
+import type { CreateScriptInput, UpdateScriptInput } from '../engine/ScriptEngine';
+import type { CreateTemplateInput, UpdateTemplateInput } from '../engine/TemplateEngine';
+import type { TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_WEB_CONTENTS_ACTIONS, type AppMenuAction } from '../shared/menuCommands';
@@ -21,6 +17,7 @@ import { generateBlogmarkBookmarkletSource } from '../shared/blogmark';
 import { registerMetadataDiffHandlers } from './metadataDiffHandlers';
 import { registerBlogHandlers } from './blogHandlers';
 import { registerPublishHandlers } from './publishHandlers';
+import type { EngineBundle } from '../engine/EngineBundle';
 
 /**
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
@@ -125,71 +122,84 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
   }
 }
 
-function buildMcpUrl(): string {
+function buildMcpUrl(bundle: EngineBundle): string {
   try {
-    const { getMCPServer } = require('../engine/MCPServer');
-    const port = getMCPServer().getPort() ?? 4124;
+    const port = bundle.mcpServer.getPort() ?? 4124;
     return `http://127.0.0.1:${port}/mcp`;
   } catch {
     return 'http://127.0.0.1:4124/mcp';
   }
 }
 
-export function registerIpcHandlers(): void {
+function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCPAgentConfigEngine').MCPAgentConfigOptions {
+  const os = require('os') as typeof import('os');
+  const scriptPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'bds-mcp.cjs')
+    : path.join(app.getAppPath(), 'dist', 'cli', 'bds-mcp.cjs');
+  return {
+    homeDir: os.homedir(),
+    platform: process.platform,
+    mcpUrl: buildMcpUrl(bundle),
+    execPath: process.execPath,
+    scriptPath,
+  };
+}
+
+export function registerIpcHandlers(bundle: EngineBundle): void {
   // ============ Git Handlers ============
 
   safeHandle('git:checkAvailability', async () => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.checkAvailability();
   });
 
   safeHandle('git:getRepoState', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getRepoState(projectPath);
   });
 
   safeHandle('git:status', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getStatus(projectPath);
   });
 
   safeHandle('git:diff', async (_, projectPath: string, filePath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getDiff(projectPath, filePath);
   });
 
   safeHandle('git:diffContent', async (_, projectPath: string, filePath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getDiffContent(projectPath, filePath);
   });
 
   safeHandle('git:commitDiffContent', async (_, projectPath: string, commitHash: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getCommitDiffContent(projectPath, commitHash);
   });
 
   safeHandle('git:history', async (_, projectPath: string, limit?: number) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getHistory(projectPath, limit);
   });
 
   safeHandle('git:fileHistory', async (_, projectPath: string, filePath: string, limit?: number) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getFileHistory(projectPath, filePath, limit);
   });
 
   safeHandle('git:remoteState', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.getRemoteState(projectPath);
   });
 
   safeHandle('git:fetch', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.fetch(projectPath);
   });
 
   safeHandle('git:pull', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     const beforeHead = await engine.getHeadCommit(projectPath);
     const pullResult = await engine.pull(projectPath);
 
@@ -212,11 +222,11 @@ export function registerIpcHandlers(): void {
     }
 
     try {
-      const projectEngine = getProjectEngine();
+      const projectEngine = bundle.projectEngine;
       const project = await projectEngine.getActiveProject();
-      const postEngine = getPostEngine();
-      const scriptEngine = getScriptEngine();
-      const templateEngine = getTemplateEngine();
+      const postEngine = bundle.postEngine;
+      const scriptEngine = bundle.scriptEngine;
+      const templateEngine = bundle.templateEngine;
 
       if (project) {
         const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
@@ -244,51 +254,51 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('git:push', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.push(projectPath);
   });
 
   safeHandle('git:commitAll', async (_, projectPath: string, message: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.commitAll(projectPath, message);
   });
 
   safeHandle('git:init', async (event, projectPath: string, remoteUrl?: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.initializeRepo(projectPath, remoteUrl, (progress) => {
       event.sender.send('git:initProgress', progress);
     });
   });
 
   safeHandle('git:ensureGitignore', async (_, projectPath: string) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.ensureGitignore(projectPath);
   });
 
   safeHandle('git:pruneLfs', async (_, projectPath: string, options?: { dryRun?: boolean; verifyRemote?: boolean }) => {
-    const engine = getGitEngine();
+    const engine = bundle.gitEngine;
     return engine.pruneLfsCache(projectPath, options);
   });
 
   // ============ Project Handlers ============
 
   safeHandle('projects:create', async (_, data: { name: string; description?: string; slug?: string; dataPath?: string }) => {
-    const engine = getProjectEngine();
+    const engine = bundle.projectEngine;
     return engine.createProject(data);
   });
 
   safeHandle('projects:update', async (_, id: string, data: Partial<ProjectData>) => {
-    const engine = getProjectEngine();
+    const engine = bundle.projectEngine;
     return engine.updateProject(id, data);
   });
 
   safeHandle('projects:delete', async (_, id: string) => {
-    const engine = getProjectEngine();
+    const engine = bundle.projectEngine;
     return engine.deleteProject(id);
   });
 
   safeHandle('projects:deleteWithData', async (_, id: string) => {
-    const engine = getProjectEngine();
+    const engine = bundle.projectEngine;
     return engine.deleteProjectWithData(id);
   });
 
@@ -297,17 +307,17 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('projects:get', async (_, id: string) => {
-    const engine = getProjectEngine();
+    const engine = bundle.projectEngine;
     return engine.getProject(id);
   });
 
   safeHandle('projects:getAll', async () => {
-    const engine = getProjectEngine();
+    const engine = bundle.projectEngine;
     return engine.getAllProjects();
   });
 
   safeHandle('projects:getActive', async () => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
 
     // Ensure all engines have the correct project context
@@ -315,13 +325,13 @@ export function registerIpcHandlers(): void {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       // For thumbnails and meta: use dataDir (whether custom or internal)
       // This ensures all project data lives in the same location for backup
-      const postEngine = getPostEngine();
-      const mediaEngine = getMediaEngine();
-      const metaEngine = getMetaEngine();
-      const menuEngine = getMenuEngine();
-      const tagEngine = getTagEngine();
-      const scriptEngine = getScriptEngine();
-      const templateEngine = getTemplateEngine();
+      const postEngine = bundle.postEngine;
+      const mediaEngine = bundle.mediaEngine;
+      const metaEngine = bundle.metaEngine;
+      const menuEngine = bundle.menuEngine;
+      const tagEngine = bundle.tagEngine;
+      const scriptEngine = bundle.scriptEngine;
+      const templateEngine = bundle.templateEngine;
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
@@ -329,7 +339,7 @@ export function registerIpcHandlers(): void {
       tagEngine.setProjectContext(project.id, dataDir);
       scriptEngine.setProjectContext(project.id, dataDir);
       templateEngine.setProjectContext(project.id, dataDir);
-      const postMediaEngine = getPostMediaEngine();
+      const postMediaEngine = bundle.postMediaEngine;
       postMediaEngine.setProjectContext(project.id);
 
       // Sync meta on startup
@@ -349,7 +359,7 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('projects:setActive', async (_, id: string) => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.setActiveProject(id);
 
     // Update all engines to use the new project context
@@ -357,13 +367,13 @@ export function registerIpcHandlers(): void {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       // For thumbnails and meta: use dataDir (whether custom or internal)
       // This ensures all project data lives in the same location for backup
-      const postEngine = getPostEngine();
-      const mediaEngine = getMediaEngine();
-      const metaEngine = getMetaEngine();
-      const menuEngine = getMenuEngine();
-      const tagEngine = getTagEngine();
-      const scriptEngine = getScriptEngine();
-      const templateEngine = getTemplateEngine();
+      const postEngine = bundle.postEngine;
+      const mediaEngine = bundle.mediaEngine;
+      const metaEngine = bundle.metaEngine;
+      const menuEngine = bundle.menuEngine;
+      const tagEngine = bundle.tagEngine;
+      const scriptEngine = bundle.scriptEngine;
+      const templateEngine = bundle.templateEngine;
       postEngine.setProjectContext(project.id, dataDir);
       mediaEngine.setProjectContext(project.id, dataDir, dataDir);
       metaEngine.setProjectContext(project.id, dataDir);
@@ -371,7 +381,7 @@ export function registerIpcHandlers(): void {
       tagEngine.setProjectContext(project.id, dataDir);
       scriptEngine.setProjectContext(project.id, dataDir);
       templateEngine.setProjectContext(project.id, dataDir);
-      const postMediaEngine = getPostMediaEngine();
+      const postMediaEngine = bundle.postMediaEngine;
       postMediaEngine.setProjectContext(project.id);
 
       // Sync meta on project switch
@@ -393,11 +403,11 @@ export function registerIpcHandlers(): void {
   // ============ Post Handlers ============
   
   safeHandle('posts:create', async (_, data: Partial<PostData>) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     
     // If no author provided, use default author from project settings
     if (!data.author) {
-      const metaEngine = getMetaEngine();
+      const metaEngine = bundle.metaEngine;
       const metadata = await metaEngine.getProjectMetadata();
       if (metadata?.defaultAuthor) {
         data.author = metadata.defaultAuthor;
@@ -408,32 +418,32 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('posts:isSlugAvailable', async (_, slug: string, excludePostId?: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.isSlugAvailable(slug, excludePostId);
   });
 
   safeHandle('posts:generateUniqueSlug', async (_, title: string, excludePostId?: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.generateUniqueSlug(title, excludePostId);
   });
 
   safeHandle('posts:update', async (_, id: string, data: Partial<PostData>) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.updatePost(id, data);
   });
 
   safeHandle('posts:delete', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.deletePost(id);
   });
 
   safeHandle('posts:get', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getPost(id);
   });
 
   safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean }) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     const post = await engine.getPost(id);
 
     if (!post) {
@@ -450,36 +460,36 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('posts:getAll', async (_, options?: PaginationOptions) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getAllPosts(options);
   });
 
   safeHandle('posts:getByStatus', async (_, status: 'draft' | 'published' | 'archived') => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getPostsByStatus(status);
   });
 
   safeHandle('posts:publish', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.publishPost(id);
   });
 
   safeHandle('posts:discard', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.discardChanges(id);
   });
 
   safeHandle('posts:hasPublishedVersion', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.hasPublishedVersion(id);
   });
 
   safeHandle('posts:rebuildFromFiles', async () => {
     // Ensure project context is current before rebuilding
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getPostEngine();
-    const metaEngine = getMetaEngine();
+    const engine = bundle.postEngine;
+    const metaEngine = bundle.metaEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
@@ -491,64 +501,64 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('posts:search', async (_, query: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.searchPosts(query);
   });
 
   safeHandle('posts:filter', async (_, filter: PostFilter) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getPostsFiltered(filter);
   });
 
   safeHandle('posts:getTags', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getAvailableTags();
   });
 
   safeHandle('posts:getCategories', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getAvailableCategories();
   });
 
   safeHandle('posts:getByYearMonth', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getPostsByYearMonth();
   });
 
   safeHandle('posts:getTagsWithCounts', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getTagsWithCounts();
   });
 
   safeHandle('posts:getCategoriesWithCounts', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getCategoriesWithCounts();
   });
 
   safeHandle('posts:getDashboardStats', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getDashboardStats();
   });
 
   safeHandle('posts:getLinksTo', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getLinksTo(id);
   });
 
   safeHandle('posts:getLinkedBy', async (_, id: string) => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.getLinkedBy(id);
   });
 
   safeHandle('posts:rebuildLinks', async () => {
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     return engine.rebuildAllPostLinks();
   });
 
   safeHandle('posts:reindexText', async () => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getPostEngine();
+    const engine = bundle.postEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
@@ -559,11 +569,11 @@ export function registerIpcHandlers(): void {
   // ============ Media Handlers ============
 
   safeHandle('media:import', async (_, sourcePath: string, metadata?: Partial<MediaData>) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     
     // If no author provided, use default author from project settings
     if (!metadata?.author) {
-      const metaEngine = getMetaEngine();
+      const metaEngine = bundle.metaEngine;
       const projectMetadata = await metaEngine.getProjectMetadata();
       if (projectMetadata?.defaultAuthor) {
         metadata = metadata || {};
@@ -589,9 +599,9 @@ export function registerIpcHandlers(): void {
     }
 
     // Ensure project context is current before importing
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       // For thumbnails and meta: use dataDir (whether custom or internal)
@@ -602,7 +612,7 @@ export function registerIpcHandlers(): void {
     const imported: MediaData[] = [];
 
     // Get default author from project settings
-    const metaEngine = getMetaEngine();
+    const metaEngine = bundle.metaEngine;
     const projectMetadata = await metaEngine.getProjectMetadata();
     const defaultAuthor = projectMetadata?.defaultAuthor;
 
@@ -619,18 +629,18 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('media:update', async (_, id: string, data: Partial<MediaData>) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.updateMedia(id, data);
   });
 
   safeHandle('media:replaceFile', async (_, id: string, newSourcePath: string) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.replaceMediaFile(id, newSourcePath);
   });
 
   safeHandle('media:replaceFileDialog', async (_, id: string) => {
     // Get the current media to determine file type filter
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     const currentMedia = await engine.getMedia(id);
     if (!currentMedia) {
       return null;
@@ -661,12 +671,12 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('media:delete', async (_, id: string) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.deleteMedia(id);
   });
 
   safeHandle('media:get', async (_, id: string) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getMedia(id);
   });
 
@@ -674,7 +684,7 @@ export function registerIpcHandlers(): void {
     // Returns the relative path for a media item (e.g. media/2025/01/uuid.jpg)
     // and exposes it as an absolute preview path (e.g. /media/2025/01/uuid.jpg)
     // so inserted markdown uses root-absolute URLs.
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     const relativePath = await engine.getRelativePath(id);
     const normalized = relativePath ?? `media/${id}`;
     return normalized.startsWith('/') ? normalized : `/${normalized}`;
@@ -688,40 +698,40 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('media:getAll', async () => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getAllMedia();
   });
 
   safeHandle('media:filter', async (_, filter: import('../engine/MediaEngine').MediaFilter) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getMediaFiltered(filter);
   });
 
   safeHandle('media:search', async (_, query: string) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.searchMedia(query);
   });
 
   safeHandle('media:getByYearMonth', async () => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getMediaByYearMonth();
   });
 
   safeHandle('media:getTags', async () => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getAvailableTags();
   });
 
   safeHandle('media:getTagsWithCounts', async () => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getTagsWithCounts();
   });
 
   safeHandle('media:rebuildFromFiles', async () => {
     // Ensure project context is current before rebuilding
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       // For thumbnails and meta: use dataDir (whether custom or internal)
@@ -732,17 +742,17 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('media:reindexText', async () => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.reindexText();
   });
 
   safeHandle('media:getThumbnail', async (_, id: string, size?: 'small' | 'medium' | 'large') => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     return engine.getThumbnailDataUrl(id, size || 'small');
   });
 
   safeHandle('media:regenerateThumbnails', async (_, id: string) => {
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     const mediaItem = await engine.getMedia(id);
     if (mediaItem && mediaItem.mimeType.startsWith('image/')) {
       const db = getDatabase().getLocal();
@@ -755,9 +765,9 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('media:regenerateMissingThumbnails', async () => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getMediaEngine();
+    const engine = bundle.mediaEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       // For thumbnails and meta: use dataDir (whether custom or internal)
@@ -770,27 +780,27 @@ export function registerIpcHandlers(): void {
   // ============ Script Handlers ============
 
   safeHandle('scripts:create', async (_, data: CreateScriptInput) => {
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     return engine.createScript(data);
   });
 
   safeHandle('scripts:update', async (_, id: string, data: UpdateScriptInput) => {
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     return engine.updateScript(id, data);
   });
 
   safeHandle('scripts:delete', async (_, id: string) => {
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     return engine.deleteScript(id);
   });
 
   safeHandle('scripts:get', async (_, id: string) => {
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     return engine.getScript(id);
   });
 
   safeHandle('scripts:getAll', async () => {
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     return engine.getAllScripts();
   });
 
@@ -798,15 +808,15 @@ export function registerIpcHandlers(): void {
   // Intentionally excluded from the Python API contract and API.md because
   // it is an internal renderer helper, not a user-facing scripting API.
   safeHandle('scripts:getEnabledMacroSlugs', async () => {
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     const scripts = await engine.getEnabledMacroScripts();
     return scripts.map((s) => s.slug);
   });
 
   safeHandle('scripts:rebuildFromFiles', async () => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getScriptEngine();
+    const engine = bundle.scriptEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
@@ -818,44 +828,44 @@ export function registerIpcHandlers(): void {
   // ============ Template Handlers ============
 
   safeHandle('templates:create', async (_, data: CreateTemplateInput) => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.createTemplate(data);
   });
 
   safeHandle('templates:update', async (_, id: string, data: UpdateTemplateInput) => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.updateTemplate(id, data);
   });
 
   safeHandle('templates:delete', async (_, id: string, options?: { force?: boolean }) => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.deleteTemplate(id, options);
   });
 
   safeHandle('templates:get', async (_, id: string) => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.getTemplate(id);
   });
 
   safeHandle('templates:getAll', async () => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.getAllTemplates();
   });
 
   safeHandle('templates:getEnabledByKind', async (_, kind: string) => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.getEnabledTemplatesByKind(kind as 'post' | 'list' | 'not-found' | 'partial');
   });
 
   safeHandle('templates:validate', async (_, content: string) => {
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     return engine.validateTemplate(content);
   });
 
   safeHandle('templates:rebuildFromFiles', async () => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
-    const engine = getTemplateEngine();
+    const engine = bundle.templateEngine;
     if (project) {
       const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
       engine.setProjectContext(project.id, dataDir);
@@ -867,69 +877,69 @@ export function registerIpcHandlers(): void {
   // ============ Task Handlers ============
 
   safeHandle('tasks:getAll', async () => {
-    return taskManager.getAllTasks();
+    return bundle.taskManager.getAllTasks();
   });
 
   safeHandle('tasks:getRunning', async () => {
-    return taskManager.getRunningTasks();
+    return bundle.taskManager.getRunningTasks();
   });
 
   safeHandle('tasks:cancel', async (_, taskId: string) => {
-    return taskManager.cancelTask(taskId);
+    return bundle.taskManager.cancelTask(taskId);
   });
 
   safeHandle('tasks:clearCompleted', async () => {
-    return taskManager.clearCompletedTasks();
+    return bundle.taskManager.clearCompletedTasks();
   });
 
   // ============ Sync Handlers (git operations via GitApiAdapter) ============
 
   safeHandle('sync:checkAvailability', async () => {
-    return getGitApiAdapter().checkAvailability();
+    return bundle.gitApiAdapter.checkAvailability();
   });
 
   safeHandle('sync:getRepoState', async () => {
-    return getGitApiAdapter().getRepoState();
+    return bundle.gitApiAdapter.getRepoState();
   });
 
   safeHandle('sync:getStatus', async () => {
-    return getGitApiAdapter().getStatus();
+    return bundle.gitApiAdapter.getStatus();
   });
 
   safeHandle('sync:getHistory', async (_, limit?: number) => {
-    return getGitApiAdapter().getHistory(limit);
+    return bundle.gitApiAdapter.getHistory(limit);
   });
 
   safeHandle('sync:getRemoteState', async () => {
-    return getGitApiAdapter().getRemoteState();
+    return bundle.gitApiAdapter.getRemoteState();
   });
 
   safeHandle('sync:fetch', async () => {
-    return getGitApiAdapter().fetch();
+    return bundle.gitApiAdapter.fetch();
   });
 
   safeHandle('sync:pull', async () => {
-    return getGitApiAdapter().pull();
+    return bundle.gitApiAdapter.pull();
   });
 
   safeHandle('sync:push', async () => {
-    return getGitApiAdapter().push();
+    return bundle.gitApiAdapter.push();
   });
 
   safeHandle('sync:commitAll', async (_, message: string) => {
-    return getGitApiAdapter().commitAll(message);
+    return bundle.gitApiAdapter.commitAll(message);
   });
 
   // ============ App Handlers ============
 
   safeHandle('app:getDataPaths', async () => {
     // Get paths for the active project
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     const projectId = activeProject?.id || 'default';
     const paths = projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
     return {
-      database: getDatabase().getDataPaths().database,
+      database: getDatabase().getDbPath(),
       posts: paths.posts,
       media: paths.media,
     };
@@ -951,7 +961,7 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('app:getDefaultProjectPath', async (_, projectId: string) => {
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     return projectEngine.getDefaultProjectBaseDir(projectId);
   });
 
@@ -1019,8 +1029,8 @@ export function registerIpcHandlers(): void {
     }
 
     if (typedAction === 'openDataFolder') {
-      const paths = getDatabase().getDataPaths();
-      await shell.openPath(path.dirname(paths.database));
+      const dbPath = getDatabase().getDbPath();
+      await shell.openPath(path.dirname(dbPath));
       return;
     }
 
@@ -1043,8 +1053,8 @@ export function registerIpcHandlers(): void {
 
   // ============ Meta Handlers ============
 
-  const ensureMetaContext = async (engine: ReturnType<typeof getMetaEngine>) => {
-    const projectEngine = getProjectEngine();
+  const ensureMetaContext = async (engine: MetaEngine) => {
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (!activeProject) {
       return;
@@ -1054,7 +1064,7 @@ export function registerIpcHandlers(): void {
     engine.setProjectContext(activeProject.id, dataDir);
   };
 
-  const ensureMetaReady = async (engine: ReturnType<typeof getMetaEngine>) => {
+  const ensureMetaReady = async (engine: MetaEngine) => {
     await ensureMetaContext(engine);
     if (!engine.isInitialized()) {
       await engine.syncOnStartup();
@@ -1062,8 +1072,8 @@ export function registerIpcHandlers(): void {
   };
 
   safeHandle('menu:get', async () => {
-    const projectEngine = getProjectEngine();
-    const menuEngine = getMenuEngine();
+    const projectEngine = bundle.projectEngine;
+    const menuEngine = bundle.menuEngine;
     const project = await projectEngine.getActiveProject();
 
     if (!project) {
@@ -1076,8 +1086,8 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('menu:save', async (_, menu: MenuDocument) => {
-    const projectEngine = getProjectEngine();
-    const menuEngine = getMenuEngine();
+    const projectEngine = bundle.projectEngine;
+    const menuEngine = bundle.menuEngine;
     const project = await projectEngine.getActiveProject();
 
     if (!project) {
@@ -1090,47 +1100,47 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('meta:getTags', async () => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     return engine.getTags();
   });
 
   safeHandle('meta:getCategories', async () => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     return engine.getCategories();
   });
 
   safeHandle('meta:addTag', async (_, tag: string) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     await engine.addTag(tag);
     return engine.getTags();
   });
 
   safeHandle('meta:removeTag', async (_, tag: string) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     await engine.removeTag(tag);
     return engine.getTags();
   });
 
   safeHandle('meta:addCategory', async (_, category: string) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     await engine.addCategory(category);
     return engine.getCategories();
   });
 
   safeHandle('meta:removeCategory', async (_, category: string) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     await engine.removeCategory(category);
     return engine.getCategories();
   });
 
   safeHandle('meta:syncOnStartup', async () => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
     await engine.syncOnStartup();
     return {
@@ -1141,39 +1151,39 @@ export function registerIpcHandlers(): void {
   });
 
   safeHandle('meta:getProjectMetadata', async () => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     return engine.getProjectMetadata();
   });
 
   safeHandle('meta:setProjectMetadata', async (_, metadata: { name: string; description?: string }) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
     await engine.setProjectMetadata(metadata);
     return engine.getProjectMetadata();
   });
 
   safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
     await engine.updateProjectMetadata(updates);
     return engine.getProjectMetadata();
   });
 
   safeHandle('meta:getPublishingPreferences', async () => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaReady(engine);
     return engine.getPublishingPreferences();
   });
 
   safeHandle('meta:setPublishingPreferences', async (_, prefs: { sshHost: string; sshUser: string; sshRemotePath: string; sshMode: 'scp' | 'rsync' }) => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
     await engine.setPublishingPreferences(prefs);
   });
 
   safeHandle('meta:clearPublishingPreferences', async () => {
-    const engine = getMetaEngine();
+    const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
     await engine.clearPublishingPreferences();
   });
@@ -1181,114 +1191,114 @@ export function registerIpcHandlers(): void {
   // ============ Tag Management Handlers ============
 
   safeHandle('tags:getAll', async () => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.getAllTags();
   });
 
   safeHandle('tags:getWithCounts', async () => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.getTagsWithCounts();
   });
 
   safeHandle('tags:get', async (_, id: string) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.getTag(id);
   });
 
   safeHandle('tags:getByName', async (_, name: string) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.getTagByName(name);
   });
 
   safeHandle('tags:create', async (_, data: { name: string; color?: string }) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.createTag(data);
   });
 
   safeHandle('tags:update', async (_, id: string, data: { name?: string; color?: string | null; postTemplateSlug?: string | null }) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.updateTag(id, data);
   });
 
   safeHandle('tags:delete', async (_, id: string) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.deleteTag(id);
   });
 
   safeHandle('tags:merge', async (_, sourceTagIds: string[], targetTagId: string) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.mergeTags(sourceTagIds, targetTagId);
   });
 
   safeHandle('tags:rename', async (_, id: string, newName: string) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.renameTag(id, newName);
   });
 
   safeHandle('tags:getPostsWithTag', async (_, tagId: string) => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.getPostsWithTag(tagId);
   });
 
   safeHandle('tags:syncFromPosts', async () => {
-    const engine = getTagEngine();
+    const engine = bundle.tagEngine;
     return engine.syncTagsFromPosts();
   });
 
   // ============ Post-Media Link Handlers ============
 
   safeHandle('postMedia:link', async (_, postId: string, mediaId: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.linkMediaToPost(postId, mediaId);
   });
 
   safeHandle('postMedia:unlink', async (_, postId: string, mediaId: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.unlinkMediaFromPost(postId, mediaId);
   });
 
   safeHandle('postMedia:linkMany', async (_, postId: string, mediaIds: string[]) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.linkManyToPost(postId, mediaIds);
   });
 
   safeHandle('postMedia:unlinkMany', async (_, postId: string, mediaIds: string[]) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.unlinkManyFromPost(postId, mediaIds);
   });
 
   safeHandle('postMedia:getForPost', async (_, postId: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.getLinkedMediaForPost(postId);
   });
 
   safeHandle('postMedia:getForMedia', async (_, mediaId: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.getLinkedPostsForMedia(mediaId);
   });
 
   safeHandle('postMedia:getMediaDataForPost', async (_, postId: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.getLinkedMediaDataForPost(postId);
   });
 
   safeHandle('postMedia:reorder', async (_, postId: string, mediaIds: string[]) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.reorderMediaForPost(postId, mediaIds);
   });
 
   safeHandle('postMedia:isLinked', async (_, postId: string, mediaId: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.isMediaLinkedToPost(postId, mediaId);
   });
 
   safeHandle('postMedia:import', async (_, postId: string, filePath: string) => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.importMediaForPost(postId, filePath);
   });
 
   safeHandle('postMedia:rebuild', async () => {
-    const engine = getPostMediaEngine();
+    const engine = bundle.postMediaEngine;
     return engine.rebuildFromSidecars();
   });
 
@@ -1329,7 +1339,7 @@ export function registerIpcHandlers(): void {
     emitImportProgress('Loading project data...', `Found ${wxrData.posts.length} posts, ${wxrData.media.length} media`);
 
     const analysisEngine = new ImportAnalysisEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       analysisEngine.setProjectContext(activeProject.id);
@@ -1363,7 +1373,7 @@ export function registerIpcHandlers(): void {
     emitImportProgress('Loading project data...', `Found ${wxrData.posts.length} posts, ${wxrData.media.length} media`);
 
     const analysisEngine = new ImportAnalysisEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       analysisEngine.setProjectContext(activeProject.id);
@@ -1421,7 +1431,7 @@ export function registerIpcHandlers(): void {
     const report = JSON.parse(reportJson) as import('../engine/ImportAnalysisEngine').ImportAnalysisReport;
     
     // Set up project context
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     
     // Calculate total items for ETA
@@ -1442,14 +1452,19 @@ export function registerIpcHandlers(): void {
       id: taskId,
       name: `Import from ${report.site.title || 'WordPress'}`,
       execute: async (onProgress: (progress: number, message: string) => void) => {
-        const executionEngine = new ImportExecutionEngine();
+        const executionEngine = new ImportExecutionEngine({
+          tagEngine: bundle.tagEngine,
+          postEngine: bundle.postEngine,
+          mediaEngine: bundle.mediaEngine,
+          postMediaEngine: bundle.postMediaEngine,
+        });
         
         if (activeProject) {
           executionEngine.setProjectContext(activeProject.id, activeProject.dataPath);
         }
 
         // Get default author from project settings
-        const metaEngine = getMetaEngine();
+        const metaEngine = bundle.metaEngine;
         const projectMetadata = await metaEngine.getProjectMetadata();
         const defaultAuthor = projectMetadata?.defaultAuthor;
 
@@ -1500,7 +1515,7 @@ export function registerIpcHandlers(): void {
     };
 
     // Run the task - this returns immediately with a promise
-    const resultPromise = taskManager.runTask(task);
+    const resultPromise = bundle.taskManager.runTask(task);
     
     // Return task ID so UI can track it
     return { taskId, totalItems };
@@ -1511,7 +1526,7 @@ export function registerIpcHandlers(): void {
   safeHandle('importDefinitions:create', async (_, name?: string) => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -1522,7 +1537,7 @@ export function registerIpcHandlers(): void {
   safeHandle('importDefinitions:get', async (_, id: string) => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -1533,7 +1548,7 @@ export function registerIpcHandlers(): void {
   safeHandle('importDefinitions:getAll', async () => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -1544,7 +1559,7 @@ export function registerIpcHandlers(): void {
   safeHandle('importDefinitions:update', async (event, id: string, updates: any) => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -1560,7 +1575,7 @@ export function registerIpcHandlers(): void {
   safeHandle('importDefinitions:delete', async (_, id: string) => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -1568,46 +1583,39 @@ export function registerIpcHandlers(): void {
     return engine.deleteDefinition(id);
   });
 
-  registerMetadataDiffHandlers(safeHandle);
-  registerBlogHandlers(safeHandle);
-  registerPublishHandlers(safeHandle);
+  registerMetadataDiffHandlers(safeHandle, bundle);
+  registerBlogHandlers(safeHandle, bundle);
+  registerPublishHandlers(safeHandle, bundle);
 
   // ============ MCP Config Handlers ============
 
   safeHandle('mcp:getAgents', async () => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine({
-      homeDir: require('os').homedir(),
-      platform: process.platform,
-      mcpUrl: buildMcpUrl(),
-    });
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
     return engine.getAgents();
   });
 
   safeHandle('mcp:addToAgentConfig', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine({
-      homeDir: require('os').homedir(),
-      platform: process.platform,
-      mcpUrl: buildMcpUrl(),
-    });
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
     return engine.addToConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
+  });
+
+  safeHandle('mcp:removeFromAgentConfig', async (_event: unknown, agentId: string) => {
+    const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
+    return engine.removeFromConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 
   safeHandle('mcp:isConfigured', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine({
-      homeDir: require('os').homedir(),
-      platform: process.platform,
-      mcpUrl: buildMcpUrl(),
-    });
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
     return engine.isConfigured(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 
   safeHandle('mcp:getPort', async () => {
     try {
-      const { getMCPServer } = await import('../engine/MCPServer');
-      return getMCPServer().getPort();
+      return bundle.mcpServer.getPort();
     } catch {
       return null;
     }
@@ -1620,13 +1628,13 @@ export function registerIpcHandlers(): void {
  * Separated from registerIpcHandlers() so that handler registration can happen
  * synchronously before any async work, eliminating startup race conditions.
  */
-export function registerEventForwarding(): void {
-  const postEngine = getPostEngine();
-  const mediaEngine = getMediaEngine();
-  const projectEngine = getProjectEngine();
-  const metaEngine = getMetaEngine();
-  const tagEngine = getTagEngine();
-  const postMediaEngine = getPostMediaEngine();
+export function registerEventForwarding(bundle: EngineBundle): void {
+  const postEngine = bundle.postEngine;
+  const mediaEngine = bundle.mediaEngine;
+  const projectEngine = bundle.projectEngine;
+  const metaEngine = bundle.metaEngine;
+  const tagEngine = bundle.tagEngine;
+  const postMediaEngine = bundle.postMediaEngine;
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -1671,19 +1679,19 @@ export function registerEventForwarding(): void {
   postMediaEngine.on('mediaReordered', forwardEvent('postMedia:reordered'));
   postMediaEngine.on('rebuilt', forwardEvent('postMedia:rebuilt'));
 
-  taskManager.on('taskCreated', forwardEvent('task:created'));
-  taskManager.on('taskStarted', forwardEvent('task:started'));
-  taskManager.on('taskProgress', forwardEvent('task:progress'));
-  taskManager.on('taskCompleted', forwardEvent('task:completed'));
-  taskManager.on('taskFailed', forwardEvent('task:failed'));
+  bundle.taskManager.on('taskCreated', forwardEvent('task:created'));
+  bundle.taskManager.on('taskStarted', forwardEvent('task:started'));
+  bundle.taskManager.on('taskProgress', forwardEvent('task:progress'));
+  bundle.taskManager.on('taskCompleted', forwardEvent('task:completed'));
+  bundle.taskManager.on('taskFailed', forwardEvent('task:failed'));
 
-  const scriptEngine = getScriptEngine();
+  const scriptEngine = bundle.scriptEngine;
   scriptEngine.on('scriptCreated', forwardEvent('script:created'));
   scriptEngine.on('scriptUpdated', forwardEvent('script:updated'));
   scriptEngine.on('scriptDeleted', forwardEvent('script:deleted'));
   scriptEngine.on('scriptsRebuilt', forwardEvent('scripts:rebuilt'));
 
-  const templateEngine = getTemplateEngine();
+  const templateEngine = bundle.templateEngine;
   templateEngine.on('templateCreated', forwardEvent('template:created'));
   templateEngine.on('templateUpdated', forwardEvent('template:updated'));
   templateEngine.on('templateDeleted', forwardEvent('template:deleted'));

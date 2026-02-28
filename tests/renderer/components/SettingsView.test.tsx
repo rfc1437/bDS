@@ -1,8 +1,75 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { SettingsView } from '../../../src/renderer/components/SettingsView/SettingsView';
 import { useAppStore } from '../../../src/renderer/store';
+
+describe('MCPAgentButton uninstall', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppStore.setState({
+      activeProject: {
+        id: 'p1',
+        name: 'Test',
+        slug: 'test',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      gitDiffPreferences: { wordWrap: true, viewStyle: 'inline', hideUnchangedRegions: false },
+    });
+
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      app: { getDefaultProjectPath: vi.fn().mockResolvedValue('/repo') },
+      meta: {
+        getCategories: vi.fn().mockResolvedValue(['article']),
+        getProjectMetadata: vi.fn().mockResolvedValue({
+          maxPostsPerPage: 75,
+          publicUrl: 'https://example.com',
+          categorySettings: { article: { renderInLists: true, showTitle: true } },
+        }),
+        updateProjectMetadata: vi.fn().mockResolvedValue({}),
+      },
+      chat: {
+        getSystemPrompt: vi.fn().mockResolvedValue({ success: true, prompt: '' }),
+        getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
+      },
+      templates: { getEnabledByKind: vi.fn().mockResolvedValue([]) },
+      projects: { update: vi.fn().mockResolvedValue({}) },
+      mcp: {
+        getAgents: vi.fn().mockResolvedValue([
+          { id: 'claude-code', label: 'Claude Code' },
+        ]),
+        addToAgentConfig: vi.fn().mockResolvedValue({ success: true, configPath: '/p' }),
+        removeFromAgentConfig: vi.fn().mockResolvedValue({ success: true, configPath: '/p' }),
+        isConfigured: vi.fn().mockResolvedValue(true),
+        getPort: vi.fn().mockResolvedValue(4124),
+      },
+    };
+  });
+
+  it('shows an uninstall button when agent is already configured', async () => {
+    render(<SettingsView />);
+    const btn = await screen.findByRole('button', { name: /remove from claude code/i });
+    expect(btn).toBeInTheDocument();
+  });
+
+  it('calls removeFromAgentConfig and shows add button after removal', async () => {
+    render(<SettingsView />);
+    const btn = await screen.findByRole('button', { name: /remove from claude code/i });
+
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+
+    expect((window as any).electronAPI.mcp.removeFromAgentConfig).toHaveBeenCalledWith('claude-code');
+
+    const addBtn = await screen.findByRole('button', { name: /add to claude code/i });
+    expect(addBtn).toBeInTheDocument();
+  });
+});
 
 describe('SettingsView Diff Preferences', () => {
   let updateProjectMock: ReturnType<typeof vi.fn>;

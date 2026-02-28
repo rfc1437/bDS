@@ -309,11 +309,3 @@ export class MenuEngine extends EventEmitter {
   }
 }
 
-let menuEngine: MenuEngine | null = null;
-
-export function getMenuEngine(): MenuEngine {
-  if (!menuEngine) {
-    menuEngine = new MenuEngine();
-  }
-  return menuEngine;
-}

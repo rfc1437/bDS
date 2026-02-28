@@ -1,28 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MCPServer, type MCPServerDependencies, DEFAULT_PAGE_SIZE, encodeCursor, decodeCursor } from '../../src/main/engine/MCPServer';
 
-// Mock all engine singletons
-vi.mock('../../src/main/engine/PostEngine', () => ({
-  getPostEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/MediaEngine', () => ({
-  getMediaEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/ScriptEngine', () => ({
-  getScriptEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/TemplateEngine', () => ({
-  getTemplateEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/MetaEngine', () => ({
-  getMetaEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/PostMediaEngine', () => ({
-  getPostMediaEngine: vi.fn(),
-}));
-vi.mock('../../src/main/engine/TagEngine', () => ({
-  getTagEngine: vi.fn(),
-}));
+
 
 function createMockPostEngine() {
   return {
@@ -60,22 +39,34 @@ function createMockMediaEngine() {
 
 function createMockScriptEngine() {
   return {
-    createScript: vi.fn().mockResolvedValue({
+    createDraftScript: vi.fn().mockResolvedValue({
       id: 'script-1', title: 'Test', slug: 'test', kind: 'macro',
       entrypoint: 'main.py', content: '', enabled: true, version: 1,
       filePath: '/test', createdAt: new Date(), updatedAt: new Date(),
     }),
+    publishScript: vi.fn().mockResolvedValue({
+      id: 'script-1', title: 'Test', slug: 'test', kind: 'macro',
+      entrypoint: 'main.py', content: '', enabled: true, version: 1,
+      filePath: '/test', createdAt: new Date(), updatedAt: new Date(),
+    }),
+    deleteDraftScript: vi.fn().mockResolvedValue(true),
     validateScript: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
   };
 }
 
 function createMockTemplateEngine() {
   return {
-    createTemplate: vi.fn().mockResolvedValue({
+    createDraftTemplate: vi.fn().mockResolvedValue({
       id: 'tpl-1', title: 'Test', slug: 'test', kind: 'post',
       enabled: true, version: 1, filePath: '/test', content: '',
       createdAt: new Date(), updatedAt: new Date(),
     }),
+    publishTemplate: vi.fn().mockResolvedValue({
+      id: 'tpl-1', title: 'Test', slug: 'test', kind: 'post',
+      enabled: true, version: 1, filePath: '/test', content: '',
+      createdAt: new Date(), updatedAt: new Date(),
+    }),
+    deleteDraftTemplate: vi.fn().mockResolvedValue(true),
     validateTemplate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
   };
 }
@@ -110,13 +101,13 @@ function createDependencies() {
   const mockTagEngine = createMockTagEngine();
 
   const deps: MCPServerDependencies = {
-    getPostEngine: () => mockPostEngine,
-    getMediaEngine: () => mockMediaEngine,
-    getScriptEngine: () => mockScriptEngine,
-    getTemplateEngine: () => mockTemplateEngine,
-    getMetaEngine: () => mockMetaEngine,
-    getPostMediaEngine: () => mockPostMediaEngine,
-    getTagEngine: () => mockTagEngine,
+    postEngine: mockPostEngine,
+    mediaEngine: mockMediaEngine,
+    scriptEngine: mockScriptEngine,
+    templateEngine: mockTemplateEngine,
+    metaEngine: mockMetaEngine,
+    postMediaEngine: mockPostMediaEngine,
+    tagEngine: mockTagEngine,
   };
 
   return { deps, mockPostEngine, mockMediaEngine, mockScriptEngine, mockTemplateEngine, mockMetaEngine, mockPostMediaEngine, mockTagEngine };
@@ -358,25 +349,21 @@ describe('MCPServer', () => {
 
     it('accepts a proposeScript proposal by creating script', async () => {
       const proposalId = server.proposalStore.create('proposeScript', {
-        title: 'My Script', kind: 'macro', content: 'print("hello")',
+        scriptId: 'script-1',
       });
       const result = await server.acceptProposal(proposalId);
       expect(result.success).toBe(true);
-      expect(mockScriptEngine.createScript).toHaveBeenCalledWith({
-        title: 'My Script', kind: 'macro', content: 'print("hello")',
-      });
+      expect(mockScriptEngine.publishScript).toHaveBeenCalledWith('script-1');
       expect(server.proposalStore.get(proposalId)).toBeUndefined();
     });
 
     it('accepts a proposeTemplate proposal by creating template', async () => {
       const proposalId = server.proposalStore.create('proposeTemplate', {
-        title: 'My Template', kind: 'post', content: '<h1>{{ title }}</h1>',
+        templateId: 'tpl-1',
       });
       const result = await server.acceptProposal(proposalId);
       expect(result.success).toBe(true);
-      expect(mockTemplateEngine.createTemplate).toHaveBeenCalledWith({
-        title: 'My Template', kind: 'post', content: '<h1>{{ title }}</h1>',
-      });
+      expect(mockTemplateEngine.publishTemplate).toHaveBeenCalledWith('tpl-1');
     });
 
     it('accepts a proposeMediaMetadata proposal by updating media', async () => {
@@ -415,9 +402,10 @@ describe('MCPServer', () => {
     });
 
     it('discards a proposeScript proposal by removing from store', async () => {
-      const proposalId = server.proposalStore.create('proposeScript', { title: 'Script' });
+      const proposalId = server.proposalStore.create('proposeScript', { scriptId: 'script-1' });
       const result = await server.discardProposal(proposalId);
       expect(result.success).toBe(true);
+      expect(mockScriptEngine.deleteDraftScript).toHaveBeenCalledWith('script-1');
       expect(server.proposalStore.get(proposalId)).toBeUndefined();
     });
 
@@ -830,7 +818,10 @@ describe('MCPServer', () => {
       const proposal = server.proposalStore.get(parsed.proposalId);
       expect(proposal).toBeDefined();
       expect(proposal!.type).toBe('proposeScript');
-      expect(proposal!.data.content).toBe('print("hi")');
+      expect(mockScriptEngine.createDraftScript).toHaveBeenCalledWith({
+        title: 'My Script', kind: 'macro', content: 'print("hi")', entrypoint: undefined,
+      });
+      expect(proposal!.data.scriptId).toBe('script-1');
     });
 
     it('propose_script calls validateScript and includes validation result in preview', async () => {

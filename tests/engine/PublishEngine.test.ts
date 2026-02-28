@@ -99,13 +99,6 @@ describe('PublishEngine', () => {
   });
 
   describe('constructor and project context', () => {
-    it('should be instantiated via getPublishEngine singleton', async () => {
-      const { getPublishEngine } = await import('../../src/main/engine/PublishEngine');
-      const e1 = getPublishEngine();
-      const e2 = getPublishEngine();
-      expect(e1).toBe(e2);
-    });
-
     it('should throw if no project context is set', async () => {
       const noContextEngine = new PublishEngine();
       await expect(

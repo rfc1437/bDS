@@ -147,15 +147,6 @@ export type { GitTemplateFileChange, GitTemplateFileChangeStatus };
 
 type GitProvider = 'unknown' | 'github' | 'gitlab' | 'gitea-forgejo';
 
-let gitEngineInstance: GitEngine | null = null;
-
-export function getGitEngine(): GitEngine {
-  if (!gitEngineInstance) {
-    gitEngineInstance = new GitEngine();
-  }
-  return gitEngineInstance;
-}
-
 export class GitEngine {
   private readonly markdownExtensions = new Set(['.md', '.markdown', '.mdx']);
 

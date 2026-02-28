@@ -31,7 +31,7 @@ describe('GitApiAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GitApiAdapter();
+    adapter = new GitApiAdapter(mockGitEngine as any, mockProjectEngine as any);
   });
 
   it('checkAvailability delegates directly (no projectPath)', async () => {

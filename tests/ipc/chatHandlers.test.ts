@@ -102,7 +102,12 @@ describe('chatHandlers', () => {
 
   it('streams sendMessage callbacks through main window events', async () => {
     const mod = await import('../../src/main/ipc/chatHandlers');
-    mod.initializeChatHandlers(() => mainWindowMock as never);
+    const mockBundle = {
+      postEngine: {},
+      mediaEngine: {},
+      postMediaEngine: {},
+    };
+    mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
     mod.registerChatHandlers();
 
     const handler = registeredHandlers.get('chat:sendMessage');

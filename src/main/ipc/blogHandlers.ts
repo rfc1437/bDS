@@ -1,13 +1,5 @@
 import { dialog } from 'electron';
-import { getPostEngine } from '../engine/PostEngine';
-import { getProjectEngine } from '../engine/ProjectEngine';
-import { getMetaEngine } from '../engine/MetaEngine';
-import { getMediaEngine } from '../engine/MediaEngine';
-import { getPostMediaEngine } from '../engine/PostMediaEngine';
-import { getMenuEngine } from '../engine/MenuEngine';
-import { taskManager } from '../engine/TaskManager';
 import {
-  getBlogGenerationEngine,
   resolvePublicBaseUrl,
   type BlogGenerationResult,
   type BlogGenerationSection,
@@ -15,17 +7,18 @@ import {
   type SiteValidationReport,
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
+import type { EngineBundle } from '../engine/EngineBundle';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
-export function registerBlogHandlers(safeHandle: SafeHandle): void {
+export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   const resolveBlogGenerationBaseOptions = async (): Promise<BlogGenerationOptions> => {
-    const projectEngine = getProjectEngine();
-    const postEngine = getPostEngine();
-    const metaEngine = getMetaEngine();
-    const mediaEngine = getMediaEngine();
-    const postMediaEngine = getPostMediaEngine();
-    const menuEngine = getMenuEngine();
+    const projectEngine = bundle.projectEngine;
+    const postEngine = bundle.postEngine;
+    const metaEngine = bundle.metaEngine;
+    const mediaEngine = bundle.mediaEngine;
+    const postMediaEngine = bundle.postMediaEngine;
+    const menuEngine = bundle.menuEngine;
 
     const project = await projectEngine.getActiveProject();
     if (!project) {
@@ -76,7 +69,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
   };
 
   safeHandle('blog:generateSitemap', async () => {
-    const blogGenerationEngine = getBlogGenerationEngine();
+    const blogGenerationEngine = bundle.blogGenerationEngine;
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
     const taskTimestamp = Date.now();
@@ -88,7 +81,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
       taskName: string,
       taskIdPrefix: string,
     ): Promise<BlogGenerationResult> => {
-      return taskManager.runTask({
+      return bundle.taskManager.runTask({
         id: `${taskIdPrefix}-${taskTimestamp}`,
         name: taskName,
         groupId: taskGroupId,
@@ -137,11 +130,11 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
   });
 
   safeHandle('blog:validateSite', async () => {
-    const blogGenerationEngine = getBlogGenerationEngine();
+    const blogGenerationEngine = bundle.blogGenerationEngine;
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
     const taskTimestamp = Date.now();
-    return taskManager.runTask({
+    return bundle.taskManager.runTask({
       id: `site-validate-${taskTimestamp}`,
       name: 'Validate Site',
       execute: async (onProgress) => {
@@ -153,11 +146,11 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
   });
 
   safeHandle('blog:regenerateCalendar', async () => {
-    const blogGenerationEngine = getBlogGenerationEngine();
+    const blogGenerationEngine = bundle.blogGenerationEngine;
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
     const taskTimestamp = Date.now();
-    return taskManager.runTask({
+    return bundle.taskManager.runTask({
       id: `site-calendar-regenerate-${taskTimestamp}`,
       name: 'Regenerate Calendar',
       execute: async (onProgress) => {
@@ -169,11 +162,11 @@ export function registerBlogHandlers(safeHandle: SafeHandle): void {
   });
 
   safeHandle('blog:applyValidation', async (_event, report: SiteValidationReport) => {
-    const blogGenerationEngine = getBlogGenerationEngine();
+    const blogGenerationEngine = bundle.blogGenerationEngine;
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
     const taskTimestamp = Date.now();
-    return taskManager.runTask({
+    return bundle.taskManager.runTask({
       id: `site-validate-apply-${taskTimestamp}`,
       name: 'Apply Site Validation',
       execute: async (onProgress) => {

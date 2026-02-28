@@ -1,4 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   registerAppTool,
@@ -82,12 +83,16 @@ interface MediaEngineContract {
 }
 
 interface ScriptEngineContract {
-  createScript: (input: CreateScriptInput) => Promise<ScriptData>;
+  createDraftScript: (input: CreateScriptInput) => Promise<ScriptData>;
+  publishScript: (id: string) => Promise<ScriptData | null>;
+  deleteDraftScript: (id: string) => Promise<boolean>;
   validateScript: (content: string) => Promise<ScriptValidationResult>;
 }
 
 interface TemplateEngineContract {
-  createTemplate: (input: CreateTemplateInput) => Promise<TemplateData>;
+  createDraftTemplate: (input: CreateTemplateInput) => Promise<TemplateData>;
+  publishTemplate: (id: string) => Promise<TemplateData | null>;
+  deleteDraftTemplate: (id: string) => Promise<boolean>;
   validateTemplate: (content: string) => Promise<TemplateValidationResult>;
 }
 
@@ -105,13 +110,13 @@ interface TagEngineContract {
 }
 
 export interface MCPServerDependencies {
-  getPostEngine: () => PostEngineContract;
-  getMediaEngine: () => MediaEngineContract;
-  getScriptEngine: () => ScriptEngineContract;
-  getTemplateEngine: () => TemplateEngineContract;
-  getMetaEngine: () => MetaEngineContract;
-  getPostMediaEngine: () => PostMediaEngineContract;
-  getTagEngine: () => TagEngineContract;
+  postEngine: PostEngineContract;
+  mediaEngine: MediaEngineContract;
+  scriptEngine: ScriptEngineContract;
+  templateEngine: TemplateEngineContract;
+  metaEngine: MetaEngineContract;
+  postMediaEngine: PostMediaEngineContract;
+  tagEngine: TagEngineContract;
 }
 
 /**
@@ -120,8 +125,8 @@ export interface MCPServerDependencies {
  */
 export interface ProposalDataMap {
   draftPost: { postId: string };
-  proposeScript: CreateScriptInput;
-  proposeTemplate: CreateTemplateInput;
+  proposeScript: { scriptId: string };
+  proposeTemplate: { templateId: string };
   proposeMediaMetadata: { mediaId: string; changes: Partial<MediaData> };
   proposePostMetadata: { postId: string; changes: Partial<PostData> };
 }
@@ -139,9 +144,21 @@ export class MCPServer {
   private httpServer: Server | null = null;
   private port: number | null = null;
 
-  constructor(deps: MCPServerDependencies) {
+  constructor(deps: MCPServerDependencies, opts?: { proposalTtlMs?: number }) {
     this.deps = deps;
-    this.proposalStore = new ProposalStore();
+    this.proposalStore = new ProposalStore(
+      opts?.proposalTtlMs,
+      (proposal) => {
+        // Clean up draft DB rows on TTL expiry
+        if (proposal.type === 'proposeScript') {
+          const { scriptId } = proposalData<'proposeScript'>(proposal);
+          this.deps.scriptEngine.deleteDraftScript(scriptId).catch(() => {});
+        } else if (proposal.type === 'proposeTemplate') {
+          const { templateId } = proposalData<'proposeTemplate'>(proposal);
+          this.deps.templateEngine.deleteDraftTemplate(templateId).catch(() => {});
+        }
+      },
+    );
   }
 
   /** Create a fresh McpServer with all tools/resources/prompts registered (stateless — one per request). */
@@ -268,6 +285,16 @@ export class MCPServer {
     return this.port;
   }
 
+  async startCli(): Promise<void> {
+    const server = this.createMcpServer();
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    await new Promise<void>((resolve) => {
+      process.stdin.on('close', resolve);
+    });
+    await server.close();
+  }
+
   // ── Accept / Discard ────────────────────────────────────────────────
 
   async acceptProposal(proposalId: string): Promise<{ success: boolean; message: string }> {
@@ -280,25 +307,27 @@ export class MCPServer {
       switch (proposal.type) {
         case 'draftPost': {
           const { postId } = proposalData<'draftPost'>(proposal);
-          await this.deps.getPostEngine().publishPost(postId);
+          await this.deps.postEngine.publishPost(postId);
           break;
         }
         case 'proposeScript': {
-          await this.deps.getScriptEngine().createScript(proposalData<'proposeScript'>(proposal));
+          const { scriptId } = proposalData<'proposeScript'>(proposal);
+          await this.deps.scriptEngine.publishScript(scriptId);
           break;
         }
         case 'proposeTemplate': {
-          await this.deps.getTemplateEngine().createTemplate(proposalData<'proposeTemplate'>(proposal));
+          const { templateId } = proposalData<'proposeTemplate'>(proposal);
+          await this.deps.templateEngine.publishTemplate(templateId);
           break;
         }
         case 'proposeMediaMetadata': {
           const { mediaId, changes } = proposalData<'proposeMediaMetadata'>(proposal);
-          await this.deps.getMediaEngine().updateMedia(mediaId, changes);
+          await this.deps.mediaEngine.updateMedia(mediaId, changes);
           break;
         }
         case 'proposePostMetadata': {
           const { postId, changes } = proposalData<'proposePostMetadata'>(proposal);
-          await this.deps.getPostEngine().updatePost(postId, changes);
+          await this.deps.postEngine.updatePost(postId, changes);
           break;
         }
       }
@@ -318,7 +347,13 @@ export class MCPServer {
     try {
       if (proposal.type === 'draftPost') {
         const { postId } = proposalData<'draftPost'>(proposal);
-        await this.deps.getPostEngine().deletePost(postId);
+        await this.deps.postEngine.deletePost(postId);
+      } else if (proposal.type === 'proposeScript') {
+        const { scriptId } = proposalData<'proposeScript'>(proposal);
+        await this.deps.scriptEngine.deleteDraftScript(scriptId);
+      } else if (proposal.type === 'proposeTemplate') {
+        const { templateId } = proposalData<'proposeTemplate'>(proposal);
+        await this.deps.templateEngine.deleteDraftTemplate(templateId);
       }
       this.proposalStore.remove(proposalId);
       return { success: true, message: `Proposal ${proposalId} discarded.` };
@@ -331,7 +366,7 @@ export class MCPServer {
 
   private registerResources(server: McpServer): void {
     server.registerResource('posts', 'bds://posts', { description: 'All blog posts (first page)' }, async () => {
-      const result = await this.deps.getPostEngine().getAllPosts({ limit: DEFAULT_PAGE_SIZE });
+      const result = await this.deps.postEngine.getAllPosts({ limit: DEFAULT_PAGE_SIZE });
       const response: Record<string, unknown> = { ...result };
       if (result.hasMore) {
         response.nextCursor = encodeCursor(DEFAULT_PAGE_SIZE);
@@ -340,7 +375,7 @@ export class MCPServer {
     });
 
     server.registerResource('media', 'bds://media', { description: 'All media files (first page)' }, async () => {
-      const allMedia = await this.deps.getMediaEngine().getAllMedia();
+      const allMedia = await this.deps.mediaEngine.getAllMedia();
       const items = allMedia.slice(0, DEFAULT_PAGE_SIZE);
       const total = allMedia.length;
       const hasMore = DEFAULT_PAGE_SIZE < total;
@@ -352,17 +387,17 @@ export class MCPServer {
     });
 
     server.registerResource('tags', 'bds://tags', { description: 'Tags with post counts' }, async () => {
-      const result = await this.deps.getPostEngine().getTagsWithCounts();
+      const result = await this.deps.postEngine.getTagsWithCounts();
       return { contents: [{ uri: 'bds://tags', mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('categories', 'bds://categories', { description: 'Categories with post counts' }, async () => {
-      const result = await this.deps.getPostEngine().getCategoriesWithCounts();
+      const result = await this.deps.postEngine.getCategoriesWithCounts();
       return { contents: [{ uri: 'bds://categories', mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('stats', 'bds://stats', { description: 'Blog statistics' }, async () => {
-      const result = await this.deps.getPostEngine().getBlogStats();
+      const result = await this.deps.postEngine.getBlogStats();
       return { contents: [{ uri: 'bds://stats', mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
   }
@@ -371,7 +406,7 @@ export class MCPServer {
     // ── Pagination templates ──
     server.registerResource('posts-page', new ResourceTemplate('bds://posts{?cursor}', { list: undefined }), { description: 'Paginated blog posts (use cursor from previous page)' }, async (uri, { cursor }) => {
       const offset = decodeCursor(cursor as string);
-      const result = await this.deps.getPostEngine().getAllPosts({ limit: DEFAULT_PAGE_SIZE, offset });
+      const result = await this.deps.postEngine.getAllPosts({ limit: DEFAULT_PAGE_SIZE, offset });
       const response: Record<string, unknown> = { ...result };
       if (result.hasMore) {
         response.nextCursor = encodeCursor(offset + DEFAULT_PAGE_SIZE);
@@ -381,7 +416,7 @@ export class MCPServer {
 
     server.registerResource('media-page', new ResourceTemplate('bds://media{?cursor}', { list: undefined }), { description: 'Paginated media files (use cursor from previous page)' }, async (uri, { cursor }) => {
       const offset = decodeCursor(cursor as string);
-      const allMedia = await this.deps.getMediaEngine().getAllMedia();
+      const allMedia = await this.deps.mediaEngine.getAllMedia();
       const items = allMedia.slice(offset, offset + DEFAULT_PAGE_SIZE);
       const total = allMedia.length;
       const hasMore = offset + DEFAULT_PAGE_SIZE < total;
@@ -394,42 +429,42 @@ export class MCPServer {
 
     // ── Entity templates ──
     server.registerResource('post', new ResourceTemplate('bds://posts/{id}', { list: undefined }), { description: 'A single post by ID' }, async (uri, { id }) => {
-      const result = await this.deps.getPostEngine().getPost(id as string);
+      const result = await this.deps.postEngine.getPost(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('media-item', new ResourceTemplate('bds://media/{id}', { list: undefined }), { description: 'A single media item by ID' }, async (uri, { id }) => {
-      const result = await this.deps.getMediaEngine().getMedia(id as string);
+      const result = await this.deps.mediaEngine.getMedia(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('post-backlinks', new ResourceTemplate('bds://posts/{id}/backlinks', { list: undefined }), { description: 'Posts linking to this post' }, async (uri, { id }) => {
-      const result = await this.deps.getPostEngine().getLinkedBy(id as string);
+      const result = await this.deps.postEngine.getLinkedBy(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('post-outlinks', new ResourceTemplate('bds://posts/{id}/outlinks', { list: undefined }), { description: 'Posts this post links to' }, async (uri, { id }) => {
-      const result = await this.deps.getPostEngine().getLinksTo(id as string);
+      const result = await this.deps.postEngine.getLinksTo(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('post-media', new ResourceTemplate('bds://posts/{id}/media', { list: undefined }), { description: 'Media linked to a post' }, async (uri, { id }) => {
-      const result = await this.deps.getPostMediaEngine().getLinkedMediaDataForPost(id as string);
+      const result = await this.deps.postMediaEngine.getLinkedMediaDataForPost(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('media-posts', new ResourceTemplate('bds://media/{id}/posts', { list: undefined }), { description: 'Posts linked to a media item' }, async (uri, { id }) => {
-      const result = await this.deps.getPostMediaEngine().getLinkedPostsForMedia(id as string);
+      const result = await this.deps.postMediaEngine.getLinkedPostsForMedia(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
 
     server.registerResource('media-image', new ResourceTemplate('bds://media/{id}/image', { list: undefined }), { description: 'Image thumbnail (medium size, base64 WebP) for visual context' }, async (uri, { id }) => {
       const mediaId = id as string;
-      const media = await this.deps.getMediaEngine().getMedia(mediaId);
+      const media = await this.deps.mediaEngine.getMedia(mediaId);
       if (!media || !media.mimeType.startsWith('image/')) {
         return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'Not an image or media not found' }] };
       }
-      const dataUrl = await this.deps.getMediaEngine().getThumbnailDataUrl(mediaId, 'medium');
+      const dataUrl = await this.deps.mediaEngine.getThumbnailDataUrl(mediaId, 'medium');
       if (!dataUrl) {
         return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'Thumbnail not available' }] };
       }
@@ -464,7 +499,7 @@ export class MCPServer {
 
       if (args.query && !hasFilters) {
         // Pure text search — use FTS
-        const results = await this.deps.getPostEngine().searchPosts(args.query);
+        const results = await this.deps.postEngine.searchPosts(args.query);
         const paginated = results.slice(offset, offset + limit);
         return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
       }
@@ -479,14 +514,14 @@ export class MCPServer {
 
       if (args.query && hasFilters) {
         // FTS + structural filters: single SQL JOIN query, ranked by FTS score
-        const results = await this.deps.getPostEngine().searchPostsFiltered(
+        const results = await this.deps.postEngine.searchPostsFiltered(
           args.query, filter, { offset, limit },
         );
         return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
       }
 
       // Filter-only query (no text search)
-      const results = await this.deps.getPostEngine().getPostsFiltered(filter);
+      const results = await this.deps.postEngine.getPostsFiltered(filter);
       const paginated = results.slice(offset, offset + limit);
       return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
     });
@@ -509,7 +544,7 @@ export class MCPServer {
       _meta: { ui: { resourceUri: 'ui://bds/review-post' } },
     }, async (args: { title: string; content: string; excerpt?: string; tags?: string[]; categories?: string[]; author?: string }) => {
       try {
-        const post = await this.deps.getPostEngine().createPost({
+        const post = await this.deps.postEngine.createPost({
           title: args.title,
           content: args.content,
           excerpt: args.excerpt,
@@ -543,13 +578,14 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-script' } },
     }, async (args: { title: string; kind: 'macro' | 'utility' | 'transform'; content: string; entrypoint?: string }) => {
-      const validation = await this.deps.getScriptEngine().validateScript(args.content);
-      const proposalId = this.proposalStore.create('proposeScript', {
+      const validation = await this.deps.scriptEngine.validateScript(args.content);
+      const draft = await this.deps.scriptEngine.createDraftScript({
         title: args.title,
         kind: args.kind,
         content: args.content,
         entrypoint: args.entrypoint,
       });
+      const proposalId = this.proposalStore.create('proposeScript', { scriptId: draft.id });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, preview: { title: args.title, kind: args.kind, contentLength: args.content.length, syntaxValid: validation.valid, syntaxErrors: validation.errors } }) }],
       };
@@ -567,12 +603,13 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-template' } },
     }, async (args: { title: string; kind: 'post' | 'list' | 'not-found' | 'partial'; content: string }) => {
-      const validation = await this.deps.getTemplateEngine().validateTemplate(args.content);
-      const proposalId = this.proposalStore.create('proposeTemplate', {
+      const validation = await this.deps.templateEngine.validateTemplate(args.content);
+      const draft = await this.deps.templateEngine.createDraftTemplate({
         title: args.title,
         kind: args.kind,
         content: args.content,
       });
+      const proposalId = this.proposalStore.create('proposeTemplate', { templateId: draft.id });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, preview: { title: args.title, kind: args.kind, contentLength: args.content.length, syntaxValid: validation.valid, syntaxErrors: validation.errors } }) }],
       };
@@ -594,7 +631,7 @@ export class MCPServer {
     }, async (args: { mediaId: string; alt?: string; caption?: string; title?: string; tags?: string[] }) => {
       try {
         const { mediaId, ...changes } = args;
-        const current = await this.deps.getMediaEngine().getMedia(mediaId);
+        const current = await this.deps.mediaEngine.getMedia(mediaId);
         if (!current) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: `Media item ${mediaId} not found.` }) }],
@@ -632,7 +669,7 @@ export class MCPServer {
     }, async (args: { postId: string; title?: string; excerpt?: string; tags?: string[]; categories?: string[] }) => {
       try {
         const { postId, ...changes } = args;
-        const current = await this.deps.getPostEngine().getPost(postId);
+        const current = await this.deps.postEngine.getPost(postId);
         if (!current) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: `Post ${postId} not found.` }) }],
@@ -850,20 +887,3 @@ function parseBody(req: { on: (event: string, cb: (data: unknown) => void) => vo
   });
 }
 
-// ── Singleton ───────────────────────────────────────────────────────
-
-let mcpServerInstance: MCPServer | null = null;
-
-export function getMCPServer(deps?: MCPServerDependencies): MCPServer {
-  if (!mcpServerInstance) {
-    if (!deps) {
-      throw new Error('MCPServer dependencies must be provided on first call to getMCPServer()');
-    }
-    mcpServerInstance = new MCPServer(deps);
-  }
-  return mcpServerInstance;
-}
-
-export function resetMCPServer(): void {
-  mcpServerInstance = null;
-}

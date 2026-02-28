@@ -157,7 +157,7 @@ describe('TagEngine', () => {
     mockSelectDataDefault = [];
     mockPostEngine.syncPublishedPostFile.mockClear();
     resetMockCounters();
-    tagEngine = new TagEngine();
+    tagEngine = new TagEngine(mockPostEngine as any);
   });
 
   afterEach(() => {

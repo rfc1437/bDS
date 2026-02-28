@@ -1,5 +1,26 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+// Mock the database connection module to prevent the native libsql binary from loading.
+// Some modules (e.g. generatedFileHashStore) import directly from connection.ts
+// instead of the barrel, so mocking the barrel alone isn't sufficient.
+vi.mock('../../src/main/database/connection', () => ({
+  DatabaseConnection: vi.fn(),
+  getDatabase: vi.fn(() => ({
+    initializeLocal: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    getLocal: vi.fn(() => null),
+    getLocalClient: vi.fn(() => null),
+    getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
+  })),
+  initDatabase: vi.fn(() => ({
+    initializeLocal: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    getLocal: vi.fn(() => null),
+    getLocalClient: vi.fn(() => null),
+    getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
+  })),
+}));
+
 describe('main bootstrap preview behavior', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -15,6 +36,8 @@ describe('main bootstrap preview behavior', () => {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
+      getPath: vi.fn(() => '/tmp/mock-userdata'),
+      isPackaged: false,
     };
 
     const browserWindowCalls: any[] = [];
@@ -60,6 +83,12 @@ describe('main bootstrap preview behavior', () => {
         openExternal: vi.fn(),
         openPath: vi.fn(),
       },
+      screen: {
+        getPrimaryDisplay: vi.fn(() => ({
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+          workAreaSize: { width: 1920, height: 1080 },
+        })),
+      },
     }));
 
     class MockPreviewServer {
@@ -72,8 +101,8 @@ describe('main bootstrap preview behavior', () => {
       PreviewServer: MockPreviewServer,
     }));
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -86,8 +115,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -99,6 +133,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -106,9 +142,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -133,6 +169,8 @@ describe('main bootstrap preview behavior', () => {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
+      getPath: vi.fn(() => '/tmp/mock-userdata'),
+      isPackaged: false,
     };
 
     const mockBrowserWindowGetAllWindows = vi.fn(() => [{ id: 1 }]);
@@ -175,6 +213,12 @@ describe('main bootstrap preview behavior', () => {
         openExternal: vi.fn(),
         openPath: vi.fn(),
       },
+      screen: {
+        getPrimaryDisplay: vi.fn(() => ({
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+          workAreaSize: { width: 1920, height: 1080 },
+        })),
+      },
     }));
 
     const mockPreviewStart = vi.fn().mockResolvedValue(4123);
@@ -191,8 +235,8 @@ describe('main bootstrap preview behavior', () => {
       PreviewServer: MockPreviewServer,
     }));
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -205,8 +249,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -218,6 +267,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -225,9 +276,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -243,6 +294,8 @@ describe('main bootstrap preview behavior', () => {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
+      getPath: vi.fn(() => '/tmp/mock-userdata'),
+      isPackaged: false,
     };
 
     const mockBrowserWindowGetAllWindows = vi.fn(() => [{ id: 1 }]);
@@ -334,13 +387,13 @@ describe('main bootstrap preview behavior', () => {
     });
 
     vi.doMock('../../src/main/engine/PostEngine', () => ({
-      getPostEngine: vi.fn(() => ({
+      PostEngine: vi.fn().mockImplementation(function() { return {
         getPost,
-      })),
+      }; }),
     }));
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -353,8 +406,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -366,6 +424,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -373,9 +433,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -408,6 +468,7 @@ describe('main bootstrap preview behavior', () => {
       on: vi.fn(),
       quit: vi.fn(),
       getPath: vi.fn((name: string) => (name === 'userData' ? '/tmp/bds-user-data' : '/tmp')),
+      isPackaged: false,
     };
 
     const browserWindowCalls: any[] = [];
@@ -482,8 +543,8 @@ describe('main bootstrap preview behavior', () => {
       return { ...mocked, default: mocked };
     });
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -496,8 +557,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -509,6 +575,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -516,9 +584,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -539,6 +607,7 @@ describe('main bootstrap preview behavior', () => {
       on: vi.fn(),
       quit: vi.fn(),
       getPath: vi.fn((name: string) => (name === 'userData' ? '/tmp/bds-user-data' : '/tmp')),
+      isPackaged: false,
     };
 
     const browserWindowCalls: any[] = [];
@@ -613,8 +682,8 @@ describe('main bootstrap preview behavior', () => {
       return { ...mocked, default: mocked };
     });
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -627,8 +696,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -640,6 +714,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -647,9 +723,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -675,6 +751,8 @@ describe('main bootstrap preview behavior', () => {
       quit: vi.fn(),
       requestSingleInstanceLock: vi.fn(() => true),
       setAsDefaultProtocolClient: vi.fn(() => true),
+      getPath: vi.fn(() => '/tmp/mock-userdata'),
+      isPackaged: false,
     };
 
     const windows: Array<{ webContents: { send: ReturnType<typeof vi.fn> } }> = [];
@@ -723,6 +801,12 @@ describe('main bootstrap preview behavior', () => {
         openExternal: vi.fn(),
         openPath: vi.fn(),
       },
+      screen: {
+        getPrimaryDisplay: vi.fn(() => ({
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+          workAreaSize: { width: 1920, height: 1080 },
+        })),
+      },
     }));
 
     class MockPreviewServer {
@@ -743,31 +827,31 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/PostEngine', () => ({
-      getPostEngine: vi.fn(() => ({
+      PostEngine: vi.fn().mockImplementation(function() { return {
         getPost: vi.fn().mockResolvedValue(null),
         createPost,
-      })),
+      }; }),
     }));
 
     vi.doMock('../../src/main/engine/MetaEngine', () => ({
-      getMetaEngine: vi.fn(() => ({
+      MetaEngine: vi.fn().mockImplementation(function() { return {
         getProjectMetadata: vi.fn().mockResolvedValue({ blogmarkCategory: 'article' }),
-      })),
+      }; }),
     }));
 
     vi.doMock('../../src/main/engine/BlogmarkTransformService', () => ({
-      getBlogmarkTransformService: vi.fn(() => ({
+      BlogmarkTransformService: vi.fn().mockImplementation(function() { return {
         applyTransforms: vi.fn(async (input: { post: { title: string; content: string; categories: string[] } }) => ({
           post: input.post,
           appliedScriptIds: [],
           errors: [],
           toasts: [],
         })),
-      })),
+      }; }),
     }));
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -780,8 +864,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -793,6 +882,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -800,9 +891,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -853,6 +944,8 @@ describe('main bootstrap preview behavior', () => {
       quit: vi.fn(),
       requestSingleInstanceLock: vi.fn(() => true),
       setAsDefaultProtocolClient: vi.fn(() => true),
+      getPath: vi.fn(() => '/tmp/mock-userdata'),
+      isPackaged: false,
     };
 
     const windows: Array<{ webContents: { send: ReturnType<typeof vi.fn> } }> = [];
@@ -905,6 +998,12 @@ describe('main bootstrap preview behavior', () => {
         openExternal: vi.fn(),
         openPath: vi.fn(),
       },
+      screen: {
+        getPrimaryDisplay: vi.fn(() => ({
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+          workAreaSize: { width: 1920, height: 1080 },
+        })),
+      },
     }));
 
     class MockPreviewServer {
@@ -925,31 +1024,31 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/PostEngine', () => ({
-      getPostEngine: vi.fn(() => ({
+      PostEngine: vi.fn().mockImplementation(function() { return {
         getPost: vi.fn().mockResolvedValue(null),
         createPost,
-      })),
+      }; }),
     }));
 
     vi.doMock('../../src/main/engine/MetaEngine', () => ({
-      getMetaEngine: vi.fn(() => ({
+      MetaEngine: vi.fn().mockImplementation(function() { return {
         getProjectMetadata: vi.fn().mockResolvedValue({ blogmarkCategory: 'article' }),
-      })),
+      }; }),
     }));
 
     vi.doMock('../../src/main/engine/BlogmarkTransformService', () => ({
-      getBlogmarkTransformService: vi.fn(() => ({
+      BlogmarkTransformService: vi.fn().mockImplementation(function() { return {
         applyTransforms: vi.fn(async (input: { post: { title: string; content: string; categories: string[] } }) => ({
           post: input.post,
           appliedScriptIds: [],
           errors: [],
           toasts: [],
         })),
-      })),
+      }; }),
     }));
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -962,8 +1061,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -975,6 +1079,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -982,9 +1088,9 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');
@@ -1042,6 +1148,8 @@ describe('main bootstrap preview behavior', () => {
       quit: vi.fn(),
       requestSingleInstanceLock: vi.fn(() => true),
       setAsDefaultProtocolClient: vi.fn(() => true),
+      getPath: vi.fn(() => '/tmp/mock-userdata'),
+      isPackaged: false,
     };
 
     class MockBrowserWindow {
@@ -1082,6 +1190,12 @@ describe('main bootstrap preview behavior', () => {
         openExternal: vi.fn(),
         openPath: vi.fn(),
       },
+      screen: {
+        getPrimaryDisplay: vi.fn(() => ({
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+          workAreaSize: { width: 1920, height: 1080 },
+        })),
+      },
     }));
 
     class MockPreviewServer {
@@ -1102,17 +1216,17 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/PostEngine', () => ({
-      getPostEngine: vi.fn(() => ({
+      PostEngine: vi.fn().mockImplementation(function() { return {
         getPost: vi.fn().mockResolvedValue(null),
         createPost,
         setProjectContext: vi.fn(),
         setSearchLanguage: vi.fn(),
-      })),
+      }; }),
     }));
 
     let currentProjectId = 'default';
     vi.doMock('../../src/main/engine/MetaEngine', () => ({
-      getMetaEngine: vi.fn(() => ({
+      MetaEngine: vi.fn().mockImplementation(function() { return {
         setProjectContext: vi.fn((projectId: string) => {
           currentProjectId = projectId;
         }),
@@ -1120,21 +1234,21 @@ describe('main bootstrap preview behavior', () => {
         getProjectMetadata: vi.fn(async () => ({
           blogmarkCategory: currentProjectId === 'project-2' ? 'aside' : 'article',
         })),
-      })),
+      }; }),
     }));
 
     vi.doMock('../../src/main/engine/ProjectEngine', () => ({
-      getProjectEngine: vi.fn(() => ({
+      ProjectEngine: vi.fn().mockImplementation(function() { return {
         getActiveProject: vi.fn().mockResolvedValue({
           id: 'project-2',
           dataPath: '/tmp/project-2',
         }),
         getDataDir: vi.fn(() => '/tmp/project-2'),
-      })),
+      }; }),
     }));
 
-    vi.doMock('../../src/main/database', () => ({
-      getDatabase: vi.fn(() => ({
+    vi.doMock('../../src/main/database', () => {
+      const mockDb = {
         initializeLocal: vi.fn().mockResolvedValue(undefined),
         close: vi.fn().mockResolvedValue(undefined),
         getLocal: vi.fn(() => ({
@@ -1147,8 +1261,13 @@ describe('main bootstrap preview behavior', () => {
           })),
         })),
         getDataPaths: vi.fn(() => ({ database: '/tmp/mock.db' })),
-      })),
-    }));
+        getDbPath: vi.fn(() => '/tmp/mock.db'),
+      };
+      return {
+        initDatabase: vi.fn(() => mockDb),
+        getDatabase: vi.fn(() => mockDb),
+      };
+    });
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
@@ -1160,6 +1279,8 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/database/schema', () => ({
       media: {},
+      projects: {},
+      dbNotifications: {},
     }));
 
     vi.doMock('drizzle-orm', () => ({
@@ -1167,11 +1288,11 @@ describe('main bootstrap preview behavior', () => {
     }));
 
     vi.doMock('../../src/main/engine/MediaEngine', () => ({
-      getMediaEngine: vi.fn(() => ({
+      MediaEngine: vi.fn().mockImplementation(function() { return {
         getThumbnailPaths: vi.fn().mockResolvedValue({ small: null }),
         setProjectContext: vi.fn(),
         setSearchLanguage: vi.fn(),
-      })),
+      }; }),
     }));
 
     await import('../../src/main/main');

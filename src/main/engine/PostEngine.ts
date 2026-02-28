@@ -11,6 +11,8 @@ import { posts, Post, NewPost, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
+import { CliNotifier, NoopNotifier } from './CliNotifier';
+import type { MediaEngine } from './MediaEngine';
 
 export interface PostData {
   id: string;
@@ -90,10 +92,17 @@ export interface PublishedPostReconcileResult {
 export class PostEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private searchLanguage: SupportedLanguage = 'english';
+  private readonly notifier: CliNotifier;
+  private readonly mediaEngine: MediaEngine | undefined;
 
-  constructor() {
+  constructor(opts: { notifier?: CliNotifier; mediaEngine?: MediaEngine } = {}) {
     super();
+    this.notifier = opts.notifier ?? new NoopNotifier();
+    this.mediaEngine = opts.mediaEngine;
   }
+
+  /** No persistent cache — DB is the source of truth. No-op for watcher compat. */
+  invalidate(_entityId?: string): void {}
 
   /**
    * Set the language used for full-text search stemming.
@@ -419,6 +428,7 @@ export class PostEngine extends EventEmitter {
     await this.updateFTSIndex(post);
 
     this.emit('postCreated', post);
+    await this.notifier.notify('post', post.id, 'created');
     return post;
   }
 
@@ -488,6 +498,7 @@ export class PostEngine extends EventEmitter {
     }
 
     this.emit('postUpdated', updated);
+    await this.notifier.notify('post', id, 'updated');
     return updated;
   }
 
@@ -515,20 +526,31 @@ export class PostEngine extends EventEmitter {
 
     // Delete post-media links and update media sidecars
     const { postMedia } = await import('../database/schema');
-    const { getMediaEngine } = await import('./MediaEngine');
     const linkedMediaResult = await db.select().from(postMedia).where(eq(postMedia.postId, id));
     const linkedMedia = Array.isArray(linkedMediaResult) ? linkedMediaResult : [];
 
-    // Remove this post from each linked media's sidecar
-    const mediaEngine = getMediaEngine();
-    for (const link of linkedMedia) {
-      const media = await mediaEngine.getMedia(link.mediaId);
-      if (media && media.linkedPostIds) {
-        const updatedLinkedPostIds = media.linkedPostIds.filter(pid => pid !== id);
-        await mediaEngine.updateMedia(link.mediaId, { linkedPostIds: updatedLinkedPostIds });
+    // Remove this post from each linked media's sidecar.
+    // Requires mediaEngine to be injected at construction time.
+    if (linkedMedia.length > 0 && this.mediaEngine) {
+      for (const link of linkedMedia) {
+        const media = await this.mediaEngine.getMedia(link.mediaId);
+        if (media && media.linkedPostIds) {
+          const updatedLinkedPostIds = media.linkedPostIds.filter(pid => pid !== id);
+          await this.mediaEngine.updateMedia(link.mediaId, { linkedPostIds: updatedLinkedPostIds });
+        }
+      }
+    } else if (linkedMedia.length > 0) {
+      // Fallback: lazy-import (app singleton path, pre-DI callers)
+      const { MediaEngine: ME } = await import('./MediaEngine');
+      const fallbackEngine = new ME();
+      for (const link of linkedMedia) {
+        const media = await fallbackEngine.getMedia(link.mediaId);
+        if (media && media.linkedPostIds) {
+          const updatedLinkedPostIds = media.linkedPostIds.filter(pid => pid !== id);
+          await fallbackEngine.updateMedia(link.mediaId, { linkedPostIds: updatedLinkedPostIds });
+        }
       }
     }
-
     // Delete post-media junction entries
     await db.delete(postMedia).where(eq(postMedia.postId, id));
 
@@ -539,6 +561,7 @@ export class PostEngine extends EventEmitter {
     await this.deleteFTSIndex(id);
 
     this.emit('postDeleted', id);
+    await this.notifier.notify('post', id, 'deleted');
     return true;
   }
 
@@ -1198,6 +1221,7 @@ export class PostEngine extends EventEmitter {
     await this.updatePostLinks(id, published.content);
 
     this.emit('postUpdated', published);
+    await this.notifier.notify('post', id, 'updated');
     return published;
   }
 
@@ -1904,12 +1928,4 @@ export class PostEngine extends EventEmitter {
   }
 }
 
-// Singleton instance
-let postEngine: PostEngine | null = null;
 
-export function getPostEngine(): PostEngine {
-  if (!postEngine) {
-    postEngine = new PostEngine();
-  }
-  return postEngine;
-}
