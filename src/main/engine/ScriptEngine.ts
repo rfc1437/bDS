@@ -6,6 +6,7 @@ import { app } from 'electron';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { scripts, type NewScript, type Script } from '../database/schema';
+import { CliNotifier, NoopNotifier } from './CliNotifier';
 
 export type ScriptKind = 'macro' | 'utility' | 'transform';
 
@@ -20,6 +21,7 @@ export interface ScriptData {
   version: number;
   filePath: string;
   content: string;
+  status: 'draft' | 'published';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +83,15 @@ interface ParsedScriptFile {
 export class ScriptEngine extends EventEmitter {
   private currentProjectId = 'default';
   private dataDir: string | null = null;
+  private readonly notifier: CliNotifier;
+
+  constructor(notifier: CliNotifier = new NoopNotifier()) {
+    super();
+    this.notifier = notifier;
+  }
+
+  /** No persistent cache — no-op for watcher compat. */
+  invalidate(_entityId?: string): void {}
 
   setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
@@ -159,6 +170,7 @@ export class ScriptEngine extends EventEmitter {
 
     const created = await this.toScriptData(row as Script);
     this.emit('scriptCreated', created);
+    await this.notifier.notify('script', created.id, 'created');
     return created;
   }
 
@@ -227,6 +239,7 @@ export class ScriptEngine extends EventEmitter {
 
     const updated = await this.toScriptData(updatedRow);
     this.emit('scriptUpdated', updated);
+    await this.notifier.notify('script', updated.id, 'updated');
     return updated;
   }
 
@@ -250,6 +263,7 @@ export class ScriptEngine extends EventEmitter {
     }
 
     this.emit('scriptDeleted', id);
+    await this.notifier.notify('script', id, 'deleted');
     return true;
   }
 
@@ -498,7 +512,10 @@ export class ScriptEngine extends EventEmitter {
   }
 
   private async toScriptData(row: Script): Promise<ScriptData> {
-    const content = await this.readScriptBody(row.filePath);
+    // Draft scripts store content in the DB; published scripts read from disk.
+    const content = row.status === 'draft' && row.content != null
+      ? row.content
+      : await this.readScriptBody(row.filePath);
 
     return {
       id: row.id,
@@ -511,6 +528,7 @@ export class ScriptEngine extends EventEmitter {
       version: row.version,
       filePath: row.filePath,
       content,
+      status: (row.status as 'draft' | 'published') ?? 'published',
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -784,6 +802,79 @@ export class ScriptEngine extends EventEmitter {
     }
   }
 
+  // ── Draft lifecycle ────────────────────────────────────────────────────────
+
+  /** Create a script DB row with status='draft'; no file is written. */
+  async createDraftScript(data: CreateScriptInput): Promise<ScriptData> {
+    const now = new Date();
+    const allScripts = await this.getAllScriptRows();
+    const desiredSlug = this.normalizeSlug(data.slug || data.title || 'script');
+    const uniqueSlug = this.ensureUniqueSlug(desiredSlug, allScripts);
+    const scriptId = uuidv4();
+    const filePath = this.getScriptFilePath(uniqueSlug); // path reserved but not yet written
+
+    const row: NewScript = {
+      id: scriptId,
+      projectId: this.currentProjectId,
+      slug: uniqueSlug,
+      title: data.title,
+      kind: data.kind,
+      entrypoint: data.entrypoint || 'render',
+      enabled: data.enabled ?? true,
+      version: 1,
+      filePath,
+      status: 'draft',
+      content: data.content,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await getDatabase().getLocal().insert(scripts).values(row);
+    const created = await this.toScriptData(row as Script);
+    this.emit('scriptCreated', created);
+    return created;
+  }
+
+  /** Publish a draft script: write file to disk, set status='published', clear DB content. */
+  async publishScript(id: string): Promise<ScriptData | null> {
+    const existing = await this.getScriptRow(id);
+    if (!existing) return null;
+
+    const content = existing.status === 'draft' && existing.content != null
+      ? existing.content
+      : await this.readScriptBody(existing.filePath);
+
+    await fs.mkdir(this.getScriptsDir(), { recursive: true });
+    await fs.writeFile(existing.filePath, this.serializeScriptFile(existing, content), 'utf-8');
+
+    const now = new Date();
+    await getDatabase().getLocal()
+      .update(scripts)
+      .set({ status: 'published', content: null, updatedAt: now })
+      .where(eq(scripts.id, id));
+
+    const updatedRow = await this.getScriptRow(id);
+    if (!updatedRow) return null;
+    const result = await this.toScriptData(updatedRow);
+    this.emit('scriptUpdated', result);
+    await this.notifier.notify('script', id, 'updated');
+    return result;
+  }
+
+  /** Delete a draft script (only if status='draft'). Returns false if not found or already published. */
+  async deleteDraftScript(id: string): Promise<boolean> {
+    const existing = await this.getScriptRow(id);
+    if (!existing || existing.status !== 'draft') return false;
+
+    await getDatabase().getLocal()
+      .delete(scripts)
+      .where(and(eq(scripts.id, id), eq(scripts.projectId, this.currentProjectId)));
+
+    this.emit('scriptDeleted', id);
+    await this.notifier.notify('script', id, 'deleted');
+    return true;
+  }
+
   private async readScriptBody(filePath: string): Promise<string> {
     try {
       const rawContent = await fs.readFile(filePath, 'utf-8');
@@ -798,11 +889,4 @@ export class ScriptEngine extends EventEmitter {
   }
 }
 
-let scriptEngineInstance: ScriptEngine | null = null;
 
-export function getScriptEngine(): ScriptEngine {
-  if (!scriptEngineInstance) {
-    scriptEngineInstance = new ScriptEngine();
-  }
-  return scriptEngineInstance;
-}

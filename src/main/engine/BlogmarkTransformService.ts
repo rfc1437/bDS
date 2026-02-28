@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { getScriptEngine } from './ScriptEngine';
-import { getMetaEngine } from './MetaEngine';
-import { getBlogmarkPythonWorkerRuntime } from './BlogmarkPythonWorkerRuntime';
+import type { BlogmarkPythonWorkerRuntime } from './BlogmarkPythonWorkerRuntime';
+import type { ScriptEngine, ScriptData } from './ScriptEngine';
+import type { MetaEngine } from './MetaEngine';
 
 const transformPostSchema = z.object({
   title: z.string().trim().min(1),
@@ -63,11 +63,7 @@ const MAX_TOASTS_PER_SCRIPT = 5;
 const MAX_TOASTS_TOTAL = 20;
 const MAX_TOAST_LENGTH = 300;
 
-const scriptEngineBackedProvider: BlogmarkTransformScriptProvider = {
-  async getScripts() {
-    return getScriptEngine().getAllScripts();
-  },
-};
+// Note: scriptEngineBackedProvider removed — ScriptEngine is injected via constructor dep.
 
 function toTimestamp(value: Date | string): number {
   if (value instanceof Date) {
@@ -163,8 +159,8 @@ function resolvePythonRuntimeMode(value: unknown): PythonRuntimeMode {
   return 'webworker';
 }
 
-async function getConfiguredPythonRuntimeMode(): Promise<PythonRuntimeMode> {
-  const metadata = await getMetaEngine().getProjectMetadata();
+async function getConfiguredPythonRuntimeModeFromEngine(metaEngine: MetaEngine): Promise<PythonRuntimeMode> {
+  const metadata = await metaEngine.getProjectMetadata();
   return resolvePythonRuntimeMode((metadata as { pythonRuntimeMode?: unknown } | null)?.pythonRuntimeMode);
 }
 
@@ -239,8 +235,10 @@ json.dumps(_result)
 }
 
 class PythonWorkerBlogmarkTransformExecutor implements BlogmarkTransformExecutor {
+  constructor(private readonly runtime: BlogmarkPythonWorkerRuntime) {}
+
   async runTransform(script: BlogmarkTransformScriptRecord, input: BlogmarkTransformInput): Promise<unknown> {
-    return getBlogmarkPythonWorkerRuntime().executeTransform({
+    return this.runtime.executeTransform({
       scriptContent: script.content,
       entrypoint: resolveTransformEntrypoint(script.entrypoint),
       payloadJson: JSON.stringify(input),
@@ -249,12 +247,14 @@ class PythonWorkerBlogmarkTransformExecutor implements BlogmarkTransformExecutor
 }
 
 const mainThreadExecutor = new PythonBlogmarkTransformExecutor();
-const workerExecutor = new PythonWorkerBlogmarkTransformExecutor();
 
 export class BlogmarkTransformService {
   constructor(
     private readonly dependencies: {
       provider?: BlogmarkTransformScriptProvider;
+      scriptEngine?: ScriptEngine;
+      metaEngine?: MetaEngine;
+      blogmarkWorkerRuntime?: BlogmarkPythonWorkerRuntime;
       executor?: BlogmarkTransformExecutor;
       resolvePythonRuntimeMode?: () => Promise<PythonRuntimeMode>;
       executors?: Partial<Record<PythonRuntimeMode, BlogmarkTransformExecutor>>;
@@ -268,7 +268,10 @@ export class BlogmarkTransformService {
       post: parsedInput,
     };
 
-    const provider = this.dependencies.provider ?? scriptEngineBackedProvider;
+    const provider = this.dependencies.provider
+      ?? (this.dependencies.scriptEngine
+        ? { getScripts: (): Promise<ScriptData[]> => this.dependencies.scriptEngine!.getAllScripts() }
+        : { getScripts: async () => [] });
     const executor = this.dependencies.executor ?? await this.resolveExecutorForConfiguredRuntime();
 
     const scripts = await provider.getScripts();
@@ -337,7 +340,10 @@ export class BlogmarkTransformService {
   }
 
   private async resolveExecutorForConfiguredRuntime(): Promise<BlogmarkTransformExecutor> {
-    const resolveMode = this.dependencies.resolvePythonRuntimeMode ?? getConfiguredPythonRuntimeMode;
+    const resolveMode = this.dependencies.resolvePythonRuntimeMode
+      ?? (this.dependencies.metaEngine
+        ? () => getConfiguredPythonRuntimeModeFromEngine(this.dependencies.metaEngine!)
+        : () => Promise.resolve<PythonRuntimeMode>('webworker'));
     const mode = await resolveMode();
     const executors = this.dependencies.executors ?? {};
 
@@ -345,16 +351,12 @@ export class BlogmarkTransformService {
       return executors['main-thread'] ?? mainThreadExecutor;
     }
 
+    const workerRuntime = this.dependencies.blogmarkWorkerRuntime;
+    const workerExecutor = workerRuntime
+      ? new PythonWorkerBlogmarkTransformExecutor(workerRuntime)
+      : mainThreadExecutor; // fall back to main-thread if no worker runtime injected
     return executors.webworker ?? workerExecutor;
   }
 }
 
-let blogmarkTransformServiceInstance: BlogmarkTransformService | null = null;
 
-export function getBlogmarkTransformService(): BlogmarkTransformService {
-  if (!blogmarkTransformServiceInstance) {
-    blogmarkTransformServiceInstance = new BlogmarkTransformService();
-  }
-
-  return blogmarkTransformServiceInstance;
-}

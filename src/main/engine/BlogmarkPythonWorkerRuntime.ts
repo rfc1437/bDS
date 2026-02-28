@@ -272,12 +272,3 @@ export class BlogmarkPythonWorkerRuntime {
   }
 }
 
-let blogmarkPythonWorkerRuntimeInstance: BlogmarkPythonWorkerRuntime | null = null;
-
-export function getBlogmarkPythonWorkerRuntime(): BlogmarkPythonWorkerRuntime {
-  if (!blogmarkPythonWorkerRuntimeInstance) {
-    blogmarkPythonWorkerRuntimeInstance = new BlogmarkPythonWorkerRuntime();
-  }
-
-  return blogmarkPythonWorkerRuntimeInstance;
-}

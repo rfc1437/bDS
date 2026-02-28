@@ -7,8 +7,8 @@ import { eq, and, asc, sql, like } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { tags, posts } from '../database/schema';
 import { taskManager } from './TaskManager';
-import { getPostEngine } from './PostEngine';
 import { normalizeTaxonomyTerm, normalizeNonEmptyTaxonomyTerm } from './taxonomyUtils';
+import type { PostEngine } from './PostEngine';
 
 /**
  * Tag data stored in the database
@@ -85,18 +85,7 @@ export interface SyncTagsResult {
   added: string[];
 }
 
-// Singleton instance
-let tagEngineInstance: TagEngine | null = null;
 
-/**
- * Get the singleton TagEngine instance
- */
-export function getTagEngine(): TagEngine {
-  if (!tagEngineInstance) {
-    tagEngineInstance = new TagEngine();
-  }
-  return tagEngineInstance;
-}
 
 /**
  * Validate hex color format
@@ -128,7 +117,7 @@ export class TagEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private dataDir: string | null = null; // Custom data directory (null = use internal userData)
 
-  constructor() {
+  constructor(private readonly postEngine?: PostEngine) {
     super();
   }
 
@@ -189,7 +178,9 @@ export class TagEngine extends EventEmitter {
       })
       .where(eq(posts.id, postId));
 
-    await getPostEngine().syncPublishedPostFile(postId);
+    if (this.postEngine) {
+      await this.postEngine.syncPublishedPostFile(postId);
+    }
   }
 
   private async updateMatchingPosts(

@@ -5,24 +5,59 @@ import { getDatabase } from './database';
 import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
-import { getMediaEngine } from './engine/MediaEngine';
-import { getPostEngine } from './engine/PostEngine';
-import { getMetaEngine } from './engine/MetaEngine';
-import { getTemplateEngine } from './engine/TemplateEngine';
-import { getScriptEngine } from './engine/ScriptEngine';
-import { getPostMediaEngine } from './engine/PostMediaEngine';
-import { getTagEngine } from './engine/TagEngine';
-import { getBlogmarkTransformService } from './engine/BlogmarkTransformService';
+import { MediaEngine } from './engine/MediaEngine';
+import { PostEngine } from './engine/PostEngine';
+import { MetaEngine } from './engine/MetaEngine';
+import { MenuEngine } from './engine/MenuEngine';
+import { TemplateEngine } from './engine/TemplateEngine';
+import { ScriptEngine } from './engine/ScriptEngine';
+import { PostMediaEngine } from './engine/PostMediaEngine';
+import { TagEngine } from './engine/TagEngine';
+import { ProjectEngine } from './engine/ProjectEngine';
+import { GitEngine } from './engine/GitEngine';
+import { GitApiAdapter } from './engine/GitApiAdapter';
+import { BlogGenerationEngine } from './engine/BlogGenerationEngine';
+import { BlogmarkTransformService } from './engine/BlogmarkTransformService';
+import { PublishEngine } from './engine/PublishEngine';
+import { MetadataDiffEngine } from './engine/MetadataDiffEngine';
+import { MCPServer } from './engine/MCPServer';
+import { taskManager } from './engine/TaskManager';
+import { BlogmarkPythonWorkerRuntime } from './engine/BlogmarkPythonWorkerRuntime';
+import { PythonMacroWorkerRuntime } from './engine/PythonMacroWorkerRuntime';
+import { AppApiAdapter } from './engine/AppApiAdapter';
+import { PublishApiAdapter } from './engine/PublishApiAdapter';
+import { NoopNotifier } from './engine/CliNotifier';
+import { NotificationWatcher } from './engine/NotificationWatcher';
+import { setEngineBundle } from './engine/mainProcessPythonApiInvoker';
+import type { EngineBundle } from './engine/EngineBundle';
 import { PreviewServer } from './engine/PreviewServer';
-import { getMCPServer } from './engine/MCPServer';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_GROUPS, APP_MENU_ITEM_IDS, type AppMenuAction, type AppMenuItemDefinition } from './shared/menuCommands';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from './shared/i18n';
 import { buildBlogmarkMarkdownLink, extractBlogmarkPayloadFromDeepLink, normalizeBlogmarkCategory } from './shared/blogmark';
 
 let mainWindow: BrowserWindow | null = null;
 let previewServer: PreviewServer | null = null;
+let notificationWatcher: NotificationWatcher | null = null;
 let activePreviewPostId: string | null = null;
 let appInitialized = false;
+let bundle: EngineBundle | null = null;
+
+function buildPreviewServerDeps() {
+  const b = bundle!;
+  return {
+    postEngine: b.postEngine,
+    mediaEngine: b.mediaEngine,
+    postMediaEngine: b.postMediaEngine,
+    settingsEngine: b.metaEngine,
+    menuEngine: b.menuEngine,
+    getActiveProjectContext: async () => {
+      const project = await b.projectEngine.getActiveProject();
+      if (!project) throw new Error('No active project');
+      const dataDir = b.projectEngine.getDataDir(project.id, project.dataPath);
+      return { projectId: project.id, dataDir, projectName: project.name };
+    },
+  };
+}
 let blogmarkQueue: string[] = [];
 let blogmarkQueueProcessing = false;
 let pendingBlogmarkCreatedEvents: unknown[] = [];
@@ -310,7 +345,7 @@ function createWindow(): void {
 
 async function openPreviewInBrowser(): Promise<void> {
   if (!previewServer) {
-    previewServer = new PreviewServer();
+    previewServer = new PreviewServer(buildPreviewServerDeps());
   }
 
   await previewServer.start(PREVIEW_SERVER_PORT);
@@ -337,7 +372,7 @@ async function openActivePostPreviewInBrowser(): Promise<void> {
     return;
   }
 
-  const postEngine = getPostEngine();
+  const postEngine = bundle!.postEngine;
   const post = await postEngine.getPost(activePreviewPostId);
   if (!post) {
     setPreviewPostMenuEnabled(false);
@@ -345,7 +380,7 @@ async function openActivePostPreviewInBrowser(): Promise<void> {
   }
 
   if (!previewServer) {
-    previewServer = new PreviewServer();
+    previewServer = new PreviewServer(buildPreviewServerDeps());
   }
 
   await previewServer.start(PREVIEW_SERVER_PORT);
@@ -355,7 +390,7 @@ async function openActivePostPreviewInBrowser(): Promise<void> {
 
 async function startPreviewServerOnAppStart(): Promise<void> {
   if (!previewServer) {
-    previewServer = new PreviewServer();
+    previewServer = new PreviewServer(buildPreviewServerDeps());
   }
 
   await previewServer.start(PREVIEW_SERVER_PORT);
@@ -391,10 +426,10 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
     return;
   }
 
-  const metadata = await getMetaEngine().getProjectMetadata();
+  const metadata = await bundle!.metaEngine.getProjectMetadata();
   const preferredCategory = normalizeBlogmarkCategory((metadata as { blogmarkCategory?: unknown } | null)?.blogmarkCategory);
 
-  const transformService = getBlogmarkTransformService();
+  const transformService = bundle!.blogmarkTransformService;
   const transformResult = await transformService.applyTransforms({
     post: {
       title: payload.title,
@@ -408,7 +443,7 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
     },
   });
 
-  const createdPost = await getPostEngine().createPost({
+  const createdPost = await bundle!.postEngine.createPost({
     title: transformResult.post.title,
     content: transformResult.post.content,
     tags: transformResult.post.tags,
@@ -475,8 +510,7 @@ function registerBlogmarkProtocolClient(): void {
 
 async function initializeActiveProjectContext(): Promise<void> {
   try {
-    const { getProjectEngine } = await import('./engine/ProjectEngine');
-    const projectEngine = getProjectEngine();
+    const projectEngine = bundle!.projectEngine;
     const project = await projectEngine.getActiveProject();
 
     if (!project) {
@@ -484,15 +518,15 @@ async function initializeActiveProjectContext(): Promise<void> {
     }
 
     const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
-    const postEngine = getPostEngine() as {
+    const postEngine = bundle!.postEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
       setSearchLanguage?: (language: string) => void;
     };
-    const mediaEngine = getMediaEngine() as {
+    const mediaEngine = bundle!.mediaEngine as {
       setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
       setSearchLanguage?: (language: string) => void;
     };
-    const metaEngine = getMetaEngine() as {
+    const metaEngine = bundle!.metaEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
       syncOnStartup?: () => Promise<void>;
       getProjectMetadata?: () => Promise<{ mainLanguage?: string } | null>;
@@ -502,7 +536,7 @@ async function initializeActiveProjectContext(): Promise<void> {
     mediaEngine.setProjectContext?.(project.id, dataDir, dataDir);
     metaEngine.setProjectContext?.(project.id, dataDir);
 
-    const templateEngine = getTemplateEngine() as {
+    const templateEngine = bundle!.templateEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
     };
     templateEngine.setProjectContext?.(project.id, dataDir);
@@ -546,8 +580,8 @@ function createApplicationMenu(): Menu {
     }
 
     if (action === 'openDataFolder') {
-      const paths = getDatabase().getDataPaths();
-      void shell.openPath(path.dirname(paths.database));
+      const dbPath = getDatabase().getDbPath();
+      void shell.openPath(path.dirname(dbPath));
       return;
     }
 
@@ -717,7 +751,7 @@ async function initialize(): Promise<void> {
   // Register IPC handlers immediately (synchronous) so they are available
   // before any async work. This eliminates race conditions where the renderer
   // calls handlers before the database is ready.
-  registerIpcHandlers();
+  registerIpcHandlers(bundle!);
 
   // Initialize database
   const db = getDatabase();
@@ -725,7 +759,7 @@ async function initialize(): Promise<void> {
 
   // Now that the database is ready, register event forwarding from engines
   // to the renderer (engines need DB access at registration time).
-  registerEventForwarding();
+  registerEventForwarding(bundle!);
 
   // Register custom protocol for serving media files
   // URLs like bds-media://media-id will be resolved to the actual file
@@ -787,7 +821,7 @@ async function initialize(): Promise<void> {
       const url = new URL(request.url);
       const mediaId = url.hostname;
 
-      const engine = getMediaEngine();
+      const engine = bundle!.mediaEngine;
       const thumbnails = await engine.getThumbnailPaths(mediaId);
 
       if (thumbnails.small) {
@@ -837,7 +871,7 @@ async function initialize(): Promise<void> {
   });
   
   // Initialize and register chat handlers
-  initializeChatHandlers(() => mainWindow);
+  initializeChatHandlers(() => mainWindow, bundle!);
   registerChatHandlers();
 }
 
@@ -867,6 +901,61 @@ app.on('open-url', (event, deepLink) => {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // Construct all engines and build EngineBundle before any initialization
+  const noopNotifier = new NoopNotifier();
+  const projectEngine = new ProjectEngine();
+  const metaEngine = new MetaEngine();
+  const menuEngine = new MenuEngine();
+  const mediaEngine = new MediaEngine(noopNotifier);
+  const postEngine = new PostEngine({ notifier: noopNotifier, mediaEngine });
+  const postMediaEngine = new PostMediaEngine(mediaEngine);
+  const tagEngine = new TagEngine(postEngine);
+  const scriptEngine = new ScriptEngine(noopNotifier);
+  const templateEngine = new TemplateEngine(noopNotifier);
+  const metadataDiffEngine = new MetadataDiffEngine(postEngine);
+  const publishEngine = new PublishEngine();
+  const gitEngine = new GitEngine();
+  const gitApiAdapter = new GitApiAdapter(gitEngine, projectEngine);
+  const blogGenerationEngine = new BlogGenerationEngine(postEngine, mediaEngine, postMediaEngine);
+  const blogmarkPythonWorkerRuntime = new BlogmarkPythonWorkerRuntime();
+  const pythonMacroWorkerRuntime = new PythonMacroWorkerRuntime();
+  const blogmarkTransformService = new BlogmarkTransformService({ scriptEngine, metaEngine, blogmarkWorkerRuntime: blogmarkPythonWorkerRuntime });
+  const appApiAdapter = new AppApiAdapter(projectEngine);
+  const publishApiAdapter = new PublishApiAdapter(projectEngine, publishEngine, taskManager);
+  const mcpServer = new MCPServer({
+    postEngine,
+    mediaEngine,
+    scriptEngine,
+    templateEngine,
+    metaEngine,
+    postMediaEngine,
+    tagEngine,
+  });
+  bundle = {
+    postEngine,
+    mediaEngine,
+    scriptEngine,
+    templateEngine,
+    metaEngine,
+    menuEngine,
+    tagEngine,
+    postMediaEngine,
+    projectEngine,
+    gitEngine,
+    gitApiAdapter,
+    blogGenerationEngine,
+    publishEngine,
+    metadataDiffEngine,
+    taskManager,
+    blogmarkTransformService,
+    mcpServer,
+    blogmarkPythonWorkerRuntime,
+    pythonMacroWorkerRuntime,
+    publishApiAdapter,
+    appApiAdapter,
+  };
+  setEngineBundle(bundle);
+
   await initialize();
   const activeProjectContextReady = initializeActiveProjectContext();
   registerBlogmarkProtocolClient();
@@ -876,20 +965,29 @@ app.whenReady().then(async () => {
     console.error('Failed to start preview server on app startup:', error);
   }
   try {
-    const mcpServer = getMCPServer({
-      getPostEngine: () => getPostEngine(),
-      getMediaEngine: () => getMediaEngine(),
-      getScriptEngine: () => getScriptEngine(),
-      getTemplateEngine: () => getTemplateEngine(),
-      getMetaEngine: () => getMetaEngine(),
-      getPostMediaEngine: () => getPostMediaEngine(),
-      getTagEngine: () => getTagEngine(),
-    });
     await mcpServer.start(MCP_SERVER_PORT);
   } catch (error) {
     console.error('Failed to start MCP server on app startup:', error);
   }
   createWindow();
+
+  // Start NotificationWatcher after window is created (watcher needs mainWindow).
+  if (mainWindow) {
+    const db = getDatabase();
+    notificationWatcher = new NotificationWatcher(
+      db.getDbPath(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db.getLocal() as any,
+      {
+        post: bundle.postEngine,
+        media: bundle.mediaEngine,
+        script: bundle.scriptEngine,
+        template: bundle.templateEngine,
+      },
+      mainWindow,
+    );
+    notificationWatcher.start();
+  }
 
   await activeProjectContextReady;
   appInitialized = true;
@@ -914,6 +1012,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', async () => {
+  // Stop the notification watcher first to avoid processing events during shutdown.
+  notificationWatcher?.stop();
+  notificationWatcher = null;
+
   // Cleanup chat resources
   await cleanupChatHandlers();
 
@@ -923,8 +1025,7 @@ app.on('before-quit', async () => {
   }
 
   try {
-    const mcpServer = getMCPServer();
-    await mcpServer.cleanup();
+    await bundle?.mcpServer.cleanup();
   } catch (error) {
     console.error('Failed to cleanup MCP server:', error);
   }

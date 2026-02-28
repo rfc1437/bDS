@@ -1,12 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { getMetaEngine, type CategoryMetadata, type ProjectMetadata } from './MetaEngine';
-import { getMediaEngine, type MediaData } from './MediaEngine';
-import { getMenuEngine, type MenuDocument } from './MenuEngine';
-import { getPostMediaEngine } from './PostMediaEngine';
-import { getPostEngine, type PostData, type PostFilter } from './PostEngine';
-import { getProjectEngine } from './ProjectEngine';
+import { type CategoryMetadata, type ProjectMetadata } from './MetaEngine';
+import { type MediaData } from './MediaEngine';
+import { type MenuDocument } from './MenuEngine';
+import { type PostData, type PostFilter } from './PostEngine';
 import {
   PageRenderer,
   PREVIEW_ASSETS,
@@ -21,9 +19,6 @@ import {
   type PostMediaEngineContract,
   type PythonMacroRendererContract,
 } from './PageRenderer';
-import { getScriptEngine } from './ScriptEngine';
-import { getTemplateEngine } from './TemplateEngine';
-import { getPythonMacroWorkerRuntime } from './PythonMacroWorkerRuntime';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
 import {
@@ -71,6 +66,7 @@ interface PreviewServerDependencies {
   menuEngine: MenuEngineContract;
   getActiveProjectContext: () => Promise<ActiveProjectContext>;
   userTemplatesDir?: string;
+  macroRenderer?: PythonMacroRendererContract;
 }
 
 interface SerializedTag {
@@ -91,29 +87,24 @@ export class PreviewServer {
   private port: number | null = null;
 
   constructor(dependencies?: Partial<PreviewServerDependencies>) {
-    this.postEngine = dependencies?.postEngine ?? getPostEngine();
-    this.mediaEngine = dependencies?.mediaEngine ?? getMediaEngine();
-    this.postMediaEngine = dependencies?.postMediaEngine ?? getPostMediaEngine();
-    this.settingsEngine = dependencies?.settingsEngine ?? getMetaEngine();
-    this.menuEngine = dependencies?.menuEngine ?? getMenuEngine();
-    this.getActiveProjectContext = dependencies?.getActiveProjectContext ?? (async () => {
-      const projectEngine = getProjectEngine();
-      const activeProject = await projectEngine.getActiveProject();
-      const projectId = activeProject?.id ?? 'default';
-      const dataDir = projectEngine.getDataDir(projectId, activeProject?.dataPath);
-      return {
-        projectId,
-        dataDir,
-        projectName: activeProject?.name,
-        projectDescription: activeProject?.description ?? undefined,
-      };
-    });
+    if (!dependencies?.postEngine) throw new Error('PreviewServer: postEngine not provided');
+    if (!dependencies?.mediaEngine) throw new Error('PreviewServer: mediaEngine not provided');
+    if (!dependencies?.postMediaEngine) throw new Error('PreviewServer: postMediaEngine not provided');
+    if (!dependencies?.settingsEngine) throw new Error('PreviewServer: settingsEngine not provided');
+    if (!dependencies?.menuEngine) throw new Error('PreviewServer: menuEngine not provided');
+    if (!dependencies?.getActiveProjectContext) throw new Error('PreviewServer: getActiveProjectContext not provided');
+    this.postEngine = dependencies.postEngine;
+    this.mediaEngine = dependencies.mediaEngine;
+    this.postMediaEngine = dependencies.postMediaEngine;
+    this.settingsEngine = dependencies.settingsEngine;
+    this.menuEngine = dependencies.menuEngine;
+    this.getActiveProjectContext = dependencies.getActiveProjectContext;
     this.pageRenderer = new PageRenderer(
       this.mediaEngine,
       this.postMediaEngine,
       this.postEngine,
-      buildPythonMacroRenderer(),
-      dependencies?.userTemplatesDir ?? getTemplateEngine().getTemplatesDirectory(),
+      dependencies.macroRenderer ?? buildNoopMacroRenderer(),
+      dependencies.userTemplatesDir,
     );
   }
 
@@ -662,20 +653,13 @@ export class PreviewServer {
   }
 }
 
-function buildPythonMacroRenderer(): PythonMacroRendererContract {
+function buildNoopMacroRenderer(): PythonMacroRendererContract {
   return {
     async getEnabledMacroScripts() {
-      const scripts = await getScriptEngine().getEnabledMacroScripts();
-      return scripts.map((s) => ({
-        id: s.id,
-        slug: s.slug,
-        entrypoint: s.entrypoint,
-        content: s.content,
-        version: s.version,
-      }));
+      return [];
     },
-    async renderMacro(params) {
-      return getPythonMacroWorkerRuntime().renderMacro(params);
+    async renderMacro() {
+      throw new Error('Python macro renderer not configured');
     },
   };
 }

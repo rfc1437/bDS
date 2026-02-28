@@ -1,5 +1,12 @@
 // Type definitions for the Electron API exposed via preload
 
+/** Payload emitted when the CLI mutates an entity (via db_notifications). */
+export interface EntityChangedPayload {
+  entity: 'post' | 'media' | 'script' | 'template';
+  entityId: string;
+  action: 'created' | 'updated' | 'deleted';
+}
+
 export interface ImportExecuteResult {
   taskId: string;
   totalItems: number;
@@ -836,6 +843,8 @@ export interface ElectronAPI {
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;
+  /** Subscribe to entity-changed events fired by the CLI NotificationWatcher. */
+  onEntityChanged: (callback: (payload: EntityChangedPayload) => void) => () => void;
   mcp: {
     getAgents: () => Promise<Array<{ id: string; label: string }>>;
     addToAgentConfig: (agentId: string) => Promise<{ success: boolean; configPath: string; error?: string }>;

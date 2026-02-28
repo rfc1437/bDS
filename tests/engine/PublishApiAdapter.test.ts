@@ -43,7 +43,7 @@ describe('PublishApiAdapter', () => {
     mockTaskManager.runTask.mockImplementation((opts: { execute: (onProgress: () => void) => Promise<unknown> }) => {
       return opts.execute(() => {});
     });
-    adapter = new PublishApiAdapter();
+    adapter = new PublishApiAdapter(mockProjectEngine as any, mockPublishEngine as any, mockTaskManager as any);
   });
 
   it('sets project context before uploading', async () => {

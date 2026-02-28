@@ -173,7 +173,7 @@ describe('MetadataDiffEngine', () => {
     mockAllPostsRows = [];
     mockSyncPublishedPostFile.mockClear();
     resetMockCounters();
-    engine = new MetadataDiffEngine();
+    engine = new MetadataDiffEngine({ syncPublishedPostFile: mockSyncPublishedPostFile } as any);
     engine.setProjectContext('test-project');
   });
 

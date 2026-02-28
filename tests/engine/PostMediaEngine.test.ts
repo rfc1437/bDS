@@ -31,6 +31,14 @@ const mockUpdateMedia = vi.fn();
 const mockGetAllMedia = vi.fn();
 const mockImportMedia = vi.fn();
 
+// Aggregated mock MediaEngine object for constructor injection
+const mockMediaEngineForPostMedia = {
+  getMedia: mockGetMedia,
+  updateMedia: mockUpdateMedia,
+  getAllMedia: mockGetAllMedia,
+  importMedia: mockImportMedia,
+};
+
 // Mock MediaEngine
 vi.mock('../../src/main/engine/MediaEngine', () => ({
   getMediaEngine: vi.fn(() => ({
@@ -144,7 +152,7 @@ describe('PostMediaEngine', () => {
     mockGetAllMedia.mockResolvedValue([]);
     mockImportMedia.mockResolvedValue({ id: 'imported-media-id' });
     
-    engine = new PostMediaEngine();
+    engine = new PostMediaEngine(mockMediaEngineForPostMedia as any);
     engine.setProjectContext('test-project');
   });
 

@@ -8,6 +8,7 @@ import { app } from 'electron';
 import { getDatabase } from '../database';
 import { media, Media, NewMedia, postMedia } from '../database/schema';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
+import { CliNotifier, NoopNotifier } from './CliNotifier';
 
 // Thumbnail sizes
 const THUMBNAIL_SIZES = {
@@ -75,10 +76,15 @@ export class MediaEngine extends EventEmitter {
   private dataDir: string | null = null;      // For media files (may be external)
   private internalDir: string | null = null;   // For thumbnails (always local)
   private searchLanguage: SupportedLanguage = 'english';
+  private readonly notifier: CliNotifier;
 
-  constructor() {
+  constructor(notifier: CliNotifier = new NoopNotifier()) {
     super();
+    this.notifier = notifier;
   }
+
+  /** No persistent cache — DB is the source of truth. No-op for watcher compat. */
+  invalidate(_entityId?: string): void {}
 
   /**
    * Set the language used for full-text search stemming.
@@ -582,6 +588,7 @@ export class MediaEngine extends EventEmitter {
     });
 
     this.emit('mediaImported', mediaData);
+    await this.notifier.notify('media', mediaData.id, 'created');
     return mediaData;
   }
 
@@ -628,6 +635,7 @@ export class MediaEngine extends EventEmitter {
     });
 
     this.emit('mediaUpdated', updated);
+    await this.notifier.notify('media', id, 'updated');
     return updated;
   }
 
@@ -738,6 +746,7 @@ export class MediaEngine extends EventEmitter {
     await this.deleteFTSIndex(id);
 
     this.emit('mediaDeleted', id);
+    await this.notifier.notify('media', id, 'deleted');
     return true;
   }
 
@@ -1275,12 +1284,4 @@ export class MediaEngine extends EventEmitter {
   }
 }
 
-// Singleton instance
-let mediaEngine: MediaEngine | null = null;
 
-export function getMediaEngine(): MediaEngine {
-  if (!mediaEngine) {
-    mediaEngine = new MediaEngine();
-  }
-  return mediaEngine;
-}

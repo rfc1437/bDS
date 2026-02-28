@@ -1,6 +1,8 @@
-import { getProjectEngine } from './ProjectEngine';
-import { getPublishEngine, type PublishCredentials } from './PublishEngine';
-import { taskManager } from './TaskManager';
+import type { ProjectEngine } from './ProjectEngine';
+import type { PublishEngine, PublishCredentials } from './PublishEngine';
+import type { TaskManager } from './TaskManager';
+
+export type { PublishCredentials };
 
 export interface PublishSiteResult {
   htmlFilesUploaded: number;
@@ -15,41 +17,46 @@ export interface PublishSiteResult {
  * context, launches three parallel upload tasks, and returns aggregate results.
  */
 export class PublishApiAdapter {
+  constructor(
+    private readonly projectEngine: ProjectEngine,
+    private readonly publishEngine: PublishEngine,
+    private readonly taskManager: TaskManager,
+  ) {}
+
   async uploadSite(credentials: PublishCredentials): Promise<PublishSiteResult> {
-    const project = await getProjectEngine().getActiveProject();
+    const project = await this.projectEngine.getActiveProject();
     if (!project) {
       throw new Error('No active project');
     }
 
-    const publishEngine = getPublishEngine();
-    publishEngine.setProjectContext(project.id, project.dataPath!);
+    this.publishEngine.setProjectContext(project.id, project.dataPath!);
 
     const ts = Date.now();
     const groupId = `publish-${ts}`;
     const groupName = 'Site Publishing';
 
-    const htmlTask = taskManager.runTask({
+    const htmlTask = this.taskManager.runTask({
       id: `publish-html-${ts}`,
       name: 'Upload HTML',
       groupId,
       groupName,
-      execute: (onProgress) => publishEngine.uploadHtml(credentials, onProgress),
+      execute: (onProgress) => this.publishEngine.uploadHtml(credentials, onProgress),
     });
 
-    const thumbsTask = taskManager.runTask({
+    const thumbsTask = this.taskManager.runTask({
       id: `publish-thumbnails-${ts}`,
       name: 'Upload Thumbnails',
       groupId,
       groupName,
-      execute: (onProgress) => publishEngine.uploadThumbnails(credentials, onProgress),
+      execute: (onProgress) => this.publishEngine.uploadThumbnails(credentials, onProgress),
     });
 
-    const mediaTask = taskManager.runTask({
+    const mediaTask = this.taskManager.runTask({
       id: `publish-media-${ts}`,
       name: 'Upload Media',
       groupId,
       groupName,
-      execute: (onProgress) => publishEngine.uploadMedia(credentials, onProgress),
+      execute: (onProgress) => this.publishEngine.uploadMedia(credentials, onProgress),
     });
 
     const [html, thumbnails, media] = await Promise.all([htmlTask, thumbsTask, mediaTask]);
@@ -61,13 +68,4 @@ export class PublishApiAdapter {
       filesSkipped: html.filesSkipped + thumbnails.filesSkipped + media.filesSkipped,
     };
   }
-}
-
-let instance: PublishApiAdapter | null = null;
-
-export function getPublishApiAdapter(): PublishApiAdapter {
-  if (!instance) {
-    instance = new PublishApiAdapter();
-  }
-  return instance;
 }

@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { app } from 'electron';
-import { getProjectEngine } from './ProjectEngine';
+import type { ProjectEngine } from './ProjectEngine';
 import { getDatabase } from '../database';
 
 /**
@@ -9,13 +9,13 @@ import { getDatabase } from '../database';
  * Provides safe, read-only app methods without requiring Electron UI facilities.
  */
 export class AppApiAdapter {
+  constructor(private readonly projectEngine: ProjectEngine) {}
   async getDataPaths(): Promise<{ database: string; posts: string; media: string }> {
-    const projectEngine = getProjectEngine();
-    const activeProject = await projectEngine.getActiveProject();
+    const activeProject = await this.projectEngine.getActiveProject();
     const projectId = activeProject?.id || 'default';
-    const paths = projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
+    const paths = this.projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
     return {
-      database: getDatabase().getDataPaths().database,
+      database: getDatabase().getDbPath(),
       posts: paths.posts,
       media: paths.media,
     };
@@ -26,7 +26,7 @@ export class AppApiAdapter {
   }
 
   async getDefaultProjectPath(projectId: string): Promise<string> {
-    return getProjectEngine().getDefaultProjectBaseDir(projectId);
+    return this.projectEngine.getDefaultProjectBaseDir(projectId);
   }
 
   async readProjectMetadata(folderPath: string): Promise<{ name?: string; description?: string; publicUrl?: string; mainLanguage?: string } | null> {
@@ -46,11 +46,3 @@ export class AppApiAdapter {
   }
 }
 
-let instance: AppApiAdapter | null = null;
-
-export function getAppApiAdapter(): AppApiAdapter {
-  if (!instance) {
-    instance = new AppApiAdapter();
-  }
-  return instance;
-}

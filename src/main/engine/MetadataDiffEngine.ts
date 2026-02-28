@@ -11,8 +11,8 @@ import { eq, and } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, media } from '../database/schema';
 import { readPostFile, PostFileData } from './postFileUtils';
-import { getPostEngine } from './PostEngine';
 import { taskManager } from './TaskManager';
+import type { PostEngine } from './PostEngine';
 
 /**
  * A difference in a specific metadata field
@@ -76,6 +76,10 @@ export interface TableStats {
 
 export class MetadataDiffEngine extends EventEmitter {
   private currentProjectId = 'default';
+
+  constructor(private readonly postEngine?: PostEngine) {
+    super();
+  }
 
   private async runSyncLoop(
     postIds: string[],
@@ -363,7 +367,8 @@ export class MetadataDiffEngine extends EventEmitter {
     postIds: string[],
     onProgress?: (percent: number, message: string) => void
   ): Promise<{ success: number; failed: number }> {
-    const postEngine = getPostEngine();
+    const postEngine = this.postEngine;
+    if (!postEngine) throw new Error('MetadataDiffEngine: postEngine not injected');
     return this.runSyncLoop(
       postIds,
       onProgress,
@@ -483,12 +488,4 @@ export class MetadataDiffEngine extends EventEmitter {
   }
 }
 
-// Singleton instance
-let metadataDiffEngineInstance: MetadataDiffEngine | null = null;
 
-export function getMetadataDiffEngine(): MetadataDiffEngine {
-  if (!metadataDiffEngineInstance) {
-    metadataDiffEngineInstance = new MetadataDiffEngine();
-  }
-  return metadataDiffEngineInstance;
-}

@@ -1,5 +1,21 @@
 import { getPythonApiMethodContract } from '../shared/pythonApiContractV1';
 import type { PythonApiParamContractV1 } from '../shared/pythonApiContractV1';
+import type { EngineBundle } from './EngineBundle';
+
+// Module-level bundle set by main.ts at startup.
+// All ENGINE_MAP getters read from this bundle.
+let registeredBundle: EngineBundle | null = null;
+
+export function setEngineBundle(bundle: EngineBundle): void {
+  registeredBundle = bundle;
+}
+
+function requireBundle(): EngineBundle {
+  if (!registeredBundle) {
+    throw new Error('Engine bundle not registered. Call setEngineBundle() before invoking Python API methods.');
+  }
+  return registeredBundle;
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -66,50 +82,17 @@ function validateParamValue(methodName: string, param: PythonApiParamContractV1,
 type EngineGetter = () => Record<string, (...args: unknown[]) => unknown>;
 
 export const ENGINE_MAP: Record<string, EngineGetter> = {
-  posts: () => {
-    const { getPostEngine } = require('../engine/PostEngine');
-    return getPostEngine();
-  },
-  media: () => {
-    const { getMediaEngine } = require('../engine/MediaEngine');
-    return getMediaEngine();
-  },
-  projects: () => {
-    const { getProjectEngine } = require('../engine/ProjectEngine');
-    return getProjectEngine();
-  },
-  meta: () => {
-    const { getMetaEngine } = require('../engine/MetaEngine');
-    return getMetaEngine();
-  },
-  tags: () => {
-    const { getTagEngine } = require('../engine/TagEngine');
-    return getTagEngine();
-  },
-  scripts: () => {
-    const { getScriptEngine } = require('../engine/ScriptEngine');
-    return getScriptEngine();
-  },
-  templates: () => {
-    const { getTemplateEngine } = require('../engine/TemplateEngine');
-    return getTemplateEngine();
-  },
-  tasks: () => {
-    const { taskManager } = require('../engine/TaskManager');
-    return taskManager;
-  },
-  sync: () => {
-    const { getGitApiAdapter } = require('../engine/GitApiAdapter');
-    return getGitApiAdapter();
-  },
-  publish: () => {
-    const { getPublishApiAdapter } = require('../engine/PublishApiAdapter');
-    return getPublishApiAdapter();
-  },
-  app: () => {
-    const { getAppApiAdapter } = require('../engine/AppApiAdapter');
-    return getAppApiAdapter();
-  },
+  posts: () => requireBundle().postEngine as any,
+  media: () => requireBundle().mediaEngine as any,
+  projects: () => requireBundle().projectEngine as any,
+  meta: () => requireBundle().metaEngine as any,
+  tags: () => requireBundle().tagEngine as any,
+  scripts: () => requireBundle().scriptEngine as any,
+  templates: () => requireBundle().templateEngine as any,
+  tasks: () => requireBundle().taskManager as any,
+  sync: () => requireBundle().gitApiAdapter as any,
+  publish: () => requireBundle().publishApiAdapter as any,
+  app: () => requireBundle().appApiAdapter as any,
 };
 
 // Map API method names to engine method names where they differ

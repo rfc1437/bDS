@@ -363,13 +363,3 @@ export class PythonMacroWorkerRuntime {
   }
 }
 
-let pythonMacroWorkerRuntimeInstance: PythonMacroWorkerRuntime | null = null;
-
-export function getPythonMacroWorkerRuntime(): PythonMacroWorkerRuntime {
-  if (!pythonMacroWorkerRuntimeInstance) {
-    const { invokeMainProcessPythonApi } = require('./mainProcessPythonApiInvoker') as { invokeMainProcessPythonApi: ApiInvoker };
-    pythonMacroWorkerRuntimeInstance = new PythonMacroWorkerRuntime(undefined, invokeMainProcessPythonApi);
-  }
-
-  return pythonMacroWorkerRuntimeInstance;
-}

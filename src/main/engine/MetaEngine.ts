@@ -901,12 +901,3 @@ export class MetaEngine extends EventEmitter {
   }
 }
 
-// Singleton instance
-let metaEngineInstance: MetaEngine | null = null;
-
-export function getMetaEngine(): MetaEngine {
-  if (!metaEngineInstance) {
-    metaEngineInstance = new MetaEngine();
-  }
-  return metaEngineInstance;
-}

@@ -154,6 +154,7 @@ describe('BlogGenerationEngine', () => {
   let tempDir: string;
   let mockPostEngine: any;
   let mockMediaEngine: any;
+  let mockPostMediaEngine: any;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -165,6 +166,8 @@ describe('BlogGenerationEngine', () => {
     mockPostEngine = __mockPostEngine;
     const { __mockMediaEngine } = await import('../../src/main/engine/MediaEngine') as any;
     mockMediaEngine = __mockMediaEngine;
+    const { __mockPostMediaEngine } = await import('../../src/main/engine/PostMediaEngine') as any;
+    mockPostMediaEngine = __mockPostMediaEngine;
   });
 
   afterEach(async () => {
@@ -210,7 +213,7 @@ describe('BlogGenerationEngine', () => {
   ) {
     setupPosts(posts);
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
     const onProgress = vi.fn();
     return engine.generate({
       projectId: 'test',
@@ -726,7 +729,7 @@ describe('BlogGenerationEngine', () => {
     });
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
     const result = await engine.generate({
       projectId: 'test',
       projectName: 'Test Blog',
@@ -759,7 +762,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
     await engine.generate({
       projectId: 'test',
       projectName: 'Test Blog',
@@ -789,7 +792,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -816,7 +819,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
     const onProgress = vi.fn();
 
     await engine.generate({
@@ -848,7 +851,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
     const onProgress = vi.fn();
 
     await engine.generate({
@@ -878,7 +881,7 @@ describe('BlogGenerationEngine', () => {
     const canonicalPathSpy = vi.spyOn(pageRendererModule, 'buildCanonicalPostPath');
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -902,7 +905,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -933,7 +936,7 @@ describe('BlogGenerationEngine', () => {
 
     const filterSpy = vi.spyOn(Array.prototype, 'filter');
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -975,7 +978,7 @@ describe('BlogGenerationEngine', () => {
     await writeFile(path.join(tempDir, 'html', 'stale', 'index.html'), '<html>stale</html>', 'utf-8');
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     const report = await engine.validateSite({
       projectId: 'test',
@@ -1006,7 +1009,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts([post]);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -1049,7 +1052,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts([post]);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -1112,7 +1115,7 @@ describe('BlogGenerationEngine', () => {
     await writeFile(path.join(tempDir, 'html', 'obsolete', 'deep', 'index.html'), '<html>obsolete</html>', 'utf-8');
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     const report = await engine.validateSite({
       projectId: 'test',
@@ -1158,7 +1161,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.generate({
       projectId: 'test',
@@ -1237,7 +1240,7 @@ describe('BlogGenerationEngine', () => {
     await writeFile(path.join(tempDir, 'html', 'stale', 'index.html'), '<html>stale</html>', 'utf-8');
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     const generateSpy = vi.spyOn(engine, 'generate');
 
@@ -1273,7 +1276,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.applyValidation({
       projectId: 'test',
@@ -1303,7 +1306,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.applyValidation({
       projectId: 'test',
@@ -1335,7 +1338,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.applyValidation({
       projectId: 'test',
@@ -1371,7 +1374,7 @@ describe('BlogGenerationEngine', () => {
     await writeFile(path.join(tempDir, 'html', 'index.html'), '<html><body>stale-root</body></html>', 'utf-8');
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.applyValidation({
       projectId: 'test',
@@ -1401,7 +1404,7 @@ describe('BlogGenerationEngine', () => {
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
     const { PageRenderer } = await import('../../src/main/engine/PageRenderer');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     const renderPostListSpy = vi.spyOn(PageRenderer.prototype, 'renderPostList');
 
@@ -1454,7 +1457,7 @@ describe('BlogGenerationEngine', () => {
     setupPosts(posts);
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     await engine.applyValidation({
       projectId: 'test',
@@ -1497,7 +1500,7 @@ describe('BlogGenerationEngine', () => {
 
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
     const { PageRenderer } = await import('../../src/main/engine/PageRenderer');
-    const engine = new BlogGenerationEngine();
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
 
     const renderPostListSpy = vi.spyOn(PageRenderer.prototype, 'renderPostList');
 

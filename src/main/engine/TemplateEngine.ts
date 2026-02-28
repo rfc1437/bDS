@@ -7,6 +7,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { Liquid } from 'liquidjs';
 import { getDatabase } from '../database';
 import { posts, tags, templates, type NewTemplate, type Template } from '../database/schema';
+import { CliNotifier, NoopNotifier } from './CliNotifier';
 
 export type TemplateKind = 'post' | 'list' | 'not-found' | 'partial';
 
@@ -20,6 +21,7 @@ export interface TemplateData {
   version: number;
   filePath: string;
   content: string;
+  status: 'draft' | 'published';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -83,6 +85,15 @@ interface ParsedTemplateFile {
 export class TemplateEngine extends EventEmitter {
   private currentProjectId = 'default';
   private dataDir: string | null = null;
+  private readonly notifier: CliNotifier;
+
+  constructor(notifier: CliNotifier = new NoopNotifier()) {
+    super();
+    this.notifier = notifier;
+  }
+
+  /** No persistent cache — no-op for watcher compat. */
+  invalidate(_entityId?: string): void {}
 
   setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
@@ -125,6 +136,7 @@ export class TemplateEngine extends EventEmitter {
 
     const created = await this.toTemplateData(row as Template);
     this.emit('templateCreated', created);
+    await this.notifier.notify('template', created.id, 'created');
     return created;
   }
 
@@ -222,6 +234,7 @@ export class TemplateEngine extends EventEmitter {
 
     const updated = await this.toTemplateData(updatedRow);
     this.emit('templateUpdated', updated);
+    await this.notifier.notify('template', updated.id, 'updated');
     return updated;
   }
 
@@ -282,6 +295,7 @@ export class TemplateEngine extends EventEmitter {
     }
 
     this.emit('templateDeleted', id);
+    await this.notifier.notify('template', id, 'deleted');
     return { deleted: true };
   }
 
@@ -538,7 +552,10 @@ export class TemplateEngine extends EventEmitter {
   }
 
   private async toTemplateData(row: Template): Promise<TemplateData> {
-    const content = await this.readTemplateBody(row.filePath);
+    // Draft templates store content in the DB; published templates read from disk.
+    const content = row.status === 'draft' && row.content != null
+      ? row.content
+      : await this.readTemplateBody(row.filePath);
 
     return {
       id: row.id,
@@ -550,9 +567,82 @@ export class TemplateEngine extends EventEmitter {
       version: row.version,
       filePath: row.filePath,
       content,
+      status: (row.status as 'draft' | 'published') ?? 'published',
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
+  }
+
+  // ── Draft lifecycle ────────────────────────────────────────────────────────
+
+  /** Create a template DB row with status='draft'; no file is written. */
+  async createDraftTemplate(data: CreateTemplateInput): Promise<TemplateData> {
+    const now = new Date();
+    const allTemplates = await this.getAllTemplateRows();
+    const desiredSlug = this.normalizeSlug(data.slug || data.title || 'template');
+    const uniqueSlug = this.ensureUniqueSlug(desiredSlug, allTemplates);
+    const templateId = uuidv4();
+    const filePath = this.getTemplateFilePath(uniqueSlug); // path reserved but not yet written
+
+    const row: NewTemplate = {
+      id: templateId,
+      projectId: this.currentProjectId,
+      slug: uniqueSlug,
+      title: data.title,
+      kind: data.kind,
+      enabled: data.enabled ?? true,
+      version: 1,
+      filePath,
+      status: 'draft',
+      content: data.content,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await getDatabase().getLocal().insert(templates).values(row);
+    const created = await this.toTemplateData(row as Template);
+    this.emit('templateCreated', created);
+    return created;
+  }
+
+  /** Publish a draft template: write file to disk, set status='published', clear DB content. */
+  async publishTemplate(id: string): Promise<TemplateData | null> {
+    const existing = await this.getTemplateRow(id);
+    if (!existing) return null;
+
+    const content = existing.status === 'draft' && existing.content != null
+      ? existing.content
+      : await this.readTemplateBody(existing.filePath);
+
+    await fs.mkdir(this.getTemplatesDir(), { recursive: true });
+    await fs.writeFile(existing.filePath, this.serializeTemplateFile(existing, content), 'utf-8');
+
+    const now = new Date();
+    await getDatabase().getLocal()
+      .update(templates)
+      .set({ status: 'published', content: null, updatedAt: now })
+      .where(eq(templates.id, id));
+
+    const updatedRow = await this.getTemplateRow(id);
+    if (!updatedRow) return null;
+    const result = await this.toTemplateData(updatedRow);
+    this.emit('templateUpdated', result);
+    await this.notifier.notify('template', id, 'updated');
+    return result;
+  }
+
+  /** Delete a draft template (only if status='draft'). Returns false if not found or already published. */
+  async deleteDraftTemplate(id: string): Promise<boolean> {
+    const existing = await this.getTemplateRow(id);
+    if (!existing || existing.status !== 'draft') return false;
+
+    await getDatabase().getLocal()
+      .delete(templates)
+      .where(and(eq(templates.id, id), eq(templates.projectId, this.currentProjectId)));
+
+    this.emit('templateDeleted', id);
+    await this.notifier.notify('template', id, 'deleted');
+    return true;
   }
 
   private getDataDir(): string {
@@ -826,11 +916,4 @@ export class TemplateEngine extends EventEmitter {
   }
 }
 
-let templateEngineInstance: TemplateEngine | null = null;
 
-export function getTemplateEngine(): TemplateEngine {
-  if (!templateEngineInstance) {
-    templateEngineInstance = new TemplateEngine();
-  }
-  return templateEngineInstance;
-}

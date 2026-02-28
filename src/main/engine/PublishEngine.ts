@@ -330,12 +330,3 @@ export class PublishEngine extends EventEmitter {
   }
 }
 
-// Singleton
-let publishEngine: PublishEngine | null = null;
-
-export function getPublishEngine(): PublishEngine {
-  if (!publishEngine) {
-    publishEngine = new PublishEngine();
-  }
-  return publishEngine;
-}

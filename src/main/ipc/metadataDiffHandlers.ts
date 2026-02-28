@@ -1,13 +1,11 @@
-import { getProjectEngine } from '../engine/ProjectEngine';
-import { taskManager } from '../engine/TaskManager';
+import type { EngineBundle } from '../engine/EngineBundle';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
-export function registerMetadataDiffHandlers(safeHandle: SafeHandle): void {
+export function registerMetadataDiffHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   safeHandle('metadataDiff:getStats', async () => {
-    const { getMetadataDiffEngine } = await import('../engine/MetadataDiffEngine');
-    const engine = getMetadataDiffEngine();
-    const projectEngine = getProjectEngine();
+    const engine = bundle.metadataDiffEngine;
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -16,16 +14,15 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle): void {
   });
 
   safeHandle('metadataDiff:scan', async () => {
-    const { getMetadataDiffEngine } = await import('../engine/MetadataDiffEngine');
-    const engine = getMetadataDiffEngine();
-    const projectEngine = getProjectEngine();
+    const engine = bundle.metadataDiffEngine;
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
     }
 
     const taskId = `metadata-diff-scan-${Date.now()}`;
-    return taskManager.runTask({
+    return bundle.taskManager.runTask({
       id: taskId,
       name: 'Scanning for metadata differences',
       execute: async (onProgress) => {
@@ -38,9 +35,8 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle): void {
   });
 
   safeHandle('metadataDiff:syncDbToFile', async (_, postIds: string[], groupLabel: string) => {
-    const { getMetadataDiffEngine } = await import('../engine/MetadataDiffEngine');
-    const engine = getMetadataDiffEngine();
-    const projectEngine = getProjectEngine();
+    const engine = bundle.metadataDiffEngine;
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);
@@ -49,9 +45,8 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle): void {
   });
 
   safeHandle('metadataDiff:syncFileToDb', async (_, postIds: string[], field: string, groupLabel: string) => {
-    const { getMetadataDiffEngine } = await import('../engine/MetadataDiffEngine');
-    const engine = getMetadataDiffEngine();
-    const projectEngine = getProjectEngine();
+    const engine = bundle.metadataDiffEngine;
+    const projectEngine = bundle.projectEngine;
     const activeProject = await projectEngine.getActiveProject();
     if (activeProject) {
       engine.setProjectContext(activeProject.id);

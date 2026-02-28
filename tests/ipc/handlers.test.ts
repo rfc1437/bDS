@@ -152,6 +152,7 @@ const mockPostMediaEngine = {
   linkManyToPost: vi.fn(),
   unlinkManyFromPost: vi.fn(),
   getLinkedMediaForPost: vi.fn(),
+  getLinkedMediaDataForPost: vi.fn().mockResolvedValue([]),
   getLinkedPostsForMedia: vi.fn(),
   reorderMediaForPost: vi.fn(),
   isMediaLinkedToPost: vi.fn(),
@@ -257,6 +258,7 @@ const mockDatabase = {
     posts: '/mock/data/posts',
     media: '/mock/data/media',
   })),
+  getDbPath: vi.fn(() => '/mock/data/bds.db'),
 };
 
 // Mock engine modules
@@ -350,16 +352,49 @@ async function invokeHandlerWithEvent(event: any, channel: string, ...args: any[
 }
 
 describe('IPC Handlers', () => {
+
+  const mockBundle: Record<string, any> = {
+    postEngine: mockPostEngine,
+    mediaEngine: mockMediaEngine,
+    projectEngine: mockProjectEngine,
+    metaEngine: mockMetaEngine,
+    tagEngine: mockTagEngine,
+    menuEngine: mockMenuEngine,
+    postMediaEngine: mockPostMediaEngine,
+    scriptEngine: mockScriptEngine,
+    templateEngine: mockTemplateEngine,
+    gitEngine: mockGitEngine,
+    gitApiAdapter: {},
+    taskManager: mockTaskManager,
+    blogGenerationEngine: null, // set in beforeEach
+    publishEngine: { setProjectContext: vi.fn(), uploadHtml: vi.fn(), uploadThumbnails: vi.fn(), uploadMedia: vi.fn() },
+    metadataDiffEngine: { setProjectContext: vi.fn(), comparePostMetadata: vi.fn(), scanAllPublishedPosts: vi.fn(), syncDbToFile: vi.fn(), syncFileToDb: vi.fn(), groupDifferencesByField: vi.fn() },
+    blogmarkTransformService: {},
+    mcpServer: { getPort: vi.fn(() => 4124), startCli: vi.fn(), cleanup: vi.fn() },
+    blogmarkPythonWorkerRuntime: {},
+    pythonMacroWorkerRuntime: {},
+    publishApiAdapter: {},
+    appApiAdapter: {},
+  };
+
   beforeEach(async () => {
     // Clear all mocks
     vi.clearAllMocks();
     registeredHandlers.clear();
     mockGeneratedFileHashStore.clear();
     resetMockCounters();
+
+    // Create a real BlogGenerationEngine with mock engines for blog handler tests
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    mockBundle.blogGenerationEngine = new BlogGenerationEngine(
+      mockPostEngine as any,
+      mockMediaEngine as any,
+      mockPostMediaEngine as any,
+    );
     
     // Import and register handlers fresh for each test
     const { registerIpcHandlers } = await import('../../src/main/ipc/handlers');
-    registerIpcHandlers();
+    registerIpcHandlers(mockBundle as any);
   });
 
   afterEach(() => {

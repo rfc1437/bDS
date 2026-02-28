@@ -1,8 +1,8 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { getPostEngine, type PostData } from './PostEngine';
-import { getMediaEngine, type MediaData } from './MediaEngine';
-import { getPostMediaEngine } from './PostMediaEngine';
+import type { PostEngine, PostData } from './PostEngine';
+import type { MediaEngine, MediaData } from './MediaEngine';
+import type { PostMediaEngine } from './PostMediaEngine';
 import {
   PageRenderer,
   buildTemplateMenuItems,
@@ -195,9 +195,15 @@ function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
 }
 
 export class BlogGenerationEngine {
-  private readonly postEngine = getPostEngine();
-  private readonly mediaEngine = getMediaEngine();
-  private readonly postMediaEngine = getPostMediaEngine();
+  private readonly postEngine: PostEngine;
+  private readonly mediaEngine: MediaEngine;
+  private readonly postMediaEngine: PostMediaEngine;
+
+  constructor(postEngine: PostEngine, mediaEngine: MediaEngine, postMediaEngine: PostMediaEngine) {
+    this.postEngine = postEngine;
+    this.mediaEngine = mediaEngine;
+    this.postMediaEngine = postMediaEngine;
+  }
 
   async generate(options: BlogGenerationOptions, onProgress: (progress: number, message?: string) => void): Promise<BlogGenerationResult> {
     onProgress(0, 'Loading posts...');
@@ -834,11 +840,4 @@ export class BlogGenerationEngine {
 
 }
 
-let blogGenerationEngine: BlogGenerationEngine | null = null;
 
-export function getBlogGenerationEngine(): BlogGenerationEngine {
-  if (!blogGenerationEngine) {
-    blogGenerationEngine = new BlogGenerationEngine();
-  }
-  return blogGenerationEngine;
-}

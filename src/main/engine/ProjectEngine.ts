@@ -358,12 +358,3 @@ export class ProjectEngine extends EventEmitter {
   }
 }
 
-// Singleton instance
-let projectEngine: ProjectEngine | null = null;
-
-export function getProjectEngine(): ProjectEngine {
-  if (!projectEngine) {
-    projectEngine = new ProjectEngine();
-  }
-  return projectEngine;
-}

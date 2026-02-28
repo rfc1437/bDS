@@ -159,6 +159,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -200,6 +203,8 @@ describe('PreviewServer', () => {
           },
         ],
       }),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -242,6 +247,8 @@ describe('PreviewServer', () => {
           { id: 'dev', title: 'Dev', kind: 'category-archive', categoryName: 'news', children: [] },
         ],
       }),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -278,6 +285,8 @@ describe('PreviewServer', () => {
           { id: 'news', title: 'news', kind: 'category-archive', categoryName: 'news', children: [] },
         ],
       }),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -293,6 +302,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -369,6 +381,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default', dataDir: tempDir ?? undefined }),
     });
 
@@ -397,6 +412,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([postWithCode]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -432,6 +450,7 @@ describe('PreviewServer', () => {
       postMediaEngine,
       settingsEngine: settingsEngine as any,
       menuEngine,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default', dataDir: '/tmp/default' }),
     });
 
@@ -474,6 +493,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -520,6 +542,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -557,6 +582,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([publishedPost, draftPost]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -589,6 +617,9 @@ describe('PreviewServer', () => {
           };
         },
       } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -618,6 +649,9 @@ describe('PreviewServer', () => {
           };
         },
       } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -645,6 +679,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -665,6 +702,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([matchingDay, sameMonth, sameYear, differentYear]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -696,6 +736,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -728,6 +771,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([post]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -753,6 +799,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([post]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -766,6 +815,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost({ content: '```js\nconst line = "x".repeat(1000);\n```' })]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -789,6 +841,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([post]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -829,6 +884,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([post]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default', dataDir: tempDir || undefined }),
     });
 
@@ -904,6 +962,9 @@ describe('PreviewServer', () => {
           };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -933,6 +994,9 @@ describe('PreviewServer', () => {
           };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -959,6 +1023,9 @@ describe('PreviewServer', () => {
           };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -988,6 +1055,9 @@ describe('PreviewServer', () => {
           };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1015,6 +1085,9 @@ describe('PreviewServer', () => {
           return { description: 'Beschreibung', maxPostsPerPage: 2 };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1043,6 +1116,9 @@ describe('PreviewServer', () => {
           return { description: 'Beschreibung', maxPostsPerPage: 2 };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1075,6 +1151,9 @@ describe('PreviewServer', () => {
           };
         },
       } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1111,6 +1190,9 @@ describe('PreviewServer', () => {
           };
         },
       } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1147,6 +1229,9 @@ describe('PreviewServer', () => {
           };
         },
       } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1166,6 +1251,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([tagged, categorized, page, regular]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1215,6 +1303,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([tagDayOneA, tagDayOneB, tagDayTwo]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1247,6 +1338,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1302,6 +1396,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine(posts),
       settingsEngine: makeSettings(7),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1326,6 +1423,9 @@ describe('PreviewServer', () => {
           };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1353,6 +1453,9 @@ describe('PreviewServer', () => {
           };
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1381,6 +1484,9 @@ describe('PreviewServer', () => {
             : null;
         },
       } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1401,6 +1507,9 @@ describe('PreviewServer', () => {
           return null;
         },
       },
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({
         projectId: 'default',
         dataDir: '/tmp/default',
@@ -1465,7 +1574,9 @@ describe('PreviewServer', () => {
           createdAt: new Date('2025-02-03T10:00:00.000Z'),
         },
       ]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
       settingsEngine: makeSettings(50),
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1495,6 +1606,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([post]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1546,7 +1660,11 @@ describe('PreviewServer', () => {
           linkedPostIds: [],
         } as any,
       ]) as any,
+      postMediaEngine: makePostMediaEngine({
+        'macro-1': [{ media: { id: 'media-1' } }, { media: { id: 'media-2' } }],
+      }) as any,
       settingsEngine: makeSettings(50),
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1587,6 +1705,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([post]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1624,6 +1745,7 @@ describe('PreviewServer', () => {
         'macro-junction-1': [{ media: { id: 'junction-media-1' } }],
       }) as any,
       settingsEngine: makeSettings(50),
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     } as any);
 
@@ -1646,6 +1768,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({
         projectId: 'default',
         dataDir: tempDir!,
@@ -1691,6 +1816,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: engine,
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1738,6 +1866,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: engine,
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1790,6 +1921,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: engine,
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 
@@ -1805,6 +1939,9 @@ describe('PreviewServer', () => {
     server = new PreviewServer({
       postEngine: makeEngine([makePost()]),
       settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default' }),
     });
 

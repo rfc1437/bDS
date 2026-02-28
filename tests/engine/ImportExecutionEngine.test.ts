@@ -108,6 +108,17 @@ const mockMediaEngine = {
   updateMedia: vi.fn().mockResolvedValue({}),
 };
 
+// Mock the PostMediaEngine
+const mockPostMediaEngine = {
+  setProjectContext: vi.fn(),
+  linkMediaToPost: vi.fn().mockResolvedValue(undefined),
+  getLinkedMediaDataForPost: vi.fn().mockResolvedValue([]),
+};
+
+vi.mock('../../src/main/engine/PostMediaEngine', () => ({
+  PostMediaEngine: vi.fn(() => mockPostMediaEngine),
+}));
+
 vi.mock('../../src/main/engine/MediaEngine', () => ({
   getMediaEngine: vi.fn(() => mockMediaEngine),
 }));
@@ -275,7 +286,12 @@ describe('ImportExecutionEngine', () => {
     insertedPosts.length = 0;
     insertedMedia.length = 0;
     updatedPosts.length = 0;
-    engine = new ImportExecutionEngine();
+    engine = new ImportExecutionEngine({
+      tagEngine: mockTagEngine as any,
+      postEngine: mockPostEngine as any,
+      mediaEngine: mockMediaEngine as any,
+      postMediaEngine: mockPostMediaEngine as any,
+    });
     engine.setProjectContext('test-project', '/mock/project/data');
   });
 

@@ -1,12 +1,11 @@
 export { TaskManager, taskManager, type Task, type TaskProgress, type TaskStatus } from './TaskManager';
-export { PostEngine, getPostEngine, type PostData, type PostFilter, type SearchResult, type PaginatedResult, type PaginationOptions } from './PostEngine';
-export { MediaEngine, getMediaEngine, type MediaData } from './MediaEngine';
-export { PostMediaEngine, getPostMediaEngine, postMediaEngine, type PostMediaLinkData } from './PostMediaEngine';
-export { ProjectEngine, getProjectEngine, type ProjectData } from './ProjectEngine';
-export { MetaEngine, getMetaEngine, type ProjectMetadata, DEFAULT_CATEGORIES } from './MetaEngine';
+export { PostEngine, type PostData, type PostFilter, type SearchResult, type PaginatedResult, type PaginationOptions } from './PostEngine';
+export { MediaEngine, type MediaData } from './MediaEngine';
+export { PostMediaEngine, type PostMediaLinkData } from './PostMediaEngine';
+export { ProjectEngine, type ProjectData } from './ProjectEngine';
+export { MetaEngine, type ProjectMetadata, DEFAULT_CATEGORIES } from './MetaEngine';
 export {
   TagEngine,
-  getTagEngine,
   type TagData,
   type TagWithCount,
   type CreateTagInput,
@@ -66,7 +65,6 @@ export {
 } from './postFileUtils';
 export {
   MetadataDiffEngine,
-  getMetadataDiffEngine,
   type PostMetadataDiff,
   type DiffGroup,
   type DiffField,
@@ -75,7 +73,6 @@ export {
 } from './MetadataDiffEngine';
 export {
   GitEngine,
-  getGitEngine,
   type GitAvailability,
   type RepoState,
   type GitStatusDto,
@@ -88,21 +85,18 @@ export {
 } from './GitEngine';
 export {
   BlogGenerationEngine,
-  getBlogGenerationEngine,
   resolvePublicBaseUrl,
   type BlogGenerationOptions,
   type BlogGenerationResult,
 } from './BlogGenerationEngine';
 export {
   MenuEngine,
-  getMenuEngine,
   type MenuItemData,
   type MenuDocument,
   type MenuItemKind,
 } from './MenuEngine';
 export {
   ScriptEngine,
-  getScriptEngine,
   type ScriptData,
   type ScriptKind,
   type CreateScriptInput,
@@ -110,7 +104,6 @@ export {
 } from './ScriptEngine';
 export {
   PublishEngine,
-  getPublishEngine,
   type PublishCredentials,
   type DirectoryUploadResult,
 } from './PublishEngine';

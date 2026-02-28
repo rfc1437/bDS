@@ -19,10 +19,10 @@ import TurndownService from 'turndown';
 import { getDatabase } from '../database';
 import { posts, media, NewPost, NewMedia } from '../database/schema';
 import { eq } from 'drizzle-orm';
-import { getTagEngine } from './TagEngine';
-import { getPostEngine, PostData } from './PostEngine';
-import { getMediaEngine, MediaData } from './MediaEngine';
-import { getPostMediaEngine } from './PostMediaEngine';
+import type { TagEngine } from './TagEngine';
+import type { PostEngine, PostData } from './PostEngine';
+import type { MediaEngine, MediaData } from './MediaEngine';
+import type { PostMediaEngine } from './PostMediaEngine';
 import type {
   ImportAnalysisReport,
   AnalyzedPost,
@@ -71,14 +71,29 @@ export interface ImportExecutionResult {
 // Regex to match WordPress shortcodes: [macroname ...] but NOT [[macroname ...]]
 const WP_SHORTCODE_REGEX = /(?<!\[)\[(\w+)([^\]]*?)(?:\s*\/)?\](?!\])/g;
 
+export interface ImportExecutionDeps {
+  tagEngine: TagEngine;
+  postEngine: PostEngine;
+  mediaEngine: MediaEngine;
+  postMediaEngine: PostMediaEngine;
+}
+
 export class ImportExecutionEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private dataDir: string | null = null;
   private turndown: TurndownService;
   private siteBaseUrl: string | null = null; // Base URL for media URL conversion
+  private readonly tagEngine: TagEngine;
+  private readonly postEngine: PostEngine;
+  private readonly mediaEngine: MediaEngine;
+  private readonly postMediaEngine: PostMediaEngine;
 
-  constructor() {
+  constructor(deps: ImportExecutionDeps) {
     super();
+    this.tagEngine = deps.tagEngine;
+    this.postEngine = deps.postEngine;
+    this.mediaEngine = deps.mediaEngine;
+    this.postMediaEngine = deps.postMediaEngine;
     this.turndown = new TurndownService({
       headingStyle: 'atx',
       codeBlockStyle: 'fenced',
@@ -329,7 +344,7 @@ export class ImportExecutionEngine extends EventEmitter {
     result: ImportExecutionResult,
     progress: (phase: string, current: number, total: number, detail?: string) => void
   ): Promise<void> {
-    const tagEngine = getTagEngine();
+    const tagEngine = this.tagEngine;
     tagEngine.setProjectContext(this.currentProjectId);
 
     let current = 0;
@@ -459,7 +474,7 @@ export class ImportExecutionEngine extends EventEmitter {
     result: ImportExecutionResult,
     options: ImportExecutionOptions
   ): Promise<boolean> {
-    const postEngine = getPostEngine();
+    const postEngine = this.postEngine;
 
     if (resolution === 'overwrite') {
       // Update the existing post with new content and set to draft for review
@@ -493,7 +508,7 @@ export class ImportExecutionEngine extends EventEmitter {
   ): Promise<boolean> {
     const wxrPost = analyzed.wxrPost;
     const db = getDatabase().getLocal();
-    const postEngine = getPostEngine();
+    const postEngine = this.postEngine;
 
     // Convert Vimeo iframes to [[vimeo]] macros BEFORE markdown conversion
     const contentWithVimeo = this.convertVimeoIframes(wxrPost.content);
@@ -640,7 +655,7 @@ export class ImportExecutionEngine extends EventEmitter {
     await db.insert(posts).values(dbPost);
 
     // Update FTS index
-    const postEngine = getPostEngine();
+    const postEngine = this.postEngine;
     await postEngine.updateFTSIndex(postData);
 
     // Track wpId to postId mapping
@@ -774,7 +789,7 @@ export class ImportExecutionEngine extends EventEmitter {
     const createdAt = this.toDate(wxrMedia.pubDate) || new Date();
 
     // Import the media file
-    const mediaEngine = getMediaEngine();
+    const mediaEngine = this.mediaEngine;
     const importedMedia = await mediaEngine.importMedia(sourcePath, {
       title: wxrMedia.title || undefined,
       alt: wxrMedia.description || undefined,
@@ -788,7 +803,7 @@ export class ImportExecutionEngine extends EventEmitter {
 
     // Link media to posts in the postMedia table
     if (linkedPostIds.length > 0) {
-      const postMediaEngine = getPostMediaEngine();
+      const postMediaEngine = this.postMediaEngine;
       postMediaEngine.setProjectContext(this.currentProjectId);
       for (const postId of linkedPostIds) {
         await postMediaEngine.linkMediaToPost(postId, importedMedia.id);
@@ -824,7 +839,7 @@ export class ImportExecutionEngine extends EventEmitter {
       return false;
     }
 
-    const mediaEngine = getMediaEngine();
+    const mediaEngine = this.mediaEngine;
 
     // Replace the file on disk and update size/checksum/dimensions in database
     await mediaEngine.replaceMediaFile(existingMediaId, sourcePath);
@@ -847,7 +862,7 @@ export class ImportExecutionEngine extends EventEmitter {
 
     // Link media to posts in the postMedia table if needed
     if (linkedPostIds.length > 0) {
-      const postMediaEngine = getPostMediaEngine();
+      const postMediaEngine = this.postMediaEngine;
       postMediaEngine.setProjectContext(this.currentProjectId);
       for (const postId of linkedPostIds) {
         await postMediaEngine.linkMediaToPost(postId, existingMediaId);
@@ -1164,12 +1179,3 @@ export class ImportExecutionEngine extends EventEmitter {
   }
 }
 
-// Singleton instance
-let importExecutionEngineInstance: ImportExecutionEngine | null = null;
-
-export function getImportExecutionEngine(): ImportExecutionEngine {
-  if (!importExecutionEngineInstance) {
-    importExecutionEngineInstance = new ImportExecutionEngine();
-  }
-  return importExecutionEngineInstance;
-}

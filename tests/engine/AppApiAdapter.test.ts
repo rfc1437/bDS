@@ -8,7 +8,7 @@ const { mockProjectEngine, mockDatabase, mockReadFile } = vi.hoisted(() => ({
     getDefaultProjectBaseDir: vi.fn().mockResolvedValue('/home/user/bDS/p1'),
   },
   mockDatabase: {
-    getDataPaths: vi.fn().mockReturnValue({ database: '/data/bds.db' }),
+    getDbPath: vi.fn(() => '/data/bds.db'),
   },
   mockReadFile: vi.fn(),
 }));
@@ -38,8 +38,7 @@ describe('AppApiAdapter', () => {
     mockProjectEngine.getActiveProject.mockResolvedValue({ id: 'p1', dataPath: '/projects/blog' });
     mockProjectEngine.getProjectPaths.mockReturnValue({ posts: '/projects/blog/posts', media: '/projects/blog/media' });
     mockProjectEngine.getDefaultProjectBaseDir.mockResolvedValue('/home/user/bDS/p1');
-    mockDatabase.getDataPaths.mockReturnValue({ database: '/data/bds.db' });
-    adapter = new AppApiAdapter();
+    adapter = new AppApiAdapter(mockProjectEngine as any);
   });
 
   it('getDataPaths returns database, posts, and media paths', async () => {

@@ -11,7 +11,7 @@
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development node ./node_modules/electron/cli.js .",
     "start": "concurrently --kill-others \"npm run dev:renderer\" \"npm run start:electron\"",
     "start:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development node ./node_modules/electron/cli.js .",
-    "build": "npm run lint && npm run db:generate && npm run build:main && npm run build:renderer",
+    "build": "npm run lint && npm run db:generate && npm run build:main && npm run build:cli && npm run build:renderer",
     "icons:generate": "node scripts/regenerate-icons.mjs",
     "package": "npm run icons:generate && npm run build && electron-builder --dir",
     "dist": "npm run icons:generate && npm run build && electron-builder",
@@ -19,6 +19,7 @@
     "dist:win": "npm run icons:generate && npm run build && electron-builder --win",
     "dist:linux": "npm run icons:generate && npm run build && electron-builder --linux",
     "build:main": "node ./node_modules/typescript/bin/tsc -p tsconfig.main.json",
+    "build:cli": "node ./node_modules/vite/bin/vite.js build --config vite.config.cli.ts",
     "build:renderer": "node ./node_modules/vite/bin/vite.js build",
     "start:prod": "node ./node_modules/electron/cli.js .",
     "start:dev": "cross-env NODE_ENV=development node ./node_modules/electron/cli.js .",
@@ -137,6 +138,10 @@
       "!**/._*"
     ],
     "extraResources": [
+      {
+        "from": "dist/cli/bds-mcp.cjs",
+        "to": "bds-mcp.cjs"
+      },
       {
         "from": "drizzle",
         "to": "drizzle"

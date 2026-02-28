@@ -19,10 +19,12 @@ const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 export class ProposalStore {
   private readonly proposals = new Map<string, Proposal>();
   private readonly ttlMs: number;
+  private readonly onExpiry: ((proposal: Proposal) => void) | undefined;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(ttlMs: number = DEFAULT_TTL_MS) {
-    this.ttlMs = ttlMs;
+  constructor(ttlMs?: number, onExpiry?: (proposal: Proposal) => void) {
+    this.ttlMs = ttlMs ?? DEFAULT_TTL_MS;
+    this.onExpiry = onExpiry;
     this.cleanupInterval = setInterval(() => this.cleanup(), this.ttlMs);
   }
 
@@ -53,6 +55,7 @@ export class ProposalStore {
     const now = Date.now();
     for (const [id, proposal] of this.proposals) {
       if (now - proposal.createdAt > this.ttlMs) {
+        this.onExpiry?.(proposal);
         this.proposals.delete(id);
       }
     }
