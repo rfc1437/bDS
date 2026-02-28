@@ -1,7 +1,41 @@
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>Review Metadata</title>
-<style>
+/**
+ * MCP App Review View Builder — generates self-contained HTML pages
+ * from shared boilerplate + per-view configuration.
+ *
+ * Each generated page uses the `App` class from
+ * `@modelcontextprotocol/ext-apps` (loaded via the `app-with-deps` bundle)
+ * and is served as a `ui://` resource for MCP hosts.
+ *
+ * This replaces the previous approach of 4 separate HTML files that
+ * duplicated ~80% of their content (CSS, JS boilerplate, accept/discard
+ * handlers, status display, XSS escaping, app connection).
+ */
+
+/** Configuration for a single MCP review view. */
+export interface McpViewConfig {
+  /** Page <title>. */
+  title: string;
+  /** Text shown in the review area before data arrives. */
+  waitingMessage: string;
+  /**
+   * The body of the `window.renderReview = (data) => { ... }` function.
+   * Has access to `data`, `esc()`, `document`, and any helpers defined
+   * in `extraJsHelpers`. Must set `document.getElementById("review").innerHTML`.
+   */
+  renderBody: string;
+  /** Label for the accept/confirm button (e.g. "Publish", "Create Template"). */
+  acceptLabel: string;
+  /** Label for the discard/cancel button (e.g. "Discard", "Discard Draft"). */
+  discardLabel: string;
+  /** Additional CSS rules appended after the shared stylesheet. */
+  extraCss?: string;
+  /** Additional JS helper functions placed before `renderReview`. */
+  extraJsHelpers?: string;
+}
+
+/* ── Shared CSS ─────────────────────────────────────────────────────── */
+
+const SHARED_CSS = `\
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; color: #1a1a1a; background: #fff; line-height: 1.5; }
     h1 { font-size: 1.25rem; margin-bottom: 12px; }
@@ -21,20 +55,11 @@
     .status { margin-top: 12px; padding: 8px 12px; border-radius: 6px; font-size: 0.875rem; }
     .status-success { background: #d4edda; color: #155724; }
     .status-error { background: #f8d7da; color: #721c24; }
-    .word-count { color: #888; font-size: 0.8rem; }
-    .diff-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-    .diff-table th, .diff-table td { padding: 6px 10px; border: 1px solid #dee2e6; text-align: left; font-size: 0.85rem; }
-    .diff-table th { background: #f1f3f5; font-weight: 600; }
-    .diff-old { background: #ffeef0; }
-    .diff-new { background: #e6ffed; }
-</style>
-</head>
-<body>
-  <div id="review">
-    <p class="meta">Waiting for metadata...</p>
-  </div>
-  <div id="status" class="status" style="display:none"></div>
-  <script type="module">
+    .word-count { color: #888; font-size: 0.8rem; }`;
+
+/* ── Shared JS ──────────────────────────────────────────────────────── */
+
+const SHARED_JS = `\
     import { App } from "@modelcontextprotocol/ext-apps/app-with-deps";
 
     const app = new App({ name: "bDS Review", version: "1.0.0" });
@@ -99,34 +124,42 @@
     }
 
     window.showStatus = showStatus;
+    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }`;
+
+/* ── Builder ────────────────────────────────────────────────────────── */
+
+/**
+ * Build a self-contained HTML page for an MCP review view.
+ *
+ * The output is a complete `<!DOCTYPE html>` document that can be served
+ * directly as a `ui://` resource.
+ */
+export function buildMcpView(config: McpViewConfig): string {
+  const extraCss = config.extraCss ? `\n${config.extraCss}` : '';
+  const extraJs = config.extraJsHelpers ? `\n    ${config.extraJsHelpers}` : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>${config.title}</title>
+<style>
+${SHARED_CSS}${extraCss}
+</style>
+</head>
+<body>
+  <div id="review">
+    <p class="meta">${config.waitingMessage}</p>
+  </div>
+  <div id="status" class="status" style="display:none"></div>
+  <script type="module">
+${SHARED_JS}${extraJs}
 
     window.renderReview = (data) => {
-      const current = data.current || {};
-      const proposed = data.proposed || {};
-      const fields = Object.keys(proposed);
-      let rows = fields.map(f => `
-        <tr>
-          <td><strong>${esc(f)}</strong></td>
-          <td class="diff-old">${esc(fmt(current[f]))}</td>
-          <td class="diff-new">${esc(fmt(proposed[f]))}</td>
-        </tr>
-      `).join("");
-      document.getElementById("review").innerHTML = `
-        <h1>Metadata Changes</h1>
-        <table class="diff-table">
-          <thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div class="actions">
-          <button class="btn btn-accept" onclick="acceptProposal()">Apply Changes</button>
-          <button class="btn btn-discard" onclick="discardProposal()">Discard</button>
-        </div>
-      `;
+${config.renderBody}
     };
-    function fmt(v) { if (v == null) return "(empty)"; if (Array.isArray(v)) return v.join(", "); return String(v); }
-    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
     app.connect().catch(e => console.error("App connect failed:", e));
   </script>
 </body>
 </html>
+`;
+}

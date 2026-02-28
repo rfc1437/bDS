@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase } from './database';
-import { registerIpcHandlers, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
+import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { getMediaEngine } from './engine/MediaEngine';
@@ -714,9 +714,18 @@ function createApplicationMenu(): Menu {
 }
 
 async function initialize(): Promise<void> {
+  // Register IPC handlers immediately (synchronous) so they are available
+  // before any async work. This eliminates race conditions where the renderer
+  // calls handlers before the database is ready.
+  registerIpcHandlers();
+
   // Initialize database
   const db = getDatabase();
   await db.initializeLocal();
+
+  // Now that the database is ready, register event forwarding from engines
+  // to the renderer (engines need DB access at registration time).
+  registerEventForwarding();
 
   // Register custom protocol for serving media files
   // URLs like bds-media://media-id will be resolved to the actual file
@@ -815,9 +824,6 @@ async function initialize(): Promise<void> {
       return new Response('Internal server error', { status: 500 });
     }
   });
-
-  // Register IPC handlers
-  registerIpcHandlers();
 
   ipcMain.handle('app:setPreviewPostTarget', async (_, postId: string | null) => {
     activePreviewPostId = typeof postId === 'string' && postId.length > 0 ? postId : null;

@@ -1,5 +1,6 @@
 /**
- * MCP App Review Views — loaded from HTML files in the `mcp-views/` directory.
+ * MCP App Review Views — generated at runtime from shared boilerplate
+ * + per-view configuration via `buildMcpView()`.
  *
  * Each function returns a self-contained HTML page that uses the
  * `App` class from `@modelcontextprotocol/ext-apps` (loaded via
@@ -9,77 +10,120 @@
  * in MCP hosts that support MCP Apps (Claude, ChatGPT, VS Code, etc.).
  */
 
-import { readFileSync } from 'fs';
-import path from 'path';
+import { buildMcpView } from './mcp-view-builder';
 
-/**
- * Resolve candidate directories for MCP view HTML files.
- * Checks `__dirname/mcp-views`, `dist/main/engine/mcp-views`,
- * `src/main/engine/mcp-views`, and `process.resourcesPath/mcp-views`.
- */
-export function resolveMcpViewsDirs(options?: {
-  moduleDir?: string;
-  cwd?: string;
-  resourcesPath?: string;
-}): string[] {
-  const moduleDir = options?.moduleDir ?? __dirname;
-  const cwd = options?.cwd ?? process.cwd();
-  const resourcesPath = options?.resourcesPath ?? process.resourcesPath;
+/* ── Review Post ────────────────────────────────────────────────────── */
 
-  const dirs = [
-    path.resolve(moduleDir, 'mcp-views'),
-    path.resolve(cwd, 'dist', 'main', 'engine', 'mcp-views'),
-    path.resolve(cwd, 'src', 'main', 'engine', 'mcp-views'),
-  ];
-
-  if (typeof resourcesPath === 'string' && resourcesPath.length > 0) {
-    dirs.unshift(path.resolve(resourcesPath, 'mcp-views'));
-  }
-
-  return Array.from(new Set(dirs));
+export function reviewPostHtml(): string {
+  return buildMcpView({
+    title: 'Review Post',
+    waitingMessage: 'Waiting for post data...',
+    acceptLabel: 'Publish',
+    discardLabel: 'Discard Draft',
+    renderBody: `\
+      const post = data.post || {};
+      const wc = (post.content || "").split(/\\s+/).filter(Boolean).length;
+      document.getElementById("review").innerHTML = \`
+        <h1>\${esc(post.title || "Untitled")}</h1>
+        <p class="meta">
+          <span class="badge badge-draft">Draft</span>
+          <span class="word-count">\${wc} words</span>
+        </p>
+        \${post.categories?.length ? '<p class="meta">Categories: ' + post.categories.map(c => esc(c)).join(", ") + '</p>' : ''}
+        \${post.tags?.length ? '<p class="meta">Tags: ' + post.tags.map(t => esc(t)).join(", ") + '</p>' : ''}
+        \${post.excerpt ? '<h2>Excerpt</h2><p>' + esc(post.excerpt) + '</p>' : ''}
+        <h2>Content</h2>
+        <div class="content-preview">\${esc(post.content || "")}</div>
+        <div class="actions">
+          <button class="btn btn-accept" onclick="acceptProposal()">Publish</button>
+          <button class="btn btn-discard" onclick="discardProposal()">Discard Draft</button>
+        </div>
+      \`;`,
+  });
 }
 
-/**
- * Load an MCP view HTML file by name, searching candidate directories.
- * Throws if the file cannot be found in any candidate directory.
- */
-export function loadViewHtml(
-  filename: string,
-  options?: Parameters<typeof resolveMcpViewsDirs>[0],
-): string {
-  const dirs = resolveMcpViewsDirs(options);
-  for (const dir of dirs) {
-    try {
-      return readFileSync(path.join(dir, filename), 'utf-8');
-    } catch {
-      // try next directory
-    }
-  }
-  throw new Error(
-    `MCP view "${filename}" not found in any of: ${dirs.join(', ')}`,
-  );
+/* ── Review Script ──────────────────────────────────────────────────── */
+
+export function reviewScriptHtml(): string {
+  return buildMcpView({
+    title: 'Review Script',
+    waitingMessage: 'Waiting for script data...',
+    acceptLabel: 'Create Script',
+    discardLabel: 'Discard',
+    renderBody: `\
+      const p = data.preview || data;
+      document.getElementById("review").innerHTML = \`
+        <h1>\${esc(p.title || "Untitled Script")}</h1>
+        <p class="meta"><span class="badge badge-kind">\${esc(p.kind || "script")}</span></p>
+        <h2>Python Code</h2>
+        <div class="content-preview">\${esc(p.content || "(code not included in preview)")}</div>
+        <div class="actions">
+          <button class="btn btn-accept" onclick="acceptProposal()">Create Script</button>
+          <button class="btn btn-discard" onclick="discardProposal()">Discard</button>
+        </div>
+      \`;`,
+  });
 }
 
-export function reviewPostHtml(
-  options?: Parameters<typeof resolveMcpViewsDirs>[0],
-): string {
-  return loadViewHtml('review-post.html', options);
+/* ── Review Template ────────────────────────────────────────────────── */
+
+export function reviewTemplateHtml(): string {
+  return buildMcpView({
+    title: 'Review Template',
+    waitingMessage: 'Waiting for template data...',
+    acceptLabel: 'Create Template',
+    discardLabel: 'Discard',
+    renderBody: `\
+      const p = data.preview || data;
+      document.getElementById("review").innerHTML = \`
+        <h1>\${esc(p.title || "Untitled Template")}</h1>
+        <p class="meta"><span class="badge badge-kind">\${esc(p.kind || "template")}</span></p>
+        <h2>Liquid Template</h2>
+        <div class="content-preview">\${esc(p.content || "(template not included in preview)")}</div>
+        <div class="actions">
+          <button class="btn btn-accept" onclick="acceptProposal()">Create Template</button>
+          <button class="btn btn-discard" onclick="discardProposal()">Discard</button>
+        </div>
+      \`;`,
+  });
 }
 
-export function reviewScriptHtml(
-  options?: Parameters<typeof resolveMcpViewsDirs>[0],
-): string {
-  return loadViewHtml('review-script.html', options);
-}
+/* ── Review Metadata ────────────────────────────────────────────────── */
 
-export function reviewTemplateHtml(
-  options?: Parameters<typeof resolveMcpViewsDirs>[0],
-): string {
-  return loadViewHtml('review-template.html', options);
-}
-
-export function reviewMetadataHtml(
-  options?: Parameters<typeof resolveMcpViewsDirs>[0],
-): string {
-  return loadViewHtml('review-metadata.html', options);
+export function reviewMetadataHtml(): string {
+  return buildMcpView({
+    title: 'Review Metadata',
+    waitingMessage: 'Waiting for metadata...',
+    acceptLabel: 'Apply Changes',
+    discardLabel: 'Discard',
+    extraCss: `\
+    .diff-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+    .diff-table th, .diff-table td { padding: 6px 10px; border: 1px solid #dee2e6; text-align: left; font-size: 0.85rem; }
+    .diff-table th { background: #f1f3f5; font-weight: 600; }
+    .diff-old { background: #ffeef0; }
+    .diff-new { background: #e6ffed; }`,
+    extraJsHelpers: `function fmt(v) { if (v == null) return "(empty)"; if (Array.isArray(v)) return v.join(", "); return String(v); }`,
+    renderBody: `\
+      const current = data.current || {};
+      const proposed = data.proposed || {};
+      const fields = Object.keys(proposed);
+      let rows = fields.map(f => \`
+        <tr>
+          <td><strong>\${esc(f)}</strong></td>
+          <td class="diff-old">\${esc(fmt(current[f]))}</td>
+          <td class="diff-new">\${esc(fmt(proposed[f]))}</td>
+        </tr>
+      \`).join("");
+      document.getElementById("review").innerHTML = \`
+        <h1>Metadata Changes</h1>
+        <table class="diff-table">
+          <thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead>
+          <tbody>\${rows}</tbody>
+        </table>
+        <div class="actions">
+          <button class="btn btn-accept" onclick="acceptProposal()">Apply Changes</button>
+          <button class="btn btn-discard" onclick="discardProposal()">Discard</button>
+        </div>
+      \`;`,
+  });
 }

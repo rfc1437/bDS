@@ -91,6 +91,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -209,6 +210,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -356,6 +358,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -498,6 +501,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -628,6 +632,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -780,6 +785,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -961,6 +967,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),
@@ -1145,6 +1152,7 @@ describe('main bootstrap preview behavior', () => {
 
     vi.doMock('../../src/main/ipc', () => ({
       registerIpcHandlers: vi.fn(),
+      registerEventForwarding: vi.fn(),
       registerChatHandlers: vi.fn(),
       initializeChatHandlers: vi.fn(),
       cleanupChatHandlers: vi.fn().mockResolvedValue(undefined),

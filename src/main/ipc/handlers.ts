@@ -1612,10 +1612,15 @@ export function registerIpcHandlers(): void {
       return null;
     }
   });
+}
 
-  // ============ Event Forwarding ============
-  
-  // Forward engine events to renderer
+/**
+ * Register event forwarding from engine EventEmitters to the renderer via IPC.
+ * Must be called after the database is initialized (engines require DB access).
+ * Separated from registerIpcHandlers() so that handler registration can happen
+ * synchronously before any async work, eliminating startup race conditions.
+ */
+export function registerEventForwarding(): void {
   const postEngine = getPostEngine();
   const mediaEngine = getMediaEngine();
   const projectEngine = getProjectEngine();
