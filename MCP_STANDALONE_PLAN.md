@@ -59,8 +59,11 @@ CREATE TABLE db_notifications (
 
 The CLI writes a row after every mutation. The app's `NotificationWatcher` queries for
 `seenAt IS NULL AND fromCli = 1`, invalidates the relevant engine cache, emits IPC events
-to the renderer, stamps `seenAt`, then **prunes rows whose `seenAt` is older than 1 hour**
-to prevent unbounded table growth.
+to the renderer, stamps `seenAt`, then **prunes rows in two passes** to prevent unbounded
+table growth:
+- rows whose `seenAt` is older than 1 hour (already processed by the app)
+- rows whose `seenAt IS NULL AND createdAt` is older than 24 hours (stale unprocessed rows
+  written while the app was closed — they will never be read)
 
 ---
 
@@ -216,6 +219,30 @@ in `tests/setup.ts` for engines that no longer import it.
 > follow the same explicit-construction refactor only to be consistent (they lose their
 > singleton factories too), but their `CliNotifier` parameter is omitted.
 
+**Cross-engine coupling — hidden singleton calls that must be wired up.** Several engines
+that are not directly called by the CLI still pull other engines through the deleted
+singleton factories internally:
+
+| Engine | Internal call |
+|---|---|
+| `TagEngine` | `getPostEngine().syncPublishedPostFile()` |
+| `PostMediaEngine` | `getMediaEngine()` — 8 call sites |
+| `MetadataDiffEngine` | `getPostEngine()` |
+| `BlogGenerationEngine` | `getPostEngine()` |
+| `BlogmarkTransformService` | `getScriptEngine()` |
+
+Removing the singleton factories without wiring these calls will produce compile errors.
+Each of these classes must gain a constructor parameter for the engine it depends on, and
+`main.ts` must inject the already-constructed instance. This is additional — but
+mechanical — work within this same step.
+
+**`MCPServerDependencies` shape change.** The current interface uses lazy getter functions
+(`getPostEngine: () => PostEngineContract`). After engines are constructed explicitly at
+startup, wrapping them in getters is pointless overhead. The interface should become direct
+properties (`postEngine: PostEngineContract`). All callers inside `MCPServer.ts` change
+from `this.deps.getPostEngine().method()` to `this.deps.postEngine.method()`. This is a
+mechanical find-and-replace across `MCPServer.ts` and `main.ts` — do it as part of step D.
+
 ---
 
 ### E — Engine `invalidate()` API
@@ -273,36 +300,53 @@ export class NotificationWatcher {
     this.watcher.on('add',    () => this.schedule()); // WAL created for first time
   }
 
+  private isProcessing = false;
+
   private schedule(): void {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => this.process(), this.debounceMs);
   }
 
   private async process(): Promise<void> {
-    const rows = await this.db
-      .select()
-      .from(dbNotifications)
-      .where(and(
-        isNull(dbNotifications.seenAt),
-        eq(dbNotifications.fromCli, 1),
-      ));
+    // Re-entry guard: seenAt updates trigger chokidar again; skip if already running.
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+    try {
+      const rows = await this.db
+        .select()
+        .from(dbNotifications)
+        .where(and(
+          isNull(dbNotifications.seenAt),
+          eq(dbNotifications.fromCli, 1),
+        ));
 
-    for (const row of rows) {
-      this.engines[row.entity]?.invalidate(row.entityId);
-      this.mainWindow.webContents.send(
-        'entity:changed',
-        { entity: row.entity, entityId: row.entityId, action: row.action },
-      );
+      for (const row of rows) {
+        this.engines[row.entity]?.invalidate(row.entityId);
+        this.mainWindow.webContents.send(
+          'entity:changed',
+          { entity: row.entity, entityId: row.entityId, action: row.action },
+        );
+        await this.db
+          .update(dbNotifications)
+          .set({ seenAt: Date.now() })
+          .where(eq(dbNotifications.id, row.id));
+      }
+
+      const now = Date.now();
+      // Prune rows processed more than 1 hour ago.
       await this.db
-        .update(dbNotifications)
-        .set({ seenAt: Date.now() })
-        .where(eq(dbNotifications.id, row.id));
+        .delete(dbNotifications)
+        .where(lt(dbNotifications.seenAt, now - 3_600_000));
+      // Prune unprocessed rows older than 24 hours (written while app was closed).
+      await this.db
+        .delete(dbNotifications)
+        .where(and(
+          isNull(dbNotifications.seenAt),
+          lt(dbNotifications.createdAt, now - 86_400_000),
+        ));
+    } finally {
+      this.isProcessing = false;
     }
-
-    // Prune rows processed more than 1 hour ago to prevent unbounded growth.
-    await this.db
-      .delete(dbNotifications)
-      .where(lt(dbNotifications.seenAt, Date.now() - 3_600_000));
   }
 
   stop(): void {
@@ -323,6 +367,11 @@ queries `db_notifications` for `seenAt IS NULL AND fromCli = 1`. When no CLI is 
 that query returns zero rows and the function exits immediately — this is a single cheap
 indexed SELECT. Do not try to "optimise" the watcher by making it conditional on CLI
 presence; that would break notification delivery.
+
+**`seenAt` writes are themselves DB writes** that fire chokidar again. The `isProcessing`
+flag prevents the resulting re-entrant call from doing any work — it returns immediately
+and the debounce timer is not rescheduled. This bounds the feedback to one extra no-op
+debounce per notification batch, not a loop.
 
 ---
 
@@ -351,6 +400,14 @@ async startCli(): Promise<void> {
 
 No secondary HTTP port. No `bds-mcp-base-url` meta tag. The `ProposalStore` is owned by
 the single `MCPServer` instance as before.
+
+**App View host compatibility.** The proposal-review HTML (`reviewPostHtml`, etc.) is
+rendered through the `@modelcontextprotocol/ext-apps` App View protocol. This interactive
+panel is supported by Claude Desktop and Claude Code. Other MCP hosts (VS Code agent mode,
+Gemini CLI, OpenCode) may not implement the ext-apps spec and will show the raw HTML as
+text, or ignore the resource entirely. This is acceptable: `accept_proposal` and
+`discard_proposal` are plain MCP tool calls that work in any conformant host — the HTML
+panel is a convenience layer on top, not a requirement.
 
 ---
 
@@ -530,6 +587,13 @@ buttons, so users never have to hunt down config files manually.
 
 New methods on each engine:
 
+> **Also update `ScriptEngineContract` and `TemplateEngineContract` in `MCPServer.ts`.**
+> The interfaces currently only declare `createScript` / `createTemplate` / `validateScript`
+> / `validateTemplate`. After this step, `acceptProposal` and `discardProposal` call
+> `publishScript`, `deleteDraftScript`, `publishTemplate`, `deleteDraftTemplate` — all of
+> which must be added to the respective contract interfaces, or `MCPServer.ts` will not
+> compile. Do this as part of the same step.
+
 ```typescript
 // ScriptEngine
 createDraftScript(data: CreateScriptInput): Promise<ScriptData>   // status: 'draft', no file
@@ -566,6 +630,39 @@ change, `ProposalStore` for those types holds only `{ scriptId }` / `{ templateI
 call `deleteDraftScript(scriptId)` / `deleteDraftTemplate(templateId)` to clean up the DB
 row — not just `proposalStore.remove()`. These updates to `MCPServer.ts` are part of this
 step, not a separate one.
+
+**`ProposalStore` TTL expiry must call back to clean up draft DB rows.** The existing
+`setInterval` cleanup in `ProposalStore` calls `proposals.delete(id)` in-memory but knows
+nothing about the `scriptId` / `templateId` DB row it points to. If a `proposeScript` or
+`proposeTemplate` proposal expires without being accepted or discarded, the `status='draft'`
+DB row is orphaned forever.
+
+Fix: add an optional `onExpiry` callback to `ProposalStore`:
+
+```typescript
+class ProposalStore {
+  constructor(
+    ttlMs: number = DEFAULT_TTL_MS,
+    private readonly onExpiry?: (proposal: Proposal) => void,
+  ) { … }
+
+  cleanup(): void {
+    const now = Date.now();
+    for (const [id, proposal] of this.proposals) {
+      if (now - proposal.createdAt > this.ttlMs) {
+        this.onExpiry?.(proposal);
+        this.proposals.delete(id);
+      }
+    }
+  }
+}
+```
+
+`MCPServer` passes an `onExpiry` handler at construction time that dispatches
+`deleteDraftScript` / `deleteDraftTemplate` for the relevant proposal types (using the
+`scriptId` / `templateId` stored in `proposal.data`). `draftPost`, metadata proposals, and
+all other types are no-ops in the handler. Wire this in step 6 (ProposalStore TTL option)
+before step 7 (draft lifecycle methods).
 
 **Known failure mode for in-memory metadata proposals:** if the CLI process is killed after
 a `propose_media_metadata` or `propose_post_metadata` call but before accept/discard, the
@@ -643,6 +740,13 @@ This is non-trivial cross-cutting work and should be its own implementation step
 | CLI shutdown | `mcpServer.cleanup()` (not direct `proposalStore.destroy()`) then `db.close()` then `process.exit(0)` |
 | Renderer live updates | Section N: `entity:changed` IPC → store `invalidate()` + refetch; `invalidate()` methods must be added to each store |
 | Watcher fire rate | chokidar fires on every DB write (app + CLI); `process()` no-ops with a cheap indexed SELECT when no CLI rows are pending |
+| Watcher re-entry | `isProcessing` flag prevents double-processing when `seenAt` writes re-trigger chokidar |
+| Stale unprocessed rows | Pruned after 24h (app was closed); processed rows pruned after 1h — both inside the same `process()` call |
+| Cross-engine coupling | `TagEngine`, `PostMediaEngine`, `MetadataDiffEngine`, `BlogGenerationEngine`, `BlogmarkTransformService` use deleted singleton calls internally; must be given injected deps in step D |
+| `MCPServerDependencies` shape | Lazy getters (`getPostEngine: () => …`) → direct properties (`postEngine: …`) after step D; mechanical find-and-replace in `MCPServer.ts` and `main.ts` |
+| `ScriptEngineContract` / `TemplateEngineContract` | Must add draft lifecycle method signatures in step L to avoid compile errors in `MCPServer.ts` |
+| `ProposalStore` TTL + draft DB rows | `onExpiry` callback lets `MCPServer` clean up `status='draft'` DB rows when a `proposeScript`/`proposeTemplate` proposal expires without accept/discard |
+| App View host support | Interactive review HTML only renders in hosts implementing `@modelcontextprotocol/ext-apps`; `accept_proposal`/`discard_proposal` work as plain tool calls in all hosts |
 
 ---
 
@@ -651,11 +755,11 @@ This is non-trivial cross-cutting work and should be its own implementation step
 1. **Migrations** (A + B) — schema changes first, all other work builds on them
 2. **Decouple `DatabaseConnection` from Electron** (C0) — remove `app` import, move `getDataPaths()` to callers, add WAL pragmas; update existing DB tests to pass explicit paths
 3. **`platformConfigPath()`** (C) — pure function, easy to test
-4. **Explicit engine construction + `CliNotifier`** (D) — remove all `getXxxEngine()` singletons; add explicit construction in `main.ts`; update `registerIpcHandlers()` signature; add `CliNotifier` constructor arg to the four mutating engines; unit-test `DbNotifier` with mock DB. This is the largest single step — sequence it early because every later step depends on the new construction pattern.
+4. **Explicit engine construction + `CliNotifier`** (D) — remove all `getXxxEngine()` singletons; add explicit construction in `main.ts`; update `registerIpcHandlers()` signature; add `CliNotifier` constructor arg to the four mutating engines; unit-test `DbNotifier` with mock DB. Also inject deps into the five cross-engine callers (`TagEngine`, `PostMediaEngine`, `MetadataDiffEngine`, `BlogGenerationEngine`, `BlogmarkTransformService`) and change `MCPServerDependencies` from lazy getters to direct properties. This is the largest single step — sequence it early because every later step depends on the new construction pattern.
 5. **Engine `invalidate()` API** (E) — add and test on each engine before NotificationWatcher
-6. **`ProposalStore` TTL option** (M, partial) — add `proposalTtlMs` constructor arg and extend existing tests; the DB mapping part of M comes after L
+6. **`ProposalStore` TTL option + `onExpiry` callback** (M, partial) — add `proposalTtlMs` constructor arg; add `onExpiry?: (proposal: Proposal) => void` callback invoked from `cleanup()` before deletion; extend existing tests; the DB mapping part of M and the `MCPServer` wiring of `onExpiry` comes after L
 7. **`ScriptEngine`/`TemplateEngine` draft lifecycle** (L) — tests first; produces `publishScript`, `deleteDraftScript`, `publishTemplate`, `deleteDraftTemplate`
-8. **`ProposalStore` DB mapping + `MCPServer` accept/discard update** (M, remainder) — map `proposeScript`/`proposeTemplate` proposals to DB row IDs; update `acceptProposal()` and `discardProposal()` in `MCPServer.ts` to call publish/delete methods; extend existing MCPServer accept/discard tests
+8. **`ProposalStore` DB mapping + `MCPServer` accept/discard update** (M, remainder) — map `proposeScript`/`proposeTemplate` proposals to DB row IDs; update `acceptProposal()` and `discardProposal()` in `MCPServer.ts` to call publish/delete methods; wire `onExpiry` handler in `MCPServer` constructor to call `deleteDraftScript`/`deleteDraftTemplate` on TTL expiry; extend existing MCPServer accept/discard/expiry tests
 9. **`NotificationWatcher`** (F) — test with mock DB rows + mock chokidar emitter (emit `'change'` / `'add'` events on a fake `FSWatcher`)
 10. **`MCPAgentConfigEngine` — `claude-desktop` + `removeFromConfig`** (K) — extend existing tests; `execPath`/`scriptPath` optional; verify opencode format before writing its case
 11. **`MCPServer.startCli()`** (G) — test with in-process `StdioServerTransport`
