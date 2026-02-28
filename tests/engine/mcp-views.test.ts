@@ -14,10 +14,10 @@ describe('mcp-views', () => {
       expect(html).toContain('</html>');
     });
 
-    it('contains App import from ext-apps', () => {
+    it('inlines ext-apps bundle and uses App class', () => {
       const html = reviewPostHtml();
-      expect(html).toContain('@modelcontextprotocol/ext-apps/app-with-deps');
-      expect(html).toContain('new App(');
+      expect(html).toContain('__bdsExtApp'); // inlined bundle sets global
+      expect(html).toContain('new App(');   // SHARED_JS uses the global
     });
 
     it('contains accept and discard buttons', () => {
@@ -61,9 +61,10 @@ describe('mcp-views', () => {
       expect(html).toContain('</html>');
     });
 
-    it('contains App import from ext-apps', () => {
+    it('inlines ext-apps bundle and uses App class', () => {
       const html = reviewScriptHtml();
-      expect(html).toContain('@modelcontextprotocol/ext-apps/app-with-deps');
+      expect(html).toContain('__bdsExtApp');
+      expect(html).toContain('new App(');
     });
 
     it('contains accept and discard buttons', () => {
@@ -87,9 +88,10 @@ describe('mcp-views', () => {
       expect(html).toContain('</html>');
     });
 
-    it('contains App import from ext-apps', () => {
+    it('inlines ext-apps bundle and uses App class', () => {
       const html = reviewTemplateHtml();
-      expect(html).toContain('@modelcontextprotocol/ext-apps/app-with-deps');
+      expect(html).toContain('__bdsExtApp');
+      expect(html).toContain('new App(');
     });
 
     it('contains accept and discard buttons', () => {
@@ -113,9 +115,10 @@ describe('mcp-views', () => {
       expect(html).toContain('</html>');
     });
 
-    it('contains App import from ext-apps', () => {
+    it('inlines ext-apps bundle and uses App class', () => {
       const html = reviewMetadataHtml();
-      expect(html).toContain('@modelcontextprotocol/ext-apps/app-with-deps');
+      expect(html).toContain('__bdsExtApp');
+      expect(html).toContain('new App(');
     });
 
     it('contains accept and discard buttons', () => {

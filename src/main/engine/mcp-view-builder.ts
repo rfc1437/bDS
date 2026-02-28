@@ -3,13 +3,14 @@
  * from shared boilerplate + per-view configuration.
  *
  * Each generated page uses the `App` class from
- * `@modelcontextprotocol/ext-apps` (loaded via the `app-with-deps` bundle)
+ * `@modelcontextprotocol/ext-apps` (inlined as a self-contained script)
  * and is served as a `ui://` resource for MCP hosts.
  *
- * This replaces the previous approach of 4 separate HTML files that
- * duplicated ~80% of their content (CSS, JS boilerplate, accept/discard
- * handlers, status display, XSS escaping, app connection).
+ * The bundle is loaded from disk once and cached; it cannot use bare
+ * specifiers in the sandboxed iframe, so it is inlined directly.
  */
+
+import * as fs from 'fs';
 
 /** Configuration for a single MCP review view. */
 export interface McpViewConfig {
@@ -57,10 +58,42 @@ const SHARED_CSS = `\
     .status-error { background: #f8d7da; color: #721c24; }
     .word-count { color: #888; font-size: 0.8rem; }`;
 
+/* ── Inline bundle loader ───────────────────────────────────────────── */
+
+let _appBundle: string | null = null;
+
+/**
+ * Read the `app-with-deps` ESM bundle from node_modules, strip its
+ * `export{...}` block, and add `globalThis.__bdsExtApp = App_internal_name;`
+ * so the App class is accessible as a global from a plain `<script>` tag.
+ * Result is cached after the first call.
+ */
+function getAppBundle(): string {
+  if (_appBundle !== null) return _appBundle;
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const bundlePath: string = require.resolve('@modelcontextprotocol/ext-apps/app-with-deps');
+  let source = fs.readFileSync(bundlePath, 'utf-8');
+
+  // The bundle ends with export{...,X as App,...}.
+  // Extract the internal variable name for `App`.
+  const match = source.match(/export\{[^}]*\b(\w+)\s+as\s+App\b[^}]*\}/);
+  if (!match) throw new Error('Could not find App export in app-with-deps bundle');
+  const internalName = match[1];
+
+  // Strip ESM export block and expose App class on globalThis.
+  source = source.replace(/export\{[^}]+\}/, '');
+  source += `\nglobalThis.__bdsExtApp=${internalName};`;
+
+  _appBundle = source;
+  return _appBundle;
+}
+
 /* ── Shared JS ──────────────────────────────────────────────────────── */
 
 const SHARED_JS = `\
-    import { App } from "@modelcontextprotocol/ext-apps/app-with-deps";
+    const App = globalThis.__bdsExtApp;
+    if (!App) { document.getElementById("status").textContent = "Error: App bundle not loaded"; document.getElementById("status").className = "status status-error"; document.getElementById("status").style.display = "block"; throw new Error("App bundle not loaded"); }
 
     const app = new App({ name: "bDS Review", version: "1.0.0" });
 
@@ -72,6 +105,8 @@ const SHARED_JS = `\
         if (textContent?.text) {
           currentData = JSON.parse(textContent.text);
           renderReview(currentData);
+        } else {
+          showStatus("Tool result received but no text content found. Raw: " + JSON.stringify(result).slice(0, 200), "error");
         }
       } catch (e) {
         showStatus("Failed to parse tool result: " + e.message, "error");
@@ -124,7 +159,18 @@ const SHARED_JS = `\
     }
 
     window.showStatus = showStatus;
-    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }`;
+    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+    window.__connectApp = () => {
+      app.connect()
+        .then(() => {
+          showStatus("Connected — waiting for tool result…", "success");
+        })
+        .catch(e => {
+          showStatus("Failed to connect to host: " + e.message, "error");
+          console.error("App connect failed:", e);
+        });
+    };`;
 
 /* ── Builder ────────────────────────────────────────────────────────── */
 
@@ -150,6 +196,7 @@ ${SHARED_CSS}${extraCss}
     <p class="meta">${config.waitingMessage}</p>
   </div>
   <div id="status" class="status" style="display:none"></div>
+  <script>${getAppBundle()}</script>
   <script type="module">
 ${SHARED_JS}${extraJs}
 
@@ -157,7 +204,7 @@ ${SHARED_JS}${extraJs}
 ${config.renderBody}
     };
 
-    app.connect().catch(e => console.error("App connect failed:", e));
+    window.__connectApp();
   </script>
 </body>
 </html>
