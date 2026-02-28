@@ -29,6 +29,7 @@ interface PostEngineContract {
   getAllPosts: (options?: { limit?: number; offset?: number }) => Promise<{ items: Array<Record<string, unknown>>; hasMore: boolean; total: number }>;
   getPost: (id: string) => Promise<Record<string, unknown> | null>;
   searchPosts: (query: string) => Promise<Array<{ id: string; title: string; slug: string; excerpt?: string }>>;
+  searchPostsFiltered: (query: string, filter: PostFilter, pagination?: { offset?: number; limit?: number }) => Promise<Array<Record<string, unknown>>>;
   createPost: (data: Record<string, unknown>) => Promise<Record<string, unknown>>;
   updatePost: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
   publishPost: (id: string) => Promise<Record<string, unknown> | null>;
@@ -383,26 +384,24 @@ export class MCPServer {
         return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
       }
 
-      // Filter-based query (optionally narrowed by text search)
+      // Build structural filter
       const filter: PostFilter = {};
       if (args.category) filter.categories = [args.category];
       if (args.tags) filter.tags = args.tags;
       if (args.year) filter.year = args.year;
       if (args.month) filter.month = args.month;
       if (args.status) filter.status = args.status;
-      let results = await this.deps.getPostEngine().getPostsFiltered(filter);
 
-      // Client-side text filter when query is combined with structured filters
-      if (args.query) {
-        const q = args.query.toLowerCase();
-        results = results.filter((p: Record<string, unknown>) => {
-          const title = String(p.title ?? '').toLowerCase();
-          const content = String(p.content ?? '').toLowerCase();
-          const excerpt = String(p.excerpt ?? '').toLowerCase();
-          return title.includes(q) || content.includes(q) || excerpt.includes(q);
-        });
+      if (args.query && hasFilters) {
+        // FTS + structural filters: single SQL JOIN query, ranked by FTS score
+        const results = await this.deps.getPostEngine().searchPostsFiltered(
+          args.query, filter, { offset, limit },
+        );
+        return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
       }
 
+      // Filter-only query (no text search)
+      const results = await this.deps.getPostEngine().getPostsFiltered(filter);
       const paginated = results.slice(offset, offset + limit);
       return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
     });
@@ -424,19 +423,26 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-post' } },
     }, async (args: { title: string; content: string; excerpt?: string; tags?: string[]; categories?: string[]; author?: string }) => {
-      const post = await this.deps.getPostEngine().createPost({
-        title: args.title,
-        content: args.content,
-        excerpt: args.excerpt,
-        tags: args.tags ?? [],
-        categories: args.categories ?? [],
-        author: args.author,
-        status: 'draft',
-      });
-      const proposalId = this.proposalStore.create('draftPost', { postId: (post as Record<string, unknown>).id });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, post }) }],
-      };
+      try {
+        const post = await this.deps.getPostEngine().createPost({
+          title: args.title,
+          content: args.content,
+          excerpt: args.excerpt,
+          tags: args.tags ?? [],
+          categories: args.categories ?? [],
+          author: args.author,
+          status: 'draft',
+        });
+        const proposalId = this.proposalStore.create('draftPost', { postId: (post as Record<string, unknown>).id });
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, post }) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Failed to create draft: ${error instanceof Error ? error.message : String(error)}` }) }],
+          isError: true,
+        };
+      }
     });
 
     // ── propose_script ──
@@ -499,15 +505,28 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-metadata' } },
     }, async (args: { mediaId: string; alt?: string; caption?: string; title?: string; tags?: string[] }) => {
-      const { mediaId, ...changes } = args;
-      const current = await this.deps.getMediaEngine().getMedia(mediaId);
-      const proposalId = this.proposalStore.create('proposeMediaMetadata', {
-        mediaId,
-        changes,
-      });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, current, proposed: changes }) }],
-      };
+      try {
+        const { mediaId, ...changes } = args;
+        const current = await this.deps.getMediaEngine().getMedia(mediaId);
+        if (!current) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: `Media item ${mediaId} not found.` }) }],
+            isError: true,
+          };
+        }
+        const proposalId = this.proposalStore.create('proposeMediaMetadata', {
+          mediaId,
+          changes,
+        });
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, current, proposed: changes }) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Failed to propose media metadata: ${error instanceof Error ? error.message : String(error)}` }) }],
+          isError: true,
+        };
+      }
     });
 
     // ── propose_post_metadata ──
@@ -524,15 +543,28 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-metadata' } },
     }, async (args: { postId: string; title?: string; excerpt?: string; tags?: string[]; categories?: string[] }) => {
-      const { postId, ...changes } = args;
-      const current = await this.deps.getPostEngine().getPost(postId);
-      const proposalId = this.proposalStore.create('proposePostMetadata', {
-        postId,
-        changes,
-      });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, current, proposed: changes }) }],
-      };
+      try {
+        const { postId, ...changes } = args;
+        const current = await this.deps.getPostEngine().getPost(postId);
+        if (!current) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: `Post ${postId} not found.` }) }],
+            isError: true,
+          };
+        }
+        const proposalId = this.proposalStore.create('proposePostMetadata', {
+          postId,
+          changes,
+        });
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, current, proposed: changes }) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Failed to propose post metadata: ${error instanceof Error ? error.message : String(error)}` }) }],
+          isError: true,
+        };
+      }
     });
 
     // ── Register ui:// resources for review Views ──

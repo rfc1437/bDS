@@ -22,6 +22,7 @@ function createMockDeps(): MCPServerDependencies {
       getLinkedBy: vi.fn().mockResolvedValue([]),
       getLinksTo: vi.fn().mockResolvedValue([]),
       getPostsFiltered: vi.fn().mockResolvedValue([]),
+      searchPostsFiltered: vi.fn().mockResolvedValue([]),
     }),
     getMediaEngine: () => ({
       getAllMedia: vi.fn().mockResolvedValue([]),

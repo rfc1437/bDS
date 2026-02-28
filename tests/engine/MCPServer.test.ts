@@ -29,6 +29,7 @@ function createMockPostEngine() {
     getAllPosts: vi.fn().mockResolvedValue({ items: [], hasMore: false, total: 0 }),
     getPost: vi.fn().mockResolvedValue(null),
     searchPosts: vi.fn().mockResolvedValue([]),
+    searchPostsFiltered: vi.fn().mockResolvedValue([]),
     createPost: vi.fn().mockResolvedValue({
       id: 'post-1', title: 'Test', slug: 'test', content: '', status: 'draft',
       tags: [], categories: [], createdAt: new Date(), updatedAt: new Date(),
@@ -618,20 +619,49 @@ describe('MCPServer', () => {
       expect(parsed[0].id).toBe('p3');
     });
 
-    it('search_posts with query + filters uses getPostsFiltered and client-side text filter', async () => {
-      const allFiltered = [
-        { id: 'p1', title: 'TypeScript Guide', content: 'Learn TS', excerpt: '' },
-        { id: 'p2', title: 'Python Guide', content: 'Learn Python', excerpt: '' },
+    it('search_posts with query + filters calls searchPostsFiltered', async () => {
+      const combined = [
+        { id: 'p1', title: 'TypeScript Guide', categories: ['tech'] },
       ];
-      mockPostEngine.getPostsFiltered.mockResolvedValue(allFiltered);
+      mockPostEngine.searchPostsFiltered.mockResolvedValue(combined);
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ query: 'typescript', category: 'tech' }, {}) as { content: Array<{ text: string }> };
-      expect(mockPostEngine.getPostsFiltered).toHaveBeenCalled();
+      // Should call searchPostsFiltered, not searchPosts + getPostsFiltered separately
+      expect(mockPostEngine.searchPostsFiltered).toHaveBeenCalledWith(
+        'typescript',
+        { categories: ['tech'] },
+        { offset: 0, limit: 50 },
+      );
       expect(mockPostEngine.searchPosts).not.toHaveBeenCalled();
+      expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toHaveLength(1);
-      expect(parsed[0].title).toBe('TypeScript Guide');
+      expect(parsed[0].id).toBe('p1');
+    });
+
+    it('search_posts with query + filters passes pagination to searchPostsFiltered', async () => {
+      mockPostEngine.searchPostsFiltered.mockResolvedValue([{ id: 'p3', title: 'Result' }]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      await tool.handler({ query: 'keyword', status: 'published', offset: 5, limit: 10 }, {});
+      expect(mockPostEngine.searchPostsFiltered).toHaveBeenCalledWith(
+        'keyword',
+        { status: 'published' },
+        { offset: 5, limit: 10 },
+      );
+    });
+
+    it('search_posts with query + multiple filters builds correct filter', async () => {
+      mockPostEngine.searchPostsFiltered.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      await tool.handler({ query: 'test', category: 'tech', tags: ['js'], year: 2025, status: 'published' }, {});
+      expect(mockPostEngine.searchPostsFiltered).toHaveBeenCalledWith(
+        'test',
+        { categories: ['tech'], tags: ['js'], year: 2025, status: 'published' },
+        { offset: 0, limit: 50 },
+      );
     });
 
     it('draft_post creates a draft and stores proposal', async () => {
@@ -677,6 +707,18 @@ describe('MCPServer', () => {
       expect(proposal!.data.mediaId).toBe('img-1');
     });
 
+    it('propose_media_metadata returns error for non-existent media', async () => {
+      mockMediaEngine.getMedia.mockResolvedValue(null);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_media_metadata');
+      const result = await tool.handler({ mediaId: 'no-such', alt: 'New alt' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('not found');
+      // No proposal should be created
+      expect(server.proposalStore.getAll()).toHaveLength(0);
+    });
+
     it('propose_post_metadata loads current post and stores proposal', async () => {
       const currentPost = { id: 'post-1', title: 'Old Title', excerpt: 'Old excerpt' };
       mockPostEngine.getPost.mockResolvedValue(currentPost);
@@ -688,6 +730,48 @@ describe('MCPServer', () => {
       expect(parsed.proposed).toEqual({ title: 'New Title' });
       const proposal = server.proposalStore.get(parsed.proposalId);
       expect(proposal!.type).toBe('proposePostMetadata');
+    });
+
+    it('propose_post_metadata returns error for non-existent post', async () => {
+      mockPostEngine.getPost.mockResolvedValue(null);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_post_metadata');
+      const result = await tool.handler({ postId: 'no-such', title: 'New Title' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('not found');
+      expect(server.proposalStore.getAll()).toHaveLength(0);
+    });
+
+    it('draft_post returns error when createPost fails', async () => {
+      mockPostEngine.createPost.mockRejectedValue(new Error('No active project'));
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'draft_post');
+      const result = await tool.handler({ title: 'Test', content: '# Hello' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('No active project');
+      expect(server.proposalStore.getAll()).toHaveLength(0);
+    });
+
+    it('propose_media_metadata returns error when getMedia throws', async () => {
+      mockMediaEngine.getMedia.mockRejectedValue(new Error('DB error'));
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_media_metadata');
+      const result = await tool.handler({ mediaId: 'img-1', alt: 'New' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('DB error');
+    });
+
+    it('propose_post_metadata returns error when getPost throws', async () => {
+      mockPostEngine.getPost.mockRejectedValue(new Error('DB error'));
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_post_metadata');
+      const result = await tool.handler({ postId: 'p1', title: 'New' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('DB error');
     });
   });
 

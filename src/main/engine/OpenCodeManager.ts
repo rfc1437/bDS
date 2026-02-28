@@ -1253,46 +1253,47 @@ export class OpenCodeManager {
     try {
       switch (name) {
         case 'search_posts': {
-          const searchResults = await this.postEngine.searchPosts(args.query as string);
-          const fullPosts = await Promise.all(
-            searchResults.map(sr => this.postEngine.getPost(sr.id))
-          );
-          let filteredPosts = fullPosts.filter(p => p !== null);
+          const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[]; year?: number; month?: number } = {};
+          if (args.category) filter.categories = [args.category as string];
+          if (args.tags && Array.isArray(args.tags) && (args.tags as string[]).length > 0) filter.tags = args.tags as string[];
+          if (args.year !== undefined) filter.year = args.year as number;
+          if (args.month !== undefined && args.year !== undefined) filter.month = args.month as number;
 
-          if (args.category) {
-            filteredPosts = filteredPosts.filter(p => p!.categories.includes(args.category as string));
-          }
-          if (args.tags && Array.isArray(args.tags) && (args.tags as string[]).length > 0) {
-            filteredPosts = filteredPosts.filter(p =>
-              (args.tags as string[]).every(tag => p!.tags.includes(tag))
+          const hasFilters = Object.keys(filter).length > 0;
+          const offset = (args.offset as number) || 0;
+          const limit = (args.limit as number) || 10;
+
+          let filteredPosts;
+          if (hasFilters) {
+            // Combined FTS + structural filters in a single SQL query
+            filteredPosts = await this.postEngine.searchPostsFiltered(
+              args.query as string, filter, { offset, limit },
             );
-          }
-          if (args.year !== undefined) {
-            const year = args.year as number;
-            filteredPosts = filteredPosts.filter(p => p!.createdAt.getFullYear() === year);
-          }
-          if (args.month !== undefined && args.year !== undefined) {
-            const month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
-            filteredPosts = filteredPosts.filter(p => p!.createdAt.getMonth() === month);
+          } else {
+            // Pure FTS search
+            const searchResults = await this.postEngine.searchPosts(args.query as string);
+            // searchPosts returns sparse results; fetch full post data
+            const fullPosts = await Promise.all(
+              searchResults.map(sr => this.postEngine.getPost(sr.id))
+            );
+            const all = fullPosts.filter(p => p !== null) as PostData[];
+            filteredPosts = all.slice(offset, offset + limit);
           }
 
           const totalMatches = filteredPosts.length;
-          const offset = (args.offset as number) || 0;
-          const limit = (args.limit as number) || 10;
-          filteredPosts = filteredPosts.slice(offset, offset + limit);
 
           return {
             success: true,
             count: filteredPosts.length,
             totalMatches,
-            hasMore: offset + limit < totalMatches,
+            hasMore: false,
             offset,
             limit,
             posts: filteredPosts.map(p => ({
-              id: p!.id, title: p!.title, slug: p!.slug,
-              excerpt: p!.excerpt, status: p!.status,
-              categories: p!.categories, tags: p!.tags,
-              createdAt: p!.createdAt, updatedAt: p!.updatedAt,
+              id: p.id, title: p.title, slug: p.slug,
+              excerpt: p.excerpt, status: p.status,
+              categories: p.categories, tags: p.tags,
+              createdAt: p.createdAt, updatedAt: p.updatedAt,
             })),
           };
         }
