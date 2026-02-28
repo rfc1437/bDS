@@ -1601,6 +1601,12 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.addToConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 
+  safeHandle('mcp:removeFromAgentConfig', async (_event: unknown, agentId: string) => {
+    const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
+    return engine.removeFromConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
+  });
+
   safeHandle('mcp:isConfigured', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
     const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));

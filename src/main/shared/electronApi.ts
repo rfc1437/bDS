@@ -848,6 +848,7 @@ export interface ElectronAPI {
   mcp: {
     getAgents: () => Promise<Array<{ id: string; label: string }>>;
     addToAgentConfig: (agentId: string) => Promise<{ success: boolean; configPath: string; error?: string }>;
+    removeFromAgentConfig: (agentId: string) => Promise<{ success: boolean; configPath: string; error?: string }>;
     isConfigured: (agentId: string) => Promise<boolean>;
     getPort: () => Promise<number | null>;
   };

@@ -986,8 +986,11 @@
   "settings.mcp.agentsTitle": "Configurazione agenti",
   "settings.mcp.agentsDescription": "Aggiungi il server MCP bDS alla configurazione del tuo agente di programmazione. Le impostazioni esistenti vengono preservate.",
   "settings.mcp.addToAgent": "Aggiungi a {agent}",
+  "settings.mcp.removeFromAgent": "Rimuovi da {agent}",
   "settings.mcp.alreadyConfigured": "Configurato",
   "settings.toast.mcpConfigSuccess": "Server MCP bDS aggiunto alla configurazione di {agent}",
+  "settings.toast.mcpConfigRemoveSuccess": "Server MCP bDS rimosso dalla configurazione di {agent}",
   "settings.toast.mcpConfigFailed": "Configurazione di {agent} non riuscita: {error}",
+  "settings.toast.mcpConfigRemoveFailed": "Rimozione da {agent} non riuscita: {error}",
   "settings.toast.mcpConfigPath": "Configurazione scritta in {path}"
 }

@@ -392,6 +392,7 @@ export const electronAPI: ElectronAPI = {
   mcp: {
     getAgents: () => ipcRenderer.invoke('mcp:getAgents'),
     addToAgentConfig: (agentId: string) => ipcRenderer.invoke('mcp:addToAgentConfig', agentId),
+    removeFromAgentConfig: (agentId: string) => ipcRenderer.invoke('mcp:removeFromAgentConfig', agentId),
     isConfigured: (agentId: string) => ipcRenderer.invoke('mcp:isConfigured', agentId),
     getPort: () => ipcRenderer.invoke('mcp:getPort'),
   },
