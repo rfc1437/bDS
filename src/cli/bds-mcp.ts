@@ -74,6 +74,19 @@ async function main(): Promise<void> {
   const templateEngine = new TemplateEngine(notifier);
   const metaEngine = new MetaEngine();
 
+  // 3b. Point every engine at the active project so queries/mutations
+  //     target the correct project instead of the hardcoded 'default'.
+  const dataDir = activeProject.dataPath
+    ?? path.join(userData, 'projects', activeProject.id);
+
+  postEngine.setProjectContext(activeProject.id, dataDir);
+  mediaEngine.setProjectContext(activeProject.id, dataDir, dataDir);
+  postMediaEngine.setProjectContext(activeProject.id);
+  tagEngine.setProjectContext(activeProject.id, dataDir);
+  scriptEngine.setProjectContext(activeProject.id, dataDir);
+  templateEngine.setProjectContext(activeProject.id, dataDir);
+  metaEngine.setProjectContext(activeProject.id, dataDir);
+
   // 4. Create the MCP server with an 8-hour proposal TTL (CLI sessions can
   //    last overnight).
   const mcpServer = new MCPServer(
