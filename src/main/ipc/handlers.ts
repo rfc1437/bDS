@@ -122,15 +122,6 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
   }
 }
 
-function buildMcpUrl(bundle: EngineBundle): string {
-  try {
-    const port = bundle.mcpServer.getPort() ?? 4124;
-    return `http://127.0.0.1:${port}/mcp`;
-  } catch {
-    return 'http://127.0.0.1:4124/mcp';
-  }
-}
-
 function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCPAgentConfigEngine').MCPAgentConfigOptions {
   const os = require('os') as typeof import('os');
   const scriptPath = app.isPackaged
@@ -139,7 +130,6 @@ function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCP
   return {
     homeDir: os.homedir(),
     platform: process.platform,
-    mcpUrl: buildMcpUrl(bundle),
     execPath: process.execPath,
     scriptPath,
   };

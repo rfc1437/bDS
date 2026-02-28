@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MCPAgentConfigEngine, type MCPAgentId, type AgentConfigResult } from '../../src/main/engine/MCPAgentConfigEngine';
+import { MCPAgentConfigEngine } from '../../src/main/engine/MCPAgentConfigEngine';
+import { stringify as stringifyToml, parse as parseToml } from 'smol-toml';
 
-// Mock fs and os
+// Mock fs
 const mockReadFileSync = vi.fn();
 const mockWriteFileSync = vi.fn();
 const mockExistsSync = vi.fn();
@@ -25,6 +26,26 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
+const EXEC = '/path/to/electron';
+const SCRIPT = '/path/to/bds-mcp.cjs';
+
+const stdioEntry = {
+  command: EXEC,
+  args: [SCRIPT],
+  env: { ELECTRON_RUN_AS_NODE: '1' },
+};
+
+/** Helper to parse the JSON written in the first writeFileSync call. */
+function writtenJson(): Record<string, unknown> {
+  return JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
+}
+
+/** Helper to parse the TOML written in the first writeFileSync call. */
+function writtenToml(): Record<string, unknown> {
+  const raw = (mockWriteFileSync.mock.calls[0]![1] as string).trim();
+  return parseToml(raw) as Record<string, unknown>;
+}
+
 describe('MCPAgentConfigEngine', () => {
   let engine: MCPAgentConfigEngine;
 
@@ -33,30 +54,36 @@ describe('MCPAgentConfigEngine', () => {
     engine = new MCPAgentConfigEngine({
       homeDir: '/home/testuser',
       platform: 'darwin',
-      mcpUrl: 'http://127.0.0.1:4124/mcp',
+      execPath: EXEC,
+      scriptPath: SCRIPT,
     });
   });
 
+  // ── getAgents ────────────────────────────────────────────────────
+
   describe('getAgents', () => {
-    it('returns all supported agent definitions', () => {
+    it('returns all 7 supported agent definitions', () => {
       const agents = engine.getAgents();
-      expect(agents).toHaveLength(5);
+      expect(agents).toHaveLength(7);
       const ids = agents.map((a) => a.id);
       expect(ids).toContain('claude-code');
       expect(ids).toContain('claude-desktop');
       expect(ids).toContain('github-copilot');
       expect(ids).toContain('gemini-cli');
       expect(ids).toContain('opencode');
+      expect(ids).toContain('mistral-vibe');
+      expect(ids).toContain('openai-codex');
     });
 
     it('includes display labels for each agent', () => {
-      const agents = engine.getAgents();
-      for (const agent of agents) {
+      for (const agent of engine.getAgents()) {
         expect(agent.label).toBeTruthy();
         expect(typeof agent.label).toBe('string');
       }
     });
   });
+
+  // ── getConfigPath ────────────────────────────────────────────────
 
   describe('getConfigPath', () => {
     it('returns ~/.claude.json for claude-code', () => {
@@ -73,7 +100,8 @@ describe('MCPAgentConfigEngine', () => {
       const linuxEngine = new MCPAgentConfigEngine({
         homeDir: '/home/user',
         platform: 'linux',
-        mcpUrl: 'http://127.0.0.1:4124/mcp',
+        execPath: EXEC,
+        scriptPath: SCRIPT,
       });
       expect(linuxEngine.getConfigPath('github-copilot')).toBe(
         '/home/user/.config/Code/User/mcp.json',
@@ -87,10 +115,20 @@ describe('MCPAgentConfigEngine', () => {
     it('returns ~/.opencode.json for opencode', () => {
       expect(engine.getConfigPath('opencode')).toBe('/home/testuser/.opencode.json');
     });
+
+    it('returns ~/.vibe/config.toml for mistral-vibe', () => {
+      expect(engine.getConfigPath('mistral-vibe')).toBe('/home/testuser/.vibe/config.toml');
+    });
+
+    it('returns ~/.codex/config.toml for openai-codex', () => {
+      expect(engine.getConfigPath('openai-codex')).toBe('/home/testuser/.codex/config.toml');
+    });
   });
 
+  // ── addToConfig (claude-code) ────────────────────────────────────
+
   describe('addToConfig (claude-code)', () => {
-    it('creates new config when file does not exist', () => {
+    it('creates new config with stdio entry when file does not exist', () => {
       mockExistsSync.mockReturnValue(false);
 
       const result = engine.addToConfig('claude-code');
@@ -98,9 +136,7 @@ describe('MCPAgentConfigEngine', () => {
       expect(result.success).toBe(true);
       expect(result.configPath).toBe('/home/testuser/.claude.json');
       expect(mockWriteFileSync).toHaveBeenCalledOnce();
-
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS).toEqual({ type: 'http', url: 'http://127.0.0.1:4124/mcp' });
+      expect(writtenJson().mcpServers).toEqual({ bDS: stdioEntry });
     });
 
     it('merges into existing config without overwriting other servers', () => {
@@ -115,39 +151,40 @@ describe('MCPAgentConfigEngine', () => {
       const result = engine.addToConfig('claude-code');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.other).toEqual({ type: 'stdio', command: 'npx' });
-      expect(written.mcpServers.bDS).toEqual({ type: 'http', url: 'http://127.0.0.1:4124/mcp' });
-      expect(written.someOtherKey).toBe('keep');
+      const w = writtenJson();
+      expect((w.mcpServers as Record<string, unknown>)['other']).toEqual({ type: 'stdio', command: 'npx' });
+      expect((w.mcpServers as Record<string, unknown>)['bDS']).toEqual(stdioEntry);
+      expect(w.someOtherKey).toBe('keep');
     });
 
-    it('overwrites existing bDS entry to update URL', () => {
+    it('overwrites existing bDS entry to update paths', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
         JSON.stringify({
-          mcpServers: { bDS: { type: 'http', url: 'http://old:1234/mcp' } },
+          mcpServers: { bDS: { command: '/old/exec', args: ['/old/script'] } },
         }),
       );
 
       const result = engine.addToConfig('claude-code');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS.url).toBe('http://127.0.0.1:4124/mcp');
+      const bds = (writtenJson().mcpServers as Record<string, unknown>)['bDS'] as Record<string, unknown>;
+      expect(bds.command).toBe(EXEC);
     });
   });
 
+  // ── addToConfig (github-copilot) ─────────────────────────────────
+
   describe('addToConfig (github-copilot)', () => {
-    it('creates new .vscode/mcp.json with correct servers key', () => {
+    it('creates new mcp.json with servers key and type: stdio', () => {
       mockExistsSync.mockReturnValue(false);
 
       const result = engine.addToConfig('github-copilot');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.servers.bDS).toEqual({ type: 'http', url: 'http://127.0.0.1:4124/mcp' });
-      // Should NOT have mcpServers key
-      expect(written.mcpServers).toBeUndefined();
+      const w = writtenJson();
+      expect((w.servers as Record<string, unknown>)['bDS']).toEqual({ type: 'stdio', ...stdioEntry });
+      expect(w.mcpServers).toBeUndefined();
     });
 
     it('creates parent directory if needed', () => {
@@ -172,21 +209,22 @@ describe('MCPAgentConfigEngine', () => {
       const result = engine.addToConfig('github-copilot');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.servers.github.url).toBe('https://api.githubcopilot.com/mcp');
-      expect(written.servers.bDS.url).toBe('http://127.0.0.1:4124/mcp');
+      const servers = writtenJson().servers as Record<string, Record<string, unknown>>;
+      expect(servers.github.url).toBe('https://api.githubcopilot.com/mcp');
+      expect(servers.bDS).toEqual({ type: 'stdio', ...stdioEntry });
     });
   });
 
+  // ── addToConfig (gemini-cli) ──────────────────────────────────────
+
   describe('addToConfig (gemini-cli)', () => {
-    it('creates new settings.json with httpUrl entry', () => {
+    it('creates new settings.json with stdio entry', () => {
       mockExistsSync.mockReturnValue(false);
 
       const result = engine.addToConfig('gemini-cli');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS).toEqual({ httpUrl: 'http://127.0.0.1:4124/mcp' });
+      expect((writtenJson().mcpServers as Record<string, unknown>)['bDS']).toEqual(stdioEntry);
     });
 
     it('creates ~/.gemini directory if needed', () => {
@@ -212,22 +250,27 @@ describe('MCPAgentConfigEngine', () => {
       const result = engine.addToConfig('gemini-cli');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.theme).toBe('dark');
-      expect(written.mcpServers.existing).toEqual({ command: 'python' });
-      expect(written.mcpServers.bDS).toEqual({ httpUrl: 'http://127.0.0.1:4124/mcp' });
+      const w = writtenJson();
+      expect(w.theme).toBe('dark');
+      const servers = w.mcpServers as Record<string, Record<string, unknown>>;
+      expect(servers.existing).toEqual({ command: 'python' });
+      expect(servers.bDS).toEqual(stdioEntry);
     });
   });
 
+  // ── addToConfig (opencode) ────────────────────────────────────────
+
   describe('addToConfig (opencode)', () => {
-    it('creates new .opencode.json with sse type', () => {
+    it('creates new .opencode.json with type: stdio', () => {
       mockExistsSync.mockReturnValue(false);
 
       const result = engine.addToConfig('opencode');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS).toEqual({ type: 'sse', url: 'http://127.0.0.1:4124/mcp' });
+      expect((writtenJson().mcpServers as Record<string, unknown>)['bDS']).toEqual({
+        type: 'stdio',
+        ...stdioEntry,
+      });
     });
 
     it('merges into existing opencode config', () => {
@@ -242,12 +285,197 @@ describe('MCPAgentConfigEngine', () => {
       const result = engine.addToConfig('opencode');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.providers.openai.apiKey).toBe('key');
-      expect(written.mcpServers.debugger.command).toBe('debug');
-      expect(written.mcpServers.bDS.type).toBe('sse');
+      const w = writtenJson();
+      expect((w.providers as Record<string, Record<string, string>>).openai.apiKey).toBe('key');
+      const servers = w.mcpServers as Record<string, Record<string, unknown>>;
+      expect(servers.debugger.command).toBe('debug');
+      expect(servers.bDS.type).toBe('stdio');
+      expect(servers.bDS.command).toBe(EXEC);
     });
   });
+
+  // ── addToConfig (claude-desktop) ──────────────────────────────────
+
+  describe('addToConfig (claude-desktop)', () => {
+    it('returns correct config path on macOS', () => {
+      expect(engine.getConfigPath('claude-desktop')).toBe(
+        '/home/testuser/Library/Application Support/Claude/claude_desktop_config.json',
+      );
+    });
+
+    it('returns correct config path on Windows', () => {
+      const winEngine = new MCPAgentConfigEngine({
+        homeDir: 'C:\\Users\\testuser',
+        platform: 'win32',
+        execPath: 'C:\\path\\to\\app.exe',
+        scriptPath: 'C:\\path\\to\\bds-mcp.cjs',
+      });
+      const normalised = winEngine.getConfigPath('claude-desktop').replace(/[\\/]/g, '/');
+      expect(normalised).toBe(
+        'C:/Users/testuser/AppData/Roaming/Claude/claude_desktop_config.json',
+      );
+    });
+
+    it('returns correct config path on Linux', () => {
+      const linuxEngine = new MCPAgentConfigEngine({
+        homeDir: '/home/user',
+        platform: 'linux',
+        execPath: EXEC,
+        scriptPath: SCRIPT,
+      });
+      expect(linuxEngine.getConfigPath('claude-desktop')).toBe(
+        '/home/user/.config/Claude/claude_desktop_config.json',
+      );
+    });
+
+    it('adds stdio entry with command/args/env', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = engine.addToConfig('claude-desktop');
+
+      expect(result.success).toBe(true);
+      expect((writtenJson().mcpServers as Record<string, unknown>)['bDS']).toEqual(stdioEntry);
+    });
+  });
+
+  // ── addToConfig (mistral-vibe) ────────────────────────────────────
+
+  describe('addToConfig (mistral-vibe)', () => {
+    it('creates new config.toml with bDS entry', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = engine.addToConfig('mistral-vibe');
+
+      expect(result.success).toBe(true);
+      expect(result.configPath).toBe('/home/testuser/.vibe/config.toml');
+      const t = writtenToml();
+      const servers = t.mcp_servers as Record<string, unknown>[];
+      expect(servers).toHaveLength(1);
+      expect(servers[0]).toEqual({
+        name: 'bDS',
+        transport: 'stdio',
+        command: EXEC,
+        args: [SCRIPT],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+      });
+    });
+
+    it('preserves other servers when adding bDS', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: [
+            { name: 'other', transport: 'stdio', command: 'npx', args: ['something'] },
+          ],
+        }),
+      );
+
+      const result = engine.addToConfig('mistral-vibe');
+
+      expect(result.success).toBe(true);
+      const servers = writtenToml().mcp_servers as Record<string, unknown>[];
+      expect(servers).toHaveLength(2);
+      expect(servers.find((s) => s.name === 'other')).toBeDefined();
+      expect(servers.find((s) => s.name === 'bDS')).toBeDefined();
+    });
+
+    it('replaces existing bDS entry', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: [
+            { name: 'bDS', transport: 'stdio', command: '/old/exec', args: ['/old/script'] },
+          ],
+        }),
+      );
+
+      const result = engine.addToConfig('mistral-vibe');
+
+      expect(result.success).toBe(true);
+      const servers = writtenToml().mcp_servers as Record<string, unknown>[];
+      expect(servers).toHaveLength(1);
+      expect((servers[0] as Record<string, unknown>).command).toBe(EXEC);
+    });
+
+    it('creates ~/.vibe directory if needed', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      engine.addToConfig('mistral-vibe');
+
+      expect(mockMkdirSync).toHaveBeenCalledWith(
+        expect.stringContaining('.vibe'),
+        { recursive: true },
+      );
+    });
+  });
+
+  // ── addToConfig (openai-codex) ────────────────────────────────────
+
+  describe('addToConfig (openai-codex)', () => {
+    it('creates new config.toml with bDS entry', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = engine.addToConfig('openai-codex');
+
+      expect(result.success).toBe(true);
+      expect(result.configPath).toBe('/home/testuser/.codex/config.toml');
+      const t = writtenToml();
+      const servers = t.mcp_servers as Record<string, Record<string, unknown>>;
+      expect(servers.bDS).toEqual({
+        command: EXEC,
+        args: [SCRIPT],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+      });
+    });
+
+    it('preserves other servers when adding bDS', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: {
+            other: { command: 'npx', args: ['something'] },
+          },
+        }),
+      );
+
+      const result = engine.addToConfig('openai-codex');
+
+      expect(result.success).toBe(true);
+      const servers = writtenToml().mcp_servers as Record<string, Record<string, unknown>>;
+      expect(servers.other).toBeDefined();
+      expect(servers.bDS).toBeDefined();
+    });
+
+    it('replaces existing bDS entry', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: {
+            bDS: { command: '/old/exec', args: ['/old/script'] },
+          },
+        }),
+      );
+
+      const result = engine.addToConfig('openai-codex');
+
+      expect(result.success).toBe(true);
+      const servers = writtenToml().mcp_servers as Record<string, Record<string, unknown>>;
+      expect(servers.bDS.command).toBe(EXEC);
+    });
+
+    it('creates ~/.codex directory if needed', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      engine.addToConfig('openai-codex');
+
+      expect(mockMkdirSync).toHaveBeenCalledWith(
+        expect.stringContaining('.codex'),
+        { recursive: true },
+      );
+    });
+  });
+
+  // ── error handling ────────────────────────────────────────────────
 
   describe('error handling', () => {
     it('returns error result when read fails', () => {
@@ -283,15 +511,25 @@ describe('MCPAgentConfigEngine', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeTruthy();
     });
+
+    it('returns error for invalid existing TOML', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('[[[ invalid toml');
+
+      const result = engine.addToConfig('mistral-vibe');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeTruthy();
+    });
   });
 
+  // ── isConfigured ──────────────────────────────────────────────────
+
   describe('isConfigured', () => {
-    it('returns true when bDS entry exists in config', () => {
+    it('returns true when bDS entry exists in JSON config', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
-        JSON.stringify({
-          mcpServers: { bDS: { type: 'http', url: 'http://127.0.0.1:4124/mcp' } },
-        }),
+        JSON.stringify({ mcpServers: { bDS: { command: EXEC } } }),
       );
 
       expect(engine.isConfigured('claude-code')).toBe(true);
@@ -315,117 +553,88 @@ describe('MCPAgentConfigEngine', () => {
     it('checks VS Code servers key for github-copilot', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
-        JSON.stringify({ servers: { bDS: { type: 'http', url: 'x' } } }),
+        JSON.stringify({ servers: { bDS: { type: 'stdio', command: EXEC } } }),
       );
 
       expect(engine.isConfigured('github-copilot')).toBe(true);
     });
+
+    it('returns true for mistral-vibe when bDS entry exists in TOML array', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: [{ name: 'bDS', transport: 'stdio', command: EXEC }],
+        }),
+      );
+
+      expect(engine.isConfigured('mistral-vibe')).toBe(true);
+    });
+
+    it('returns false for mistral-vibe when bDS is absent', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: [{ name: 'other', transport: 'stdio', command: 'npx' }],
+        }),
+      );
+
+      expect(engine.isConfigured('mistral-vibe')).toBe(false);
+    });
+
+    it('returns true for openai-codex when bDS entry exists in TOML table', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: { bDS: { command: EXEC } },
+        }),
+      );
+
+      expect(engine.isConfigured('openai-codex')).toBe(true);
+    });
+
+    it('returns false for openai-codex when bDS is absent', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: { other: { command: 'npx' } },
+        }),
+      );
+
+      expect(engine.isConfigured('openai-codex')).toBe(false);
+    });
   });
 
-  describe('dynamic port', () => {
-    it('uses the provided mcpUrl in server entries', () => {
+  // ── stdio paths ───────────────────────────────────────────────────
+
+  describe('stdio paths', () => {
+    it('uses the provided execPath and scriptPath in all entries', () => {
       const customEngine = new MCPAgentConfigEngine({
         homeDir: '/tmp',
         platform: 'darwin',
-        mcpUrl: 'http://127.0.0.1:9999/mcp',
+        execPath: '/custom/electron',
+        scriptPath: '/custom/bds-mcp.cjs',
       });
       mockExistsSync.mockReturnValue(false);
 
       customEngine.addToConfig('claude-code');
 
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS.url).toBe('http://127.0.0.1:9999/mcp');
+      const bds = (writtenJson().mcpServers as Record<string, Record<string, unknown>>).bDS;
+      expect(bds.command).toBe('/custom/electron');
+      expect(bds.args).toEqual(['/custom/bds-mcp.cjs']);
+      expect(bds.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' });
     });
   });
 
-  describe('claude-desktop', () => {
-    let desktopEngine: MCPAgentConfigEngine;
-
-    beforeEach(() => {
-      desktopEngine = new MCPAgentConfigEngine({
-        homeDir: '/home/testuser',
-        platform: 'darwin',
-        mcpUrl: 'http://127.0.0.1:4124/mcp',
-        execPath: '/Applications/Blogging Desktop Server.app/Contents/MacOS/Blogging Desktop Server',
-        scriptPath: '/Applications/Blogging Desktop Server.app/Contents/Resources/bds-mcp.cjs',
-      });
-    });
-
-    it('includes claude-desktop in getAgents()', () => {
-      const agents = desktopEngine.getAgents();
-      expect(agents.map((a) => a.id)).toContain('claude-desktop');
-    });
-
-    it('returns correct config path for claude-desktop on macOS', () => {
-      expect(desktopEngine.getConfigPath('claude-desktop')).toBe(
-        '/home/testuser/Library/Application Support/Claude/claude_desktop_config.json',
-      );
-    });
-
-    it('returns correct config path for claude-desktop on Windows', () => {
-      const winEngine = new MCPAgentConfigEngine({
-        homeDir: 'C:\\Users\\testuser',
-        platform: 'win32',
-        mcpUrl: 'http://127.0.0.1:4124/mcp',
-        execPath: 'C:\\path\\to\\app.exe',
-        scriptPath: 'C:\\path\\to\\bds-mcp.cjs',
-      });
-      const configPath = winEngine.getConfigPath('claude-desktop');
-      // On Windows path.join uses backslashes; on macOS it uses forward slashes
-      // so normalise for cross-platform CI
-      const normalised = configPath.replace(/[\\/]/g, '/');
-      expect(normalised).toBe(
-        'C:/Users/testuser/AppData/Roaming/Claude/claude_desktop_config.json',
-      );
-    });
-
-    it('returns correct config path for claude-desktop on Linux', () => {
-      const linuxEngine = new MCPAgentConfigEngine({
-        homeDir: '/home/user',
-        platform: 'linux',
-        mcpUrl: 'http://127.0.0.1:4124/mcp',
-      });
-      expect(linuxEngine.getConfigPath('claude-desktop')).toBe(
-        '/home/user/.config/Claude/claude_desktop_config.json',
-      );
-    });
-
-    it('adds stdio entry with command/args/env to claude_desktop_config.json', () => {
-      mockExistsSync.mockReturnValue(false);
-
-      const result = desktopEngine.addToConfig('claude-desktop');
-
-      expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS).toEqual({
-        command: '/Applications/Blogging Desktop Server.app/Contents/MacOS/Blogging Desktop Server',
-        args: ['/Applications/Blogging Desktop Server.app/Contents/Resources/bds-mcp.cjs'],
-        env: { ELECTRON_RUN_AS_NODE: '1' },
-      });
-    });
-
-    it('throws descriptive error if execPath/scriptPath missing for claude-desktop', () => {
-      const noPathEngine = new MCPAgentConfigEngine({
-        homeDir: '/home/testuser',
-        platform: 'darwin',
-        mcpUrl: 'http://127.0.0.1:4124/mcp',
-      });
-      mockExistsSync.mockReturnValue(false);
-
-      const result = noPathEngine.addToConfig('claude-desktop');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('execPath');
-    });
-  });
+  // ── removeFromConfig ──────────────────────────────────────────────
 
   describe('removeFromConfig', () => {
-    it('removes bDS entry from config and returns success', () => {
+    it('removes bDS entry from JSON config and returns success', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
         JSON.stringify({
           mcpServers: {
-            bDS: { type: 'http', url: 'http://127.0.0.1:4124/mcp' },
-            other: { type: 'http', url: 'http://other' },
+            bDS: stdioEntry,
+            other: { command: 'npx' },
           },
         }),
       );
@@ -433,23 +642,20 @@ describe('MCPAgentConfigEngine', () => {
       const result = engine.removeFromConfig('claude-code');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers.bDS).toBeUndefined();
-      expect(written.mcpServers.other).toBeDefined();
+      const w = writtenJson();
+      expect((w.mcpServers as Record<string, unknown>)['bDS']).toBeUndefined();
+      expect((w.mcpServers as Record<string, unknown>)['other']).toBeDefined();
     });
 
     it('removes the mcpServers key entirely when bDS was the only entry', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
-        JSON.stringify({
-          mcpServers: { bDS: { type: 'http', url: 'http://127.0.0.1:4124/mcp' } },
-        }),
+        JSON.stringify({ mcpServers: { bDS: stdioEntry } }),
       );
 
       engine.removeFromConfig('claude-code');
 
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.mcpServers).toBeUndefined();
+      expect(writtenJson().mcpServers).toBeUndefined();
     });
 
     it('no-ops gracefully when file does not exist', () => {
@@ -474,14 +680,13 @@ describe('MCPAgentConfigEngine', () => {
     it('uses the servers key for github-copilot', () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
-        JSON.stringify({ servers: { bDS: { type: 'http', url: 'x' } } }),
+        JSON.stringify({ servers: { bDS: { type: 'stdio', ...stdioEntry } } }),
       );
 
       const result = engine.removeFromConfig('github-copilot');
 
       expect(result.success).toBe(true);
-      const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-      expect(written.servers).toBeUndefined();
+      expect(writtenJson().servers).toBeUndefined();
     });
 
     it('returns success with configPath', () => {
@@ -491,6 +696,88 @@ describe('MCPAgentConfigEngine', () => {
 
       expect(result.success).toBe(true);
       expect(result.configPath).toBe('/home/testuser/.claude.json');
+    });
+
+    it('removes bDS from mistral-vibe TOML array', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: [
+            { name: 'bDS', transport: 'stdio', command: EXEC, args: [SCRIPT] },
+            { name: 'other', transport: 'stdio', command: 'npx', args: ['x'] },
+          ],
+        }),
+      );
+
+      const result = engine.removeFromConfig('mistral-vibe');
+
+      expect(result.success).toBe(true);
+      const servers = writtenToml().mcp_servers as Record<string, unknown>[];
+      expect(servers).toHaveLength(1);
+      expect((servers[0] as Record<string, unknown>).name).toBe('other');
+    });
+
+    it('removes mcp_servers key from vibe when bDS was the only entry', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: [{ name: 'bDS', transport: 'stdio', command: EXEC, args: [SCRIPT] }],
+        }),
+      );
+
+      engine.removeFromConfig('mistral-vibe');
+
+      expect(writtenToml().mcp_servers).toBeUndefined();
+    });
+
+    it('no-ops when mistral-vibe config does not exist', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = engine.removeFromConfig('mistral-vibe');
+
+      expect(result.success).toBe(true);
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+    });
+
+    it('removes bDS from openai-codex TOML table', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: {
+            bDS: { command: EXEC, args: [SCRIPT] },
+            other: { command: 'npx', args: ['x'] },
+          },
+        }),
+      );
+
+      const result = engine.removeFromConfig('openai-codex');
+
+      expect(result.success).toBe(true);
+      const servers = writtenToml().mcp_servers as Record<string, Record<string, unknown>>;
+      expect(servers.bDS).toBeUndefined();
+      expect(servers.other).toBeDefined();
+    });
+
+    it('removes mcp_servers key from codex when bDS was the only entry', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        stringifyToml({
+          mcp_servers: { bDS: { command: EXEC, args: [SCRIPT] } },
+        }),
+      );
+
+      engine.removeFromConfig('openai-codex');
+
+      expect(writtenToml().mcp_servers).toBeUndefined();
+    });
+
+    it('no-ops when openai-codex config does not exist', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = engine.removeFromConfig('openai-codex');
+
+      expect(result.success).toBe(true);
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
     });
   });
 });

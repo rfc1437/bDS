@@ -1284,6 +1284,8 @@ export const SettingsView: React.FC = () => {
       { id: 'github-copilot', label: 'GitHub Copilot' },
       { id: 'gemini-cli', label: 'Gemini CLI' },
       { id: 'opencode', label: 'OpenCode' },
+      { id: 'mistral-vibe', label: 'Mistral Vibe' },
+      { id: 'openai-codex', label: 'OpenAI Codex' },
     ];
 
     return (
