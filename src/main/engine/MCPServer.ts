@@ -37,6 +37,7 @@ interface MediaEngineContract {
   getAllMedia: () => Promise<Array<Record<string, unknown>>>;
   getMedia: (id: string) => Promise<Record<string, unknown> | null>;
   updateMedia: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+  getThumbnailDataUrl: (mediaId: string, size: 'small' | 'medium' | 'large') => Promise<string | null>;
 }
 
 interface ScriptEngineContract {
@@ -309,6 +310,22 @@ export class MCPServer {
       const result = await this.deps.getPostMediaEngine().getLinkedPostsForMedia(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
     });
+
+    server.registerResource('media-image', new ResourceTemplate('bds://media/{id}/image', { list: undefined }), { description: 'Image thumbnail (medium size, base64 WebP) for visual context' }, async (uri, { id }) => {
+      const mediaId = id as string;
+      const media = await this.deps.getMediaEngine().getMedia(mediaId);
+      if (!media || !(media as Record<string, unknown>).mimeType || !String((media as Record<string, unknown>).mimeType).startsWith('image/')) {
+        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'Not an image or media not found' }] };
+      }
+      const dataUrl = await this.deps.getMediaEngine().getThumbnailDataUrl(mediaId, 'medium');
+      if (!dataUrl) {
+        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'Thumbnail not available' }] };
+      }
+      const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+      return {
+        contents: [{ uri: uri.href, mimeType: 'image/webp', blob: base64Data }],
+      };
+    });
   }
 
   // ── Tool registration ──────────────────────────────────────────────
@@ -329,17 +346,34 @@ export class MCPServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     }, async (args) => {
-      if (args.query) {
+      const hasFilters = args.category || args.tags || args.year || args.month || args.status;
+
+      if (args.query && !hasFilters) {
+        // Pure text search — use FTS
         const results = await this.deps.getPostEngine().searchPosts(args.query);
         return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
       }
+
+      // Filter-based query (optionally narrowed by text search)
       const filter: Record<string, unknown> = {};
       if (args.category) filter.categories = [args.category];
       if (args.tags) filter.tags = args.tags;
       if (args.year) filter.year = args.year;
       if (args.month) filter.month = args.month;
       if (args.status) filter.status = args.status;
-      const results = await this.deps.getPostEngine().getPostsFiltered(filter);
+      let results = await this.deps.getPostEngine().getPostsFiltered(filter);
+
+      // Client-side text filter when query is combined with structured filters
+      if (args.query) {
+        const q = args.query.toLowerCase();
+        results = results.filter((p: Record<string, unknown>) => {
+          const title = String(p.title ?? '').toLowerCase();
+          const content = String(p.content ?? '').toLowerCase();
+          const excerpt = String(p.excerpt ?? '').toLowerCase();
+          return title.includes(q) || content.includes(q) || excerpt.includes(q);
+        });
+      }
+
       return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
     });
   }
@@ -357,6 +391,7 @@ export class MCPServer {
         categories: z.array(z.string()).optional().describe('Categories for the post'),
         author: z.string().optional().describe('Post author name'),
       },
+      annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-post' } },
     }, async (args: { title: string; content: string; excerpt?: string; tags?: string[]; categories?: string[]; author?: string }) => {
       const post = await this.deps.getPostEngine().createPost({
@@ -384,6 +419,7 @@ export class MCPServer {
         content: z.string().describe('Python source code'),
         entrypoint: z.string().optional().describe('Entry point function name'),
       },
+      annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-script' } },
     }, async (args: { title: string; kind: 'macro' | 'utility' | 'transform'; content: string; entrypoint?: string }) => {
       const proposalId = this.proposalStore.create('proposeScript', {
@@ -406,6 +442,7 @@ export class MCPServer {
         kind: z.enum(['post', 'list', 'not-found', 'partial']).describe('Template type'),
         content: z.string().describe('Liquid template content'),
       },
+      annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-template' } },
     }, async (args: { title: string; kind: 'post' | 'list' | 'not-found' | 'partial'; content: string }) => {
       const proposalId = this.proposalStore.create('proposeTemplate', {
@@ -429,6 +466,7 @@ export class MCPServer {
         title: z.string().optional().describe('New title'),
         tags: z.array(z.string()).optional().describe('New tags'),
       },
+      annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-metadata' } },
     }, async (args: { mediaId: string; alt?: string; caption?: string; title?: string; tags?: string[] }) => {
       const { mediaId, ...changes } = args;
@@ -453,6 +491,7 @@ export class MCPServer {
         tags: z.array(z.string()).optional().describe('New tags'),
         categories: z.array(z.string()).optional().describe('New categories'),
       },
+      annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-metadata' } },
     }, async (args: { postId: string; title?: string; excerpt?: string; tags?: string[]; categories?: string[] }) => {
       const { postId, ...changes } = args;
@@ -503,7 +542,7 @@ export class MCPServer {
       inputSchema: {
         proposalId: z.string().describe('ID of the proposal to accept'),
       },
-      annotations: { idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     }, async (args) => {
       const result = await this.acceptProposal(args.proposalId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
@@ -515,7 +554,7 @@ export class MCPServer {
       inputSchema: {
         proposalId: z.string().describe('ID of the proposal to discard'),
       },
-      annotations: { idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     }, async (args) => {
       const result = await this.discardProposal(args.proposalId);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
@@ -667,18 +706,7 @@ let mcpServerInstance: MCPServer | null = null;
 export function getMCPServer(deps?: MCPServerDependencies): MCPServer {
   if (!mcpServerInstance) {
     if (!deps) {
-      // Import singletons lazily to avoid circular deps
-      const { getPostEngine } = require('./PostEngine');
-      const { getMediaEngine } = require('./MediaEngine');
-      const { getScriptEngine } = require('./ScriptEngine');
-      const { getTemplateEngine } = require('./TemplateEngine');
-      const { getMetaEngine } = require('./MetaEngine');
-      const { getPostMediaEngine } = require('./PostMediaEngine');
-      const { getTagEngine } = require('./TagEngine');
-      deps = {
-        getPostEngine, getMediaEngine, getScriptEngine,
-        getTemplateEngine, getMetaEngine, getPostMediaEngine, getTagEngine,
-      };
+      throw new Error('MCPServer dependencies must be provided on first call to getMCPServer()');
     }
     mcpServerInstance = new MCPServer(deps);
   }

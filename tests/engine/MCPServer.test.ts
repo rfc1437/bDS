@@ -53,6 +53,7 @@ function createMockMediaEngine() {
     getAllMedia: vi.fn().mockResolvedValue([]),
     getMedia: vi.fn().mockResolvedValue(null),
     updateMedia: vi.fn().mockResolvedValue(null),
+    getThumbnailDataUrl: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -131,6 +132,7 @@ describe('MCPServer', () => {
   let mockMediaEngine: ReturnType<typeof createMockMediaEngine>;
   let mockScriptEngine: ReturnType<typeof createMockScriptEngine>;
   let mockTemplateEngine: ReturnType<typeof createMockTemplateEngine>;
+  let mockPostMediaEngine: ReturnType<typeof createMockPostMediaEngine>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -140,6 +142,7 @@ describe('MCPServer', () => {
     mockMediaEngine = mocks.mockMediaEngine;
     mockScriptEngine = mocks.mockScriptEngine;
     mockTemplateEngine = mocks.mockTemplateEngine;
+    mockPostMediaEngine = mocks.mockPostMediaEngine;
     server = new MCPServer(deps);
   });
 
@@ -260,6 +263,11 @@ describe('MCPServer', () => {
     it('registers media-posts resource template', () => {
       const mcpServer = server.createMcpServer();
       expect(hasRegistered(mcpServer, '_registeredResourceTemplates', 'media-posts')).toBe(true);
+    });
+
+    it('registers media-image resource template', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredResourceTemplates', 'media-image')).toBe(true);
     });
   });
 
@@ -385,6 +393,277 @@ describe('MCPServer', () => {
     it('returns failure for non-existent proposal', async () => {
       const result = await server.discardProposal('non-existent');
       expect(result.success).toBe(false);
+    });
+  });
+
+  // ── Tool annotations ────────────────────────────────────────────────
+
+  describe('tool annotations', () => {
+    function getToolAnnotations(toolName: string): Record<string, unknown> | undefined {
+      const mcpServer = server.createMcpServer();
+      const tool = (mcpServer as Record<string, Record<string, { annotations?: Record<string, unknown> }>>)._registeredTools[toolName];
+      return tool?.annotations;
+    }
+
+    it('search_posts has readOnlyHint true', () => {
+      const annotations = getToolAnnotations('search_posts');
+      expect(annotations).toEqual({ readOnlyHint: true, openWorldHint: false });
+    });
+
+    it('draft_post has readOnlyHint false, destructiveHint false', () => {
+      const annotations = getToolAnnotations('draft_post');
+      expect(annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    });
+
+    it('propose_script has readOnlyHint false, destructiveHint false', () => {
+      const annotations = getToolAnnotations('propose_script');
+      expect(annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    });
+
+    it('propose_template has readOnlyHint false, destructiveHint false', () => {
+      const annotations = getToolAnnotations('propose_template');
+      expect(annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    });
+
+    it('propose_media_metadata has readOnlyHint false, destructiveHint false', () => {
+      const annotations = getToolAnnotations('propose_media_metadata');
+      expect(annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    });
+
+    it('propose_post_metadata has readOnlyHint false, destructiveHint false', () => {
+      const annotations = getToolAnnotations('propose_post_metadata');
+      expect(annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    });
+
+    it('accept_proposal has readOnlyHint false, destructiveHint false, idempotentHint true', () => {
+      const annotations = getToolAnnotations('accept_proposal');
+      expect(annotations).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+    });
+
+    it('discard_proposal has readOnlyHint false, destructiveHint true, idempotentHint true', () => {
+      const annotations = getToolAnnotations('discard_proposal');
+      expect(annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    });
+  });
+
+  // ── Resource handler behavior ───────────────────────────────────────
+
+  describe('resource handlers', () => {
+    function getResource(mcpServer: unknown, uri: string) {
+      return (mcpServer as Record<string, Record<string, { readCallback: (...args: unknown[]) => Promise<unknown> }>>)._registeredResources[uri];
+    }
+
+    function getResourceTemplate(mcpServer: unknown, name: string) {
+      return (mcpServer as Record<string, Record<string, { readCallback: (...args: unknown[]) => Promise<unknown> }>>)._registeredResourceTemplates[name];
+    }
+
+    it('bds://posts calls getAllPosts and returns JSON', async () => {
+      const postsData = { items: [{ id: 'p1', title: 'Hello' }], hasMore: false, total: 1 };
+      mockPostEngine.getAllPosts.mockResolvedValue(postsData);
+      const mcpServer = server.createMcpServer();
+      const resource = getResource(mcpServer, 'bds://posts');
+      const result = await resource.readCallback(new URL('bds://posts'), {}) as { contents: Array<{ text: string }> };
+      expect(mockPostEngine.getAllPosts).toHaveBeenCalled();
+      expect(JSON.parse(result.contents[0].text)).toEqual(postsData);
+    });
+
+    it('bds://stats calls getBlogStats and returns JSON', async () => {
+      const stats = { totalPosts: 42 };
+      mockPostEngine.getBlogStats.mockResolvedValue(stats);
+      const mcpServer = server.createMcpServer();
+      const resource = getResource(mcpServer, 'bds://stats');
+      const result = await resource.readCallback(new URL('bds://stats'), {}) as { contents: Array<{ text: string }> };
+      expect(JSON.parse(result.contents[0].text)).toEqual(stats);
+    });
+
+    it('bds://posts/{id} calls getPost with correct id', async () => {
+      const post = { id: 'post-1', title: 'Test' };
+      mockPostEngine.getPost.mockResolvedValue(post);
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'post');
+      const result = await tpl.readCallback(new URL('bds://posts/post-1'), { id: 'post-1' }, {}) as { contents: Array<{ text: string }> };
+      expect(mockPostEngine.getPost).toHaveBeenCalledWith('post-1');
+      expect(JSON.parse(result.contents[0].text)).toEqual(post);
+    });
+
+    it('bds://posts/{id}/media calls getLinkedMediaDataForPost', async () => {
+      const linkedMedia = [{ id: 'm1', filename: 'photo.jpg' }];
+      mockPostMediaEngine.getLinkedMediaDataForPost.mockResolvedValue(linkedMedia);
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'post-media');
+      const result = await tpl.readCallback(new URL('bds://posts/p1/media'), { id: 'p1' }, {}) as { contents: Array<{ text: string }> };
+      expect(mockPostMediaEngine.getLinkedMediaDataForPost).toHaveBeenCalledWith('p1');
+      expect(JSON.parse(result.contents[0].text)).toEqual(linkedMedia);
+    });
+
+    it('bds://media/{id}/image returns thumbnail blob for images', async () => {
+      mockMediaEngine.getMedia.mockResolvedValue({ id: 'img-1', mimeType: 'image/jpeg', filename: 'photo.jpg' });
+      mockMediaEngine.getThumbnailDataUrl.mockResolvedValue('data:image/webp;base64,AAAA');
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'media-image');
+      const result = await tpl.readCallback(new URL('bds://media/img-1/image'), { id: 'img-1' }, {}) as { contents: Array<{ mimeType: string; blob: string }> };
+      expect(mockMediaEngine.getThumbnailDataUrl).toHaveBeenCalledWith('img-1', 'medium');
+      expect(result.contents[0].mimeType).toBe('image/webp');
+      expect(result.contents[0].blob).toBe('AAAA');
+    });
+
+    it('bds://media/{id}/image returns text error for non-images', async () => {
+      mockMediaEngine.getMedia.mockResolvedValue({ id: 'doc-1', mimeType: 'application/pdf', filename: 'doc.pdf' });
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'media-image');
+      const result = await tpl.readCallback(new URL('bds://media/doc-1/image'), { id: 'doc-1' }, {}) as { contents: Array<{ mimeType: string; text: string }> };
+      expect(result.contents[0].mimeType).toBe('text/plain');
+      expect(result.contents[0].text).toContain('Not an image');
+    });
+
+    it('bds://media/{id}/image returns text error when thumbnail unavailable', async () => {
+      mockMediaEngine.getMedia.mockResolvedValue({ id: 'img-2', mimeType: 'image/png', filename: 'pic.png' });
+      mockMediaEngine.getThumbnailDataUrl.mockResolvedValue(null);
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'media-image');
+      const result = await tpl.readCallback(new URL('bds://media/img-2/image'), { id: 'img-2' }, {}) as { contents: Array<{ mimeType: string; text: string }> };
+      expect(result.contents[0].text).toContain('Thumbnail not available');
+    });
+  });
+
+  // ── Tool handler behavior ──────────────────────────────────────────
+
+  describe('tool handlers', () => {
+    function getTool(mcpServer: unknown, name: string) {
+      return (mcpServer as Record<string, Record<string, { handler: (...args: unknown[]) => Promise<unknown> }>>)._registeredTools[name];
+    }
+
+    it('search_posts with query only calls searchPosts', async () => {
+      const searchResults = [{ id: 'p1', title: 'Found', slug: 'found' }];
+      mockPostEngine.searchPosts.mockResolvedValue(searchResults);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ query: 'test' }, {}) as { content: Array<{ text: string }> };
+      expect(mockPostEngine.searchPosts).toHaveBeenCalledWith('test');
+      expect(JSON.parse(result.content[0].text)).toEqual(searchResults);
+    });
+
+    it('search_posts with filters only calls getPostsFiltered', async () => {
+      const filtered = [{ id: 'p2', title: 'Filtered' }];
+      mockPostEngine.getPostsFiltered.mockResolvedValue(filtered);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ category: 'tech', status: 'published' }, {}) as { content: Array<{ text: string }> };
+      expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith({ categories: ['tech'], status: 'published' });
+      expect(JSON.parse(result.content[0].text)).toEqual(filtered);
+    });
+
+    it('search_posts with query + filters uses getPostsFiltered and client-side text filter', async () => {
+      const allFiltered = [
+        { id: 'p1', title: 'TypeScript Guide', content: 'Learn TS', excerpt: '' },
+        { id: 'p2', title: 'Python Guide', content: 'Learn Python', excerpt: '' },
+      ];
+      mockPostEngine.getPostsFiltered.mockResolvedValue(allFiltered);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ query: 'typescript', category: 'tech' }, {}) as { content: Array<{ text: string }> };
+      expect(mockPostEngine.getPostsFiltered).toHaveBeenCalled();
+      expect(mockPostEngine.searchPosts).not.toHaveBeenCalled();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].title).toBe('TypeScript Guide');
+    });
+
+    it('draft_post creates a draft and stores proposal', async () => {
+      const createdPost = { id: 'new-post', title: 'Draft Title', status: 'draft' };
+      mockPostEngine.createPost.mockResolvedValue(createdPost);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'draft_post');
+      const result = await tool.handler({ title: 'Draft Title', content: '# Hello' }, {}) as { content: Array<{ text: string }> };
+      expect(mockPostEngine.createPost).toHaveBeenCalledWith(expect.objectContaining({ title: 'Draft Title', content: '# Hello', status: 'draft' }));
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.proposalId).toBeTruthy();
+      expect(parsed.post).toEqual(createdPost);
+      // Verify proposal is in the store
+      const proposal = server.proposalStore.get(parsed.proposalId);
+      expect(proposal).toBeDefined();
+      expect(proposal!.type).toBe('draftPost');
+      expect(proposal!.data.postId).toBe('new-post');
+    });
+
+    it('propose_script stores proposal in ProposalStore', async () => {
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_script');
+      const result = await tool.handler({ title: 'My Script', kind: 'macro', content: 'print("hi")' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.proposalId).toBeTruthy();
+      const proposal = server.proposalStore.get(parsed.proposalId);
+      expect(proposal).toBeDefined();
+      expect(proposal!.type).toBe('proposeScript');
+      expect(proposal!.data.content).toBe('print("hi")');
+    });
+
+    it('propose_media_metadata loads current media and stores proposal', async () => {
+      const currentMedia = { id: 'img-1', alt: 'Old alt', title: 'Old title' };
+      mockMediaEngine.getMedia.mockResolvedValue(currentMedia);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_media_metadata');
+      const result = await tool.handler({ mediaId: 'img-1', alt: 'New alt' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.current).toEqual(currentMedia);
+      expect(parsed.proposed).toEqual({ alt: 'New alt' });
+      const proposal = server.proposalStore.get(parsed.proposalId);
+      expect(proposal!.type).toBe('proposeMediaMetadata');
+      expect(proposal!.data.mediaId).toBe('img-1');
+    });
+
+    it('propose_post_metadata loads current post and stores proposal', async () => {
+      const currentPost = { id: 'post-1', title: 'Old Title', excerpt: 'Old excerpt' };
+      mockPostEngine.getPost.mockResolvedValue(currentPost);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_post_metadata');
+      const result = await tool.handler({ postId: 'post-1', title: 'New Title' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.current).toEqual(currentPost);
+      expect(parsed.proposed).toEqual({ title: 'New Title' });
+      const proposal = server.proposalStore.get(parsed.proposalId);
+      expect(proposal!.type).toBe('proposePostMetadata');
+    });
+  });
+
+  // ── Prompt handler behavior ────────────────────────────────────────
+
+  describe('prompt handlers', () => {
+    function getPrompt(mcpServer: unknown, name: string) {
+      return (mcpServer as Record<string, Record<string, { callback: (...args: unknown[]) => Promise<unknown> }>>)._registeredPrompts[name];
+    }
+
+    it('draft-blog-post returns messages with topic', async () => {
+      const mcpServer = server.createMcpServer();
+      const prompt = getPrompt(mcpServer, 'draft-blog-post');
+      const result = await prompt.callback({ topic: 'AI Safety' }, {}) as { messages: Array<{ role: string; content: { type: string; text: string } }> };
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe('user');
+      expect(result.messages[0].content.text).toContain('AI Safety');
+      expect(result.messages[0].content.text).toContain('draft_post');
+    });
+
+    it('improve-media-metadata returns messages with scope', async () => {
+      const mcpServer = server.createMcpServer();
+      const prompt = getPrompt(mcpServer, 'improve-media-metadata');
+      const result = await prompt.callback({ scope: 'missing-alt' }, {}) as { messages: Array<{ role: string; content: { type: string; text: string } }> };
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].content.text).toContain('missing alt text');
+    });
+
+    it('content-audit returns messages with category', async () => {
+      const mcpServer = server.createMcpServer();
+      const prompt = getPrompt(mcpServer, 'content-audit');
+      const result = await prompt.callback({ category: 'tech' }, {}) as { messages: Array<{ role: string; content: { type: string; text: string } }> };
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].content.text).toContain('tech');
+    });
+
+    it('content-audit without category reviews all posts', async () => {
+      const mcpServer = server.createMcpServer();
+      const prompt = getPrompt(mcpServer, 'content-audit');
+      const result = await prompt.callback({}, {}) as { messages: Array<{ role: string; content: { type: string; text: string } }> };
+      expect(result.messages[0].content.text).toContain('all posts');
     });
   });
 });

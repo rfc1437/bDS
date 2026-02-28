@@ -9,6 +9,9 @@ import { getMediaEngine } from './engine/MediaEngine';
 import { getPostEngine } from './engine/PostEngine';
 import { getMetaEngine } from './engine/MetaEngine';
 import { getTemplateEngine } from './engine/TemplateEngine';
+import { getScriptEngine } from './engine/ScriptEngine';
+import { getPostMediaEngine } from './engine/PostMediaEngine';
+import { getTagEngine } from './engine/TagEngine';
 import { getBlogmarkTransformService } from './engine/BlogmarkTransformService';
 import { PreviewServer } from './engine/PreviewServer';
 import { getMCPServer } from './engine/MCPServer';
@@ -867,7 +870,15 @@ app.whenReady().then(async () => {
     console.error('Failed to start preview server on app startup:', error);
   }
   try {
-    const mcpServer = getMCPServer();
+    const mcpServer = getMCPServer({
+      getPostEngine: () => getPostEngine() as never,
+      getMediaEngine: () => getMediaEngine() as never,
+      getScriptEngine: () => getScriptEngine() as never,
+      getTemplateEngine: () => getTemplateEngine() as never,
+      getMetaEngine: () => getMetaEngine() as never,
+      getPostMediaEngine: () => getPostMediaEngine() as never,
+      getTagEngine: () => getTagEngine() as never,
+    });
     await mcpServer.start(MCP_SERVER_PORT);
   } catch (error) {
     console.error('Failed to start MCP server on app startup:', error);
