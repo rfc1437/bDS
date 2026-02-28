@@ -169,7 +169,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       const match = candidates.find((candidate) => {
         const createdAt = candidate.createdAt;
         return createdAt.getFullYear() === dateFilter.year
-          && createdAt.getMonth() === dateFilter.month;
+          && createdAt.getMonth() === dateFilter.month - 1;
       });
 
       return match ?? null;

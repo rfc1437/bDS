@@ -10,7 +10,7 @@ import {
 import './SettingsView.css';
 
 // Export category IDs for sidebar navigation
-export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'technology' | 'publishing' | 'data';
+export type SettingsCategory = 'project' | 'editor' | 'content' | 'ai' | 'technology' | 'publishing' | 'data' | 'mcp';
 
 // Scroll to a settings section by category ID
 export const scrollToSettingsSection = (category: SettingsCategory) => {
@@ -119,6 +119,62 @@ const SettingSection: React.FC<{
         {children}
       </div>
     </div>
+  );
+};
+
+/** Small component that shows the MCP server port or "Not running". */
+const MCPStatusBadge: React.FC = () => {
+  const { t } = useI18n();
+  const [port, setPort] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    window.electronAPI?.mcp?.getPort().then(setPort).catch(() => setPort(null));
+  }, []);
+
+  return (
+    <span className={`badge ${port ? 'badge-success' : 'badge-secondary'}`}>
+      {port ? t('settings.mcp.portRunning', { port: String(port) }) : t('settings.mcp.portStopped')}
+    </span>
+  );
+};
+
+/** Button to add bDS MCP server to an agent's config. Shows "Configured" if already present. */
+const MCPAgentButton: React.FC<{ agentId: string; agentLabel: string }> = ({ agentId, agentLabel }) => {
+  const { t } = useI18n();
+  const [configured, setConfigured] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    window.electronAPI?.mcp?.isConfigured(agentId).then(setConfigured).catch(() => setConfigured(false));
+  }, [agentId]);
+
+  if (configured) {
+    return <span className="badge badge-success">{t('settings.mcp.alreadyConfigured')}</span>;
+  }
+
+  return (
+    <button
+      className="secondary"
+      disabled={loading}
+      onClick={async () => {
+        setLoading(true);
+        try {
+          const result = await window.electronAPI?.mcp?.addToAgentConfig(agentId);
+          if (result?.success) {
+            showToast.success(t('settings.toast.mcpConfigSuccess', { agent: agentLabel }));
+            setConfigured(true);
+          } else {
+            showToast.error(t('settings.toast.mcpConfigFailed', { agent: agentLabel, error: result?.error ?? 'Unknown error' }));
+          }
+        } catch {
+          showToast.error(t('settings.toast.mcpConfigFailed', { agent: agentLabel, error: 'Unexpected error' }));
+        } finally {
+          setLoading(false);
+        }
+      }}
+    >
+      {t('settings.mcp.addToAgent', { agent: agentLabel })}
+    </button>
   );
 };
 
@@ -417,6 +473,7 @@ export const SettingsView: React.FC = () => {
   const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
   const publishingKeywords = ['publishing', 'ssh', 'deploy', 'server', 'host', 'upload', 'scp', 'rsync'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
+  const mcpKeywords = ['mcp', 'server', 'agent', 'claude', 'copilot', 'gemini', 'opencode', 'model context protocol', 'coding', 'configuration'];
 
   const renderProjectSettings = () => (
     <SettingSection
@@ -1197,6 +1254,43 @@ export const SettingsView: React.FC = () => {
     </SettingSection>
   );
 
+  const renderMCPSettings = () => {
+    const agents = [
+      { id: 'claude-code', label: 'Claude Code' },
+      { id: 'github-copilot', label: 'GitHub Copilot' },
+      { id: 'gemini-cli', label: 'Gemini CLI' },
+      { id: 'opencode', label: 'OpenCode' },
+    ];
+
+    return (
+      <SettingSection
+        id="settings-section-mcp"
+        title={t('settings.mcp.title')}
+        description={t('settings.mcp.description')}
+        hidden={!sectionHasMatches(mcpKeywords)}
+      >
+        <SettingRow
+          id="mcp-status"
+          label={t('settings.mcp.statusLabel')}
+          description={t('settings.mcp.statusDescription')}
+        >
+          <MCPStatusBadge />
+        </SettingRow>
+
+        {agents.map((agent) => (
+          <SettingRow
+            key={agent.id}
+            id={`mcp-agent-${agent.id}`}
+            label={t('settings.mcp.addToAgent', { agent: agent.label })}
+            description=""
+          >
+            <MCPAgentButton agentId={agent.id} agentLabel={agent.label} />
+          </SettingRow>
+        ))}
+      </SettingSection>
+    );
+  };
+
   const renderDataSettings = () => (
     <>
       <SettingSection
@@ -1392,7 +1486,8 @@ export const SettingsView: React.FC = () => {
     sectionHasMatches(aiKeywords) ||
     sectionHasMatches(technologyKeywords) ||
     sectionHasMatches(publishingKeywords) ||
-    sectionHasMatches(dataKeywords);
+    sectionHasMatches(dataKeywords) ||
+    sectionHasMatches(mcpKeywords);
 
   return (
     <div className="settings-view">
@@ -1429,6 +1524,7 @@ export const SettingsView: React.FC = () => {
             {renderTechnologySettings()}
             {renderPublishingSettings()}
             {renderDataSettings()}
+            {renderMCPSettings()}
           </>
         ) : (
           <div className="settings-no-results">

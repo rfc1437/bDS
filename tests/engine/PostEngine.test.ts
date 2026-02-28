@@ -2653,10 +2653,10 @@ Published snapshot content`);
 
       const result = await postEngine.getPostsByYearMonth();
 
-      // Note: getMonth() returns 0-11, so January is 0, February is 1, etc.
-      expect(result).toContainEqual({ year: 2024, month: 0, count: 2 }); // January
-      expect(result).toContainEqual({ year: 2024, month: 1, count: 1 }); // February
-      expect(result).toContainEqual({ year: 2023, month: 11, count: 1 }); // December
+      // months are 1-indexed (January=1, February=2, etc.)
+      expect(result).toContainEqual({ year: 2024, month: 1, count: 2 }); // January
+      expect(result).toContainEqual({ year: 2024, month: 2, count: 1 }); // February
+      expect(result).toContainEqual({ year: 2023, month: 12, count: 1 }); // December
     });
 
     it('should sort by year and month descending', async () => {
@@ -2677,7 +2677,7 @@ Published snapshot content`);
       const result = await postEngine.getPostsByYearMonth();
 
       expect(result[0].year).toBe(2024);
-      expect(result[0].month).toBe(2); // March (0-indexed)
+      expect(result[0].month).toBe(3); // March (1-indexed)
       expect(result[result.length - 1].year).toBe(2023);
     });
   });

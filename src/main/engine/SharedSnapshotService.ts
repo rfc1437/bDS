@@ -177,7 +177,7 @@ export async function findSinglePostBySlug(
       }
 
       const sameYear = draftCandidate.createdAt.getFullYear() === dateFilter.year;
-      const sameMonth = draftCandidate.createdAt.getMonth() === dateFilter.month;
+      const sameMonth = draftCandidate.createdAt.getMonth() === dateFilter.month - 1;
       const sameDay = dateFilter.day === undefined || draftCandidate.createdAt.getDate() === dateFilter.day;
       if (sameYear && sameMonth && sameDay) {
         return draftCandidate;

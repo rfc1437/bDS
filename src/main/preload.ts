@@ -382,6 +382,13 @@ export const electronAPI: ElectronAPI = {
   once: (channel: string, callback: (...args: unknown[]) => void) => {
     ipcRenderer.once(channel, (_event, ...args) => callback(...args));
   },
+
+  mcp: {
+    getAgents: () => ipcRenderer.invoke('mcp:getAgents'),
+    addToAgentConfig: (agentId: string) => ipcRenderer.invoke('mcp:addToAgentConfig', agentId),
+    isConfigured: (agentId: string) => ipcRenderer.invoke('mcp:isConfigured', agentId),
+    getPort: () => ipcRenderer.invoke('mcp:getPort'),
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

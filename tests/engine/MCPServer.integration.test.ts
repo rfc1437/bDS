@@ -32,9 +32,11 @@ function createMockDeps(): MCPServerDependencies {
     }),
     getScriptEngine: () => ({
       createScript: vi.fn().mockResolvedValue({ id: 's1' }),
+      validateScript: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
     }),
     getTemplateEngine: () => ({
       createTemplate: vi.fn().mockResolvedValue({ id: 't1' }),
+      validateTemplate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
     }),
     getMetaEngine: () => ({
       getProjectMetadata: vi.fn().mockResolvedValue(null),

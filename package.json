@@ -152,6 +152,10 @@
       {
         "from": "src/main/engine/templates",
         "to": "templates"
+      },
+      {
+        "from": "src/main/engine/mcp-views",
+        "to": "mcp-views"
       }
     ],
     "protocols": [

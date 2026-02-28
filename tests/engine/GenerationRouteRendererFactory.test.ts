@@ -86,7 +86,7 @@ describe('GenerationRouteRendererFactory', () => {
         }
 
         if (typeof filter.month === 'number') {
-          filtered = filtered.filter((post) => post.createdAt.getMonth() === filter.month);
+          filtered = filtered.filter((post) => post.createdAt.getMonth() === filter.month - 1);
         }
 
         if (filter.startDate) {

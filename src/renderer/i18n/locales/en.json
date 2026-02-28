@@ -975,5 +975,21 @@
   "importAnalysis.macroUses": "{count} uses",
   "importAnalysis.usedIn": "Used in: {items}{more}",
   "importAnalysis.moreSuffix": ", +{count} more",
-  "importAnalysis.noParameters": "(no parameters)"
+  "importAnalysis.noParameters": "(no parameters)",
+
+  "sidebar.nav.mcp": "MCP Server",
+
+  "settings.mcp.title": "MCP Server",
+  "settings.mcp.description": "Configure the Model Context Protocol server that allows AI coding agents to interact with your blog.",
+  "settings.mcp.statusLabel": "Server Status",
+  "settings.mcp.statusDescription": "Current status of the MCP server.",
+  "settings.mcp.portRunning": "Running on port {port}",
+  "settings.mcp.portStopped": "Not running",
+  "settings.mcp.agentsTitle": "Agent Configuration",
+  "settings.mcp.agentsDescription": "Add the bDS MCP server to your coding agent's configuration. Existing settings are preserved.",
+  "settings.mcp.addToAgent": "Add to {agent}",
+  "settings.mcp.alreadyConfigured": "Configured",
+  "settings.toast.mcpConfigSuccess": "bDS MCP server added to {agent} configuration",
+  "settings.toast.mcpConfigFailed": "Failed to configure {agent}: {error}",
+  "settings.toast.mcpConfigPath": "Config written to {path}"
 }

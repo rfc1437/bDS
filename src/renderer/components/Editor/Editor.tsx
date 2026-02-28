@@ -1674,7 +1674,7 @@ const Dashboard: React.FC = () => {
                     <span className="timeline-bar-count">{entry.count}</span>
                   </div>
                   <div className="timeline-bar-label">
-                    <span className="timeline-bar-label-month">{monthFormatter.format(new Date(entry.year, entry.month, 1))}</span>
+                    <span className="timeline-bar-label-month">{monthFormatter.format(new Date(entry.year, entry.month - 1, 1))}</span>
                     <span className="timeline-bar-label-year">{entry.year}</span>
                   </div>
                 </div>

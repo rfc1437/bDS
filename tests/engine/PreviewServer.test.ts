@@ -81,7 +81,7 @@ function makeEngine(posts: PostData[]): PostEngineLike {
       }
 
       if (filter.month !== undefined && filter.year !== undefined) {
-        result = result.filter((post) => post.createdAt.getUTCMonth() === filter.month);
+        result = result.filter((post) => post.createdAt.getUTCMonth() === filter.month - 1);
       }
 
       if (filter.startDate) {

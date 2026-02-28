@@ -1264,21 +1264,11 @@ export class OpenCodeManager {
           const limit = (args.limit as number) || 10;
 
           let filteredPosts;
-          if (hasFilters) {
-            // Combined FTS + structural filters in a single SQL query
-            filteredPosts = await this.postEngine.searchPostsFiltered(
-              args.query as string, filter, { offset, limit },
-            );
-          } else {
-            // Pure FTS search
-            const searchResults = await this.postEngine.searchPosts(args.query as string);
-            // searchPosts returns sparse results; fetch full post data
-            const fullPosts = await Promise.all(
-              searchResults.map(sr => this.postEngine.getPost(sr.id))
-            );
-            const all = fullPosts.filter(p => p !== null) as PostData[];
-            filteredPosts = all.slice(offset, offset + limit);
-          }
+          // Use searchPostsFiltered for all paths — it handles FTS + structural
+          // filters in a single SQL JOIN and returns full PostData[]
+          filteredPosts = await this.postEngine.searchPostsFiltered(
+            args.query as string, filter, { offset, limit },
+          );
 
           const totalMatches = filteredPosts.length;
 
@@ -1320,7 +1310,7 @@ export class OpenCodeManager {
           if (args.tags) filter.tags = args.tags as string[];
           if (args.category) filter.categories = [args.category as string];
           if (args.year !== undefined) filter.year = args.year as number;
-          if (args.month !== undefined && args.year !== undefined) filter.month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
+          if (args.month !== undefined && args.year !== undefined) filter.month = args.month as number;
 
           const offset = (args.offset as number) || 0;
           const limit = (args.limit as number) || 20;
@@ -1380,7 +1370,7 @@ export class OpenCodeManager {
           if (hasMediaFilter) {
             const mediaFilter: { year?: number; month?: number; tags?: string[] } = {};
             if (args.year !== undefined) mediaFilter.year = args.year as number;
-            if (args.month !== undefined && args.year !== undefined) mediaFilter.month = (args.month as number) - 1; // Convert 1-indexed to 0-indexed
+            if (args.month !== undefined && args.year !== undefined) mediaFilter.month = args.month as number;
             if (args.tags) mediaFilter.tags = args.tags as string[];
             mediaList = await this.mediaEngine.getMediaFiltered(mediaFilter);
           } else {

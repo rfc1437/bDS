@@ -468,11 +468,16 @@ describe('main bootstrap preview behavior', () => {
       PreviewServer: MockPreviewServer,
     }));
 
-    vi.doMock('fs', () => ({
-      existsSync: vi.fn((targetPath: string) => targetPath.includes('window-state.json')),
-      readFileSync: vi.fn(() => JSON.stringify({ x: 120, y: 80, width: 1280, height: 820 })),
-      writeFileSync: vi.fn(),
-    }));
+    vi.doMock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      const mocked = {
+        ...actual,
+        existsSync: vi.fn((targetPath: string) => targetPath.includes('window-state.json')),
+        readFileSync: vi.fn(() => JSON.stringify({ x: 120, y: 80, width: 1280, height: 820 })),
+        writeFileSync: vi.fn(),
+      };
+      return { ...mocked, default: mocked };
+    });
 
     vi.doMock('../../src/main/database', () => ({
       getDatabase: vi.fn(() => ({
@@ -593,11 +598,16 @@ describe('main bootstrap preview behavior', () => {
       PreviewServer: MockPreviewServer,
     }));
 
-    vi.doMock('fs', () => ({
-      existsSync: vi.fn((targetPath: string) => targetPath.includes('window-state.json')),
-      readFileSync: vi.fn(() => JSON.stringify({ x: -40, y: -10, width: 1800, height: 1000 })),
-      writeFileSync: vi.fn(),
-    }));
+    vi.doMock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      const mocked = {
+        ...actual,
+        existsSync: vi.fn((targetPath: string) => targetPath.includes('window-state.json')),
+        readFileSync: vi.fn(() => JSON.stringify({ x: -40, y: -10, width: 1800, height: 1000 })),
+        writeFileSync: vi.fn(),
+      };
+      return { ...mocked, default: mocked };
+    });
 
     vi.doMock('../../src/main/database', () => ({
       getDatabase: vi.fn(() => ({

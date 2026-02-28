@@ -770,8 +770,8 @@ export class PostEngine extends EventEmitter {
     }
 
     if (filter.month !== undefined && filter.year !== undefined) {
-      const startOfMonth = new Date(filter.year, filter.month, 1);
-      const endOfMonth = new Date(filter.year, filter.month + 1, 1);
+      const startOfMonth = new Date(filter.year, filter.month - 1, 1);
+      const endOfMonth = new Date(filter.year, filter.month, 1);
       conditions.push(gte(posts.createdAt, startOfMonth));
       conditions.push(lte(posts.createdAt, endOfMonth));
     }
@@ -1126,7 +1126,7 @@ export class PostEngine extends EventEmitter {
 
     for (const post of allPosts) {
       const year = post.createdAt.getFullYear();
-      const month = post.createdAt.getMonth();
+      const month = post.createdAt.getMonth() + 1; // 1-indexed
       const key = `${year}-${month}`;
       const current = counts.get(key) || { year, month, count: 0 };
       current.count++;
