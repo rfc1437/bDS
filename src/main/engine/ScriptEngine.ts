@@ -57,6 +57,11 @@ export interface ScriptReconcileResult {
   processedFiles: number;
 }
 
+export interface ScriptValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
 interface ParsedScriptFile {
   metadata: {
     id?: string;
@@ -84,6 +89,45 @@ export class ScriptEngine extends EventEmitter {
 
   getProjectContext(): string {
     return this.currentProjectId;
+  }
+
+  async validateScript(content: string): Promise<ScriptValidationResult> {
+    const script = [
+      'import ast, sys, json',
+      'code = sys.stdin.read()',
+      'try:',
+      '    ast.parse(code)',
+      '    json.dump({"valid": True, "errors": []}, sys.stdout)',
+      'except SyntaxError as e:',
+      '    msg = e.msg or "invalid syntax"',
+      '    line = e.lineno or 1',
+      '    col = e.offset or 1',
+      '    json.dump({"valid": False, "errors": [f"{msg} (line {line}, col {col})"]}, sys.stdout)',
+    ].join('\n');
+
+    try {
+      const { execFile } = await import('node:child_process');
+      return await new Promise<ScriptValidationResult>((resolve) => {
+        const proc = execFile('python3', ['-c', script], { timeout: 5000 }, (error, stdout) => {
+          if (error && !stdout) {
+            // python3 not available or timed out — assume valid (can't check)
+            resolve({ valid: true, errors: [] });
+            return;
+          }
+          try {
+            const result = JSON.parse(stdout);
+            resolve({ valid: !!result.valid, errors: Array.isArray(result.errors) ? result.errors : [] });
+          } catch {
+            resolve({ valid: true, errors: [] });
+          }
+        });
+        proc.stdin?.write(content);
+        proc.stdin?.end();
+      });
+    } catch {
+      // Dynamic import failed — assume valid
+      return { valid: true, errors: [] };
+    }
   }
 
   async createScript(input: CreateScriptInput): Promise<ScriptData> {

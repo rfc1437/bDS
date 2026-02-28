@@ -14,60 +14,94 @@ import {
   reviewTemplateHtml,
   reviewMetadataHtml,
 } from './mcp-views';
+import type {
+  PostData,
+  PostFilter,
+  SearchResult,
+  PaginatedResult,
+  PaginationOptions,
+} from './PostEngine';
+import type { MediaData } from './MediaEngine';
+import type { CreateScriptInput, ScriptData, ScriptValidationResult } from './ScriptEngine';
+import type { CreateTemplateInput, TemplateData, TemplateValidationResult } from './TemplateEngine';
+import type { ProjectMetadata } from './MetaEngine';
+import type { PostMediaLinkData } from './PostMediaEngine';
+import type { TagWithCount } from './TagEngine';
+
+// ── Pagination helpers ─────────────────────────────────────────────────
+
+export const DEFAULT_PAGE_SIZE = 50;
+
+export function encodeCursor(offset: number): string {
+  return Buffer.from(String(offset)).toString('base64url');
+}
+
+export function decodeCursor(cursor: string): number {
+  try {
+    const offset = parseInt(Buffer.from(cursor, 'base64url').toString(), 10);
+    return Number.isNaN(offset) || offset < 0 ? 0 : offset;
+  } catch {
+    return 0;
+  }
+}
 
 // ── Dependency contracts ──────────────────────────────────────────────
 
-export interface PostFilter {
-  status?: 'draft' | 'published' | 'archived';
-  tags?: string[];
-  categories?: string[];
-  year?: number;
-  month?: number;
-}
-
 interface PostEngineContract {
-  getAllPosts: (options?: { limit?: number; offset?: number }) => Promise<{ items: Array<Record<string, unknown>>; hasMore: boolean; total: number }>;
-  getPost: (id: string) => Promise<Record<string, unknown> | null>;
-  searchPosts: (query: string) => Promise<Array<{ id: string; title: string; slug: string; excerpt?: string }>>;
-  searchPostsFiltered: (query: string, filter: PostFilter, pagination?: { offset?: number; limit?: number }) => Promise<Array<Record<string, unknown>>>;
-  createPost: (data: Record<string, unknown>) => Promise<Record<string, unknown>>;
-  updatePost: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
-  publishPost: (id: string) => Promise<Record<string, unknown> | null>;
+  getAllPosts: (options?: PaginationOptions) => Promise<PaginatedResult<PostData>>;
+  getPost: (id: string) => Promise<PostData | null>;
+  searchPosts: (query: string) => Promise<SearchResult[]>;
+  searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<PostData[]>;
+  createPost: (data: Partial<PostData>) => Promise<PostData>;
+  updatePost: (id: string, data: Partial<PostData>) => Promise<PostData | null>;
+  publishPost: (id: string) => Promise<PostData | null>;
   deletePost: (id: string) => Promise<boolean>;
   getTagsWithCounts: () => Promise<Array<{ tag: string; count: number }>>;
   getCategoriesWithCounts: () => Promise<Array<{ category: string; count: number }>>;
-  getBlogStats: () => Promise<Record<string, unknown>>;
+  getBlogStats: () => Promise<{
+    totalPosts: number;
+    draftCount: number;
+    publishedCount: number;
+    archivedCount: number;
+    oldestPostDate: Date | null;
+    newestPostDate: Date | null;
+    postsPerYear: Record<number, number>;
+    tagCount: number;
+    categoryCount: number;
+  }>;
   getLinkedBy: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
   getLinksTo: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
-  getPostsFiltered: (filter: PostFilter) => Promise<Array<Record<string, unknown>>>;
+  getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
 }
 
 interface MediaEngineContract {
-  getAllMedia: () => Promise<Array<Record<string, unknown>>>;
-  getMedia: (id: string) => Promise<Record<string, unknown> | null>;
-  updateMedia: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+  getAllMedia: () => Promise<MediaData[]>;
+  getMedia: (id: string) => Promise<MediaData | null>;
+  updateMedia: (id: string, data: Partial<MediaData>) => Promise<MediaData | null>;
   getThumbnailDataUrl: (mediaId: string, size: 'small' | 'medium' | 'large') => Promise<string | null>;
 }
 
 interface ScriptEngineContract {
-  createScript: (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  createScript: (input: CreateScriptInput) => Promise<ScriptData>;
+  validateScript: (content: string) => Promise<ScriptValidationResult>;
 }
 
 interface TemplateEngineContract {
-  createTemplate: (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  createTemplate: (input: CreateTemplateInput) => Promise<TemplateData>;
+  validateTemplate: (content: string) => Promise<TemplateValidationResult>;
 }
 
 interface MetaEngineContract {
-  getProjectMetadata: () => Promise<Record<string, unknown> | null>;
+  getProjectMetadata: () => Promise<ProjectMetadata | null>;
 }
 
 interface PostMediaEngineContract {
-  getLinkedMediaDataForPost: (postId: string) => Promise<Array<Record<string, unknown>>>;
-  getLinkedPostsForMedia: (mediaId: string) => Promise<Array<Record<string, unknown>>>;
+  getLinkedMediaDataForPost: (postId: string) => Promise<Array<PostMediaLinkData & { media: MediaData }>>;
+  getLinkedPostsForMedia: (mediaId: string) => Promise<PostMediaLinkData[]>;
 }
 
 interface TagEngineContract {
-  getTagsWithCounts: () => Promise<Array<Record<string, unknown>>>;
+  getTagsWithCounts: () => Promise<TagWithCount[]>;
 }
 
 export interface MCPServerDependencies {
@@ -78,6 +112,23 @@ export interface MCPServerDependencies {
   getMetaEngine: () => MetaEngineContract;
   getPostMediaEngine: () => PostMediaEngineContract;
   getTagEngine: () => TagEngineContract;
+}
+
+/**
+ * Maps each proposal type to the shape of its stored data.
+ * Used to recover type safety when reading from the generic ProposalStore.
+ */
+export interface ProposalDataMap {
+  draftPost: { postId: string };
+  proposeScript: CreateScriptInput;
+  proposeTemplate: CreateTemplateInput;
+  proposeMediaMetadata: { mediaId: string; changes: Partial<MediaData> };
+  proposePostMetadata: { postId: string; changes: Partial<PostData> };
+}
+
+/** Type-safe accessor for proposal data (bridges the generic ProposalStore). */
+function proposalData<T extends keyof ProposalDataMap>(proposal: { data: Record<string, unknown> }): ProposalDataMap[T] {
+  return proposal.data as unknown as ProposalDataMap[T];
 }
 
 // ── MCPServer engine ──────────────────────────────────────────────────
@@ -228,27 +279,25 @@ export class MCPServer {
     try {
       switch (proposal.type) {
         case 'draftPost': {
-          const postId = proposal.data.postId as string;
+          const { postId } = proposalData<'draftPost'>(proposal);
           await this.deps.getPostEngine().publishPost(postId);
           break;
         }
         case 'proposeScript': {
-          await this.deps.getScriptEngine().createScript(proposal.data);
+          await this.deps.getScriptEngine().createScript(proposalData<'proposeScript'>(proposal));
           break;
         }
         case 'proposeTemplate': {
-          await this.deps.getTemplateEngine().createTemplate(proposal.data);
+          await this.deps.getTemplateEngine().createTemplate(proposalData<'proposeTemplate'>(proposal));
           break;
         }
         case 'proposeMediaMetadata': {
-          const mediaId = proposal.data.mediaId as string;
-          const changes = proposal.data.changes as Record<string, unknown>;
+          const { mediaId, changes } = proposalData<'proposeMediaMetadata'>(proposal);
           await this.deps.getMediaEngine().updateMedia(mediaId, changes);
           break;
         }
         case 'proposePostMetadata': {
-          const postId = proposal.data.postId as string;
-          const changes = proposal.data.changes as Record<string, unknown>;
+          const { postId, changes } = proposalData<'proposePostMetadata'>(proposal);
           await this.deps.getPostEngine().updatePost(postId, changes);
           break;
         }
@@ -268,7 +317,7 @@ export class MCPServer {
 
     try {
       if (proposal.type === 'draftPost') {
-        const postId = proposal.data.postId as string;
+        const { postId } = proposalData<'draftPost'>(proposal);
         await this.deps.getPostEngine().deletePost(postId);
       }
       this.proposalStore.remove(proposalId);
@@ -281,14 +330,25 @@ export class MCPServer {
   // ── Resource registration ──────────────────────────────────────────
 
   private registerResources(server: McpServer): void {
-    server.registerResource('posts', 'bds://posts', { description: 'All blog posts' }, async () => {
-      const result = await this.deps.getPostEngine().getAllPosts();
-      return { contents: [{ uri: 'bds://posts', mimeType: 'application/json', text: JSON.stringify(result) }] };
+    server.registerResource('posts', 'bds://posts', { description: 'All blog posts (first page)' }, async () => {
+      const result = await this.deps.getPostEngine().getAllPosts({ limit: DEFAULT_PAGE_SIZE });
+      const response: Record<string, unknown> = { ...result };
+      if (result.hasMore) {
+        response.nextCursor = encodeCursor(DEFAULT_PAGE_SIZE);
+      }
+      return { contents: [{ uri: 'bds://posts', mimeType: 'application/json', text: JSON.stringify(response) }] };
     });
 
-    server.registerResource('media', 'bds://media', { description: 'All media files' }, async () => {
-      const result = await this.deps.getMediaEngine().getAllMedia();
-      return { contents: [{ uri: 'bds://media', mimeType: 'application/json', text: JSON.stringify(result) }] };
+    server.registerResource('media', 'bds://media', { description: 'All media files (first page)' }, async () => {
+      const allMedia = await this.deps.getMediaEngine().getAllMedia();
+      const items = allMedia.slice(0, DEFAULT_PAGE_SIZE);
+      const total = allMedia.length;
+      const hasMore = DEFAULT_PAGE_SIZE < total;
+      const response: Record<string, unknown> = { items, total, hasMore };
+      if (hasMore) {
+        response.nextCursor = encodeCursor(DEFAULT_PAGE_SIZE);
+      }
+      return { contents: [{ uri: 'bds://media', mimeType: 'application/json', text: JSON.stringify(response) }] };
     });
 
     server.registerResource('tags', 'bds://tags', { description: 'Tags with post counts' }, async () => {
@@ -308,6 +368,31 @@ export class MCPServer {
   }
 
   private registerResourceTemplates(server: McpServer): void {
+    // ── Pagination templates ──
+    server.registerResource('posts-page', new ResourceTemplate('bds://posts{?cursor}', { list: undefined }), { description: 'Paginated blog posts (use cursor from previous page)' }, async (uri, { cursor }) => {
+      const offset = decodeCursor(cursor as string);
+      const result = await this.deps.getPostEngine().getAllPosts({ limit: DEFAULT_PAGE_SIZE, offset });
+      const response: Record<string, unknown> = { ...result };
+      if (result.hasMore) {
+        response.nextCursor = encodeCursor(offset + DEFAULT_PAGE_SIZE);
+      }
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(response) }] };
+    });
+
+    server.registerResource('media-page', new ResourceTemplate('bds://media{?cursor}', { list: undefined }), { description: 'Paginated media files (use cursor from previous page)' }, async (uri, { cursor }) => {
+      const offset = decodeCursor(cursor as string);
+      const allMedia = await this.deps.getMediaEngine().getAllMedia();
+      const items = allMedia.slice(offset, offset + DEFAULT_PAGE_SIZE);
+      const total = allMedia.length;
+      const hasMore = offset + DEFAULT_PAGE_SIZE < total;
+      const response: Record<string, unknown> = { items, total, hasMore };
+      if (hasMore) {
+        response.nextCursor = encodeCursor(offset + DEFAULT_PAGE_SIZE);
+      }
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(response) }] };
+    });
+
+    // ── Entity templates ──
     server.registerResource('post', new ResourceTemplate('bds://posts/{id}', { list: undefined }), { description: 'A single post by ID' }, async (uri, { id }) => {
       const result = await this.deps.getPostEngine().getPost(id as string);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
@@ -341,7 +426,7 @@ export class MCPServer {
     server.registerResource('media-image', new ResourceTemplate('bds://media/{id}/image', { list: undefined }), { description: 'Image thumbnail (medium size, base64 WebP) for visual context' }, async (uri, { id }) => {
       const mediaId = id as string;
       const media = await this.deps.getMediaEngine().getMedia(mediaId);
-      if (!media || !(media as Record<string, unknown>).mimeType || !String((media as Record<string, unknown>).mimeType).startsWith('image/')) {
+      if (!media || !media.mimeType.startsWith('image/')) {
         return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'Not an image or media not found' }] };
       }
       const dataUrl = await this.deps.getMediaEngine().getThumbnailDataUrl(mediaId, 'medium');
@@ -433,7 +518,7 @@ export class MCPServer {
           author: args.author,
           status: 'draft',
         });
-        const proposalId = this.proposalStore.create('draftPost', { postId: (post as Record<string, unknown>).id });
+        const proposalId = this.proposalStore.create('draftPost', { postId: post.id });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, post }) }],
         };
@@ -458,6 +543,7 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-script' } },
     }, async (args: { title: string; kind: 'macro' | 'utility' | 'transform'; content: string; entrypoint?: string }) => {
+      const validation = await this.deps.getScriptEngine().validateScript(args.content);
       const proposalId = this.proposalStore.create('proposeScript', {
         title: args.title,
         kind: args.kind,
@@ -465,7 +551,7 @@ export class MCPServer {
         entrypoint: args.entrypoint,
       });
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, preview: { title: args.title, kind: args.kind, contentLength: args.content.length } }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, preview: { title: args.title, kind: args.kind, contentLength: args.content.length, syntaxValid: validation.valid, syntaxErrors: validation.errors } }) }],
       };
     });
 
@@ -481,13 +567,14 @@ export class MCPServer {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: { ui: { resourceUri: 'ui://bds/review-template' } },
     }, async (args: { title: string; kind: 'post' | 'list' | 'not-found' | 'partial'; content: string }) => {
+      const validation = await this.deps.getTemplateEngine().validateTemplate(args.content);
       const proposalId = this.proposalStore.create('proposeTemplate', {
         title: args.title,
         kind: args.kind,
         content: args.content,
       });
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, preview: { title: args.title, kind: args.kind, contentLength: args.content.length } }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ proposalId, preview: { title: args.title, kind: args.kind, contentLength: args.content.length, syntaxValid: validation.valid, syntaxErrors: validation.errors } }) }],
       };
     });
 

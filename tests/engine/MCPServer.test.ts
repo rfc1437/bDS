@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { MCPServer, type MCPServerDependencies } from '../../src/main/engine/MCPServer';
+import { MCPServer, type MCPServerDependencies, DEFAULT_PAGE_SIZE, encodeCursor, decodeCursor } from '../../src/main/engine/MCPServer';
 
 // Mock all engine singletons
 vi.mock('../../src/main/engine/PostEngine', () => ({
@@ -65,6 +65,7 @@ function createMockScriptEngine() {
       entrypoint: 'main.py', content: '', enabled: true, version: 1,
       filePath: '/test', createdAt: new Date(), updatedAt: new Date(),
     }),
+    validateScript: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
   };
 }
 
@@ -75,6 +76,7 @@ function createMockTemplateEngine() {
       enabled: true, version: 1, filePath: '/test', content: '',
       createdAt: new Date(), updatedAt: new Date(),
     }),
+    validateTemplate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
   };
 }
 
@@ -269,6 +271,34 @@ describe('MCPServer', () => {
     it('registers media-image resource template', () => {
       const mcpServer = server.createMcpServer();
       expect(hasRegistered(mcpServer, '_registeredResourceTemplates', 'media-image')).toBe(true);
+    });
+
+    it('registers posts-page resource template for pagination', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredResourceTemplates', 'posts-page')).toBe(true);
+    });
+
+    it('registers media-page resource template for pagination', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredResourceTemplates', 'media-page')).toBe(true);
+    });
+  });
+
+  describe('cursor encoding', () => {
+    it('round-trips offset through encode/decode', () => {
+      expect(decodeCursor(encodeCursor(0))).toBe(0);
+      expect(decodeCursor(encodeCursor(50))).toBe(50);
+      expect(decodeCursor(encodeCursor(999))).toBe(999);
+    });
+
+    it('returns 0 for invalid cursor', () => {
+      expect(decodeCursor('!!!invalid!!!')).toBe(0);
+      expect(decodeCursor('')).toBe(0);
+    });
+
+    it('returns 0 for negative offset', () => {
+      // Encoding a negative offset then decoding should clamp to 0
+      expect(decodeCursor(encodeCursor(-5))).toBe(0);
     });
   });
 
@@ -490,14 +520,69 @@ describe('MCPServer', () => {
       return (mcpServer as Record<string, Record<string, { readCallback: (...args: unknown[]) => Promise<unknown> }>>)._registeredResourceTemplates[name];
     }
 
-    it('bds://posts calls getAllPosts and returns JSON', async () => {
+    it('bds://posts calls getAllPosts with pagination limit and returns JSON', async () => {
       const postsData = { items: [{ id: 'p1', title: 'Hello' }], hasMore: false, total: 1 };
       mockPostEngine.getAllPosts.mockResolvedValue(postsData);
       const mcpServer = server.createMcpServer();
       const resource = getResource(mcpServer, 'bds://posts');
       const result = await resource.readCallback(new URL('bds://posts'), {}) as { contents: Array<{ text: string }> };
-      expect(mockPostEngine.getAllPosts).toHaveBeenCalled();
+      expect(mockPostEngine.getAllPosts).toHaveBeenCalledWith({ limit: DEFAULT_PAGE_SIZE });
       expect(JSON.parse(result.contents[0].text)).toEqual(postsData);
+    });
+
+    it('bds://posts includes nextCursor when hasMore is true', async () => {
+      const postsData = {
+        items: Array.from({ length: DEFAULT_PAGE_SIZE }, (_, i) => ({ id: `p${i}` })),
+        hasMore: true,
+        total: 120,
+      };
+      mockPostEngine.getAllPosts.mockResolvedValue(postsData);
+      const mcpServer = server.createMcpServer();
+      const resource = getResource(mcpServer, 'bds://posts');
+      const result = await resource.readCallback(new URL('bds://posts'), {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.nextCursor).toBeTruthy();
+      expect(parsed.hasMore).toBe(true);
+      expect(parsed.total).toBe(120);
+      // Cursor should decode to the next offset
+      expect(decodeCursor(parsed.nextCursor)).toBe(DEFAULT_PAGE_SIZE);
+    });
+
+    it('bds://posts omits nextCursor when hasMore is false', async () => {
+      const postsData = { items: [{ id: 'p1' }], hasMore: false, total: 1 };
+      mockPostEngine.getAllPosts.mockResolvedValue(postsData);
+      const mcpServer = server.createMcpServer();
+      const resource = getResource(mcpServer, 'bds://posts');
+      const result = await resource.readCallback(new URL('bds://posts'), {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.nextCursor).toBeUndefined();
+    });
+
+    it('bds://media returns paginated response with items, total, hasMore', async () => {
+      const allMedia = Array.from({ length: 3 }, (_, i) => ({ id: `m${i}` }));
+      mockMediaEngine.getAllMedia.mockResolvedValue(allMedia);
+      const mcpServer = server.createMcpServer();
+      const resource = getResource(mcpServer, 'bds://media');
+      const result = await resource.readCallback(new URL('bds://media'), {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.items).toHaveLength(3);
+      expect(parsed.total).toBe(3);
+      expect(parsed.hasMore).toBe(false);
+      expect(parsed.nextCursor).toBeUndefined();
+    });
+
+    it('bds://media includes nextCursor when more items than page size', async () => {
+      const allMedia = Array.from({ length: DEFAULT_PAGE_SIZE + 10 }, (_, i) => ({ id: `m${i}` }));
+      mockMediaEngine.getAllMedia.mockResolvedValue(allMedia);
+      const mcpServer = server.createMcpServer();
+      const resource = getResource(mcpServer, 'bds://media');
+      const result = await resource.readCallback(new URL('bds://media'), {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.items).toHaveLength(DEFAULT_PAGE_SIZE);
+      expect(parsed.total).toBe(DEFAULT_PAGE_SIZE + 10);
+      expect(parsed.hasMore).toBe(true);
+      expect(parsed.nextCursor).toBeTruthy();
+      expect(decodeCursor(parsed.nextCursor)).toBe(DEFAULT_PAGE_SIZE);
     });
 
     it('bds://stats calls getBlogStats and returns JSON', async () => {
@@ -517,6 +602,61 @@ describe('MCPServer', () => {
       const result = await tpl.readCallback(new URL('bds://posts/post-1'), { id: 'post-1' }, {}) as { contents: Array<{ text: string }> };
       expect(mockPostEngine.getPost).toHaveBeenCalledWith('post-1');
       expect(JSON.parse(result.contents[0].text)).toEqual(post);
+    });
+
+    it('posts-page template decodes cursor and passes offset to getAllPosts', async () => {
+      const cursor = encodeCursor(50);
+      mockPostEngine.getAllPosts.mockResolvedValue({ items: [{ id: 'p50' }], hasMore: false, total: 60 });
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'posts-page');
+      const result = await tpl.readCallback(new URL(`bds://posts?cursor=${cursor}`), { cursor }, {}) as { contents: Array<{ text: string }> };
+      expect(mockPostEngine.getAllPosts).toHaveBeenCalledWith({ limit: DEFAULT_PAGE_SIZE, offset: 50 });
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.items).toEqual([{ id: 'p50' }]);
+      expect(parsed.nextCursor).toBeUndefined();
+    });
+
+    it('posts-page template includes nextCursor for subsequent pages', async () => {
+      const cursor = encodeCursor(50);
+      mockPostEngine.getAllPosts.mockResolvedValue({
+        items: Array.from({ length: DEFAULT_PAGE_SIZE }, (_, i) => ({ id: `p${50 + i}` })),
+        hasMore: true,
+        total: 200,
+      });
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'posts-page');
+      const result = await tpl.readCallback(new URL(`bds://posts?cursor=${cursor}`), { cursor }, {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.nextCursor).toBeTruthy();
+      expect(decodeCursor(parsed.nextCursor)).toBe(100);
+    });
+
+    it('media-page template decodes cursor and returns correct slice', async () => {
+      const allMedia = Array.from({ length: 80 }, (_, i) => ({ id: `m${i}` }));
+      mockMediaEngine.getAllMedia.mockResolvedValue(allMedia);
+      const cursor = encodeCursor(50);
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'media-page');
+      const result = await tpl.readCallback(new URL(`bds://media?cursor=${cursor}`), { cursor }, {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.items).toHaveLength(30);
+      expect(parsed.items[0].id).toBe('m50');
+      expect(parsed.total).toBe(80);
+      expect(parsed.hasMore).toBe(false);
+      expect(parsed.nextCursor).toBeUndefined();
+    });
+
+    it('media-page template includes nextCursor when more pages remain', async () => {
+      const allMedia = Array.from({ length: 120 }, (_, i) => ({ id: `m${i}` }));
+      mockMediaEngine.getAllMedia.mockResolvedValue(allMedia);
+      const cursor = encodeCursor(0);
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'media-page');
+      const result = await tpl.readCallback(new URL(`bds://media?cursor=${cursor}`), { cursor }, {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.items).toHaveLength(DEFAULT_PAGE_SIZE);
+      expect(parsed.hasMore).toBe(true);
+      expect(decodeCursor(parsed.nextCursor)).toBe(DEFAULT_PAGE_SIZE);
     });
 
     it('bds://posts/{id}/media calls getLinkedMediaDataForPost', async () => {
@@ -691,6 +831,50 @@ describe('MCPServer', () => {
       expect(proposal).toBeDefined();
       expect(proposal!.type).toBe('proposeScript');
       expect(proposal!.data.content).toBe('print("hi")');
+    });
+
+    it('propose_script calls validateScript and includes validation result in preview', async () => {
+      mockScriptEngine.validateScript.mockResolvedValue({ valid: true, errors: [] });
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_script');
+      const result = await tool.handler({ title: 'Valid Script', kind: 'macro', content: 'print("hello")' }, {}) as { content: Array<{ text: string }> };
+      expect(mockScriptEngine.validateScript).toHaveBeenCalledWith('print("hello")');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.preview.syntaxValid).toBe(true);
+      expect(parsed.preview.syntaxErrors).toEqual([]);
+    });
+
+    it('propose_script includes syntax errors in preview when validation fails', async () => {
+      mockScriptEngine.validateScript.mockResolvedValue({ valid: false, errors: ['invalid syntax (line 1, col 6)'] });
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_script');
+      const result = await tool.handler({ title: 'Bad Script', kind: 'macro', content: 'def (' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.proposalId).toBeTruthy();
+      expect(parsed.preview.syntaxValid).toBe(false);
+      expect(parsed.preview.syntaxErrors).toEqual(['invalid syntax (line 1, col 6)']);
+    });
+
+    it('propose_template calls validateTemplate and includes validation result in preview', async () => {
+      mockTemplateEngine.validateTemplate.mockResolvedValue({ valid: true, errors: [] });
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_template');
+      const result = await tool.handler({ title: 'Valid Template', kind: 'post', content: '<h1>{{ title }}</h1>' }, {}) as { content: Array<{ text: string }> };
+      expect(mockTemplateEngine.validateTemplate).toHaveBeenCalledWith('<h1>{{ title }}</h1>');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.preview.syntaxValid).toBe(true);
+      expect(parsed.preview.syntaxErrors).toEqual([]);
+    });
+
+    it('propose_template includes syntax errors in preview when validation fails', async () => {
+      mockTemplateEngine.validateTemplate.mockResolvedValue({ valid: false, errors: ['tag "{% invalid" not closed'] });
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'propose_template');
+      const result = await tool.handler({ title: 'Bad Template', kind: 'post', content: '{% invalid' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.proposalId).toBeTruthy();
+      expect(parsed.preview.syntaxValid).toBe(false);
+      expect(parsed.preview.syntaxErrors).toEqual(['tag "{% invalid" not closed']);
     });
 
     it('propose_media_metadata loads current media and stores proposal', async () => {

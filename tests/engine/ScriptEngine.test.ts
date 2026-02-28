@@ -2,6 +2,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import { ScriptEngine } from '../../src/main/engine/ScriptEngine';
 
+const { mockExecFile } = vi.hoisted(() => ({
+  mockExecFile: vi.fn(),
+}));
+
+vi.mock('node:child_process', () => ({
+  execFile: mockExecFile,
+  default: { execFile: mockExecFile },
+}));
+
 const mockScripts = new Map<string, any>();
 const mockFiles = new Map<string, string>();
 
@@ -375,6 +384,65 @@ describe('ScriptEngine', () => {
     it('getMacroScriptBySlug returns null for non-existent slug', async () => {
       const found = await scriptEngine.getMacroScriptBySlug('nonexistent');
       expect(found).toBeNull();
+    });
+  });
+
+  describe('validateScript', () => {
+    it('returns valid for correct Python syntax', async () => {
+      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: null, stdout: string) => void) => {
+        cb(null, JSON.stringify({ valid: true, errors: [] }));
+        return { stdin: { write: vi.fn(), end: vi.fn() } };
+      });
+
+      const result = await scriptEngine.validateScript('print("hello")');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('returns invalid with errors for bad Python syntax', async () => {
+      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: null, stdout: string) => void) => {
+        cb(null, JSON.stringify({ valid: false, errors: ['invalid syntax (line 1, col 5)'] }));
+        return { stdin: { write: vi.fn(), end: vi.fn() } };
+      });
+
+      const result = await scriptEngine.validateScript('def (');
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual(['invalid syntax (line 1, col 5)']);
+    });
+
+    it('returns valid when python3 is not available', async () => {
+      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: Error, stdout: string) => void) => {
+        cb(new Error('spawn python3 ENOENT'), '');
+        return { stdin: { write: vi.fn(), end: vi.fn() } };
+      });
+
+      const result = await scriptEngine.validateScript('print("hello")');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('returns valid when python3 output is not parseable JSON', async () => {
+      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: null, stdout: string) => void) => {
+        cb(null, 'not json');
+        return { stdin: { write: vi.fn(), end: vi.fn() } };
+      });
+
+      const result = await scriptEngine.validateScript('print("hello")');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('passes script content via stdin', async () => {
+      const writeFn = vi.fn();
+      const endFn = vi.fn();
+      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: null, stdout: string) => void) => {
+        cb(null, JSON.stringify({ valid: true, errors: [] }));
+        return { stdin: { write: writeFn, end: endFn } };
+      });
+
+      await scriptEngine.validateScript('x = 42');
+      expect(writeFn).toHaveBeenCalledWith('x = 42');
+      expect(endFn).toHaveBeenCalled();
     });
   });
 });

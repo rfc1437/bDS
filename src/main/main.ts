@@ -871,13 +871,13 @@ app.whenReady().then(async () => {
   }
   try {
     const mcpServer = getMCPServer({
-      getPostEngine: () => getPostEngine() as never,
-      getMediaEngine: () => getMediaEngine() as never,
-      getScriptEngine: () => getScriptEngine() as never,
-      getTemplateEngine: () => getTemplateEngine() as never,
-      getMetaEngine: () => getMetaEngine() as never,
-      getPostMediaEngine: () => getPostMediaEngine() as never,
-      getTagEngine: () => getTagEngine() as never,
+      getPostEngine: () => getPostEngine(),
+      getMediaEngine: () => getMediaEngine(),
+      getScriptEngine: () => getScriptEngine(),
+      getTemplateEngine: () => getTemplateEngine(),
+      getMetaEngine: () => getMetaEngine(),
+      getPostMediaEngine: () => getPostMediaEngine(),
+      getTagEngine: () => getTagEngine(),
     });
     await mcpServer.start(MCP_SERVER_PORT);
   } catch (error) {
