@@ -131,6 +131,20 @@ function buildMcpUrl(bundle: EngineBundle): string {
   }
 }
 
+function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCPAgentConfigEngine').MCPAgentConfigOptions {
+  const os = require('os') as typeof import('os');
+  const scriptPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'bds-mcp.cjs')
+    : path.join(app.getAppPath(), 'dist', 'cli', 'bds-mcp.cjs');
+  return {
+    homeDir: os.homedir(),
+    platform: process.platform,
+    mcpUrl: buildMcpUrl(bundle),
+    execPath: process.execPath,
+    scriptPath,
+  };
+}
+
 export function registerIpcHandlers(bundle: EngineBundle): void {
   // ============ Git Handlers ============
 
@@ -1577,31 +1591,19 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
 
   safeHandle('mcp:getAgents', async () => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine({
-      homeDir: require('os').homedir(),
-      platform: process.platform,
-      mcpUrl: buildMcpUrl(bundle),
-    });
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
     return engine.getAgents();
   });
 
   safeHandle('mcp:addToAgentConfig', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine({
-      homeDir: require('os').homedir(),
-      platform: process.platform,
-      mcpUrl: buildMcpUrl(bundle),
-    });
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
     return engine.addToConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 
   safeHandle('mcp:isConfigured', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine({
-      homeDir: require('os').homedir(),
-      platform: process.platform,
-      mcpUrl: buildMcpUrl(bundle),
-    });
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
     return engine.isConfigured(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 

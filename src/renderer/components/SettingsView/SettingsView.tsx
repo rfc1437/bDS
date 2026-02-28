@@ -1257,6 +1257,7 @@ export const SettingsView: React.FC = () => {
   const renderMCPSettings = () => {
     const agents = [
       { id: 'claude-code', label: 'Claude Code' },
+      { id: 'claude-desktop', label: 'Claude Desktop' },
       { id: 'github-copilot', label: 'GitHub Copilot' },
       { id: 'gemini-cli', label: 'Gemini CLI' },
       { id: 'opencode', label: 'OpenCode' },

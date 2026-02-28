@@ -9,6 +9,7 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import { eq } from 'drizzle-orm';
 import { platformConfigPath } from './platform';
 import { initDatabase } from '../main/database/connection';
@@ -28,10 +29,15 @@ import { MCPServer } from '../main/engine/MCPServer';
 const userData = platformConfigPath();
 const dbPath = path.join(userData, 'bds.db');
 
-// __dirname points to Contents/Resources/ in the packaged app (bds-mcp.cjs
-// is placed there by extraResources).  The drizzle/ migrations folder is also
-// shipped to Contents/Resources/drizzle/ via extraResources.
-const migrationsFolder = path.join(__dirname, 'drizzle');
+// __dirname points to Contents/Resources/ in the packaged app (bds-mcp.cjs is
+// placed there by extraResources, alongside drizzle/).
+// In development it points to dist/cli/ — drizzle/ lives at the project root.
+const migrationsFolder = (() => {
+  const adjacent = path.join(__dirname, 'drizzle');
+  if (fs.existsSync(adjacent)) return adjacent;
+  // dev: dist/cli/ → ../../drizzle
+  return path.join(__dirname, '..', '..', 'drizzle');
+})();
 
 const db = initDatabase({ dbPath, migrationsFolder });
 

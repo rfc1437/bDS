@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol, net, shell, screen } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getDatabase } from './database';
+import { getDatabase, initDatabase } from './database';
 import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
@@ -901,6 +901,14 @@ app.on('open-url', (event, deepLink) => {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // Initialise the database before constructing any engines.
+  const userData = app.getPath('userData');
+  const migrationsFolder = app.isPackaged
+    ? path.join(process.resourcesPath, 'drizzle')
+    : path.join(__dirname, '..', '..', 'drizzle');
+  const db = initDatabase({ dbPath: path.join(userData, 'bds.db'), migrationsFolder });
+  await db.initializeLocal();
+
   // Construct all engines and build EngineBundle before any initialization
   const noopNotifier = new NoopNotifier();
   const projectEngine = new ProjectEngine();
