@@ -429,8 +429,11 @@ export class MCPServer {
 
     // ── Entity templates ──
     server.registerResource('post', new ResourceTemplate('bds://posts/{id}', { list: undefined }), { description: 'A single post by ID' }, async (uri, { id }) => {
-      const result = await this.deps.postEngine.getPost(id as string);
-      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(result) }] };
+      const postId = id as string;
+      const result = await this.deps.postEngine.getPost(postId);
+      const backlinks = await this.deps.postEngine.getLinkedBy(postId);
+      const enriched = { ...result, backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })) };
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(enriched) }] };
     });
 
     server.registerResource('media-item', new ResourceTemplate('bds://media/{id}', { list: undefined }), { description: 'A single media item by ID' }, async (uri, { id }) => {
@@ -480,7 +483,7 @@ export class MCPServer {
   private registerReadTools(server: McpServer): void {
     server.registerTool('search_posts', {
       title: 'Search Posts',
-      description: 'Search blog posts by query, category, tags, or date range.',
+      description: 'Search blog posts by query, category, tags, or date range. Each result includes backlinks (posts linking to it).',
       inputSchema: {
         query: z.string().optional().describe('Full-text search query'),
         category: z.string().optional().describe('Filter by category'),
@@ -497,11 +500,20 @@ export class MCPServer {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 50;
 
+      // Helper: enrich posts with backlinks
+      const enrichWithBacklinks = async <T extends { id: string }>(posts: T[]) => {
+        return Promise.all(posts.map(async (p) => {
+          const backlinks = await this.deps.postEngine.getLinkedBy(p.id);
+          return { ...p, backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })) };
+        }));
+      };
+
       if (args.query && !hasFilters) {
         // Pure text search — use FTS
         const results = await this.deps.postEngine.searchPosts(args.query);
         const paginated = results.slice(offset, offset + limit);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
+        const enriched = await enrichWithBacklinks(paginated);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
       }
 
       // Build structural filter
@@ -517,13 +529,15 @@ export class MCPServer {
         const results = await this.deps.postEngine.searchPostsFiltered(
           args.query, filter, { offset, limit },
         );
-        return { content: [{ type: 'text' as const, text: JSON.stringify(results) }] };
+        const enriched = await enrichWithBacklinks(results);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
       }
 
       // Filter-only query (no text search)
       const results = await this.deps.postEngine.getPostsFiltered(filter);
       const paginated = results.slice(offset, offset + limit);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(paginated) }] };
+      const enriched = await enrichWithBacklinks(paginated);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
     });
   }
 

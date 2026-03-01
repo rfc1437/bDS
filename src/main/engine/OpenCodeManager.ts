@@ -886,7 +886,7 @@ export class OpenCodeManager {
       },
       {
         name: 'read_post',
-        description: 'Read the full content and metadata of a specific blog post by its ID.',
+        description: 'Read the full content and metadata of a specific blog post by its ID. Includes backlinks (posts linking to this post).',
         input_schema: {
           type: 'object',
           properties: {
@@ -897,7 +897,7 @@ export class OpenCodeManager {
       },
       {
         name: 'list_posts',
-        description: 'List blog posts with optional filtering by status, category, tags, year, or month. Returns paginated results. The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use year/month filters to efficiently narrow to a time period instead of paginating through all posts. Use offset/limit to page through filtered results.',
+        description: 'List blog posts with optional filtering by status, category, tags, year, or month. Returns paginated results. Each post includes backlinks (posts linking to it). The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use year/month filters to efficiently narrow to a time period instead of paginating through all posts. Use offset/limit to page through filtered results.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1282,11 +1282,15 @@ export class OpenCodeManager {
             hasMore: false,
             offset,
             limit,
-            posts: filteredPosts.map(p => ({
-              id: p.id, title: p.title, slug: p.slug,
-              excerpt: p.excerpt, status: p.status,
-              categories: p.categories, tags: p.tags,
-              createdAt: p.createdAt, updatedAt: p.updatedAt,
+            posts: await Promise.all(filteredPosts.map(async p => {
+              const backlinks = await this.postEngine.getLinkedBy(p.id);
+              return {
+                id: p.id, title: p.title, slug: p.slug,
+                excerpt: p.excerpt, status: p.status,
+                categories: p.categories, tags: p.tags,
+                createdAt: p.createdAt, updatedAt: p.updatedAt,
+                backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+              };
             })),
           };
         }
@@ -1294,6 +1298,7 @@ export class OpenCodeManager {
         case 'read_post': {
           const post = await this.postEngine.getPost(args.postId as string);
           if (!post) return { success: false, error: 'Post not found' };
+          const backlinks = await this.postEngine.getLinkedBy(post.id);
           return {
             success: true,
             post: {
@@ -1303,6 +1308,7 @@ export class OpenCodeManager {
               categories: post.categories, tags: post.tags,
               createdAt: post.createdAt, updatedAt: post.updatedAt,
               publishedAt: post.publishedAt,
+              backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
             },
           };
         }
@@ -1343,10 +1349,14 @@ export class OpenCodeManager {
             hasMore: offset + limit < filteredTotal,
             offset,
             limit,
-            posts: pageItems.map(p => ({
-              id: p.id, title: p.title, slug: p.slug,
-              status: p.status, categories: p.categories,
-              tags: p.tags, createdAt: p.createdAt, updatedAt: p.updatedAt,
+            posts: await Promise.all(pageItems.map(async p => {
+              const backlinks = await this.postEngine.getLinkedBy(p.id);
+              return {
+                id: p.id, title: p.title, slug: p.slug,
+                status: p.status, categories: p.categories,
+                tags: p.tags, createdAt: p.createdAt, updatedAt: p.updatedAt,
+                backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+              };
             })),
           };
         }

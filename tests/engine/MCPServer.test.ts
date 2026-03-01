@@ -582,14 +582,33 @@ describe('MCPServer', () => {
       expect(JSON.parse(result.contents[0].text)).toEqual(stats);
     });
 
-    it('bds://posts/{id} calls getPost with correct id', async () => {
+    it('bds://posts/{id} calls getPost with correct id and includes backlinks', async () => {
       const post = { id: 'post-1', title: 'Test' };
       mockPostEngine.getPost.mockResolvedValue(post);
+      mockPostEngine.getLinkedBy.mockResolvedValue([
+        { id: 'p2', title: 'Referring Post', slug: 'referring-post' },
+      ]);
       const mcpServer = server.createMcpServer();
       const tpl = getResourceTemplate(mcpServer, 'post');
       const result = await tpl.readCallback(new URL('bds://posts/post-1'), { id: 'post-1' }, {}) as { contents: Array<{ text: string }> };
       expect(mockPostEngine.getPost).toHaveBeenCalledWith('post-1');
-      expect(JSON.parse(result.contents[0].text)).toEqual(post);
+      expect(mockPostEngine.getLinkedBy).toHaveBeenCalledWith('post-1');
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.id).toBe('post-1');
+      expect(parsed.backlinks).toEqual([
+        { id: 'p2', title: 'Referring Post', slug: 'referring-post' },
+      ]);
+    });
+
+    it('bds://posts/{id} returns empty backlinks when none exist', async () => {
+      const post = { id: 'post-1', title: 'Test' };
+      mockPostEngine.getPost.mockResolvedValue(post);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tpl = getResourceTemplate(mcpServer, 'post');
+      const result = await tpl.readCallback(new URL('bds://posts/post-1'), { id: 'post-1' }, {}) as { contents: Array<{ text: string }> };
+      const parsed = JSON.parse(result.contents[0].text);
+      expect(parsed.backlinks).toEqual([]);
     });
 
     it('posts-page template decodes cursor and passes offset to getAllPosts', async () => {
@@ -694,14 +713,16 @@ describe('MCPServer', () => {
       return (mcpServer as Record<string, Record<string, { handler: (...args: unknown[]) => Promise<unknown> }>>)._registeredTools[name];
     }
 
-    it('search_posts with query only calls searchPosts', async () => {
+    it('search_posts with query only calls searchPosts and includes backlinks', async () => {
       const searchResults = [{ id: 'p1', title: 'Found', slug: 'found' }];
       mockPostEngine.searchPosts.mockResolvedValue(searchResults);
+      mockPostEngine.getLinkedBy.mockResolvedValue([{ id: 'px', title: 'Ref', slug: 'ref' }]);
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ query: 'test' }, {}) as { content: Array<{ text: string }> };
       expect(mockPostEngine.searchPosts).toHaveBeenCalledWith('test');
-      expect(JSON.parse(result.content[0].text)).toEqual(searchResults);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed[0].backlinks).toEqual([{ id: 'px', title: 'Ref', slug: 'ref' }]);
     });
 
     it('search_posts with query applies offset and limit', async () => {
@@ -726,14 +747,17 @@ describe('MCPServer', () => {
       expect(parsed).toHaveLength(50);
     });
 
-    it('search_posts with filters only calls getPostsFiltered', async () => {
+    it('search_posts with filters only calls getPostsFiltered and includes backlinks', async () => {
       const filtered = [{ id: 'p2', title: 'Filtered' }];
       mockPostEngine.getPostsFiltered.mockResolvedValue(filtered);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ category: 'tech', status: 'published' }, {}) as { content: Array<{ text: string }> };
       expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith({ categories: ['tech'], status: 'published' });
-      expect(JSON.parse(result.content[0].text)).toEqual(filtered);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed[0].backlinks).toEqual([]);
+      expect(mockPostEngine.getLinkedBy).toHaveBeenCalledWith('p2');
     });
 
     it('search_posts with filters applies offset and limit', async () => {
@@ -747,11 +771,12 @@ describe('MCPServer', () => {
       expect(parsed[0].id).toBe('p3');
     });
 
-    it('search_posts with query + filters calls searchPostsFiltered', async () => {
+    it('search_posts with query + filters calls searchPostsFiltered and includes backlinks', async () => {
       const combined = [
         { id: 'p1', title: 'TypeScript Guide', categories: ['tech'] },
       ];
       mockPostEngine.searchPostsFiltered.mockResolvedValue(combined);
+      mockPostEngine.getLinkedBy.mockResolvedValue([{ id: 'p9', title: 'See Also', slug: 'see-also' }]);
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ query: 'typescript', category: 'tech' }, {}) as { content: Array<{ text: string }> };
@@ -766,6 +791,7 @@ describe('MCPServer', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toHaveLength(1);
       expect(parsed[0].id).toBe('p1');
+      expect(parsed[0].backlinks).toEqual([{ id: 'p9', title: 'See Also', slug: 'see-also' }]);
     });
 
     it('search_posts with query + filters passes pagination to searchPostsFiltered', async () => {
