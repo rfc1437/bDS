@@ -19,8 +19,8 @@ This work is split into **3 sequential PRs** to reduce risk:
 
 | PR | Scope | Key Changes |
 |----|-------|-------------|
-| **PR 1 — SSE Streaming** | Standalone feature, no Mistral dependency | `httpRequestStream()`, SSE parsers (Anthropic + OpenAI formats), `stream: true` in request bodies, tool-call accumulation during streaming |
-| **PR 2 — Keychain Migration** | Standalone security improvement | Migrate OpenCode API key from plain-text SQLite to `safeStorage`; add encryption/decryption wrappers; migration logic for existing keys; cross-platform (macOS Keychain, Windows DPAPI, Linux libsecret) |
+| **PR 1 — SSE Streaming** ✅ | Standalone feature, no Mistral dependency | `httpRequestStream()`, SSE parsers (Anthropic + OpenAI formats), `stream: true` in request bodies, tool-call accumulation during streaming |
+| **PR 2 — Keychain Migration** | Standalone security improvement | Migrate OpenCode API key from plain-text SQLite to `safeStorage`; add encryption/decryption wrappers; delete old plain-text keys (no migration); cross-platform (macOS Keychain, Windows DPAPI, Linux libsecret) |
 | **PR 3 — Mistral Integration** | Builds on PR 1 + PR 2 | Mistral constants, model detection, key storage (using keychain from PR 2), parameterized `sendOpenAIMessage()`, vision fix, provider-aware routing, UI changes, i18n |
 
 ## Target Models
@@ -64,9 +64,9 @@ Use **latest aliases** (not dated IDs) so models auto-update when Mistral releas
 **D. Add Mistral API key storage (using keychain from PR 2)**
 - New field: `private mistralApiKey: string = ''`
 - New methods: `setMistralApiKey()`, `getMistralApiKey()`, `validateMistralApiKey()`
-- Load on init via `safeStorage.decryptString()` (keychain infrastructure from PR 2)
+- Load on init via `SecureKeyStore.retrieve()` (keychain infrastructure from PR 2)
 - Store/retrieve using the same `SecureKeyStore` wrapper that PR 2 introduces for the OpenCode key
-- Fallback: if `safeStorage.isEncryptionAvailable()` returns false (rare Linux setups without libsecret), fall back to plain-text SQLite
+- No plain-text fallback — `safeStorage` is required
 
 **E. Update `checkReady()`**
 - Return `ready: true` if **either** OpenCode key or Mistral key is set
@@ -295,7 +295,7 @@ data: {"type":"message_stop"}
 
 > **This section is implemented in PR 2, before the Mistral PR.** PR 3 (Mistral) uses the keychain infrastructure introduced here.
 
-**Scope:** Migrate all API keys from plain-text SQLite to Electron `safeStorage` (OS keychain). Cross-platform: macOS Keychain, Windows DPAPI, Linux libsecret.
+**Scope:** Migrate all API keys from plain-text SQLite to Electron `safeStorage` (OS keychain). Cross-platform: macOS Keychain, Windows DPAPI, Linux libsecret. No legacy fallback — old plain-text keys are deleted on startup; users re-enter keys.
 
 **1b-A. `SecureKeyStore` utility class** (~60 lines)
 - New module: `src/main/engine/SecureKeyStore.ts`
@@ -303,21 +303,20 @@ data: {"type":"message_stop"}
 - `retrieve(key: string): string | null` — reads encrypted base64 from SQLite, decrypts with `safeStorage.decryptString()`
 - `remove(key: string)` — deletes the encrypted entry
 - `isAvailable(): boolean` — wraps `safeStorage.isEncryptionAvailable()`
-- When `isAvailable()` is false (rare Linux without libsecret), fall back to plain-text SQLite with a console warning
+- No plain-text fallback — `store()` throws if `safeStorage` is unavailable
 
-**1b-B. Migration logic** (~30 lines)
-- On app startup (in `getOpenCodeManager()` init): check if plain-text `opencode_api_key` exists in settings
-- If yes and `safeStorage` is available: encrypt it, store encrypted version, delete plain-text entry
-- If `safeStorage` not available: leave as-is (plain-text fallback)
-- Idempotent — safe to run multiple times
+**1b-B. Cleanup of old plain-text keys** (~10 lines)
+- On app startup (in `getOpenCodeManager()` init): delete plain-text `opencode_api_key` from settings if it exists
+- No migration — users re-enter their API key after the update
+- Simple and secure: no window where both plain-text and encrypted keys coexist
 
-**1b-C. Update `setApiKey()` / `getApiKey()` in OpenCodeManager**
+**1b-C. Update `setApiKey()` / `getApiKey()` in chatHandlers**
 - Use `SecureKeyStore.store()` / `SecureKeyStore.retrieve()` instead of direct `getSetting()`/`setSetting()`
 - `getApiKey()` returns masked key as before (for UI display)
 - `validateApiKey()` unchanged — works with the decrypted key in memory
 
 **1b-D. Tests**
-- `SecureKeyStore` unit tests: encrypt/decrypt round-trip, fallback when `safeStorage` unavailable, migration from plain-text
+- `SecureKeyStore` unit tests: encrypt/decrypt round-trip, error when `safeStorage` unavailable, cleanup of old plain-text keys
 - Mock `safeStorage` in tests (it's an Electron API, not available in Node)
 
 **Estimated scope:** ~120 lines of new code + ~80 lines of tests
@@ -508,9 +507,9 @@ Keys needed:
 
 **PR 2 (Keychain Migration):**
 - `SecureKeyStore` encrypt/decrypt round-trip
-- Fallback when `safeStorage` unavailable
-- Migration from plain-text SQLite to encrypted storage
-- Idempotent migration (safe to run multiple times)
+- Error when `safeStorage` unavailable (no plain-text fallback)
+- Cleanup of old plain-text keys on startup
+- `chatHandlers` integration with `SecureKeyStore`
 
 **PR 3 (Mistral Integration):**
 - OpenCodeManager: Mistral key storage, `detectProvider('mistral-*')` + `detectProvider('devstral-*')` + `detectProvider('codestral-*')` + `detectProvider('pixtral-*')`, parameterized `sendOpenAIMessage()` with Mistral URL/key, vision image conversion in OpenAI path, tool-call message persistence in OpenAI path, `generateConversationTitle()` Mistral routing, model cache merge (both providers), `MODEL_CONTEXT_BUDGETS` correctness, `MODEL_CAPABILITIES` correctness, `isProviderKeySet()` helper, `getProviderConfig()` helper, fallback model list filtering by available keys, provider-aware API key guards in `analyzeTaxonomy()`/`analyzeMediaImage()`
@@ -548,9 +547,10 @@ Keys needed:
 ### PR 2 — Keychain Migration (prerequisite)
 1. Tests first — `SecureKeyStore` unit tests
 2. `SecureKeyStore` utility class
-3. Migration logic in `getOpenCodeManager()` init
-4. Update `setApiKey()` / `getApiKey()` to use `SecureKeyStore`
-5. Build verification (`npm run build`)
+3. Delete old plain-text `opencode_api_key` in `getOpenCodeManager()` init
+4. Update `chatHandlers` `setApiKey()` / init to use `SecureKeyStore`
+5. Add `deleteSetting()` to `ChatEngine` for cleanup
+6. Build verification (`npm run build`)
 
 ### PR 3 — Mistral Integration (builds on PR 1 + PR 2)
 1. Tests first (per AGENTS.md)
@@ -599,7 +599,7 @@ Keys needed:
 12. Manual: verify SSE streaming — text appears token-by-token (not as a single block after long wait)
 13. Manual: verify abort during streaming — text stops immediately, no wasted response
 14. Manual: verify keychain storage — API keys are encrypted, not stored as plain text in SQLite
-15. Manual: verify keychain migration — existing plain-text OpenCode key is migrated to encrypted storage on first launch after update
+15. Manual: verify old plain-text key is deleted on first launch after update (user re-enters key)
 
 ## Resolved Decisions
 
@@ -630,7 +630,7 @@ Keys needed:
 25. **SettingsView model state type** — Currently `{id: string; name: string}[]`; must be updated to `ChatModel[]` to include `provider` and `vision` fields for grouping and filtering
 26. **PR structure** — Split into 3 PRs: PR 1 (SSE streaming), PR 2 (keychain migration), PR 3 (Mistral integration). Reduces risk and allows independent review/testing
 27. **Model IDs** — Use "latest" aliases (`mistral-large-latest`, etc.) not dated IDs. Models auto-update when Mistral releases new versions; `getAvailableModels()` fetches actual model list from API
-28. **API key storage** — All API keys (OpenCode + Mistral) stored via Electron `safeStorage` (OS keychain). Cross-platform: macOS Keychain, Windows DPAPI, Linux libsecret. Fallback to plain-text SQLite when `safeStorage.isEncryptionAvailable()` returns false
+28. **API key storage** — All API keys (OpenCode + Mistral) stored via Electron `safeStorage` (OS keychain). Cross-platform: macOS Keychain, Windows DPAPI, Linux libsecret. No plain-text fallback — old plain-text keys are deleted on startup; users re-enter keys after upgrade
 29. **Model fallback filtering** — `getAvailableModels()` fallback list (from `MODEL_DISPLAY_NAMES`) filtered by available provider keys. Only shows models whose provider has a configured key, even in fallback mode
 30. **`requestProvider` routing** — The `requestProvider` lambda in `sendMessage()` must pass provider-specific URL/key/options to `sendOpenAIMessage()` via `getProviderConfig()` helper
 31. **Vision capability map** — `MODEL_CAPABILITIES` static map provides `vision: boolean` per model ID, since neither Mistral nor OpenCode APIs expose this field. OpenCode models also need vision flags for the image analysis dropdown filter

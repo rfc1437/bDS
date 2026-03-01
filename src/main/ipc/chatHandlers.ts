@@ -5,11 +5,13 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { ChatEngine } from '../engine/ChatEngine';
 import { OpenCodeManager } from '../engine/OpenCodeManager';
+import { SecureKeyStore } from '../engine/SecureKeyStore';
 import { getDatabase } from '../database';
 import type { EngineBundle } from '../engine/EngineBundle';
 
 let chatEngine: ChatEngine | null = null;
 let openCodeManager: OpenCodeManager | null = null;
+let secureKeyStore: SecureKeyStore | null = null;
 let openCodeManagerInitPromise: Promise<void> | null = null;
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 let engineBundle: EngineBundle | null = null;
@@ -47,11 +49,16 @@ async function getOpenCodeManager(): Promise<OpenCodeManager> {
       () => mainWindowGetter?.() || null
     );
 
-    // Load API key from settings and await it
+    // Initialize secure key store and load API key
     const engine = getChatEngine();
+    secureKeyStore = new SecureKeyStore(engine);
     openCodeManagerInitPromise = (async () => {
       try {
-        const key = await engine.getSetting('opencode_api_key');
+        // Clean up old plain-text key from settings (pre-keychain storage)
+        await secureKeyStore!.cleanupPlainTextKey('opencode_api_key');
+
+        // Load API key from encrypted storage
+        const key = await secureKeyStore!.retrieve('opencode_api_key');
         if (key) {
           openCodeManager!.setApiKey(key);
         }
@@ -109,9 +116,8 @@ export function registerChatHandlers(): void {
       const manager = await getOpenCodeManager();
       manager.setApiKey(apiKey);
 
-      // Persist to settings
-      const engine = getChatEngine();
-      await engine.setSetting('opencode_api_key', apiKey);
+      // Persist to encrypted storage
+      await secureKeyStore!.store('opencode_api_key', apiKey);
 
       return { success: true };
     } catch (error) {
@@ -411,5 +417,6 @@ export async function cleanupChatHandlers(): Promise<void> {
     openCodeManager = null;
   }
   openCodeManagerInitPromise = null;
+  secureKeyStore = null;
   chatEngine = null;
 }
