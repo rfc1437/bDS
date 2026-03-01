@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { A2UIMindmap, buildTree, computeLayout } from '../../../src/renderer/a2ui/components/A2UIMindmap';
+import { A2UIMindmap, buildTree, computeLayout, splitChildren } from '../../../src/renderer/a2ui/components/A2UIMindmap';
 import type { A2UIResolvedComponent, A2UIClientAction } from '../../../src/main/a2ui/types';
 
 function makeMindmapComponent(
@@ -71,6 +71,45 @@ describe('A2UIMindmap', () => {
     });
   });
 
+  describe('splitChildren', () => {
+    it('returns empty arrays for no children', () => {
+      const { right, left } = splitChildren([]);
+      expect(right).toHaveLength(0);
+      expect(left).toHaveLength(0);
+    });
+
+    it('puts single child on the right', () => {
+      const child: ReturnType<typeof buildTree> = { id: 'a', label: 'A', children: [] };
+      const { right, left } = splitChildren([child!]);
+      expect(right).toHaveLength(1);
+      expect(left).toHaveLength(0);
+    });
+
+    it('splits two children across right and left', () => {
+      const a = { id: 'a', label: 'A', children: [] };
+      const b = { id: 'b', label: 'B', children: [] };
+      const { right, left } = splitChildren([a, b]);
+      expect(right).toHaveLength(1);
+      expect(left).toHaveLength(1);
+    });
+
+    it('balances by subtree size', () => {
+      // 'a' has 3 leaves, 'b' has 1 leaf, 'c' has 1 leaf
+      const a = { id: 'a', label: 'A', children: [
+        { id: 'a1', label: 'A1', children: [] },
+        { id: 'a2', label: 'A2', children: [] },
+        { id: 'a3', label: 'A3', children: [] },
+      ] };
+      const b = { id: 'b', label: 'B', children: [] };
+      const c = { id: 'c', label: 'C', children: [] };
+      const { right, left } = splitChildren([a, b, c]);
+      // 'a' (weight 3) goes right, then 'b' (weight 1) goes left (0 < 3),
+      // 'c' (weight 1) also goes left (1 < 3)
+      expect(right.map((n) => n.id)).toContain('a');
+      expect(left.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe('computeLayout', () => {
     it('computes layout for a simple tree', () => {
       const tree = buildTree([
@@ -85,13 +124,25 @@ describe('A2UIMindmap', () => {
       expect(layout.links).toHaveLength(2);
       expect(layout.svgWidth).toBeGreaterThan(0);
       expect(layout.svgHeight).toBeGreaterThan(0);
+    });
 
-      // Root should be leftmost (smallest x)
+    it('places root between left and right children', () => {
+      const tree = buildTree([
+        { id: 'root', label: 'Root', children: ['a', 'b'] },
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ])!;
+
+      const layout = computeLayout(tree);
       const root = layout.nodes.find((n) => n.id === 'root')!;
       const nodeA = layout.nodes.find((n) => n.id === 'a')!;
       const nodeB = layout.nodes.find((n) => n.id === 'b')!;
-      expect(root.x).toBeLessThan(nodeA.x);
-      expect(root.x).toBeLessThan(nodeB.x);
+
+      // With 2 children, one should be to the right of root, one to the left
+      const rightChild = nodeA.x > root.x ? nodeA : nodeB;
+      const leftChild = nodeA.x > root.x ? nodeB : nodeA;
+      expect(rightChild.x).toBeGreaterThan(root.x);
+      expect(leftChild.x).toBeLessThan(root.x);
     });
 
     it('assigns correct depth values', () => {

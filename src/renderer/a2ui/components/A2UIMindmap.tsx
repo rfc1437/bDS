@@ -1,12 +1,19 @@
 /**
  * A2UI Mindmap Component
  *
- * Renders a mind map diagram using d3-hierarchy for layout
- * and d3-shape for link paths, with inline SVG output.
+ * Renders a centered mind map diagram using d3-hierarchy for tree layout
+ * and d3-shape for curved link paths, with inline SVG output.
+ *
+ * Layout strategy (classic mindmap):
+ * - Root node sits at the horizontal center
+ * - Children are split into two balanced groups: right half and left half
+ * - Each half is laid out as a vertical tree using d3.tree()
+ * - Left-side trees are mirrored horizontally
+ * - Horizontal spacing accounts for actual label widths to prevent overlap
  */
 
 import React, { useMemo } from 'react';
-import { hierarchy, tree as d3tree } from 'd3-hierarchy';
+import { hierarchy, tree as d3tree, type HierarchyPointNode } from 'd3-hierarchy';
 import { linkHorizontal } from 'd3-shape';
 import type { A2UIResolvedComponent, A2UIClientAction } from '../../../main/a2ui/types';
 
@@ -74,103 +81,276 @@ function estimateTextWidth(text: string): number {
   return Math.max(text.length * 7, 40);
 }
 
+/** Compute node box width from label. */
+function nodeWidth(label: string): number {
+  return estimateTextWidth(label) + NODE_PADDING_X * 2;
+}
+
 const NODE_HEIGHT = 28;
 const NODE_PADDING_X = 12;
-const NODE_PADDING_Y = 6;
 const NODE_RADIUS = 6;
-const VERTICAL_GAP = 8;
+const VERTICAL_GAP = 10;
+const HORIZONTAL_GAP = 24;
+
+/** Count total descendant leaves for balancing. */
+function leafCount(node: TreeNode): number {
+  if (node.children.length === 0) return 1;
+  let count = 0;
+  for (const child of node.children) {
+    count += leafCount(child);
+  }
+  return count;
+}
+
+/**
+ * Split root children into right and left groups, balanced by subtree size.
+ * Uses a greedy approach: assign children to the smaller side.
+ */
+export function splitChildren(children: TreeNode[]): { right: TreeNode[]; left: TreeNode[] } {
+  if (children.length === 0) return { right: [], left: [] };
+  if (children.length === 1) return { right: children, left: [] };
+
+  // Compute weights (leaf counts) for each child subtree
+  const weighted = children.map((child) => ({ child, weight: leafCount(child) }));
+
+  const right: TreeNode[] = [];
+  const left: TreeNode[] = [];
+  let rightWeight = 0;
+  let leftWeight = 0;
+
+  for (const { child, weight } of weighted) {
+    if (rightWeight <= leftWeight) {
+      right.push(child);
+      rightWeight += weight;
+    } else {
+      left.push(child);
+      leftWeight += weight;
+    }
+  }
+
+  return { right, left };
+}
+
+interface PositionedNode {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+}
 
 interface LayoutResult {
   svgWidth: number;
   svgHeight: number;
-  nodes: Array<{
-    id: string;
-    label: string;
-    x: number;
-    y: number;
-    width: number;
-    depth: number;
-  }>;
+  nodes: PositionedNode[];
   links: Array<{
     source: { x: number; y: number };
     target: { x: number; y: number };
   }>;
 }
 
-export function computeLayout(root: TreeNode): LayoutResult {
-  const h = hierarchy(root, (d) => (d.children.length > 0 ? d.children : null));
+/**
+ * Compute the maximum node width at each depth level of a d3 hierarchy tree.
+ * Used to set proper horizontal spacing per level so nodes don't overlap.
+ */
+function maxWidthPerDepth(root: HierarchyPointNode<TreeNode>): Map<number, number> {
+  const widths = new Map<number, number>();
+  for (const n of root.descendants()) {
+    const w = nodeWidth(n.data.label);
+    const current = widths.get(n.depth) ?? 0;
+    if (w > current) widths.set(n.depth, w);
+  }
+  return widths;
+}
 
-  // Node sizes: [vertical spacing, horizontal spacing]
+/**
+ * Lay out one side (right or left) of the mindmap.
+ * Creates a virtual root to act as connection point, then runs d3.tree().
+ * Returns positioned nodes (excluding virtual root) and links.
+ *
+ * @param side 'right' = nodes extend rightward (positive x), 'left' = mirrored
+ * @param children The children that go on this side
+ * @param rootId ID of the real root node (for link origins)
+ * @param depthOffset Depth offset (1, since these are children of root)
+ */
+function layoutSide(
+  side: 'right' | 'left',
+  children: TreeNode[],
+  rootId: string,
+  rootX: number,
+  rootY: number,
+): { nodes: PositionedNode[]; links: LayoutResult['links'] } {
+  if (children.length === 0) return { nodes: [], links: [] };
+
+  // Create a virtual root that holds the side's children
+  const virtualRoot: TreeNode = { id: `__virtual_${side}`, label: '', children };
+  const h = hierarchy(virtualRoot, (d) => (d.children.length > 0 ? d.children : null));
+
   const nodeVSpacing = NODE_HEIGHT + VERTICAL_GAP;
-  const nodeHSpacing = 180;
-
-  const treeLayout = d3tree<TreeNode>().nodeSize([nodeVSpacing, nodeHSpacing]);
+  const treeLayout = d3tree<TreeNode>().nodeSize([nodeVSpacing, 1]);
   const treeRoot = treeLayout(h);
 
-  // Collect all positioned nodes
-  const allNodes = treeRoot.descendants();
-  const allLinks = treeRoot.links();
+  // Compute max widths per depth to set proper horizontal offsets
+  const depthWidths = maxWidthPerDepth(treeRoot);
 
-  // Compute node widths based on label text
-  const positioned = allNodes.map((n) => {
-    const textW = estimateTextWidth(n.data.label);
-    const width = textW + NODE_PADDING_X * 2;
-    return {
+  // Compute cumulative x offset for each depth level
+  // depth 0 = virtual root (at rootX), depth 1 = first children, etc.
+  const depthX = new Map<number, number>();
+  depthX.set(0, 0);
+  let cumulativeX = 0;
+  const maxDepth = Math.max(...depthWidths.keys());
+  for (let d = 1; d <= maxDepth; d++) {
+    const parentWidth = depthWidths.get(d - 1) ?? 60;
+    const currentWidth = depthWidths.get(d) ?? 60;
+    cumulativeX += parentWidth / 2 + HORIZONTAL_GAP + currentWidth / 2;
+    depthX.set(d, cumulativeX);
+  }
+
+  const mirror = side === 'left' ? -1 : 1;
+  const nodes: PositionedNode[] = [];
+  const links: LayoutResult['links'] = [];
+
+  for (const n of treeRoot.descendants()) {
+    // Skip virtual root
+    if (n.depth === 0) continue;
+
+    const w = nodeWidth(n.data.label);
+    const xOffset = depthX.get(n.depth) ?? 0;
+
+    nodes.push({
       id: n.data.id,
       label: n.data.label,
-      // d3.tree uses x for vertical, y for horizontal (depth axis)
-      x: n.y, // horizontal position (depth)
-      y: n.x, // vertical position
-      width,
-      depth: n.depth,
-    };
-  });
+      x: rootX + mirror * xOffset,
+      // d3.tree: x = vertical position, y = depth (but we computed our own x)
+      y: rootY + n.x,
+      width: w,
+      depth: n.depth, // depth relative to virtual root; real depth = n.depth
+    });
+  }
 
-  // Compute links — connect right edge of source to left edge of target
-  const nodeById = new Map(positioned.map((n) => [n.id, n]));
-  const links = allLinks.map((link) => {
-    const source = nodeById.get(link.source.data.id)!;
-    const target = nodeById.get(link.target.data.id)!;
+  // Build links
+  for (const link of treeRoot.links()) {
+    if (link.source.depth === 0) {
+      // Link from real root to first-level children
+      const targetNode = nodes.find((n) => n.id === link.target.data.id);
+      if (targetNode) {
+        const rootW = nodeWidth(''); // Will be overridden by caller
+        links.push({
+          source: { x: rootX, y: rootY },
+          target: {
+            x: targetNode.x + (side === 'left' ? targetNode.width / 2 : -targetNode.width / 2),
+            y: targetNode.y,
+          },
+        });
+      }
+    } else {
+      const sourceNode = nodes.find((n) => n.id === link.source.data.id);
+      const targetNode = nodes.find((n) => n.id === link.target.data.id);
+      if (sourceNode && targetNode) {
+        links.push({
+          source: {
+            x: sourceNode.x + (side === 'left' ? -sourceNode.width / 2 : sourceNode.width / 2),
+            y: sourceNode.y,
+          },
+          target: {
+            x: targetNode.x + (side === 'left' ? targetNode.width / 2 : -targetNode.width / 2),
+            y: targetNode.y,
+          },
+        });
+      }
+    }
+  }
+
+  return { nodes, links };
+}
+
+export function computeLayout(root: TreeNode): LayoutResult {
+  const rootW = nodeWidth(root.label);
+
+  // Single node — just center it
+  if (root.children.length === 0) {
+    const pad = 16;
     return {
-      source: { x: source.x + source.width / 2, y: source.y },
-      target: { x: target.x - target.width / 2, y: target.y },
+      svgWidth: rootW + pad * 2,
+      svgHeight: NODE_HEIGHT + pad * 2,
+      nodes: [{
+        id: root.id,
+        label: root.label,
+        x: rootW / 2 + pad,
+        y: NODE_HEIGHT / 2 + pad,
+        width: rootW,
+        depth: 0,
+      }],
+      links: [],
     };
-  });
+  }
+
+  // Split children into right and left sides for balanced layout
+  const { right, left } = splitChildren(root.children);
+
+  // Root starts at origin (0, 0) — we'll translate after
+  const rootX = 0;
+  const rootY = 0;
+
+  const rightResult = layoutSide('right', right, root.id, rootX, rootY);
+  const leftResult = layoutSide('left', left, root.id, rootX, rootY);
+
+  // Merge all nodes
+  const allNodes: PositionedNode[] = [
+    { id: root.id, label: root.label, x: rootX, y: rootY, width: rootW, depth: 0 },
+    ...rightResult.nodes.map((n) => ({ ...n, depth: n.depth })),
+    ...leftResult.nodes.map((n) => ({ ...n, depth: n.depth })),
+  ];
+
+  // Fix root→child links to use actual root width
+  const fixRootLinks = (links: LayoutResult['links'], side: 'right' | 'left') =>
+    links.map((l) => {
+      if (l.source.x === rootX && l.source.y === rootY) {
+        return {
+          source: {
+            x: rootX + (side === 'right' ? rootW / 2 : -rootW / 2),
+            y: rootY,
+          },
+          target: l.target,
+        };
+      }
+      return l;
+    });
+
+  const allLinks = [
+    ...fixRootLinks(rightResult.links, 'right'),
+    ...fixRootLinks(leftResult.links, 'left'),
+  ];
 
   // Compute bounding box
   let minX = Infinity, maxX = -Infinity;
   let minY = Infinity, maxY = -Infinity;
-  for (const n of positioned) {
-    const left = n.x - n.width / 2;
-    const right = n.x + n.width / 2;
-    const top = n.y - NODE_HEIGHT / 2;
-    const bottom = n.y + NODE_HEIGHT / 2;
-    if (left < minX) minX = left;
-    if (right > maxX) maxX = right;
-    if (top < minY) minY = top;
-    if (bottom > maxY) maxY = bottom;
+  for (const n of allNodes) {
+    const l = n.x - n.width / 2;
+    const r = n.x + n.width / 2;
+    const t = n.y - NODE_HEIGHT / 2;
+    const b = n.y + NODE_HEIGHT / 2;
+    if (l < minX) minX = l;
+    if (r > maxX) maxX = r;
+    if (t < minY) minY = t;
+    if (b > maxY) maxY = b;
   }
 
-  // Add padding
   const pad = 16;
   minX -= pad;
   minY -= pad;
   maxX += pad;
   maxY += pad;
 
-  // Translate all coordinates so they start at (0,0)
   const offsetX = -minX;
   const offsetY = -minY;
 
   return {
     svgWidth: maxX - minX,
     svgHeight: maxY - minY,
-    nodes: positioned.map((n) => ({
-      ...n,
-      x: n.x + offsetX,
-      y: n.y + offsetY,
-    })),
-    links: links.map((l) => ({
+    nodes: allNodes.map((n) => ({ ...n, x: n.x + offsetX, y: n.y + offsetY })),
+    links: allLinks.map((l) => ({
       source: { x: l.source.x + offsetX, y: l.source.y + offsetY },
       target: { x: l.target.x + offsetX, y: l.target.y + offsetY },
     })),
