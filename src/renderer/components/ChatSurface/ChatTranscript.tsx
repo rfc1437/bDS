@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import Markdown from 'marked-react';
 import type { ChatMessage } from '../../types/electron';
 import type { ChatToolEvent } from '../../navigation/useChatSurfaceState';
@@ -49,6 +49,17 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
   onSurfaceDataChange,
   currentTurnIndex,
 }) => {
+  // Block external images — CSP only allows self/data/file/blob/bds-media/bds-thumb
+  const safeRenderer = {
+    image(src: string, alt: string): ReactNode {
+      if (/^https?:\/\//i.test(src)) {
+        // Show alt text as a link instead of trying to load the image
+        return <a href={src} key={src} title={alt}>{alt || src}</a>;
+      }
+      return <img src={src} alt={alt} key={src} />;
+    },
+  };
+
   const renderToolMarkers = (events: ChatToolEvent[]) => {
     if (events.length === 0) {
       return null;
@@ -160,7 +171,7 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
             </div>
           )}
           <div className="chat-message-text">
-            {message.role === 'assistant' ? <Markdown gfm>{message.content}</Markdown> : message.content}
+            {message.role === 'assistant' ? <Markdown gfm renderer={safeRenderer}>{message.content}</Markdown> : message.content}
           </div>
         </div>
       </div>
@@ -199,7 +210,7 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
               {showToolMarkers ? renderToolMarkers(toolEvents) : null}
               {streamingContent && (
                 <div className="chat-message-text">
-                  <Markdown gfm>{streamingContent}</Markdown>
+                  <Markdown gfm renderer={safeRenderer}>{streamingContent}</Markdown>
                 </div>
               )}
             </div>

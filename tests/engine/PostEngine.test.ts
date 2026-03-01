@@ -2419,9 +2419,9 @@ Published snapshot content`);
   });
 
   describe('searchPostsFiltered', () => {
-    it('should return empty array for empty query', async () => {
+    it('should return empty result for empty query', async () => {
       const result = await postEngine.searchPostsFiltered('', {});
-      expect(result).toEqual([]);
+      expect(result).toEqual({ posts: [], total: 0 });
     });
 
     it('should use FTS JOIN with posts table to combine search and filters', async () => {
@@ -2432,8 +2432,9 @@ Published snapshot content`);
       });
 
       const result = await postEngine.searchPostsFiltered('search term', { status: 'published' });
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('p1');
+      expect(result.posts).toHaveLength(1);
+      expect(result.posts[0].id).toBe('p1');
+      expect(result.total).toBe(1);
 
       // Verify SQL includes both MATCH and status filter
       const call = vi.mocked(mockLocalClient.execute).mock.calls[0]?.[0] as { sql?: string } | undefined;
@@ -2464,8 +2465,9 @@ Published snapshot content`);
       });
 
       const result = await postEngine.searchPostsFiltered('term', { tags: ['js'] });
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('p1');
+      expect(result.posts).toHaveLength(1);
+      expect(result.posts[0].id).toBe('p1');
+      expect(result.total).toBe(1);
     });
 
     it('should apply pagination with offset and limit', async () => {
@@ -2475,9 +2477,123 @@ Published snapshot content`);
       mockLocalClient.execute.mockResolvedValueOnce({ rows });
 
       const result = await postEngine.searchPostsFiltered('term', {}, { offset: 1, limit: 2 });
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('p1');
-      expect(result[1].id).toBe('p2');
+      expect(result.posts).toHaveLength(2);
+      expect(result.posts[0].id).toBe('p1');
+      expect(result.posts[1].id).toBe('p2');
+      expect(result.total).toBe(5);
+    });
+
+    it('should return total count reflecting tag filtering but not pagination', async () => {
+      const rows = Array.from({ length: 4 }, (_, i) => ({
+        id: `p${i}`, projectId: 'test-project', title: `Post ${i}`, slug: `post-${i}`, excerpt: null, content: '', status: 'published', author: null, createdAt: new Date(), updatedAt: new Date(), publishedAt: null, tags: i < 3 ? '["js"]' : '["python"]', categories: '[]', filePath: null, version: 1, stemmedTitle: '', stemmedContent: '', language: 'en', translationOfId: null, templateSlug: null,
+      }));
+      mockLocalClient.execute.mockResolvedValueOnce({ rows });
+
+      const result = await postEngine.searchPostsFiltered('term', { tags: ['js'] }, { offset: 0, limit: 2 });
+      expect(result.posts).toHaveLength(2);
+      expect(result.total).toBe(3); // 3 posts have 'js' tag, not 4 total
+    });
+  });
+
+  describe('getPostCounts', () => {
+    it('should return empty groups when no posts exist', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      const result = await postEngine.getPostCounts(['year']);
+      expect(result).toEqual({ groups: [], totalPosts: 0 });
+    });
+
+    it('should group by year', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { g_year: 2024, cnt: 15 },
+          { g_year: 2023, cnt: 10 },
+        ],
+      });
+
+      const result = await postEngine.getPostCounts(['year']);
+      expect(result.groups).toEqual([
+        { year: 2024, count: 15 },
+        { year: 2023, count: 10 },
+      ]);
+      expect(result.totalPosts).toBe(25);
+    });
+
+    it('should group by month and tag with year filter', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { g_month: 1, g_tag: 'Politik', cnt: 12 },
+          { g_month: 1, g_tag: 'Medien', cnt: 8 },
+          { g_month: 2, g_tag: 'Politik', cnt: 5 },
+        ],
+      });
+
+      const result = await postEngine.getPostCounts(['month', 'tag'], { year: 2004 });
+      expect(result.groups).toEqual([
+        { month: 1, tag: 'Politik', count: 12 },
+        { month: 1, tag: 'Medien', count: 8 },
+        { month: 2, tag: 'Politik', count: 5 },
+      ]);
+      expect(result.totalPosts).toBe(25);
+    });
+
+    it('should group by category and status', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { g_category: 'article', g_status: 'published', cnt: 20 },
+          { g_category: 'wiki', g_status: 'draft', cnt: 3 },
+        ],
+      });
+
+      const result = await postEngine.getPostCounts(['category', 'status']);
+      expect(result.groups).toEqual([
+        { category: 'article', status: 'published', count: 20 },
+        { category: 'wiki', status: 'draft', count: 3 },
+      ]);
+    });
+
+    it('should include year and month filters in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['tag'], { year: 2004, month: 6 });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('json_each');
+      expect(sql).toContain('group by');
+      expect(sql).toContain('created_at >=');
+      expect(sql).toContain('created_at <');
+    });
+
+    it('should include status filter in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['year'], { status: 'published' });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain("status = ?");
+    });
+
+    it('should include category filter in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['month'], { year: 2024, category: 'tech' });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('json_each');
+      expect(sql).toContain('categories');
+    });
+
+    it('should include tags filter in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['year'], { tags: ['js', 'react'] });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('json_each');
     });
   });
 

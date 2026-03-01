@@ -3,6 +3,8 @@
  *
  * Tests that API keys are stored/retrieved via SecureKeyStore (encrypted)
  * and that old plain-text keys are cleaned up on startup.
+ *
+ * Post-Phase 2: chatHandlers uses ProviderRegistry + ChatService, not OpenCodeManager.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +19,7 @@ const mainWindowMock = {
 };
 
 const chatEngineInstances: Array<Record<string, any>> = [];
-const openCodeManagerInstances: Array<Record<string, any>> = [];
+const providerRegistryInstances: Array<Record<string, any>> = [];
 const secureKeyStoreInstances: Array<Record<string, any>> = [];
 
 // Per-test overrides for SecureKeyStore mock behavior
@@ -88,24 +90,46 @@ vi.mock('../../src/main/engine/SecureKeyStore', () => ({
   },
 }));
 
-vi.mock('../../src/main/engine/OpenCodeManager', () => ({
-  OpenCodeManager: class {
+vi.mock('../../src/main/engine/ai/providers', () => ({
+  ProviderRegistry: class {
     constructor() {
       const instance = {
-        setApiKey: vi.fn(),
-        checkReady: vi.fn(async () => ({ ready: true })),
-        validateApiKey: vi.fn(async () => ({ isValid: true, models: [] })),
-        getApiKey: vi.fn(() => 'abc12345'),
+        setOpencodeKey: vi.fn(),
+        getOpencodeKey: vi.fn(() => 'abc12345'),
+        setMistralKey: vi.fn(),
+        getMistralKey: vi.fn(() => ''),
+        isReady: vi.fn(() => true),
+        isProviderKeySet: vi.fn(() => true),
+        getProviderStatus: vi.fn(() => ({ opencode: true, mistral: false })),
+        resolveModel: vi.fn(),
         getAvailableModels: vi.fn(async () => []),
-        sendMessage: vi.fn(async () => ({ success: true, message: 'reply' })),
-        abortMessage: vi.fn(async () => ({ success: true })),
-        analyzeTaxonomy: vi.fn(async () => ({ success: true })),
-        analyzeMediaImage: vi.fn(async () => ({ success: true })),
-        stop: vi.fn(async () => undefined),
+        validateOpencodeKey: vi.fn(async () => ({ isValid: true, models: [] })),
+        validateMistralKey: vi.fn(async () => ({ isValid: true, models: [] })),
+        invalidateModelCache: vi.fn(),
+        getModelCatalogEngine: vi.fn(() => ({ refresh: vi.fn(async () => ({})), getAll: vi.fn(async () => []) })),
       };
-      openCodeManagerInstances.push(instance);
+      providerRegistryInstances.push(instance);
       return instance;
     }
+  },
+  detectProvider: vi.fn(() => 'anthropic'),
+  createOpenCodeGateway: vi.fn(),
+}));
+
+vi.mock('../../src/main/engine/ai/chat', () => ({
+  ChatService: class {
+    constructor() { /* no-op */ }
+    sendMessage = vi.fn(async () => ({ success: true, message: 'reply' }));
+    abortMessage = vi.fn(async () => ({ success: true }));
+    stop = vi.fn(async () => undefined);
+  },
+}));
+
+vi.mock('../../src/main/engine/ai/tasks', () => ({
+  OneShotTasks: class {
+    constructor() { /* no-op */ }
+    analyzeTaxonomy = vi.fn(async () => ({ success: true }));
+    analyzeMediaImage = vi.fn(async () => ({ success: true }));
   },
 }));
 
@@ -114,7 +138,7 @@ describe('chatHandlers keychain integration', () => {
     registeredHandlers.clear();
     webContentsSend.mockReset();
     chatEngineInstances.length = 0;
-    openCodeManagerInstances.length = 0;
+    providerRegistryInstances.length = 0;
     secureKeyStoreInstances.length = 0;
     secureKeyStoreRetrieveResult = 'encrypted-stored-key';
     secureKeyStoreStoreError = null;
@@ -141,8 +165,8 @@ describe('chatHandlers keychain integration', () => {
     const keyStore = secureKeyStoreInstances[0];
     expect(keyStore.retrieve).toHaveBeenCalledWith('opencode_api_key');
 
-    const manager = openCodeManagerInstances[0];
-    expect(manager.setApiKey).toHaveBeenCalledWith('encrypted-stored-key');
+    const registry = providerRegistryInstances[0];
+    expect(registry.setOpencodeKey).toHaveBeenCalledWith('encrypted-stored-key');
   });
 
   it('cleans up old plain-text key on init', async () => {
@@ -173,8 +197,8 @@ describe('chatHandlers keychain integration', () => {
     const keyStore = secureKeyStoreInstances[0];
     expect(keyStore.store).toHaveBeenCalledWith('opencode_api_key', 'sk-new-secret-key');
 
-    const manager = openCodeManagerInstances[0];
-    expect(manager.setApiKey).toHaveBeenCalledWith('sk-new-secret-key');
+    const registry = providerRegistryInstances[0];
+    expect(registry.setOpencodeKey).toHaveBeenCalledWith('sk-new-secret-key');
   });
 
   it('does not use plain-text getSetting for API key', async () => {
@@ -218,9 +242,9 @@ describe('chatHandlers keychain integration', () => {
     const result = await handler!(undefined);
     expect(result.ready).toBe(true);
 
-    const manager = openCodeManagerInstances[0];
-    // setApiKey should NOT have been called since there's no stored key
-    expect(manager.setApiKey).not.toHaveBeenCalled();
+    const registry = providerRegistryInstances[0];
+    // setOpencodeKey should NOT have been called since there's no stored key
+    expect(registry.setOpencodeKey).not.toHaveBeenCalled();
   });
 
   it('still initializes when retrieve() throws on init', async () => {
@@ -236,8 +260,8 @@ describe('chatHandlers keychain integration', () => {
     // Init should complete even if key retrieval fails
     expect(result.ready).toBe(true);
 
-    const manager = openCodeManagerInstances[0];
-    expect(manager.setApiKey).not.toHaveBeenCalled();
+    const registry = providerRegistryInstances[0];
+    expect(registry.setOpencodeKey).not.toHaveBeenCalled();
   });
 
   it('still initializes and loads key when cleanupPlainTextKey() throws on init', async () => {
@@ -254,8 +278,8 @@ describe('chatHandlers keychain integration', () => {
     expect(result.ready).toBe(true);
 
     // The encrypted key should still be loaded despite cleanup failure
-    const manager = openCodeManagerInstances[0];
-    expect(manager.setApiKey).toHaveBeenCalledWith('encrypted-stored-key');
+    const registry = providerRegistryInstances[0];
+    expect(registry.setOpencodeKey).toHaveBeenCalledWith('encrypted-stored-key');
   });
 
   it('returns error and rolls back in-memory key when store() throws on chat:setApiKey', async () => {
@@ -270,13 +294,13 @@ describe('chatHandlers keychain integration', () => {
     const checkHandler = registeredHandlers.get('chat:checkReady');
     await checkHandler!(undefined);
 
-    const manager = openCodeManagerInstances[0];
-    // After init, the manager has the key from SecureKeyStore
-    expect(manager.setApiKey).toHaveBeenCalledWith('encrypted-stored-key');
-    manager.setApiKey.mockClear();
+    const registry = providerRegistryInstances[0];
+    // After init, the registry has the key from SecureKeyStore
+    expect(registry.setOpencodeKey).toHaveBeenCalledWith('encrypted-stored-key');
+    registry.setOpencodeKey.mockClear();
 
-    // getApiKey returns the current in-memory key (to be restored on rollback)
-    manager.getApiKey.mockReturnValue('encrypted-stored-key');
+    // getOpencodeKey returns the current in-memory key (to be restored on rollback)
+    registry.getOpencodeKey.mockReturnValue('encrypted-stored-key');
 
     const handler = registeredHandlers.get('chat:setApiKey');
     const result = await handler!(undefined, 'sk-new-key');
@@ -284,10 +308,10 @@ describe('chatHandlers keychain integration', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('encryption unavailable');
 
-    // setApiKey should have been called twice:
+    // setOpencodeKey should have been called twice:
     // 1) with the new key (optimistic), 2) with the old key (rollback)
-    expect(manager.setApiKey).toHaveBeenCalledTimes(2);
-    expect(manager.setApiKey).toHaveBeenNthCalledWith(1, 'sk-new-key');
-    expect(manager.setApiKey).toHaveBeenNthCalledWith(2, 'encrypted-stored-key');
+    expect(registry.setOpencodeKey).toHaveBeenCalledTimes(2);
+    expect(registry.setOpencodeKey).toHaveBeenNthCalledWith(1, 'sk-new-key');
+    expect(registry.setOpencodeKey).toHaveBeenNthCalledWith(2, 'encrypted-stored-key');
   });
 });

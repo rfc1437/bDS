@@ -70,6 +70,9 @@
     "wait-on": "^9.0.3"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.50",
+    "@ai-sdk/mistral": "^3.0.21",
+    "@ai-sdk/openai": "^3.0.37",
     "@braintree/sanitize-url": "^7.1.2",
     "@floating-ui/dom": "^1.7.5",
     "@highlightjs/cdn-assets": "^11.11.1",
@@ -89,6 +92,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@picocss/pico": "^2.1.1",
     "@xmldom/xmldom": "^0.8.11",
+    "ai": "^6.0.105",
     "chokidar": "^5.0.0",
     "d3-cloud": "^1.2.8",
     "date-fns": "^4.1.0",
@@ -163,7 +167,9 @@
       {
         "from": "src/main/engine/assets",
         "to": "assets",
-        "filter": ["*.css"]
+        "filter": [
+          "*.css"
+        ]
       }
     ],
     "protocols": [

@@ -25,8 +25,6 @@ Decision: which model is better for my usecases?
 
 3. Integration
 
-Ollama is using OpenAI protocols, so should be easy to integrate as a third AI provider.
-
-Important: models for different defaults in Preferences must be able to be configured to span multiple providers if multiple ones are set up.
+Ollama is using OpenAI protocols, so should be easy to integrate with AI SDK.
 
 Ollama integration - if activated - must do a check if ollama is serving the model, and if not give a message to the user, so they can fire up ollama, since it won't always be running.
