@@ -227,9 +227,9 @@ describe('PostEngine', () => {
       expect(post.slug).toBe('multiple-spaces-here');
     });
 
-    it('should handle unicode characters by removing them', async () => {
+    it('should handle unicode characters by transliterating them', async () => {
       const post = await postEngine.createPost({ title: 'Café Test' });
-      expect(post.slug).toBe('caf-test');
+      expect(post.slug).toBe('cafe-test');
     });
   });
 

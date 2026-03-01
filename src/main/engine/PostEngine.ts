@@ -13,6 +13,7 @@ import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 import type { MediaEngine } from './MediaEngine';
+import { slugify } from './slugify';
 
 export interface PostData {
   id: string;
@@ -216,10 +217,7 @@ export class PostEngine extends EventEmitter {
   }
 
   private generateSlug(title: string): string {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    return slugify(title);
   }
 
   /**

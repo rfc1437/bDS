@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { projects, posts, media, Project, NewProject } from '../database/schema';
+import { slugify } from './slugify';
 
 export interface ProjectData {
   id: string;
@@ -43,10 +44,7 @@ export class ProjectEngine extends EventEmitter {
   }
 
   private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    return slugify(name);
   }
 
   /**
