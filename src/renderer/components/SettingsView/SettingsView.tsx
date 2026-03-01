@@ -245,6 +245,9 @@ export const SettingsView: React.FC = () => {
   const [aiHasMistralKey, setAiHasMistralKey] = useState(false);
   const [aiMistralKeyMasked, setAiMistralKeyMasked] = useState('');
   const [newMistralKey, setNewMistralKey] = useState('');
+  const [ollamaEnabled, setOllamaEnabled] = useState(false);
+  const [ollamaCapabilities, setOllamaCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
+  const [ollamaModels, setOllamaModels] = useState<{id: string; name: string}[]>([]);
   const [titleModel, setTitleModel] = useState('claude-haiku-4-5');
   const [imageAnalysisModel, setImageAnalysisModel] = useState('claude-sonnet-4-5');
   const [availableModels, setAvailableModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
@@ -415,6 +418,20 @@ export const SettingsView: React.FC = () => {
             setAiMistralKeyMasked(mistralKeyResult.maskedKey || '');
           }
 
+          // Load Ollama enabled state
+          const ollamaState = await window.electronAPI?.chat.getOllamaEnabled();
+          setOllamaEnabled(!!ollamaState);
+
+          // Load Ollama model capabilities and models list
+          if (ollamaState) {
+            const [caps, models] = await Promise.all([
+              window.electronAPI?.chat.getOllamaModelCapabilities(),
+              window.electronAPI?.chat.getOllamaModels(),
+            ]);
+            if (caps) setOllamaCapabilities(caps);
+            if (models) setOllamaModels(models.map(m => ({ id: m.id, name: m.name })));
+          }
+
           // Load per-purpose model preferences
           const titleModelResult = await window.electronAPI?.chat.getTitleModel();
           if (titleModelResult?.success && titleModelResult.modelId) {
@@ -536,7 +553,7 @@ export const SettingsView: React.FC = () => {
   const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'url', 'public', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page', 'bookmarklet', 'blogmark'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
-  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode'];
+  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode', 'ollama', 'local'];
   const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
   const publishingKeywords = ['publishing', 'ssh', 'deploy', 'server', 'host', 'upload', 'scp', 'rsync'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
@@ -1144,6 +1161,55 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleOllamaToggle = async (enabled: boolean) => {
+    try {
+      const result = await window.electronAPI?.chat.setOllamaEnabled(enabled);
+      if (result?.success) {
+        setOllamaEnabled(enabled);
+        showToast.success(t(enabled ? 'settings.toast.ollamaEnabled' : 'settings.toast.ollamaDisabled'));
+
+        // Refresh models after toggle
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+          setSelectedModel(modelsResult.selectedModel || '');
+        }
+
+        // Load Ollama models and capabilities when enabling
+        if (enabled) {
+          const [caps, ollamaModelsList] = await Promise.all([
+            window.electronAPI?.chat.getOllamaModelCapabilities(),
+            window.electronAPI?.chat.getOllamaModels(),
+          ]);
+          if (caps) setOllamaCapabilities(caps);
+          if (ollamaModelsList) setOllamaModels(ollamaModelsList.map(m => ({ id: m.id, name: m.name })));
+        } else {
+          setOllamaModels([]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle Ollama:', error);
+    }
+  };
+
+  const handleOllamaCapabilityToggle = async (modelId: string, field: 'tools' | 'vision', value: boolean) => {
+    const current = ollamaCapabilities[modelId] ?? { tools: false, vision: false };
+    const updated = { ...current, [field]: value };
+    try {
+      const result = await window.electronAPI?.chat.setOllamaModelCapabilities(modelId, updated);
+      if (result?.success) {
+        setOllamaCapabilities(prev => ({ ...prev, [modelId]: updated }));
+        // Refresh available models to reflect vision change
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update Ollama model capabilities:', error);
+    }
+  };
+
   const handleTitleModelChange = async (modelId: string) => {
     try {
       const result = await window.electronAPI?.chat.setTitleModel(modelId);
@@ -1236,6 +1302,7 @@ export const SettingsView: React.FC = () => {
   const providerLabel = (provider: string) => {
     if (provider === 'anthropic' || provider === 'openai' || provider === 'google' || provider === 'other') return t('settings.ai.providerOpenCode');
     if (provider === 'mistral') return t('settings.ai.providerMistral');
+    if (provider === 'ollama') return t('settings.ai.providerOllama');
     return provider;
   };
 
@@ -1347,16 +1414,75 @@ export const SettingsView: React.FC = () => {
       </SettingRow>
 
       <SettingRow
+        id="ai-ollama"
+        label={t('settings.ai.ollamaLabel')}
+        description={t('settings.ai.ollamaDescription')}
+      >
+        <div className="setting-input-group">
+          <label className="toggle-label">
+            <input
+              id="ai-ollama"
+              type="checkbox"
+              checked={ollamaEnabled}
+              onChange={(e) => handleOllamaToggle(e.target.checked)}
+            />
+            {t('settings.ai.ollamaEnable')}
+          </label>
+          {ollamaEnabled && (
+            <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+          )}
+        </div>
+        {ollamaEnabled && ollamaModels.length > 0 && (
+          <div className="ollama-model-capabilities">
+            <small className="setting-description">{t('settings.ai.ollamaCapabilitiesDescription')}</small>
+            <table className="ollama-caps-table">
+              <thead>
+                <tr>
+                  <th>{t('settings.ai.ollamaCapModel')}</th>
+                  <th>{t('settings.ai.ollamaCapTools')}</th>
+                  <th>{t('settings.ai.ollamaCapVision')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ollamaModels.map(m => {
+                  const caps = ollamaCapabilities[m.id] ?? { tools: false, vision: false };
+                  return (
+                    <tr key={m.id}>
+                      <td>{m.name}</td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={caps.tools}
+                          onChange={(e) => handleOllamaCapabilityToggle(m.id, 'tools', e.target.checked)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={caps.vision}
+                          onChange={(e) => handleOllamaCapabilityToggle(m.id, 'vision', e.target.checked)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
         id="ai-model"
         label={t('settings.ai.defaultModelLabel')}
         description={t('settings.ai.defaultModelDescription')}
       >
         <div className="setting-input-group">
-          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey)}
+          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
           <button
             className="secondary"
             onClick={handleRefreshModelCatalog}
-            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey)}
+            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
             title={t('settings.ai.refreshModelCatalog')}
           >
             {refreshingCatalog ? t('settings.ai.refreshing') : t('settings.ai.refreshModelCatalog')}
@@ -1388,7 +1514,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.titleModelLabel')}
         description={t('settings.ai.titleModelDescription')}
       >
-        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey)}
+        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
       </SettingRow>
 
       <SettingRow
@@ -1396,7 +1522,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.imageAnalysisModelLabel')}
         description={t('settings.ai.imageAnalysisModelDescription')}
       >
-        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey, groupedVisionModels)}
+        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled, groupedVisionModels)}
       </SettingRow>
 
       <SettingRow

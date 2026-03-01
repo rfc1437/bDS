@@ -8,7 +8,7 @@
 import { generateText } from 'ai';
 import type { ChatEngine } from '../ChatEngine';
 import type { MediaEngine } from '../MediaEngine';
-import { ProviderRegistry, detectProvider } from './providers';
+import { ProviderRegistry } from './providers';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,9 +68,9 @@ export class OneShotTasks {
     tags: Array<{ name: string; slug: string; existsInProject: boolean }>,
     modelId: string,
   ): Promise<TaxonomyAnalysisResult> {
-    const provider = detectProvider(modelId);
+    const provider = this.providers.detectModelProvider(modelId);
     if (!this.providers.isProviderKeySet(provider)) {
-      const providerLabel = provider === 'mistral' ? 'Mistral' : 'OpenCode';
+      const providerLabel = provider === 'mistral' ? 'Mistral' : provider === 'ollama' ? 'Ollama' : 'OpenCode';
       return { success: false, error: `${providerLabel} API key not set` };
     }
 
@@ -187,7 +187,7 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
   ): Promise<ImageAnalysisResult> {
     // Determine model with smart fallback
     let modelId = await this.chatEngine.getSetting('chat_image_analysis_model');
-    if (!modelId || !this.providers.isProviderKeySet(detectProvider(modelId))) {
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
       modelId = this.providers.getOpencodeKey()
         ? 'claude-sonnet-4-5'
         : this.providers.getMistralKey()

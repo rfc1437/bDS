@@ -27,8 +27,11 @@ import type { ChatModel } from '../../shared/electronApi';
 export const ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
 export const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 export const MISTRAL_MODELS_URL = 'https://api.mistral.ai/v1/models';
+export const OLLAMA_BASE_URL = 'http://localhost:11434/v1';
+export const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
 
 const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const OLLAMA_FETCH_TIMEOUT = 3000; // 3 s — fail fast when Ollama isn't running
 
 // ---------------------------------------------------------------------------
 // Gateway factory
@@ -99,8 +102,12 @@ export function detectProvider(modelId: string): string {
 export class ProviderRegistry {
   private opencodeKey = '';
   private mistralKey = '';
+  private ollamaEnabled = false;
   private opencodeGateway: Provider | null = null;
   private mistralProvider: ReturnType<typeof createMistral> | null = null;
+  private ollamaProvider: ReturnType<typeof createOpenAI> | null = null;
+  private ollamaModelIds = new Set<string>();
+  private ollamaCapabilities = new Map<string, { tools: boolean; vision: boolean }>();
   private modelCatalogEngine = new ModelCatalogEngine();
 
   // Model cache
@@ -129,22 +136,100 @@ export class ProviderRegistry {
     return this.mistralKey;
   }
 
+  // ---- Ollama management ----
+
+  setOllamaEnabled(enabled: boolean): void {
+    this.ollamaEnabled = enabled;
+    this.ollamaProvider = null;
+    this.invalidateModelCache();
+  }
+
+  isOllamaEnabled(): boolean {
+    return this.ollamaEnabled;
+  }
+
+  /** Register a model ID as belonging to Ollama. */
+  registerOllamaModel(modelId: string): void {
+    this.ollamaModelIds.add(modelId);
+  }
+
+  /** Check whether a model ID was registered as an Ollama model. */
+  isOllamaModel(modelId: string): boolean {
+    return this.ollamaModelIds.has(modelId);
+  }
+
+  /** Remove all registered Ollama model IDs. */
+  clearOllamaModels(): void {
+    this.ollamaModelIds.clear();
+  }
+
+  // ---- Ollama model capability overrides ----
+
+  /** Get capability overrides for a specific Ollama model (defaults to tools=false, vision=false). */
+  getOllamaModelCapabilities(modelId: string): { tools: boolean; vision: boolean } {
+    return this.ollamaCapabilities.get(modelId) ?? { tools: false, vision: false };
+  }
+
+  /** Set capability overrides for a specific Ollama model. */
+  setOllamaModelCapabilities(modelId: string, caps: { tools: boolean; vision: boolean }): void {
+    this.ollamaCapabilities.set(modelId, caps);
+    this.invalidateModelCache();
+  }
+
+  /** Get all stored capability overrides as a plain object. */
+  getAllOllamaModelCapabilities(): Record<string, { tools: boolean; vision: boolean }> {
+    const result: Record<string, { tools: boolean; vision: boolean }> = {};
+    for (const [id, caps] of this.ollamaCapabilities) {
+      result[id] = caps;
+    }
+    return result;
+  }
+
+  /** Load capability overrides from a serialized object (e.g. from settings DB). */
+  loadOllamaModelCapabilities(data: Record<string, { tools: boolean; vision: boolean }>): void {
+    this.ollamaCapabilities.clear();
+    for (const [id, caps] of Object.entries(data)) {
+      this.ollamaCapabilities.set(id, caps);
+    }
+  }
+
+  /** Check whether an Ollama model has tools capability enabled. */
+  ollamaModelSupportsTools(modelId: string): boolean {
+    return this.ollamaCapabilities.get(modelId)?.tools ?? false;
+  }
+
+  /** Check whether an Ollama model has vision capability enabled. */
+  ollamaModelSupportsVision(modelId: string): boolean {
+    return this.ollamaCapabilities.get(modelId)?.vision ?? false;
+  }
+
+  /**
+   * Detect the effective provider for a model ID, checking Ollama
+   * registration first, then falling back to prefix-based detection.
+   */
+  detectModelProvider(modelId: string): string {
+    if (this.ollamaModelIds.has(modelId)) return 'ollama';
+    return detectProvider(modelId);
+  }
+
   /** Check whether at least one provider key is configured. */
   isReady(): boolean {
-    return !!(this.opencodeKey || this.mistralKey);
+    return !!(this.opencodeKey || this.mistralKey || this.ollamaEnabled);
   }
 
   /** Check whether the key for a specific provider is set. */
   isProviderKeySet(provider: string): boolean {
     if (provider === 'mistral') return !!this.mistralKey;
+    if (provider === 'ollama') return this.ollamaEnabled;
     return !!this.opencodeKey;
   }
 
   /** Returns status of all configured providers. */
-  getProviderStatus(): { opencode: boolean; mistral: boolean } {
+  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean } {
     return {
       opencode: !!this.opencodeKey,
       mistral: !!this.mistralKey,
+      ollama: this.ollamaEnabled,
     };
   }
 
@@ -152,6 +237,20 @@ export class ProviderRegistry {
 
   /** Resolve a model ID to an AI SDK LanguageModel. */
   resolveModel(modelId: string): LanguageModel {
+    // Check if this is a registered Ollama model first
+    if (this.ollamaModelIds.has(modelId)) {
+      if (!this.ollamaEnabled) {
+        throw new Error(`Ollama not configured for model '${modelId}'`);
+      }
+      if (!this.ollamaProvider) {
+        this.ollamaProvider = createOpenAI({
+          baseURL: OLLAMA_BASE_URL,
+          apiKey: 'ollama', // Ollama doesn't need a real key
+        });
+      }
+      return this.ollamaProvider.chat(modelId);
+    }
+
     const provider = detectProvider(modelId);
 
     if (provider === 'mistral') {
@@ -229,6 +328,17 @@ export class ProviderRegistry {
       }
     }
 
+    // Fetch Ollama models
+    if (this.ollamaEnabled) {
+      try {
+        const models = await this.fetchOllamaModels();
+        allModels.push(...models);
+        if (models.length > 0) fetched = true;
+      } catch {
+        // Ollama not running — skip silently
+      }
+    }
+
     if (fetched && allModels.length > 0) {
       this.cachedModels = allModels;
       this.cachedModelsAt = Date.now();
@@ -280,6 +390,39 @@ export class ProviderRegistry {
       return { isValid: true, models };
     } catch {
       return { isValid: false, models: [] };
+    }
+  }
+
+  // ---- Ollama model listing ----
+
+  /**
+   * Fetch available models from Ollama's /api/tags endpoint.
+   * Returns ChatModel[] and registers the model IDs internally.
+   */
+  async fetchOllamaModels(): Promise<ChatModel[]> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), OLLAMA_FETCH_TIMEOUT);
+      const response = await fetch(OLLAMA_TAGS_URL, { method: 'GET', signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) return [];
+
+      const data = await response.json() as { models?: Array<{ name: string; details?: { family?: string } }> };
+      if (!data.models || !Array.isArray(data.models)) return [];
+
+      this.clearOllamaModels();
+      const models: ChatModel[] = data.models.map(m => {
+        this.registerOllamaModel(m.name);
+        return {
+          id: m.name,
+          name: m.name,
+          provider: 'ollama',
+          vision: this.ollamaModelSupportsVision(m.name),
+        };
+      });
+      return models;
+    } catch {
+      return [];
     }
   }
 

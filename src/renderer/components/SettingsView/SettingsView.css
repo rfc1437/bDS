@@ -532,3 +532,36 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+/* Ollama model capabilities table */
+.ollama-model-capabilities {
+  margin-top: 12px;
+}
+
+.ollama-model-capabilities .setting-description {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.ollama-caps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.ollama-caps-table th,
+.ollama-caps-table td {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--pico-muted-border-color, #ccc);
+}
+
+.ollama-caps-table th:not(:first-child),
+.ollama-caps-table td:not(:first-child) {
+  text-align: center;
+  width: 80px;
+}
+
+.ollama-caps-table input[type="checkbox"] {
+  margin: 0;
+}

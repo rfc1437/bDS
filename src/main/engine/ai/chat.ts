@@ -16,7 +16,7 @@ import type { BrowserWindow } from 'electron';
 import type { ChatEngine, ChatMessageData } from '../ChatEngine';
 import { isRenderTool, generateFromToolCall } from '../../a2ui/generator';
 import type { A2UIServerMessage } from '../../a2ui/types';
-import { ProviderRegistry, detectProvider } from './providers';
+import { ProviderRegistry } from './providers';
 import { createBlogTools, type BlogToolDeps } from './blog-tools';
 import { createA2UITools } from './a2ui-tools';
 
@@ -247,11 +247,11 @@ export class ChatService {
       this.abortControllers.set(conversationId, abortController);
 
       const modelId = conversation.model || 'claude-sonnet-4';
-      const provider = detectProvider(modelId);
+      const provider = this.providers.detectModelProvider(modelId);
 
       // Verify provider key is available
       if (!this.providers.isProviderKeySet(provider)) {
-        const providerLabel = provider === 'mistral' ? 'Mistral' : 'OpenCode';
+        const providerLabel = provider === 'mistral' ? 'Mistral' : provider === 'ollama' ? 'Ollama' : 'OpenCode';
         return { success: false, error: `The model '${modelId}' requires a ${providerLabel} API key. Configure it in Settings.` };
       }
 
@@ -271,10 +271,13 @@ export class ChatService {
 
       const aiMessages = dbMessagesToAIMessages(dbMessages);
 
-      // Build tools
-      const blogTools = createBlogTools(this.blogToolDeps);
-      const a2uiToolsRaw = createA2UITools();
+      // Build tools (skip for Ollama models unless capability override is set)
+      const isOllama = this.providers.isOllamaModel(modelId);
+      const skipTools = isOllama && !this.providers.ollamaModelSupportsTools(modelId);
+      const blogTools = skipTools ? {} : createBlogTools(this.blogToolDeps);
+      const a2uiToolsRaw = skipTools ? {} : createA2UITools();
       const allTools = { ...blogTools, ...a2uiToolsRaw };
+      const hasTools = Object.keys(allTools).length > 0;
 
       // Get context window for truncation
       const contextWindow = await this.providers.getModelCatalogEngine().getContextWindow(modelId) ?? 150_000;
@@ -301,12 +304,14 @@ export class ChatService {
 
       try {
         // --- streamText: the AI SDK replaces our entire SSE/accumulator/tool-loop ---
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tools may be empty for Ollama models
+        const toolsOption = hasTools ? allTools : undefined as any;
         const result = streamText({
           model,
           system: systemPrompt,
           messages: truncatedMessages,
-          tools: allTools,
-          stopWhen: stepCountIs(MAX_TOOL_ROUNDS),
+          tools: toolsOption,
+          stopWhen: hasTools ? stepCountIs(MAX_TOOL_ROUNDS) : undefined,
           abortSignal: abortController.signal,
           maxRetries: 3,
           providerOptions,
@@ -435,7 +440,7 @@ export class ChatService {
       let titleModel = await this.chatEngine.getSetting('chat_title_model');
 
       // Fallback chain: setting → haiku → mistral-small
-      if (!titleModel || !this.providers.isProviderKeySet(detectProvider(titleModel))) {
+      if (!titleModel || !this.providers.isProviderKeySet(this.providers.detectModelProvider(titleModel))) {
         titleModel = this.providers.getOpencodeKey()
           ? 'claude-haiku-4-5'
           : this.providers.getMistralKey()

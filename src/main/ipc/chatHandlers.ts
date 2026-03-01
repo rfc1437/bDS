@@ -109,6 +109,21 @@ async function ensureInitialized(): Promise<void> {
         const mistralKey = await keyStore.retrieve('mistral_api_key');
         if (mistralKey) reg.setMistralKey(mistralKey);
       } catch { /* ignore */ }
+
+      // Restore Ollama enabled state from settings DB
+      try {
+        const ollamaEnabled = await getChatEngine().getSetting('ollama_enabled');
+        if (ollamaEnabled === 'true') reg.setOllamaEnabled(true);
+      } catch { /* ignore */ }
+
+      // Restore Ollama model capability overrides
+      try {
+        const capsJson = await getChatEngine().getSetting('ollama_model_capabilities');
+        if (capsJson) {
+          const caps = JSON.parse(capsJson) as Record<string, { tools: boolean; vision: boolean }>;
+          reg.loadOllamaModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
     })();
   }
   await initPromise;
@@ -234,6 +249,74 @@ export function registerChatHandlers(): void {
     } catch (error) {
       console.error('[Chat IPC] Error getting Mistral API key:', error);
       return { hasKey: false, maskedKey: '' };
+    }
+  });
+
+  // ============ Ollama (Local) ============
+
+  // Get Ollama enabled state
+  ipcMain.handle('chat:getOllamaEnabled', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().isOllamaEnabled();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting Ollama enabled state:', error);
+      return false;
+    }
+  });
+
+  // Set Ollama enabled state
+  ipcMain.handle('chat:setOllamaEnabled', async (_, enabled: boolean) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setOllamaEnabled(enabled);
+
+      // Persist to settings DB
+      await getChatEngine().setSetting('ollama_enabled', enabled ? 'true' : 'false');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting Ollama enabled state:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get Ollama models (probe local server)
+  ipcMain.handle('chat:getOllamaModels', async () => {
+    try {
+      await ensureInitialized();
+      return await getProviders().fetchOllamaModels();
+    } catch (error) {
+      console.error('[Chat IPC] Error fetching Ollama models:', error);
+      return [];
+    }
+  });
+
+  // Get Ollama model capability overrides
+  ipcMain.handle('chat:getOllamaModelCapabilities', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getAllOllamaModelCapabilities();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting Ollama model capabilities:', error);
+      return {};
+    }
+  });
+
+  // Set capability overrides for a single Ollama model
+  ipcMain.handle('chat:setOllamaModelCapabilities', async (_, modelId: string, caps: { tools: boolean; vision: boolean }) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setOllamaModelCapabilities(modelId, caps);
+
+      // Persist all capabilities to settings DB
+      const allCaps = reg.getAllOllamaModelCapabilities();
+      await getChatEngine().setSetting('ollama_model_capabilities', JSON.stringify(allCaps));
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting Ollama model capabilities:', error);
+      return { success: false, error: (error as Error).message };
     }
   });
 

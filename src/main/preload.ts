@@ -314,6 +314,13 @@ export const electronAPI: ElectronAPI = {
     setMistralApiKey: (apiKey: string) => ipcRenderer.invoke('chat:setMistralApiKey', apiKey),
     getMistralApiKey: () => ipcRenderer.invoke('chat:getMistralApiKey'),
 
+    // Ollama (Local)
+    getOllamaEnabled: () => ipcRenderer.invoke('chat:getOllamaEnabled'),
+    setOllamaEnabled: (enabled: boolean) => ipcRenderer.invoke('chat:setOllamaEnabled', enabled),
+    getOllamaModels: () => ipcRenderer.invoke('chat:getOllamaModels'),
+    getOllamaModelCapabilities: () => ipcRenderer.invoke('chat:getOllamaModelCapabilities'),
+    setOllamaModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setOllamaModelCapabilities', modelId, caps),
+
     // Per-Purpose Model Preferences
     getTitleModel: () => ipcRenderer.invoke('chat:getTitleModel'),
     setTitleModel: (modelId: string | null) => ipcRenderer.invoke('chat:setTitleModel', modelId),
