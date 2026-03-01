@@ -11,6 +11,7 @@ const mainWindowMock = {
 
 const chatEngineInstances: Array<Record<string, any>> = [];
 const openCodeManagerInstances: Array<Record<string, any>> = [];
+const secureKeyStoreInstances: Array<Record<string, any>> = [];
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -39,8 +40,9 @@ vi.mock('../../src/main/engine/ChatEngine', () => ({
   ChatEngine: class {
     constructor() {
       const instance = {
-        getSetting: vi.fn(async (key: string) => (key === 'opencode_api_key' ? 'stored-key' : null)),
+        getSetting: vi.fn(async () => null),
         setSetting: vi.fn(async () => undefined),
+        deleteSetting: vi.fn(async () => undefined),
         getSelectedModel: vi.fn(async () => 'gpt-5'),
         getDefaultSystemPrompt: vi.fn(async () => 'system prompt'),
       };
@@ -86,12 +88,29 @@ vi.mock('../../src/main/engine/OpenCodeManager', () => ({
   },
 }));
 
+vi.mock('../../src/main/engine/SecureKeyStore', () => ({
+  SecureKeyStore: class {
+    constructor() {
+      const instance = {
+        isAvailable: vi.fn(() => true),
+        store: vi.fn(async () => undefined),
+        retrieve: vi.fn(async () => 'stored-key'),
+        remove: vi.fn(async () => undefined),
+        cleanupPlainTextKey: vi.fn(async () => undefined),
+      };
+      secureKeyStoreInstances.push(instance);
+      return instance;
+    }
+  },
+}));
+
 describe('chatHandlers', () => {
   beforeEach(() => {
     registeredHandlers.clear();
     webContentsSend.mockReset();
     chatEngineInstances.length = 0;
     openCodeManagerInstances.length = 0;
+    secureKeyStoreInstances.length = 0;
     vi.resetModules();
   });
 

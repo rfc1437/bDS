@@ -776,6 +776,38 @@ describe('ChatEngine', () => {
     });
   });
 
+  describe('deleteSetting', () => {
+    it('should delete a setting by key', async () => {
+      let capturedTable: any;
+      let capturedPredicate: any;
+      vi.mocked(mockLocalDb.delete).mockImplementation((table: any) => {
+        capturedTable = table;
+        return {
+          where: vi.fn((predicate) => {
+            capturedPredicate = predicate;
+            return Promise.resolve();
+          }),
+        } as any;
+      });
+
+      await chatEngine.deleteSetting('opencode_api_key');
+
+      expect(mockLocalDb.delete).toHaveBeenCalledTimes(1);
+      // Verify the correct table was targeted
+      expect(capturedTable).toBeDefined();
+      // Verify a where predicate was passed
+      expect(capturedPredicate).toBeDefined();
+    });
+
+    it('should not throw for nonexistent keys', async () => {
+      vi.mocked(mockLocalDb.delete).mockImplementation(() => ({
+        where: vi.fn(() => Promise.resolve()),
+      } as any));
+
+      await expect(chatEngine.deleteSetting('nonexistent_key')).resolves.not.toThrow();
+    });
+  });
+
   describe('setSelectedModel', () => {
     it('should save selected model', async () => {
       let capturedValues: any;

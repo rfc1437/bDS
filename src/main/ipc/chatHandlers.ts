@@ -5,14 +5,26 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { ChatEngine } from '../engine/ChatEngine';
 import { OpenCodeManager } from '../engine/OpenCodeManager';
+import { SecureKeyStore } from '../engine/SecureKeyStore';
 import { getDatabase } from '../database';
 import type { EngineBundle } from '../engine/EngineBundle';
 
 let chatEngine: ChatEngine | null = null;
 let openCodeManager: OpenCodeManager | null = null;
+let secureKeyStore: SecureKeyStore | null = null;
 let openCodeManagerInitPromise: Promise<void> | null = null;
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 let engineBundle: EngineBundle | null = null;
+
+/**
+ * Get or create the SecureKeyStore instance.
+ */
+function getSecureKeyStore(): SecureKeyStore {
+  if (!secureKeyStore) {
+    secureKeyStore = new SecureKeyStore(getChatEngine());
+  }
+  return secureKeyStore;
+}
 
 /**
  * Initialize chat handlers with the main window reference
@@ -47,11 +59,19 @@ async function getOpenCodeManager(): Promise<OpenCodeManager> {
       () => mainWindowGetter?.() || null
     );
 
-    // Load API key from settings and await it
-    const engine = getChatEngine();
+    // Load API key from encrypted storage
+    const keyStore = getSecureKeyStore();
     openCodeManagerInitPromise = (async () => {
+      // Clean up old plain-text key from settings (pre-keychain storage)
       try {
-        const key = await engine.getSetting('opencode_api_key');
+        await keyStore.cleanupPlainTextKey('opencode_api_key');
+      } catch {
+        // Best-effort cleanup; not critical
+      }
+
+      // Load API key from encrypted storage
+      try {
+        const key = await keyStore.retrieve('opencode_api_key');
         if (key) {
           openCodeManager!.setApiKey(key);
         }
@@ -107,11 +127,16 @@ export function registerChatHandlers(): void {
   ipcMain.handle('chat:setApiKey', async (_, apiKey: string) => {
     try {
       const manager = await getOpenCodeManager();
+      const previousKey = manager.getApiKey();
       manager.setApiKey(apiKey);
 
-      // Persist to settings
-      const engine = getChatEngine();
-      await engine.setSetting('opencode_api_key', apiKey);
+      // Persist to encrypted storage — roll back in-memory key on failure
+      try {
+        await getSecureKeyStore().store('opencode_api_key', apiKey);
+      } catch (storeError) {
+        manager.setApiKey(previousKey);
+        throw storeError;
+      }
 
       return { success: true };
     } catch (error) {
@@ -411,5 +436,6 @@ export async function cleanupChatHandlers(): Promise<void> {
     openCodeManager = null;
   }
   openCodeManagerInitPromise = null;
+  secureKeyStore = null;
   chatEngine = null;
 }

@@ -395,6 +395,17 @@ CRITICAL - Heatmap and complex visualizations:
   }
 
   /**
+   * Delete a setting by key
+   */
+  async deleteSetting(key: string): Promise<void> {
+    const drizzle = this.db.getLocal();
+
+    await drizzle
+      .delete(settings)
+      .where(eq(settings.key, key));
+  }
+
+  /**
    * Get selected model for new conversations
    */
   async getSelectedModel(): Promise<string> {
