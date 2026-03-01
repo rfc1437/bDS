@@ -159,6 +159,11 @@
       {
         "from": "src/main/engine/templates",
         "to": "templates"
+      },
+      {
+        "from": "src/main/engine/assets",
+        "to": "assets",
+        "filter": ["*.css"]
       }
     ],
     "protocols": [

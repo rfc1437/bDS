@@ -11,6 +11,26 @@ import { CALENDAR_RUNTIME_JS } from './assets/calendarRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
 import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
 
+function readLocalAsset(filename: string): string {
+  const candidates = [
+    path.join(__dirname, 'assets', filename),
+    path.join(process.cwd(), 'dist', 'main', 'engine', 'assets', filename),
+    path.join(process.cwd(), 'src', 'main', 'engine', 'assets', filename),
+  ];
+
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+    candidates.unshift(path.join(process.resourcesPath, 'assets', filename));
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return fs.readFileSync(candidate, 'utf-8');
+    }
+  }
+
+  throw new Error(`Local asset not found: ${filename}`);
+}
+
 export interface PythonMacroScript {
   id: string;
   slug: string;
@@ -270,6 +290,10 @@ export const PREVIEW_ASSETS: Record<string, PreviewAssetDefinition> = {
   'calendar-runtime.js': {
     contentType: 'application/javascript; charset=utf-8',
     sourceText: CALENDAR_RUNTIME_JS,
+  },
+  'bds.css': {
+    contentType: 'text/css; charset=utf-8',
+    sourceText: readLocalAsset('bds.css'),
   },
 };
 

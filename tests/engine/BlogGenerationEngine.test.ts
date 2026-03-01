@@ -462,7 +462,7 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('data-template="post-list"');
     expect(html).toContain('/assets/pico.min.css');
     expect(html).toContain('/assets/lightbox.min.css');
-    expect(html).toContain('.lb-nav a, .lb-nav a:hover, .lb-nav a:focus-visible { border: 0; box-shadow: none; outline: none; text-decoration: none; }');
+    expect(html).toContain('/assets/bds.css');
     expect(html).toContain('/assets/tag-cloud.js');
     expect(html).toContain('rel="alternate" type="application/rss+xml"');
     expect(html).toContain('href="/rss.xml"');
@@ -484,8 +484,7 @@ describe('BlogGenerationEngine', () => {
     const indexPath = path.join(tempDir, 'html', 'index.html');
     const html = await readFile(indexPath, 'utf-8');
     expect(html).toContain('href="/assets/pico.green.min.css"');
-    expect(html).toContain('@media only screen and (prefers-color-scheme: dark)');
-    expect(html).toContain('--pico-background-color: #13171f;');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('generates single post pages at /{year}/{month}/{day}/{slug}/index.html', async () => {
@@ -533,14 +532,7 @@ describe('BlogGenerationEngine', () => {
     expect(html).toContain('href="/category/article/"');
     expect(html).toContain('href="/tag/css-only/"');
     expect(html).toContain('style="--bubble-accent: #22aa88;"');
-    expect(html).toContain('background: var(--bubble-bg, var(--bubble-accent));');
-    expect(html).toContain('color: #000;');
-    expect(html).toContain('.single-post-taxonomy-bubble-category {');
-    expect(html).toContain('--bubble-accent: var(--pico-ins-color');
-    expect(html).toContain('--bubble-bg: var(--pico-ins-color');
-    expect(html).toContain('.single-post-taxonomy-bubble-tag {');
-    expect(html).toContain('--bubble-accent: var(--pico-del-color');
-    expect(html).toContain('--bubble-bg: var(--pico-del-color');
+    expect(html).toContain('/assets/bds.css');
 
     const categoryIndex = html.indexOf('single-post-taxonomy-bubble-category');
     const tagIndex = html.indexOf('single-post-taxonomy-bubble-tag');

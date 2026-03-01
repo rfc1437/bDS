@@ -181,6 +181,6 @@ describe('GenerationRouteRendererFactory', () => {
 
     expect(html).toContain('class="macro-youtube"');
     expect(html).toContain('youtube.com/embed/dQw4w9WgXcQ?rel=0');
-    expect(html).toContain('.macro-youtube, .macro-vimeo { margin-bottom: 1rem; }');
+    expect(html).toContain('/assets/bds.css');
   });
 });

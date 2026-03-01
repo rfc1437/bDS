@@ -318,6 +318,7 @@ describe('PreviewServer', () => {
     expect(rootHtml).toContain('href="/assets/lightbox.min.css"');
     expect(rootHtml).toContain('href="/assets/highlight.min.css"');
     expect(rootHtml).toContain('href="/assets/vanilla-calendar.min.css"');
+    expect(rootHtml).toContain('href="/assets/bds.css"');
     expect(rootHtml).toContain('src="/assets/lightbox.min.js"');
     expect(rootHtml).toContain('src="/assets/highlight.min.js"');
     expect(rootHtml).toContain('src="/assets/code-enhancements.js"');
@@ -359,6 +360,18 @@ describe('PreviewServer', () => {
     const tagCloudJsResponse = await fetch(`${server.getBaseUrl()}/assets/tag-cloud.js`);
     expect(tagCloudJsResponse.status).toBe(200);
     expect(tagCloudJsResponse.headers.get('content-type')).toContain('application/javascript');
+
+    const bdsCssResponse = await fetch(`${server.getBaseUrl()}/assets/bds.css`);
+    expect(bdsCssResponse.status).toBe(200);
+    expect(bdsCssResponse.headers.get('content-type')).toContain('text/css');
+    const bdsCss = await bdsCssResponse.text();
+    expect(bdsCss).toContain('.blog-menu');
+    expect(bdsCss).toContain('.post {');
+    expect(bdsCss).toContain('.single-post-taxonomy-bubble');
+    expect(bdsCss).toContain('.archive-day-separator');
+    expect(bdsCss).toContain('.not-found');
+    expect(bdsCss).toContain('--pico-background-color: #13171f;');
+    expect(bdsCss).toContain('.lb-nav a, .lb-nav a:hover, .lb-nav a:focus-visible');
 
     const lightboxPrevImageResponse = await fetch(`${server.getBaseUrl()}/images/prev.png`);
     expect(lightboxPrevImageResponse.status).toBe(200);
@@ -663,7 +676,7 @@ describe('PreviewServer', () => {
 
     expect(html).toContain('<html lang="en" data-theme="dark">');
     expect(html).toContain('href="/assets/pico.green.min.css"');
-    expect(html).toContain('--pico-background-color: #13171f;');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('limits list routes to 50 posts', async () => {
@@ -757,12 +770,7 @@ describe('PreviewServer', () => {
     const separatorCount = (html.match(/class="archive-day-separator"/g) || []).length;
     expect(separatorCount).toBe(1);
 
-    expect(html).toContain('.archive-day-separator { position: relative; height: 2px;');
-    expect(html).toContain('color: var(--pico-color, var(--color));');
-    expect(html).toContain('border-top: 1px solid currentColor;');
-    expect(html).toContain('opacity: .18;');
-    expect(html).toContain('.archive-day-separator::before');
-    expect(html).toContain('linear-gradient(to right, transparent 0%, transparent 18%, currentColor 58%, transparent 92%, transparent 100%)');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('supports day-and-slug post route', async () => {
@@ -784,7 +792,7 @@ describe('PreviewServer', () => {
     const html = await response.text();
     expect(html).toContain('Single Post');
     expect(html).toContain('data-template="single-post"');
-    expect(html).toContain('.single-post { margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('resets lightbox nav anchor hover and focus styles to avoid frame artifacts over images', async () => {
@@ -808,7 +816,7 @@ describe('PreviewServer', () => {
     await server.start(0);
 
     const html = await (await fetch(`${server.getBaseUrl()}/2025/2/14/lightbox-style-post/`)).text();
-    expect(html).toContain('.lb-nav a, .lb-nav a:hover, .lb-nav a:focus-visible { border: 0; box-shadow: none; outline: none; text-decoration: none; }');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('keeps code blocks constrained to post column width with horizontal overflow inside the block', async () => {
@@ -824,9 +832,7 @@ describe('PreviewServer', () => {
     await server.start(0);
 
     const html = await (await fetch(`${server.getBaseUrl()}/`)).text();
-    expect(html).toContain('.post { border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); padding: 1rem; background: var(--pico-card-background-color, var(--card-background-color)); min-width: 0; }');
-    expect(html).toContain('.post pre { position: relative; overflow-x: auto; max-width: 100%;');
-    expect(html).toContain('.post pre code { display: block; font-size: .88rem; line-height: 1.5; white-space: pre; }');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('renders single post title as h1', async () => {
@@ -903,14 +909,7 @@ describe('PreviewServer', () => {
     expect(html).toContain('href="/category/article/"');
     expect(html).toContain('href="/tag/css-only/"');
     expect(html).toContain('style="--bubble-accent: #22aa88;"');
-    expect(html).toContain('background: var(--bubble-bg, var(--bubble-accent));');
-    expect(html).toContain('color: #000;');
-    expect(html).toContain('.single-post-taxonomy-bubble-category {');
-    expect(html).toContain('--bubble-accent: var(--pico-ins-color');
-    expect(html).toContain('--bubble-bg: var(--pico-ins-color');
-    expect(html).toContain('.single-post-taxonomy-bubble-tag {');
-    expect(html).toContain('--bubble-accent: var(--pico-del-color');
-    expect(html).toContain('--bubble-bg: var(--pico-del-color');
+    expect(html).toContain('/assets/bds.css');
 
     const categoryIndex = html.indexOf('single-post-taxonomy-bubble-category');
     const tagIndex = html.indexOf('single-post-taxonomy-bubble-tag');
@@ -993,9 +992,8 @@ describe('PreviewServer', () => {
     expect(html).toContain('href="/2025/03/10/source-post"');
     expect(html).toContain('href="/2025/03/12/a-very-long-slug-post-that-exceeds-thirty-characters"');
 
-    // Backlinks use pico accent color
-    expect(html).toContain('.single-post-backlink-bubble');
-    expect(html).toContain('--pico-primary');
+    // Backlinks use pico accent color (in external bds.css)
+    expect(html).toContain('/assets/bds.css');
 
     // Backlinks section is after the article
     const articleEndIndex = html.indexOf('</article>');
@@ -1836,7 +1834,7 @@ describe('PreviewServer', () => {
 
     expect(html).toContain('class="macro-youtube"');
     expect(html).toContain('youtube.com/embed/dQw4w9WgXcQ?rel=0');
-    expect(html).toContain('.macro-youtube, .macro-vimeo { margin-bottom: 1rem; }');
+    expect(html).toContain('/assets/bds.css');
   });
 
   it('resolves gallery linked images via post-media links even when media.linkedPostIds is empty', async () => {
