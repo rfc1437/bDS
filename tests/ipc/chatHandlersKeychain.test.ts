@@ -258,7 +258,7 @@ describe('chatHandlers keychain integration', () => {
     expect(manager.setApiKey).toHaveBeenCalledWith('encrypted-stored-key');
   });
 
-  it('returns error when store() throws on chat:setApiKey', async () => {
+  it('returns error and rolls back in-memory key when store() throws on chat:setApiKey', async () => {
     secureKeyStoreStoreError = new Error('encryption unavailable');
 
     const mod = await import('../../src/main/ipc/chatHandlers');
@@ -266,10 +266,28 @@ describe('chatHandlers keychain integration', () => {
     mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
     mod.registerChatHandlers();
 
+    // Trigger init to load the existing key
+    const checkHandler = registeredHandlers.get('chat:checkReady');
+    await checkHandler!(undefined);
+
+    const manager = openCodeManagerInstances[0];
+    // After init, the manager has the key from SecureKeyStore
+    expect(manager.setApiKey).toHaveBeenCalledWith('encrypted-stored-key');
+    manager.setApiKey.mockClear();
+
+    // getApiKey returns the current in-memory key (to be restored on rollback)
+    manager.getApiKey.mockReturnValue('encrypted-stored-key');
+
     const handler = registeredHandlers.get('chat:setApiKey');
     const result = await handler!(undefined, 'sk-new-key');
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('encryption unavailable');
+
+    // setApiKey should have been called twice:
+    // 1) with the new key (optimistic), 2) with the old key (rollback)
+    expect(manager.setApiKey).toHaveBeenCalledTimes(2);
+    expect(manager.setApiKey).toHaveBeenNthCalledWith(1, 'sk-new-key');
+    expect(manager.setApiKey).toHaveBeenNthCalledWith(2, 'encrypted-stored-key');
   });
 });

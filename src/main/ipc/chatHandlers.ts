@@ -127,10 +127,16 @@ export function registerChatHandlers(): void {
   ipcMain.handle('chat:setApiKey', async (_, apiKey: string) => {
     try {
       const manager = await getOpenCodeManager();
+      const previousKey = manager.getApiKey();
       manager.setApiKey(apiKey);
 
-      // Persist to encrypted storage
-      await getSecureKeyStore().store('opencode_api_key', apiKey);
+      // Persist to encrypted storage — roll back in-memory key on failure
+      try {
+        await getSecureKeyStore().store('opencode_api_key', apiKey);
+      } catch (storeError) {
+        manager.setApiKey(previousKey);
+        throw storeError;
+      }
 
       return { success: true };
     } catch (error) {

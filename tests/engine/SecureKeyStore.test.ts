@@ -5,7 +5,7 @@
  * and ChatEngine dependencies.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Track mock state
 let safeStorageAvailable = true;
@@ -203,6 +203,26 @@ describe('SecureKeyStore', () => {
 
       await expect(store.cleanupPlainTextKey('opencode_api_key')).resolves.not.toThrow();
       expect(mockChatEngine.deleteSetting).toHaveBeenCalledWith('opencode_api_key');
+    });
+  });
+
+  describe('retrieve with corrupted data', () => {
+    it('throws when stored base64 decodes to invalid ciphertext', async () => {
+      const store = new SecureKeyStore(mockChatEngine as any);
+
+      // Simulate corrupted data: valid base64 but not a valid encrypted buffer
+      mockSettings.set('__encrypted_api_key', Buffer.from('CORRUPT:garbage').toString('base64'));
+
+      await expect(store.retrieve('api_key')).rejects.toThrow('Failed to decrypt');
+    });
+
+    it('throws when stored value is not valid base64', async () => {
+      const store = new SecureKeyStore(mockChatEngine as any);
+
+      // Not valid base64 — Buffer.from tolerates this but decryptString will reject it
+      mockSettings.set('__encrypted_api_key', '!!!not-base64!!!');
+
+      await expect(store.retrieve('api_key')).rejects.toThrow('Failed to decrypt');
     });
   });
 });
