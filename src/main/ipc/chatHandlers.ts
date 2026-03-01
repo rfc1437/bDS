@@ -17,6 +17,16 @@ let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 let engineBundle: EngineBundle | null = null;
 
 /**
+ * Get or create the SecureKeyStore instance.
+ */
+function getSecureKeyStore(): SecureKeyStore {
+  if (!secureKeyStore) {
+    secureKeyStore = new SecureKeyStore(getChatEngine());
+  }
+  return secureKeyStore;
+}
+
+/**
  * Initialize chat handlers with the main window reference
  */
 export function initializeChatHandlers(getMainWindow: () => BrowserWindow | null, bundle: EngineBundle): void {
@@ -49,16 +59,15 @@ async function getOpenCodeManager(): Promise<OpenCodeManager> {
       () => mainWindowGetter?.() || null
     );
 
-    // Initialize secure key store and load API key
-    const engine = getChatEngine();
-    secureKeyStore = new SecureKeyStore(engine);
+    // Load API key from encrypted storage
+    const keyStore = getSecureKeyStore();
     openCodeManagerInitPromise = (async () => {
       try {
         // Clean up old plain-text key from settings (pre-keychain storage)
-        await secureKeyStore!.cleanupPlainTextKey('opencode_api_key');
+        await keyStore.cleanupPlainTextKey('opencode_api_key');
 
         // Load API key from encrypted storage
-        const key = await secureKeyStore!.retrieve('opencode_api_key');
+        const key = await keyStore.retrieve('opencode_api_key');
         if (key) {
           openCodeManager!.setApiKey(key);
         }
@@ -117,7 +126,7 @@ export function registerChatHandlers(): void {
       manager.setApiKey(apiKey);
 
       // Persist to encrypted storage
-      await secureKeyStore!.store('opencode_api_key', apiKey);
+      await getSecureKeyStore().store('opencode_api_key', apiKey);
 
       return { success: true };
     } catch (error) {

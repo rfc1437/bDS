@@ -9,7 +9,6 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Track mock state
 let safeStorageAvailable = true;
-const encryptedBuffers = new Map<string, Buffer>();
 
 // Mock Electron's safeStorage
 vi.mock('electron', () => ({

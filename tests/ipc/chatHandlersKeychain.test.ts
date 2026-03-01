@@ -20,6 +20,12 @@ const chatEngineInstances: Array<Record<string, any>> = [];
 const openCodeManagerInstances: Array<Record<string, any>> = [];
 const secureKeyStoreInstances: Array<Record<string, any>> = [];
 
+// Per-test overrides for SecureKeyStore mock behavior
+let secureKeyStoreRetrieveResult: string | null = 'encrypted-stored-key';
+let secureKeyStoreStoreError: Error | null = null;
+let secureKeyStoreRetrieveError: Error | null = null;
+let secureKeyStoreCleanupError: Error | null = null;
+
 vi.mock('electron', () => ({
   BrowserWindow: {
     fromWebContents: vi.fn(),
@@ -64,10 +70,17 @@ vi.mock('../../src/main/engine/SecureKeyStore', () => ({
     constructor() {
       const instance = {
         isAvailable: vi.fn(() => true),
-        store: vi.fn(async () => undefined),
-        retrieve: vi.fn(async () => 'encrypted-stored-key'),
+        store: vi.fn(async (_key: string, _value: string) => {
+          if (secureKeyStoreStoreError) throw secureKeyStoreStoreError;
+        }),
+        retrieve: vi.fn(async () => {
+          if (secureKeyStoreRetrieveError) throw secureKeyStoreRetrieveError;
+          return secureKeyStoreRetrieveResult;
+        }),
         remove: vi.fn(async () => undefined),
-        cleanupPlainTextKey: vi.fn(async () => undefined),
+        cleanupPlainTextKey: vi.fn(async () => {
+          if (secureKeyStoreCleanupError) throw secureKeyStoreCleanupError;
+        }),
       };
       secureKeyStoreInstances.push(instance);
       return instance;
@@ -103,6 +116,10 @@ describe('chatHandlers keychain integration', () => {
     chatEngineInstances.length = 0;
     openCodeManagerInstances.length = 0;
     secureKeyStoreInstances.length = 0;
+    secureKeyStoreRetrieveResult = 'encrypted-stored-key';
+    secureKeyStoreStoreError = null;
+    secureKeyStoreRetrieveError = null;
+    secureKeyStoreCleanupError = null;
     vi.resetModules();
   });
 
@@ -190,26 +207,65 @@ describe('chatHandlers keychain integration', () => {
   });
 
   it('handles missing key gracefully on init (no key stored)', async () => {
-    // Override retrieve to return null
-    vi.resetModules();
-    const secureKeyStoreModuleMock = await import('../../src/main/engine/SecureKeyStore');
-    // The mock class already returns 'encrypted-stored-key', but we need null for this test
-    // We'll handle this differently - mock retrieve to return null
+    secureKeyStoreRetrieveResult = null;
 
     const mod = await import('../../src/main/ipc/chatHandlers');
     const mockBundle = { postEngine: {}, mediaEngine: {}, postMediaEngine: {} };
     mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
     mod.registerChatHandlers();
 
-    // Override the retrieve mock before triggering init
-    // Since we can't easily change the mock after construction, we verify
-    // that when retrieve returns null, setApiKey is not called with null
     const handler = registeredHandlers.get('chat:checkReady');
-
-    // Make retrieve return null for this test
-    secureKeyStoreInstances.length = 0;
-
     const result = await handler!(undefined);
     expect(result.ready).toBe(true);
+
+    const manager = openCodeManagerInstances[0];
+    // setApiKey should NOT have been called since there's no stored key
+    expect(manager.setApiKey).not.toHaveBeenCalled();
+  });
+
+  it('still initializes when retrieve() throws on init', async () => {
+    secureKeyStoreRetrieveError = new Error('decryption failed');
+
+    const mod = await import('../../src/main/ipc/chatHandlers');
+    const mockBundle = { postEngine: {}, mediaEngine: {}, postMediaEngine: {} };
+    mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
+    mod.registerChatHandlers();
+
+    const handler = registeredHandlers.get('chat:checkReady');
+    const result = await handler!(undefined);
+    // Init should complete even if key retrieval fails
+    expect(result.ready).toBe(true);
+
+    const manager = openCodeManagerInstances[0];
+    expect(manager.setApiKey).not.toHaveBeenCalled();
+  });
+
+  it('still initializes when cleanupPlainTextKey() throws on init', async () => {
+    secureKeyStoreCleanupError = new Error('delete failed');
+
+    const mod = await import('../../src/main/ipc/chatHandlers');
+    const mockBundle = { postEngine: {}, mediaEngine: {}, postMediaEngine: {} };
+    mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
+    mod.registerChatHandlers();
+
+    const handler = registeredHandlers.get('chat:checkReady');
+    const result = await handler!(undefined);
+    // Init should complete even if cleanup fails
+    expect(result.ready).toBe(true);
+  });
+
+  it('returns error when store() throws on chat:setApiKey', async () => {
+    secureKeyStoreStoreError = new Error('encryption unavailable');
+
+    const mod = await import('../../src/main/ipc/chatHandlers');
+    const mockBundle = { postEngine: {}, mediaEngine: {}, postMediaEngine: {} };
+    mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
+    mod.registerChatHandlers();
+
+    const handler = registeredHandlers.get('chat:setApiKey');
+    const result = await handler!(undefined, 'sk-new-key');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('encryption unavailable');
   });
 });
