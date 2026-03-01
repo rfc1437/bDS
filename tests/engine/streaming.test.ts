@@ -10,12 +10,14 @@
  * - Retry with exponential backoff (429/502/503, Retry-After, no retry on 4xx/abort)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import http from 'http';
 import {
   parseSSELines,
   parseOpenAIStreamEvent,
   parseAnthropicStreamEvent,
   withRetry,
+  httpRequestStream,
   type SSEEvent,
   type OpenAIStreamAccumulator,
   type AnthropicStreamAccumulator,
@@ -838,29 +840,268 @@ describe('OpenAI cache token extraction', () => {
 // ── httpRequestStream ──
 
 describe('httpRequestStream', () => {
-  // We test httpRequestStream by mocking Node's http/https modules
-  // These tests verify the async iterable, error handling, and abort behavior
+  // Use a real HTTP server for integration tests (avoids ESM spyOn limitations)
 
-  // Helper to create a mock response
-  function createMockResponse(statusCode: number) {
-    const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
-    return {
-      statusCode,
-      headers: {} as Record<string, string>,
-      on(event: string, handler: (...args: unknown[]) => void) {
-        if (!handlers[event]) handlers[event] = [];
-        handlers[event].push(handler);
-        return this;
-      },
-      emit(event: string, ...args: unknown[]) {
-        for (const h of handlers[event] || []) h(...args);
-      },
-    };
+  function startTestServer(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void): Promise<{ url: string; close: () => Promise<void> }> {
+    return new Promise((resolve) => {
+      const server = http.createServer(handler);
+      server.listen(0, () => {
+        const addr = server.address() as { port: number };
+        resolve({
+          url: `http://localhost:${addr.port}`,
+          close: () => new Promise<void>((r) => server.close(() => r())),
+        });
+      });
+    });
   }
 
-  it('should be importable', async () => {
-    // Verify the function exists and has the right shape
-    const { httpRequestStream } = await import('../../src/main/engine/streaming');
-    expect(typeof httpRequestStream).toBe('function');
+  it('parses streamed SSE events from response data chunks', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n');
+      res.write('data: {"choices":[{"delta":{"content":" world"}}]}\n\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+    });
+
+    try {
+      const { events } = await httpRequestStream(srv.url, { method: 'POST', body: '{}' });
+      const collected: SSEEvent[] = [];
+      for await (const event of events) {
+        collected.push(event);
+      }
+      expect(collected).toHaveLength(3);
+      expect(collected[0].data).toBe('{"choices":[{"delta":{"content":"Hello"}}]}');
+      expect(collected[1].data).toBe('{"choices":[{"delta":{"content":" world"}}]}');
+      expect(collected[2].data).toBe('[DONE]');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('collects error body and rejects on non-2xx status', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' });
+      res.end(JSON.stringify({ error: { message: 'Rate limited' } }));
+    });
+
+    try {
+      await expect(httpRequestStream(srv.url, {})).rejects.toMatchObject({
+        message: 'Rate limited',
+        statusCode: 429,
+        retryAfter: 5,
+      });
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('propagates mid-stream errors to async iterable consumer', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n');
+      // Destroy the socket to simulate TCP disconnect
+      setTimeout(() => res.destroy(), 20);
+    });
+
+    try {
+      const { events } = await httpRequestStream(srv.url, {});
+      const collected: SSEEvent[] = [];
+      await expect(async () => {
+        for await (const event of events) {
+          collected.push(event);
+        }
+      }).rejects.toThrow();
+
+      // Should have received the first event before the error
+      expect(collected).toHaveLength(1);
+      expect(collected[0].data).toBe('{"choices":[{"delta":{"content":"Hi"}}]}');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('propagates stored error when no consumer was waiting (pendingError fix)', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      // Send data and immediately destroy — error fires before consumer calls .next()
+      res.write('data: {"ok":true}\n\n');
+      // Give a tiny delay so the data event fires first
+      setTimeout(() => res.destroy(), 5);
+    });
+
+    try {
+      const { events } = await httpRequestStream(srv.url, {});
+      const iter = events[Symbol.asyncIterator]();
+
+      // Wait a bit for both data and error to fire
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // First call should return the queued event
+      const first = await iter.next();
+      expect(first.done).toBe(false);
+      expect(first.value.data).toBe('{"ok":true}');
+
+      // Second call should throw the stored (pending) error
+      await expect(iter.next()).rejects.toThrow();
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('handles already-aborted signal', async () => {
+    // No server needed — should reject immediately
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(httpRequestStream('http://localhost:1/test', {
+      signal: controller.signal,
+    })).rejects.toMatchObject({
+      isAbort: true,
+    });
+  });
+
+  it('handles non-JSON error body', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal Server Error');
+    });
+
+    try {
+      await expect(httpRequestStream(srv.url, {})).rejects.toMatchObject({
+        statusCode: 500,
+      });
+    } finally {
+      await srv.close();
+    }
+  });
+});
+
+// ── withRetry onRetry callback ──
+
+describe('withRetry onRetry callback', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('calls onRetry callback before each retry attempt', async () => {
+    const error429 = Object.assign(new Error('Rate limited'), { statusCode: 429 });
+    const onRetry = vi.fn();
+    const fn = vi.fn()
+      .mockRejectedValueOnce(error429)
+      .mockRejectedValueOnce(error429)
+      .mockResolvedValue('success');
+
+    const promise = withRetry(fn, { maxRetries: 3, onRetry });
+    await vi.advanceTimersByTimeAsync(10000);
+    const result = await promise;
+
+    expect(result).toBe('success');
+    expect(onRetry).toHaveBeenCalledTimes(2);
+    expect(onRetry).toHaveBeenCalledWith(1, error429);
+    expect(onRetry).toHaveBeenCalledWith(2, error429);
+  });
+
+  it('does not call onRetry when first attempt succeeds', async () => {
+    const onRetry = vi.fn();
+    const fn = vi.fn().mockResolvedValue('ok');
+
+    const result = await withRetry(fn, { maxRetries: 3, onRetry });
+
+    expect(result).toBe('ok');
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+});
+
+// ── Mid-stream retry integration ──
+
+describe('mid-stream retry with withRetry', () => {
+  it('retries stream consumption on transient mid-stream error', async () => {
+    vi.useRealTimers();
+
+    let attempt = 0;
+    const fn = async () => {
+      attempt++;
+      if (attempt === 1) {
+        // First attempt: simulate partial stream then error
+        const error = Object.assign(new Error('Service temporarily unavailable'), { statusCode: 503 });
+        throw error;
+      }
+      // Second attempt: succeed
+      return { text: 'Hello world!', toolCalls: [] };
+    };
+
+    const result = await withRetry(fn, { maxRetries: 2 });
+    expect(result).toEqual({ text: 'Hello world!', toolCalls: [] });
+    expect(attempt).toBe(2);
+  });
+
+  it('retries on mid-stream TCP error (no status code)', async () => {
+    vi.useRealTimers();
+
+    let attempt = 0;
+    const fn = async () => {
+      attempt++;
+      if (attempt === 1) {
+        throw new Error('ECONNRESET');
+      }
+      return 'recovered';
+    };
+
+    const result = await withRetry(fn, { maxRetries: 2 });
+    expect(result).toBe('recovered');
+    expect(attempt).toBe(2);
+  });
+
+  it('does not retry mid-stream abort errors', async () => {
+    const abortError = Object.assign(new Error('Request cancelled'), { isAbort: true });
+
+    let attempt = 0;
+    const fn = async () => {
+      attempt++;
+      throw abortError;
+    };
+
+    await expect(withRetry(fn, { maxRetries: 3 })).rejects.toThrow('Request cancelled');
+    expect(attempt).toBe(1);
+  });
+});
+
+// ── SSE spec compliance ──
+
+describe('SSE spec compliance - single space removal', () => {
+  it('removes exactly one leading space after colon in data field', () => {
+    const chunk = 'data: {"key": "value"}\n\n';
+    const { events } = parseSSELines(chunk);
+    expect(events[0].data).toBe('{"key": "value"}');
+  });
+
+  it('preserves data when no space after colon', () => {
+    const chunk = 'data:{"key":"value"}\n\n';
+    const { events } = parseSSELines(chunk);
+    expect(events[0].data).toBe('{"key":"value"}');
+  });
+
+  it('preserves extra leading spaces after removing one', () => {
+    const chunk = 'data:  two spaces\n\n';
+    const { events } = parseSSELines(chunk);
+    // Per SSE spec: only one leading space is removed
+    expect(events[0].data).toBe(' two spaces');
+  });
+
+  it('removes exactly one leading space from event type', () => {
+    const chunk = 'event: message_start\ndata: {}\n\n';
+    const { events } = parseSSELines(chunk);
+    expect(events[0].event).toBe('message_start');
+  });
+
+  it('handles event type with no space after colon', () => {
+    const chunk = 'event:ping\ndata: {}\n\n';
+    const { events } = parseSSELines(chunk);
+    expect(events[0].event).toBe('ping');
   });
 });

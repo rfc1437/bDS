@@ -93,9 +93,11 @@ export function parseSSELines(text: string): { events: SSEEvent[]; remaining: st
       if (line.startsWith(':')) continue;
 
       if (line.startsWith('event: ') || line.startsWith('event:')) {
-        eventType = line.slice(line.indexOf(':') + 1).trim();
+        const afterColon = line.slice(line.indexOf(':') + 1);
+        eventType = afterColon.startsWith(' ') ? afterColon.slice(1) : afterColon;
       } else if (line.startsWith('data: ') || line.startsWith('data:')) {
-        dataLines.push(line.slice(line.indexOf(':') + 1).trimStart());
+        const afterColon = line.slice(line.indexOf(':') + 1);
+        dataLines.push(afterColon.startsWith(' ') ? afterColon.slice(1) : afterColon);
       }
     }
 
@@ -326,7 +328,7 @@ const RETRYABLE_STATUS_CODES = new Set([429, 502, 503]);
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options: { maxRetries?: number } = {},
+  options: { maxRetries?: number; onRetry?: (attempt: number, error: Error) => void } = {},
 ): Promise<T> {
   const maxRetries = options.maxRetries ?? 3;
   let lastError: Error | undefined;
@@ -361,6 +363,10 @@ export async function withRetry<T>(
       // Respect Retry-After header for 429
       if (httpError.retryAfter && httpError.retryAfter > 0) {
         delay = Math.max(delay, httpError.retryAfter * 1000);
+      }
+
+      if (options.onRetry) {
+        options.onRetry(attempt + 1, lastError);
       }
 
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -446,6 +452,7 @@ export function httpRequestStream(
         [Symbol.asyncIterator]() {
           let buffer = '';
           let done = false;
+          let pendingError: Error | null = null;
           const eventQueue: SSEEvent[] = [];
           let resolveNext: ((value: IteratorResult<SSEEvent>) => void) | null = null;
           let rejectNext: ((error: Error) => void) | null = null;
@@ -484,6 +491,9 @@ export function httpRequestStream(
               resolveNext = null;
               rejectNext = null;
               reject(err);
+            } else {
+              // Store error for next .next() call so it's not silently swallowed
+              pendingError = err;
             }
           });
 
@@ -492,6 +502,13 @@ export function httpRequestStream(
               // Return queued event immediately
               if (eventQueue.length > 0) {
                 return Promise.resolve({ value: eventQueue.shift()!, done: false });
+              }
+
+              // Throw stored error from a previous event that fired with no consumer waiting
+              if (pendingError) {
+                const err = pendingError;
+                pendingError = null;
+                return Promise.reject(err);
               }
 
               // Stream already ended
