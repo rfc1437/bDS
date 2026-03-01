@@ -463,6 +463,11 @@ describe('MCPServer', () => {
       const annotations = getToolAnnotations('discard_proposal');
       expect(annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     });
+
+    it('check_term has readOnlyHint true', () => {
+      const annotations = getToolAnnotations('check_term');
+      expect(annotations).toEqual({ readOnlyHint: true, openWorldHint: false });
+    });
   });
 
   // ── Tool visibility ─────────────────────────────────────────────────
@@ -973,6 +978,140 @@ describe('MCPServer', () => {
       expect(result.isError).toBe(true);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.error).toContain('DB error');
+    });
+
+    // ── check_term tool ──────────────────────────────────────────────
+
+    it('registers check_term tool', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredTools', 'check_term')).toBe(true);
+    });
+
+    it('check_term returns category and tag info for a term that exists as both', async () => {
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'wiki', count: 3 },
+        { category: 'tech', count: 5 },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'wiki', count: 1 },
+        { tag: 'python', count: 4 },
+      ]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'check_term');
+      const result = await tool.handler({ term: 'wiki' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.term).toBe('wiki');
+      expect(parsed.asCategory).toBe(true);
+      expect(parsed.categoryPostCount).toBe(3);
+      expect(parsed.asTag).toBe(true);
+      expect(parsed.tagPostCount).toBe(1);
+    });
+
+    it('check_term returns false for a term that does not exist', async () => {
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'tech', count: 5 },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'python', count: 4 },
+      ]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'check_term');
+      const result = await tool.handler({ term: 'nonexistent' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.term).toBe('nonexistent');
+      expect(parsed.asCategory).toBe(false);
+      expect(parsed.categoryPostCount).toBe(0);
+      expect(parsed.asTag).toBe(false);
+      expect(parsed.tagPostCount).toBe(0);
+    });
+
+    it('check_term is case-insensitive', async () => {
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'Wiki', count: 3 },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'check_term');
+      const result = await tool.handler({ term: 'wiki' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.asCategory).toBe(true);
+      expect(parsed.categoryPostCount).toBe(3);
+    });
+
+    // ── search_posts month validation ────────────────────────────────
+
+    it('search_posts returns error when month is given without year', async () => {
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ month: 3 }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('month');
+      expect(parsed.error).toContain('year');
+    });
+
+    it('search_posts accepts month when year is also given', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ year: 2025, month: 3 }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBeUndefined();
+      expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith(
+        expect.objectContaining({ year: 2025, month: 3 }),
+      );
+    });
+
+    // ── search_posts ambiguity hints ─────────────────────────────────
+
+    it('search_posts includes hint when category term also exists as tag', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([
+        { id: 'p1', title: 'Post', categories: ['wiki'], tags: [] },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'wiki', count: 2 },
+      ]);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
+      mockPostEngine.getLinksTo.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ category: 'wiki' }, {}) as { content: Array<{ text: string }> };
+      // Should have a second content item with the hint
+      expect(result.content.length).toBeGreaterThan(1);
+      const hintText = result.content.find(c => c.text.includes('wiki'))?.text ?? '';
+      expect(hintText).toContain('tag');
+    });
+
+    it('search_posts includes hint when tag terms also exist as categories', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([
+        { id: 'p1', title: 'Post', categories: [], tags: ['wiki'] },
+      ]);
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'wiki', count: 3 },
+      ]);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
+      mockPostEngine.getLinksTo.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ tags: ['wiki'] }, {}) as { content: Array<{ text: string }> };
+      expect(result.content.length).toBeGreaterThan(1);
+      const hintText = result.content[1].text;
+      expect(hintText).toContain('wiki');
+      expect(hintText).toContain('category');
+    });
+
+    it('search_posts does not include hint when no ambiguity exists', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([
+        { id: 'p1', title: 'Post', categories: ['tech'], tags: [] },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'python', count: 4 },
+      ]);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
+      mockPostEngine.getLinksTo.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'search_posts');
+      const result = await tool.handler({ category: 'tech' }, {}) as { content: Array<{ text: string }> };
+      expect(result.content).toHaveLength(1);
     });
   });
 

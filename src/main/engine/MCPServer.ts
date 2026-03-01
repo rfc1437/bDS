@@ -488,21 +488,60 @@ export class MCPServer {
   // ── Tool registration ──────────────────────────────────────────────
 
   private registerReadTools(server: McpServer): void {
+    // ── check_term ──
+    server.registerTool('check_term', {
+      title: 'Check Term',
+      description: 'Check whether a term exists as a category, tag, or both. Returns post counts for each. Useful for disambiguation before querying with search_posts.',
+      inputSchema: {
+        term: z.string().describe('The term to look up'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    }, async (args) => {
+      const [categories, tags] = await Promise.all([
+        this.deps.postEngine.getCategoriesWithCounts(),
+        this.deps.postEngine.getTagsWithCounts(),
+      ]);
+      const termLower = args.term.toLowerCase();
+      const catMatch = categories.find(c => c.category.toLowerCase() === termLower);
+      const tagMatch = tags.find(t => t.tag.toLowerCase() === termLower);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            term: args.term,
+            asCategory: !!catMatch,
+            categoryPostCount: catMatch?.count ?? 0,
+            asTag: !!tagMatch,
+            tagPostCount: tagMatch?.count ?? 0,
+          }),
+        }],
+      };
+    });
+
+    // ── search_posts ──
     server.registerTool('search_posts', {
       title: 'Search Posts',
-      description: 'Search blog posts by query, category, tags, or date range. Each result includes backlinks (posts linking to it) and linksTo (posts it links to).',
+      description: 'Search blog posts by query, category, tags, or date range. Each result includes backlinks (posts linking to it) and linksTo (posts it links to). Use check_term first if unsure whether a term is a category or tag. Also available as resources: bds://categories (categories with counts), bds://tags (tags with counts).',
       inputSchema: {
         query: z.string().optional().describe('Full-text search query'),
         category: z.string().optional().describe('Filter by category'),
-        tags: z.array(z.string()).optional().describe('Filter by tags'),
+        tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
         year: z.number().optional().describe('Filter by year'),
-        month: z.number().optional().describe('Filter by month (1-12)'),
+        month: z.number().optional().describe('Filter by month (1-12). Requires year.'),
         status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter by status'),
         offset: z.number().optional().describe('Pagination offset'),
         limit: z.number().optional().describe('Max results to return'),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     }, async (args) => {
+      // Validate: month requires year
+      if (args.month && !args.year) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'month requires year. Example: year: 2025, month: 3' }) }],
+          isError: true,
+        };
+      }
+
       const hasFilters = args.category || args.tags || args.year || args.month || args.status;
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 50;
@@ -544,15 +583,61 @@ export class MCPServer {
           args.query, filter, { offset, limit },
         );
         const enriched = await enrichWithLinks(results);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
+        const content: Array<{ type: 'text'; text: string }> = [
+          { type: 'text' as const, text: JSON.stringify(enriched) },
+        ];
+        const hints = await this.buildAmbiguityHints(args.category, args.tags);
+        if (hints) {
+          content.push({ type: 'text' as const, text: hints });
+        }
+        return { content };
       }
 
       // Filter-only query (no text search)
       const results = await this.deps.postEngine.getPostsFiltered(filter);
       const paginated = results.slice(offset, offset + limit);
       const enriched = await enrichWithLinks(paginated);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
+
+      const content: Array<{ type: 'text'; text: string }> = [
+        { type: 'text' as const, text: JSON.stringify(enriched) },
+      ];
+
+      // Ambiguity hints: check if category/tag terms exist in the other namespace
+      const hints = await this.buildAmbiguityHints(args.category, args.tags);
+      if (hints) {
+        content.push({ type: 'text' as const, text: hints });
+      }
+
+      return { content };
     });
+  }
+
+  /** Build a hint string when category/tag terms overlap across namespaces. */
+  private async buildAmbiguityHints(
+    category: string | undefined,
+    tags: string[] | undefined,
+  ): Promise<string | null> {
+    const hints: string[] = [];
+
+    if (category) {
+      const allTags = await this.deps.postEngine.getTagsWithCounts();
+      const tagMatch = allTags.find(t => t.tag.toLowerCase() === category.toLowerCase());
+      if (tagMatch) {
+        hints.push(`Note: "${category}" also exists as a tag (${tagMatch.count} post${tagMatch.count !== 1 ? 's' : ''}). Use the tags parameter to filter by tag instead.`);
+      }
+    }
+
+    if (tags && tags.length > 0) {
+      const allCats = await this.deps.postEngine.getCategoriesWithCounts();
+      for (const tag of tags) {
+        const catMatch = allCats.find(c => c.category.toLowerCase() === tag.toLowerCase());
+        if (catMatch) {
+          hints.push(`Note: "${tag}" also exists as a category (${catMatch.count} post${catMatch.count !== 1 ? 's' : ''}). Use the category parameter to filter by category instead.`);
+        }
+      }
+    }
+
+    return hints.length > 0 ? hints.join(' ') : null;
   }
 
   private registerProposalTools(server: McpServer): void {

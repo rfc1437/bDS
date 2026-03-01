@@ -1124,14 +1124,25 @@ export class OpenCodeManager {
   private getToolDefinitions(): ToolDefinition[] {
     return [
       {
+        name: 'check_term',
+        description: 'Check whether a term exists as a category, tag, or both. Returns post counts for each. Use this before search_posts or list_posts when unsure whether a term is a category or tag.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            term: { type: 'string', description: 'The term to look up' },
+          },
+          required: ['term'],
+        },
+      },
+      {
         name: 'search_posts',
-        description: 'Search blog posts using full-text search. Can filter by category, tags, year, or month. Returns paginated results with totalMatches count. Use offset to page through results when totalMatches > limit.',
+        description: 'Search blog posts using full-text search. Can filter by category, tags, year, or month. Returns paginated results with totalMatches count. Use offset to page through results when totalMatches > limit. Use check_term first if unsure whether a term is a category or tag.',
         input_schema: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'The search query text to find in posts' },
             category: { type: 'string', description: 'Optional category to filter by (e.g., "article", "picture", "aside", "page")' },
-            tags: { type: 'array', items: { type: 'string' }, description: 'Optional array of tags to filter by' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Optional array of tags to filter by (all must match)' },
             year: { type: 'number', description: 'Filter to posts created in this year (e.g., 2024)' },
             month: { type: 'number', description: 'Filter to posts created in this month (1-12). Requires year.' },
             limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' },
@@ -1153,7 +1164,7 @@ export class OpenCodeManager {
       },
       {
         name: 'list_posts',
-        description: 'List blog posts with optional filtering by status, category, tags, year, or month. Returns paginated results. Each post includes backlinks (posts linking to it). The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use year/month filters to efficiently narrow to a time period instead of paginating through all posts. Use offset/limit to page through filtered results.',
+        description: 'List blog posts with optional filtering by status, category, tags, year, or month. Returns paginated results. Each post includes backlinks (posts linking to it). The response includes "total" (global post count in the blog) and "filteredTotal" (count matching current filters). Use year/month filters to efficiently narrow to a time period instead of paginating through all posts. Use offset/limit to page through filtered results. Use check_term first if unsure whether a term is a category or tag.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1511,7 +1522,29 @@ export class OpenCodeManager {
   private async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     try {
       switch (name) {
+        case 'check_term': {
+          const [categories, tags] = await Promise.all([
+            this.postEngine.getCategoriesWithCounts(),
+            this.postEngine.getTagsWithCounts(),
+          ]);
+          const termLower = (args.term as string).toLowerCase();
+          const catMatch = categories.find(c => c.category.toLowerCase() === termLower);
+          const tagMatch = tags.find(t => t.tag.toLowerCase() === termLower);
+          return {
+            success: true,
+            term: args.term as string,
+            asCategory: !!catMatch,
+            categoryPostCount: catMatch?.count ?? 0,
+            asTag: !!tagMatch,
+            tagPostCount: tagMatch?.count ?? 0,
+          };
+        }
+
         case 'search_posts': {
+          if (args.month !== undefined && args.year === undefined) {
+            return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
+          }
+
           const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[]; year?: number; month?: number } = {};
           if (args.category) filter.categories = [args.category as string];
           if (args.tags && Array.isArray(args.tags) && (args.tags as string[]).length > 0) filter.tags = args.tags as string[];
@@ -1530,8 +1563,9 @@ export class OpenCodeManager {
           );
 
           const totalMatches = filteredPosts.length;
+          const hints = await this.buildAmbiguityHints(args.category as string | undefined, args.tags as string[] | undefined);
 
-          return {
+          const result: Record<string, unknown> = {
             success: true,
             count: filteredPosts.length,
             totalMatches,
@@ -1553,6 +1587,8 @@ export class OpenCodeManager {
               };
             })),
           };
+          if (hints.length > 0) result.hints = hints;
+          return result;
         }
 
         case 'read_post': {
@@ -1578,6 +1614,10 @@ export class OpenCodeManager {
         }
 
         case 'list_posts': {
+          if (args.month !== undefined && args.year === undefined) {
+            return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
+          }
+
           const filter: { status?: 'draft' | 'published' | 'archived'; tags?: string[]; categories?: string[]; year?: number; month?: number } = {};
           if (args.status) filter.status = args.status as 'draft' | 'published' | 'archived';
           if (args.tags) filter.tags = args.tags as string[];
@@ -1600,12 +1640,14 @@ export class OpenCodeManager {
             filteredTotal = allFiltered.length;
             pageItems = allFiltered.slice(offset, offset + limit);
           } else {
-            const result = await this.postEngine.getAllPosts({ limit, offset });
-            pageItems = result.items;
-            filteredTotal = result.total;
+            const listResult = await this.postEngine.getAllPosts({ limit, offset });
+            pageItems = listResult.items;
+            filteredTotal = listResult.total;
           }
 
-          return {
+          const hints = await this.buildAmbiguityHints(args.category as string | undefined, args.tags as string[] | undefined);
+
+          const result: Record<string, unknown> = {
             success: true,
             count: pageItems.length,
             total: globalTotal,
@@ -1627,6 +1669,8 @@ export class OpenCodeManager {
               };
             })),
           };
+          if (hints.length > 0) result.hints = hints;
+          return result;
         }
 
         case 'get_media': {
@@ -1645,6 +1689,10 @@ export class OpenCodeManager {
         }
 
         case 'list_media': {
+          if (args.month !== undefined && args.year === undefined) {
+            return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
+          }
+
           const hasMediaFilter = args.year !== undefined || (args.tags && Array.isArray(args.tags) && (args.tags as string[]).length > 0);
           let mediaList: MediaData[];
 
@@ -1875,6 +1923,34 @@ export class OpenCodeManager {
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
+  }
+
+  /** Build ambiguity hint strings when category/tag terms overlap across namespaces. */
+  private async buildAmbiguityHints(
+    category: string | undefined,
+    tags: string[] | undefined,
+  ): Promise<string[]> {
+    const hints: string[] = [];
+
+    if (category) {
+      const allTags = await this.postEngine.getTagsWithCounts();
+      const tagMatch = allTags.find(t => t.tag.toLowerCase() === category.toLowerCase());
+      if (tagMatch) {
+        hints.push(`Note: "${category}" also exists as a tag (${tagMatch.count} post${tagMatch.count !== 1 ? 's' : ''}). Use the tags parameter to filter by tag instead.`);
+      }
+    }
+
+    if (tags && tags.length > 0) {
+      const allCats = await this.postEngine.getCategoriesWithCounts();
+      for (const tag of tags) {
+        const catMatch = allCats.find(c => c.category.toLowerCase() === tag.toLowerCase());
+        if (catMatch) {
+          hints.push(`Note: "${tag}" also exists as a category (${catMatch.count} post${catMatch.count !== 1 ? 's' : ''}). Use the category parameter to filter by category instead.`);
+        }
+      }
+    }
+
+    return hints;
   }
 
   /**

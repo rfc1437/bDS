@@ -199,6 +199,179 @@ describe('OpenCodeManager tool execution – backlinks & linksTo', () => {
       expect(mockPostEngine.getLinksTo).toHaveBeenCalledWith('p5');
     });
   });
+
+  // ── check_term tool ──────────────────────────────────────────────
+
+  describe('check_term', () => {
+    it('returns category and tag info for a term that exists as both', async () => {
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'wiki', count: 3 },
+        { category: 'tech', count: 5 },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'wiki', count: 1 },
+        { tag: 'python', count: 4 },
+      ]);
+
+      const result = await (manager as any).executeTool('check_term', { term: 'wiki' });
+
+      expect(result.success).toBe(true);
+      expect(result.term).toBe('wiki');
+      expect(result.asCategory).toBe(true);
+      expect(result.categoryPostCount).toBe(3);
+      expect(result.asTag).toBe(true);
+      expect(result.tagPostCount).toBe(1);
+    });
+
+    it('returns false for a term that does not exist', async () => {
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'tech', count: 5 },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'python', count: 4 },
+      ]);
+
+      const result = await (manager as any).executeTool('check_term', { term: 'nonexistent' });
+
+      expect(result.success).toBe(true);
+      expect(result.term).toBe('nonexistent');
+      expect(result.asCategory).toBe(false);
+      expect(result.categoryPostCount).toBe(0);
+      expect(result.asTag).toBe(false);
+      expect(result.tagPostCount).toBe(0);
+    });
+
+    it('is case-insensitive', async () => {
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'Wiki', count: 3 },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([]);
+
+      const result = await (manager as any).executeTool('check_term', { term: 'wiki' });
+
+      expect(result.success).toBe(true);
+      expect(result.asCategory).toBe(true);
+      expect(result.categoryPostCount).toBe(3);
+    });
+  });
+
+  // ── month validation ────────────────────────────────────────────────
+
+  describe('month validation', () => {
+    it('search_posts returns error when month is given without year', async () => {
+      const result = await (manager as any).executeTool('search_posts', { query: 'test', month: 3 });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('month');
+      expect(result.error).toContain('year');
+    });
+
+    it('list_posts returns error when month is given without year', async () => {
+      const result = await (manager as any).executeTool('list_posts', { month: 3 });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('month');
+      expect(result.error).toContain('year');
+    });
+
+    it('list_media returns error when month is given without year', async () => {
+      const result = await (manager as any).executeTool('list_media', { month: 3 });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('month');
+      expect(result.error).toContain('year');
+    });
+
+    it('search_posts accepts month when year is also given', async () => {
+      mockPostEngine.searchPostsFiltered.mockResolvedValue([]);
+      const result = await (manager as any).executeTool('search_posts', { query: 'test', year: 2025, month: 3 });
+      expect(result.success).toBe(true);
+    });
+
+    it('list_posts accepts month when year is also given', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([]);
+      const result = await (manager as any).executeTool('list_posts', { year: 2025, month: 3 });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  // ── ambiguity hints ─────────────────────────────────────────────────
+
+  describe('ambiguity hints', () => {
+    it('search_posts includes hint when category also exists as tag', async () => {
+      mockPostEngine.searchPostsFiltered.mockResolvedValue([
+        { id: 'p1', title: 'Post', slug: 'post', excerpt: '', status: 'published', categories: ['wiki'], tags: [], createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'wiki', count: 2 },
+      ]);
+
+      const result = await (manager as any).executeTool('search_posts', { query: 'test', category: 'wiki' });
+
+      expect(result.success).toBe(true);
+      expect(result.hints).toBeDefined();
+      expect(result.hints.length).toBeGreaterThan(0);
+      expect(result.hints[0]).toContain('wiki');
+      expect(result.hints[0]).toContain('tag');
+    });
+
+    it('list_posts includes hint when category also exists as tag', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([
+        { id: 'p1', title: 'Post', slug: 'post', status: 'published', categories: ['wiki'], tags: [], createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'wiki', count: 2 },
+      ]);
+
+      const result = await (manager as any).executeTool('list_posts', { category: 'wiki' });
+
+      expect(result.success).toBe(true);
+      expect(result.hints).toBeDefined();
+      expect(result.hints[0]).toContain('wiki');
+      expect(result.hints[0]).toContain('tag');
+    });
+
+    it('list_posts includes hint when tags also exist as categories', async () => {
+      mockPostEngine.getPostsFiltered.mockResolvedValue([]);
+      mockPostEngine.getCategoriesWithCounts.mockResolvedValue([
+        { category: 'wiki', count: 3 },
+      ]);
+
+      const result = await (manager as any).executeTool('list_posts', { tags: ['wiki'] });
+
+      expect(result.success).toBe(true);
+      expect(result.hints).toBeDefined();
+      expect(result.hints[0]).toContain('wiki');
+      expect(result.hints[0]).toContain('category');
+    });
+
+    it('search_posts does not include hints when no ambiguity exists', async () => {
+      mockPostEngine.searchPostsFiltered.mockResolvedValue([]);
+      mockPostEngine.getTagsWithCounts.mockResolvedValue([
+        { tag: 'python', count: 4 },
+      ]);
+
+      const result = await (manager as any).executeTool('search_posts', { query: 'test', category: 'tech' });
+
+      expect(result.success).toBe(true);
+      expect(result.hints).toBeUndefined();
+    });
+  });
+});
+
+// ── check_term tool definition ──────────────────────────────────────
+
+describe('OpenCodeManager tool definitions', () => {
+  let manager: OpenCodeManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    manager = createManager(createMockPostEngine());
+  });
+
+  it('includes check_term in tool definitions', () => {
+    const tools = (manager as any).getToolDefinitions();
+    const checkTerm = tools.find((t: any) => t.name === 'check_term');
+    expect(checkTerm).toBeDefined();
+    expect(checkTerm.input_schema.required).toContain('term');
+  });
 });
 
 describe('OpenCodeManager – getMaxOutputTokens (ModelCatalogEngine delegate)', () => {
