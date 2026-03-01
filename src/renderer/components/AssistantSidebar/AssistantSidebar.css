@@ -455,7 +455,7 @@
 }
 
 .assistant-panel-mindmap-label {
-  font-size: 12px;
+  font-size: 13px;
   fill: var(--vscode-foreground);
   pointer-events: none;
 }

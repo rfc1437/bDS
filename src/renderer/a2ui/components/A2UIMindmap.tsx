@@ -1,20 +1,17 @@
 /**
  * A2UI Mindmap Component
  *
- * Renders a centered mind map diagram using d3-hierarchy for tree layout
- * and d3-shape for curved link paths, with inline SVG output.
+ * Renders a centered mind map diagram using dagre for automatic graph layout
+ * with variable-sized nodes, word wrapping, and multi-line labels.
  *
- * Layout strategy (classic mindmap):
- * - Root node sits at the horizontal center
- * - Children are split into two balanced groups: right half and left half
- * - Each half is laid out as a vertical tree using d3.tree()
- * - Left-side trees are mirrored horizontally
- * - Horizontal spacing accounts for actual label widths to prevent overlap
+ * Layout strategy:
+ * - Dagre arranges the tree left-to-right (rankdir: LR)
+ * - Each node has dynamically computed width/height based on wrapped text lines
+ * - Links follow dagre routed edge points, rendered as SVG cubic curves
  */
 
 import React, { useMemo } from 'react';
-import { hierarchy, tree as d3tree, type HierarchyPointNode } from 'd3-hierarchy';
-import { linkHorizontal } from 'd3-shape';
+import dagre from '@dagrejs/dagre';
 import type { A2UIResolvedComponent, A2UIClientAction } from '../../../main/a2ui/types';
 
 interface A2UIComponentProps {
@@ -31,7 +28,7 @@ interface MindmapNode {
   children?: string[];
 }
 
-interface TreeNode {
+export interface TreeNode {
   id: string;
   label: string;
   children: TreeNode[];
@@ -50,6 +47,69 @@ function getNodeColor(depth: number): string {
   if (depth === 0) return 'var(--vscode-focusBorder, #007fd4)';
   return NODE_COLORS[(depth - 1) % NODE_COLORS.length];
 }
+
+/* ── Constants ──────────────────────────────────────────────── */
+
+export const FONT_SIZE = 13;
+export const CHAR_WIDTH = 7.8;
+export const LINE_HEIGHT = 18;
+const NODE_PADDING_X = 14;
+const NODE_PADDING_Y = 8;
+const NODE_RADIUS = 6;
+export const MAX_NODE_WIDTH = 180;
+const MIN_NODE_WIDTH = 50;
+const NODE_SEP = 18;
+const RANK_SEP = 40;
+
+/* ── Text wrapping ──────────────────────────────────────────── */
+
+/** Break a label into wrapped lines that fit within maxWidth (in px). */
+export function wrapText(text: string, maxWidth: number): string[] {
+  const maxChars = Math.max(Math.floor(maxWidth / CHAR_WIDTH), 4);
+  const words = text.split(/\s+/);
+  if (words.length === 0) return [text];
+
+  const lines: string[] = [];
+  let currentLine = words[0];
+
+  for (let i = 1; i < words.length; i++) {
+    const candidate = currentLine + ' ' + words[i];
+    if (candidate.length <= maxChars) {
+      currentLine = candidate;
+    } else {
+      lines.push(currentLine);
+      currentLine = words[i];
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+}
+
+/** Estimate text width in px for a single line. */
+function estimateTextWidth(text: string): number {
+  return Math.max(text.length * CHAR_WIDTH, MIN_NODE_WIDTH);
+}
+
+/** Compute node box dimensions from wrapped lines. */
+export function nodeSize(label: string): { width: number; height: number; lines: string[] } {
+  const innerMax = MAX_NODE_WIDTH - NODE_PADDING_X * 2;
+  const singleLineWidth = estimateTextWidth(label);
+
+  // If single line fits, use it
+  if (singleLineWidth <= innerMax) {
+    const width = Math.max(singleLineWidth + NODE_PADDING_X * 2, MIN_NODE_WIDTH);
+    return { width, height: LINE_HEIGHT + NODE_PADDING_Y * 2, lines: [label] };
+  }
+
+  // Wrap text
+  const lines = wrapText(label, innerMax);
+  const longestLine = Math.max(...lines.map((l) => estimateTextWidth(l)));
+  const width = Math.min(Math.max(longestLine + NODE_PADDING_X * 2, MIN_NODE_WIDTH), MAX_NODE_WIDTH);
+  const height = lines.length * LINE_HEIGHT + NODE_PADDING_Y * 2;
+  return { width, height, lines };
+}
+
+/* ── Tree building ──────────────────────────────────────────── */
 
 /** Build a nested tree from a flat node array. First node is the root. */
 export function buildTree(nodes: MindmapNode[]): TreeNode | null {
@@ -76,293 +136,110 @@ export function buildTree(nodes: MindmapNode[]): TreeNode | null {
   return toTreeNode(nodes[0].id);
 }
 
-/** Estimate text width in pixels (rough: 7px per char at 12px font). */
-function estimateTextWidth(text: string): number {
-  return Math.max(text.length * 7, 40);
-}
+/* ── Layout (dagre) ─────────────────────────────────────────── */
 
-/** Compute node box width from label. */
-function nodeWidth(label: string): number {
-  return estimateTextWidth(label) + NODE_PADDING_X * 2;
-}
-
-const NODE_HEIGHT = 28;
-const NODE_PADDING_X = 12;
-const NODE_RADIUS = 6;
-const VERTICAL_GAP = 10;
-const HORIZONTAL_GAP = 24;
-
-/** Count total descendant leaves for balancing. */
-function leafCount(node: TreeNode): number {
-  if (node.children.length === 0) return 1;
-  let count = 0;
-  for (const child of node.children) {
-    count += leafCount(child);
-  }
-  return count;
-}
-
-/**
- * Split root children into right and left groups, balanced by subtree size.
- * Uses a greedy approach: assign children to the smaller side.
- */
-export function splitChildren(children: TreeNode[]): { right: TreeNode[]; left: TreeNode[] } {
-  if (children.length === 0) return { right: [], left: [] };
-  if (children.length === 1) return { right: children, left: [] };
-
-  // Compute weights (leaf counts) for each child subtree
-  const weighted = children.map((child) => ({ child, weight: leafCount(child) }));
-
-  const right: TreeNode[] = [];
-  const left: TreeNode[] = [];
-  let rightWeight = 0;
-  let leftWeight = 0;
-
-  for (const { child, weight } of weighted) {
-    if (rightWeight <= leftWeight) {
-      right.push(child);
-      rightWeight += weight;
-    } else {
-      left.push(child);
-      leftWeight += weight;
-    }
-  }
-
-  return { right, left };
-}
-
-interface PositionedNode {
+export interface PositionedNode {
   id: string;
   label: string;
   x: number;
   y: number;
   width: number;
+  height: number;
   depth: number;
+  lines: string[];
 }
 
-interface LayoutResult {
+export interface LayoutResult {
   svgWidth: number;
   svgHeight: number;
   nodes: PositionedNode[];
-  links: Array<{
-    source: { x: number; y: number };
-    target: { x: number; y: number };
-  }>;
+  links: Array<{ points: Array<{ x: number; y: number }> }>;
 }
 
-/**
- * Compute the maximum node width at each depth level of a d3 hierarchy tree.
- * Used to set proper horizontal spacing per level so nodes don't overlap.
- */
-function maxWidthPerDepth(root: HierarchyPointNode<TreeNode>): Map<number, number> {
-  const widths = new Map<number, number>();
-  for (const n of root.descendants()) {
-    const w = nodeWidth(n.data.label);
-    const current = widths.get(n.depth) ?? 0;
-    if (w > current) widths.set(n.depth, w);
-  }
-  return widths;
-}
+/** Compute dagre layout for the full tree. */
+export function computeLayout(root: TreeNode): LayoutResult {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: 'LR',
+    nodesep: NODE_SEP,
+    ranksep: RANK_SEP,
+    marginx: 16,
+    marginy: 16,
+  });
+  g.setDefaultEdgeLabel(() => ({}));
 
-/**
- * Lay out one side (right or left) of the mindmap.
- * Creates a virtual root to act as connection point, then runs d3.tree().
- * Returns positioned nodes (excluding virtual root) and links.
- *
- * @param side 'right' = nodes extend rightward (positive x), 'left' = mirrored
- * @param children The children that go on this side
- * @param rootId ID of the real root node (for link origins)
- * @param depthOffset Depth offset (1, since these are children of root)
- */
-function layoutSide(
-  side: 'right' | 'left',
-  children: TreeNode[],
-  rootId: string,
-  rootX: number,
-  rootY: number,
-): { nodes: PositionedNode[]; links: LayoutResult['links'] } {
-  if (children.length === 0) return { nodes: [], links: [] };
-
-  // Create a virtual root that holds the side's children
-  const virtualRoot: TreeNode = { id: `__virtual_${side}`, label: '', children };
-  const h = hierarchy(virtualRoot, (d) => (d.children.length > 0 ? d.children : null));
-
-  const nodeVSpacing = NODE_HEIGHT + VERTICAL_GAP;
-  const treeLayout = d3tree<TreeNode>().nodeSize([nodeVSpacing, 1]);
-  const treeRoot = treeLayout(h);
-
-  // Compute max widths per depth to set proper horizontal offsets
-  const depthWidths = maxWidthPerDepth(treeRoot);
-
-  // Compute cumulative x offset for each depth level
-  // depth 0 = virtual root (at rootX), depth 1 = first children, etc.
-  const depthX = new Map<number, number>();
-  depthX.set(0, 0);
-  let cumulativeX = 0;
-  const maxDepth = Math.max(...depthWidths.keys());
-  for (let d = 1; d <= maxDepth; d++) {
-    const parentWidth = depthWidths.get(d - 1) ?? 60;
-    const currentWidth = depthWidths.get(d) ?? 60;
-    cumulativeX += parentWidth / 2 + HORIZONTAL_GAP + currentWidth / 2;
-    depthX.set(d, cumulativeX);
-  }
-
-  const mirror = side === 'left' ? -1 : 1;
-  const nodes: PositionedNode[] = [];
-  const links: LayoutResult['links'] = [];
-
-  for (const n of treeRoot.descendants()) {
-    // Skip virtual root
-    if (n.depth === 0) continue;
-
-    const w = nodeWidth(n.data.label);
-    const xOffset = depthX.get(n.depth) ?? 0;
-
-    nodes.push({
-      id: n.data.id,
-      label: n.data.label,
-      x: rootX + mirror * xOffset,
-      // d3.tree: x = vertical position, y = depth (but we computed our own x)
-      y: rootY + n.x,
-      width: w,
-      depth: n.depth, // depth relative to virtual root; real depth = n.depth
+  // Recursively add nodes and edges
+  function addNode(node: TreeNode, depth: number): void {
+    const size = nodeSize(node.label);
+    g.setNode(node.id, {
+      label: node.label,
+      width: size.width,
+      height: size.height,
+      depth,
+      lines: size.lines,
     });
-  }
-
-  // Build links
-  for (const link of treeRoot.links()) {
-    if (link.source.depth === 0) {
-      // Link from real root to first-level children
-      const targetNode = nodes.find((n) => n.id === link.target.data.id);
-      if (targetNode) {
-        const rootW = nodeWidth(''); // Will be overridden by caller
-        links.push({
-          source: { x: rootX, y: rootY },
-          target: {
-            x: targetNode.x + (side === 'left' ? targetNode.width / 2 : -targetNode.width / 2),
-            y: targetNode.y,
-          },
-        });
-      }
-    } else {
-      const sourceNode = nodes.find((n) => n.id === link.source.data.id);
-      const targetNode = nodes.find((n) => n.id === link.target.data.id);
-      if (sourceNode && targetNode) {
-        links.push({
-          source: {
-            x: sourceNode.x + (side === 'left' ? -sourceNode.width / 2 : sourceNode.width / 2),
-            y: sourceNode.y,
-          },
-          target: {
-            x: targetNode.x + (side === 'left' ? targetNode.width / 2 : -targetNode.width / 2),
-            y: targetNode.y,
-          },
-        });
-      }
+    for (const child of node.children) {
+      addNode(child, depth + 1);
+      g.setEdge(node.id, child.id);
     }
   }
 
-  return { nodes, links };
-}
+  addNode(root, 0);
+  dagre.layout(g);
 
-export function computeLayout(root: TreeNode): LayoutResult {
-  const rootW = nodeWidth(root.label);
-
-  // Single node — just center it
-  if (root.children.length === 0) {
-    const pad = 16;
+  const nodes: PositionedNode[] = g.nodes().map((id) => {
+    const n = g.node(id) as any;
     return {
-      svgWidth: rootW + pad * 2,
-      svgHeight: NODE_HEIGHT + pad * 2,
-      nodes: [{
-        id: root.id,
-        label: root.label,
-        x: rootW / 2 + pad,
-        y: NODE_HEIGHT / 2 + pad,
-        width: rootW,
-        depth: 0,
-      }],
-      links: [],
+      id,
+      label: n.label,
+      x: n.x,
+      y: n.y,
+      width: n.width,
+      height: n.height,
+      depth: n.depth ?? 0,
+      lines: n.lines ?? [n.label],
     };
-  }
+  });
 
-  // Split children into right and left sides for balanced layout
-  const { right, left } = splitChildren(root.children);
+  const links = g.edges().map((e) => {
+    const edge = g.edge(e);
+    return { points: edge.points };
+  });
 
-  // Root starts at origin (0, 0) — we'll translate after
-  const rootX = 0;
-  const rootY = 0;
-
-  const rightResult = layoutSide('right', right, root.id, rootX, rootY);
-  const leftResult = layoutSide('left', left, root.id, rootX, rootY);
-
-  // Merge all nodes
-  const allNodes: PositionedNode[] = [
-    { id: root.id, label: root.label, x: rootX, y: rootY, width: rootW, depth: 0 },
-    ...rightResult.nodes.map((n) => ({ ...n, depth: n.depth })),
-    ...leftResult.nodes.map((n) => ({ ...n, depth: n.depth })),
-  ];
-
-  // Fix root→child links to use actual root width
-  const fixRootLinks = (links: LayoutResult['links'], side: 'right' | 'left') =>
-    links.map((l) => {
-      if (l.source.x === rootX && l.source.y === rootY) {
-        return {
-          source: {
-            x: rootX + (side === 'right' ? rootW / 2 : -rootW / 2),
-            y: rootY,
-          },
-          target: l.target,
-        };
-      }
-      return l;
-    });
-
-  const allLinks = [
-    ...fixRootLinks(rightResult.links, 'right'),
-    ...fixRootLinks(leftResult.links, 'left'),
-  ];
-
-  // Compute bounding box
-  let minX = Infinity, maxX = -Infinity;
-  let minY = Infinity, maxY = -Infinity;
-  for (const n of allNodes) {
-    const l = n.x - n.width / 2;
-    const r = n.x + n.width / 2;
-    const t = n.y - NODE_HEIGHT / 2;
-    const b = n.y + NODE_HEIGHT / 2;
-    if (l < minX) minX = l;
-    if (r > maxX) maxX = r;
-    if (t < minY) minY = t;
-    if (b > maxY) maxY = b;
-  }
-
-  const pad = 16;
-  minX -= pad;
-  minY -= pad;
-  maxX += pad;
-  maxY += pad;
-
-  const offsetX = -minX;
-  const offsetY = -minY;
-
+  const graphLabel = g.graph();
   return {
-    svgWidth: maxX - minX,
-    svgHeight: maxY - minY,
-    nodes: allNodes.map((n) => ({ ...n, x: n.x + offsetX, y: n.y + offsetY })),
-    links: allLinks.map((l) => ({
-      source: { x: l.source.x + offsetX, y: l.source.y + offsetY },
-      target: { x: l.target.x + offsetX, y: l.target.y + offsetY },
-    })),
+    svgWidth: (graphLabel.width ?? 400) as number,
+    svgHeight: (graphLabel.height ?? 200) as number,
+    nodes,
+    links,
   };
 }
 
-const linkGenerator = linkHorizontal<
-  { source: { x: number; y: number }; target: { x: number; y: number } },
-  { x: number; y: number }
->()
-  .x((d) => d.x)
-  .y((d) => d.y);
+/* ── SVG path from dagre edge points ────────────────────────── */
+
+function edgePath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+
+  let d = `M${points[0].x},${points[0].y}`;
+
+  if (points.length === 2) {
+    d += ` L${points[1].x},${points[1].y}`;
+    return d;
+  }
+
+  // Smooth cubic curves through edge points
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev.x + curr.x) / 2;
+    d += ` C${cpx},${prev.y} ${cpx},${curr.y} ${curr.x},${curr.y}`;
+  }
+
+  return d;
+}
+
+/* ── Component ──────────────────────────────────────────────── */
 
 export const A2UIMindmap: React.FC<A2UIComponentProps> = ({ component }) => {
   const title = component.properties.title as string | undefined;
@@ -390,7 +267,7 @@ export const A2UIMindmap: React.FC<A2UIComponentProps> = ({ component }) => {
           <path
             key={`${component.id}-link-${i}`}
             className="assistant-panel-mindmap-link"
-            d={linkGenerator(link) ?? ''}
+            d={edgePath(link.points)}
             fill="none"
           />
         ))}
@@ -402,9 +279,9 @@ export const A2UIMindmap: React.FC<A2UIComponentProps> = ({ component }) => {
               <rect
                 className="assistant-panel-mindmap-node"
                 x={node.x - node.width / 2}
-                y={node.y - NODE_HEIGHT / 2}
+                y={node.y - node.height / 2}
                 width={node.width}
-                height={NODE_HEIGHT}
+                height={node.height}
                 rx={NODE_RADIUS}
                 ry={NODE_RADIUS}
                 fill={color}
@@ -420,8 +297,23 @@ export const A2UIMindmap: React.FC<A2UIComponentProps> = ({ component }) => {
                 y={node.y}
                 textAnchor="middle"
                 dominantBaseline="central"
+                fontSize={FONT_SIZE}
               >
-                {node.label}
+                {node.lines.length === 1 ? (
+                  node.lines[0]
+                ) : (
+                  node.lines.map((line, li) => (
+                    <tspan
+                      key={li}
+                      x={node.x}
+                      dy={li === 0
+                        ? -((node.lines.length - 1) * LINE_HEIGHT) / 2
+                        : LINE_HEIGHT}
+                    >
+                      {line}
+                    </tspan>
+                  ))
+                )}
               </text>
             </g>
           );

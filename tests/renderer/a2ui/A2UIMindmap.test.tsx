@@ -1,7 +1,15 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { A2UIMindmap, buildTree, computeLayout, splitChildren } from '../../../src/renderer/a2ui/components/A2UIMindmap';
+import {
+  A2UIMindmap,
+  buildTree,
+  computeLayout,
+  wrapText,
+  nodeSize,
+  MAX_NODE_WIDTH,
+  LINE_HEIGHT,
+} from '../../../src/renderer/a2ui/components/A2UIMindmap';
 import type { A2UIResolvedComponent, A2UIClientAction } from '../../../src/main/a2ui/types';
 
 function makeMindmapComponent(
@@ -29,6 +37,48 @@ function makeMindmapComponent(
 const noopAction = vi.fn<(action: A2UIClientAction) => void>();
 
 describe('A2UIMindmap', () => {
+  describe('wrapText', () => {
+    it('returns single line for short text', () => {
+      const lines = wrapText('Hello', 200);
+      expect(lines).toEqual(['Hello']);
+    });
+
+    it('wraps long text into multiple lines', () => {
+      const long = 'This is a fairly long label that should wrap into multiple lines';
+      const innerMax = MAX_NODE_WIDTH - 28; // NODE_PADDING_X * 2
+      const lines = wrapText(long, innerMax);
+      expect(lines.length).toBeGreaterThan(1);
+      expect(lines.join(' ')).toBe(long);
+    });
+
+    it('handles single word that exceeds max width', () => {
+      const lines = wrapText('Superlongwordwithoutspaces', 50);
+      // Single word stays as one line
+      expect(lines).toEqual(['Superlongwordwithoutspaces']);
+    });
+
+    it('preserves all words across lines', () => {
+      const text = 'one two three four five six';
+      const lines = wrapText(text, 80);
+      expect(lines.join(' ')).toBe(text);
+    });
+  });
+
+  describe('nodeSize', () => {
+    it('returns single-line size for short label', () => {
+      const result = nodeSize('Hi');
+      expect(result.lines).toEqual(['Hi']);
+      expect(result.height).toBe(LINE_HEIGHT + 16); // + padding*2
+    });
+
+    it('wraps long label into multiple lines', () => {
+      const result = nodeSize('A very long label that definitely exceeds the max width');
+      expect(result.lines.length).toBeGreaterThan(1);
+      expect(result.width).toBeLessThanOrEqual(MAX_NODE_WIDTH);
+      expect(result.height).toBeGreaterThan(LINE_HEIGHT + 16);
+    });
+  });
+
   describe('buildTree', () => {
     it('builds nested tree from flat node array', () => {
       const tree = buildTree([
@@ -71,45 +121,6 @@ describe('A2UIMindmap', () => {
     });
   });
 
-  describe('splitChildren', () => {
-    it('returns empty arrays for no children', () => {
-      const { right, left } = splitChildren([]);
-      expect(right).toHaveLength(0);
-      expect(left).toHaveLength(0);
-    });
-
-    it('puts single child on the right', () => {
-      const child: ReturnType<typeof buildTree> = { id: 'a', label: 'A', children: [] };
-      const { right, left } = splitChildren([child!]);
-      expect(right).toHaveLength(1);
-      expect(left).toHaveLength(0);
-    });
-
-    it('splits two children across right and left', () => {
-      const a = { id: 'a', label: 'A', children: [] };
-      const b = { id: 'b', label: 'B', children: [] };
-      const { right, left } = splitChildren([a, b]);
-      expect(right).toHaveLength(1);
-      expect(left).toHaveLength(1);
-    });
-
-    it('balances by subtree size', () => {
-      // 'a' has 3 leaves, 'b' has 1 leaf, 'c' has 1 leaf
-      const a = { id: 'a', label: 'A', children: [
-        { id: 'a1', label: 'A1', children: [] },
-        { id: 'a2', label: 'A2', children: [] },
-        { id: 'a3', label: 'A3', children: [] },
-      ] };
-      const b = { id: 'b', label: 'B', children: [] };
-      const c = { id: 'c', label: 'C', children: [] };
-      const { right, left } = splitChildren([a, b, c]);
-      // 'a' (weight 3) goes right, then 'b' (weight 1) goes left (0 < 3),
-      // 'c' (weight 1) also goes left (1 < 3)
-      expect(right.map((n) => n.id)).toContain('a');
-      expect(left.length).toBeGreaterThanOrEqual(1);
-    });
-  });
-
   describe('computeLayout', () => {
     it('computes layout for a simple tree', () => {
       const tree = buildTree([
@@ -126,7 +137,7 @@ describe('A2UIMindmap', () => {
       expect(layout.svgHeight).toBeGreaterThan(0);
     });
 
-    it('places root between left and right children', () => {
+    it('places children to the right of root (LR layout)', () => {
       const tree = buildTree([
         { id: 'root', label: 'Root', children: ['a', 'b'] },
         { id: 'a', label: 'A' },
@@ -138,11 +149,9 @@ describe('A2UIMindmap', () => {
       const nodeA = layout.nodes.find((n) => n.id === 'a')!;
       const nodeB = layout.nodes.find((n) => n.id === 'b')!;
 
-      // With 2 children, one should be to the right of root, one to the left
-      const rightChild = nodeA.x > root.x ? nodeA : nodeB;
-      const leftChild = nodeA.x > root.x ? nodeB : nodeA;
-      expect(rightChild.x).toBeGreaterThan(root.x);
-      expect(leftChild.x).toBeLessThan(root.x);
+      // LR layout: children should be to the right of root
+      expect(nodeA.x).toBeGreaterThan(root.x);
+      expect(nodeB.x).toBeGreaterThan(root.x);
     });
 
     it('assigns correct depth values', () => {
@@ -167,6 +176,31 @@ describe('A2UIMindmap', () => {
       expect(layout.svgWidth).toBeGreaterThan(0);
       expect(layout.svgHeight).toBeGreaterThan(0);
     });
+
+    it('provides wrapped lines for each node', () => {
+      const tree = buildTree([
+        { id: 'root', label: 'A long root label for wrapping test purposes here', children: ['a'] },
+        { id: 'a', label: 'Short' },
+      ])!;
+
+      const layout = computeLayout(tree);
+      const root = layout.nodes.find((n) => n.id === 'root')!;
+      expect(root.lines.length).toBeGreaterThanOrEqual(1);
+      expect(root.lines.join(' ')).toBe('A long root label for wrapping test purposes here');
+    });
+
+    it('links have points arrays', () => {
+      const tree = buildTree([
+        { id: 'root', label: 'Root', children: ['a'] },
+        { id: 'a', label: 'A' },
+      ])!;
+
+      const layout = computeLayout(tree);
+      expect(layout.links).toHaveLength(1);
+      expect(layout.links[0].points.length).toBeGreaterThanOrEqual(2);
+      expect(layout.links[0].points[0]).toHaveProperty('x');
+      expect(layout.links[0].points[0]).toHaveProperty('y');
+    });
   });
 
   describe('rendering', () => {
@@ -185,14 +219,14 @@ describe('A2UIMindmap', () => {
       const svg = container.querySelector('.assistant-panel-mindmap-svg');
       expect(svg).not.toBeNull();
 
-      // 4 nodes → 4 rect + 4 text
+      // 4 nodes -> 4 rect
       const rects = container.querySelectorAll('.assistant-panel-mindmap-node');
       expect(rects).toHaveLength(4);
 
       const labels = container.querySelectorAll('.assistant-panel-mindmap-label');
       expect(labels).toHaveLength(4);
 
-      // 3 links (root→a, root→b, a→a1)
+      // 3 links (root->a, root->b, a->a1)
       const links = container.querySelectorAll('.assistant-panel-mindmap-link');
       expect(links).toHaveLength(3);
     });
@@ -258,6 +292,18 @@ describe('A2UIMindmap', () => {
       const childRect = rects[1];
       expect(childRect.getAttribute('stroke-width')).toBe('1');
       expect(childRect.getAttribute('fill-opacity')).toBe('0.15');
+    });
+
+    it('renders multi-line labels with tspan elements', () => {
+      const comp = makeMindmapComponent({}, [
+        { id: 'root', label: 'This is a very long label that should definitely wrap into multiple lines in the mindmap' },
+      ]);
+      const { container } = render(
+        <A2UIMindmap component={comp} surfaceId="s1" onAction={noopAction} />,
+      );
+
+      const tspans = container.querySelectorAll('tspan');
+      expect(tspans.length).toBeGreaterThan(1);
     });
   });
 });
