@@ -1221,3 +1221,73 @@ describe('SSE spec compliance - single space removal', () => {
     expect(events[0].event).toBe('ping');
   });
 });
+
+// ── Async iterator return() cleanup ──
+
+describe('async iterator return() cleanup', () => {
+  function startTestServer(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void): Promise<{ url: string; close: () => Promise<void> }> {
+    return new Promise((resolve) => {
+      const server = http.createServer(handler);
+      server.listen(0, () => {
+        const addr = server.address() as { port: number };
+        resolve({
+          url: `http://localhost:${addr.port}`,
+          close: () => new Promise<void>((r) => server.close(() => r())),
+        });
+      });
+    });
+  }
+
+  it('destroys response stream when for-await-of breaks early', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"choices":[{"delta":{"content":"A"}}]}\n\n');
+      res.write('data: {"choices":[{"delta":{"content":"B"}}]}\n\n');
+      res.write('data: {"choices":[{"delta":{"content":"C"}}]}\n\n');
+      // Don't end the response — the client should destroy it via return()
+      // Keep connection alive for a bit
+      setTimeout(() => res.end(), 5000);
+    });
+
+    try {
+      const { events } = await httpRequestStream(srv.url, { method: 'POST', body: '{}' });
+      const collected: SSEEvent[] = [];
+      for await (const event of events) {
+        collected.push(event);
+        if (collected.length === 1) break; // Early exit triggers return()
+      }
+
+      expect(collected).toHaveLength(1);
+      expect(collected[0].data).toBe('{"choices":[{"delta":{"content":"A"}}]}');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('return() method signals done and is idempotent', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"ok":true}\n\n');
+      setTimeout(() => res.end(), 5000);
+    });
+
+    try {
+      const { events } = await httpRequestStream(srv.url, { method: 'POST', body: '{}' });
+      const iter = events[Symbol.asyncIterator]();
+
+      // Consume one event
+      const first = await iter.next();
+      expect(first.done).toBe(false);
+
+      // Call return() explicitly
+      const returnResult = await iter.return!(undefined as unknown as SSEEvent);
+      expect(returnResult.done).toBe(true);
+
+      // Subsequent next() should return done
+      const after = await iter.next();
+      expect(after.done).toBe(true);
+    } finally {
+      await srv.close();
+    }
+  });
+});

@@ -137,6 +137,7 @@ interface AnthropicContentBlock {
   input?: unknown;
   tool_use_id?: string;
   content?: string | AnthropicToolResultContent[];
+  is_error?: boolean;
   source?: {
     type: 'base64';
     media_type: string;
@@ -535,8 +536,9 @@ export class OpenCodeManager {
       const streamToolCalls = streamAccumulator.toolCalls;
       accumulatedText += roundText;
 
-      // Emit token usage after stream completes
-      if (callbacks.onTokenUsage) {
+      // Emit token usage after stream completes (only when usage data was received)
+      const hasUsageData = inputTokens > 0 || outputTokens > 0;
+      if (callbacks.onTokenUsage && hasUsageData) {
         const adjustedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
         const totalTokens = inputTokens + outputTokens;
 
@@ -562,12 +564,13 @@ export class OpenCodeManager {
       }
 
       // Collect tool calls from stream accumulator
-      const toolUseBlocks: Array<{ id: string; name: string; input: unknown }> = [];
+      const toolUseBlocks: Array<{ id: string; name: string; input: unknown; parseError?: string }> = [];
       for (const [, tc] of streamToolCalls) {
         try {
           toolUseBlocks.push({ id: tc.id, name: tc.name, input: JSON.parse(tc.arguments) });
-        } catch {
-          toolUseBlocks.push({ id: tc.id, name: tc.name, input: {} });
+        } catch (e) {
+          console.error(`[OpenCodeManager] Failed to parse tool arguments for ${tc.name}:`, tc.arguments);
+          toolUseBlocks.push({ id: tc.id, name: tc.name, input: {}, parseError: `Failed to parse tool arguments: ${(e as Error).message}` });
         }
       }
 
@@ -606,6 +609,21 @@ export class OpenCodeManager {
 
         if (callbacks.onToolCall) {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
+        }
+
+        // If JSON parsing of tool arguments failed, report the error to the model
+        if (toolBlock.parseError) {
+          const errorResult = { error: true, message: toolBlock.parseError };
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: errorResult });
+          }
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: JSON.stringify(errorResult),
+            is_error: true,
+          });
+          continue;
         }
 
         // Check if this is a render tool — generate A2UI messages instead of executing
@@ -814,8 +832,9 @@ export class OpenCodeManager {
       const streamToolCalls = streamAccumulator.toolCalls;
       accumulatedText += roundText;
 
-      // Emit token usage after stream completes
-      if (callbacks.onTokenUsage) {
+      // Emit token usage after stream completes (only when usage data was received)
+      const hasUsageData = promptTokens > 0 || completionTokens > 0;
+      if (callbacks.onTokenUsage && hasUsageData) {
         const inputTokens = promptTokens - cacheReadTokens;
         const outputTokens = completionTokens;
 
@@ -843,12 +862,13 @@ export class OpenCodeManager {
       }
 
       // Collect tool calls from stream accumulator
-      const parsedToolCalls: Array<{ id: string; name: string; args: unknown }> = [];
+      const parsedToolCalls: Array<{ id: string; name: string; args: unknown; parseError?: string }> = [];
       for (const [, tc] of streamToolCalls) {
         try {
           parsedToolCalls.push({ id: tc.id, name: tc.name, args: JSON.parse(tc.arguments) });
-        } catch {
-          parsedToolCalls.push({ id: tc.id, name: tc.name, args: {} });
+        } catch (e) {
+          console.error(`[OpenCodeManager:OpenAI] Failed to parse tool arguments for ${tc.name}:`, tc.arguments);
+          parsedToolCalls.push({ id: tc.id, name: tc.name, args: {}, parseError: `Failed to parse tool arguments: ${(e as Error).message}` });
         }
       }
 
@@ -880,6 +900,20 @@ export class OpenCodeManager {
         allToolCalls.push({ name: toolName, args: toolArgs });
         if (callbacks.onToolCall) {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
+        }
+
+        // If JSON parsing of tool arguments failed, report the error to the model
+        if (toolCall.parseError) {
+          const errorResult = { error: true, message: toolCall.parseError };
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: errorResult });
+          }
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify(errorResult),
+            tool_call_id: toolCall.id,
+          });
+          continue;
         }
 
         // Check if this is a render tool

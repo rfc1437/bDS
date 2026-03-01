@@ -529,6 +529,13 @@ export function httpRequestStream(
                 rejectNext = reject;
               });
             },
+            return(): Promise<IteratorResult<SSEEvent>> {
+              // Called when for-await-of exits early (break, return, throw).
+              // Destroy the response stream to free the socket immediately.
+              done = true;
+              res.destroy();
+              return Promise.resolve({ value: undefined as unknown as SSEEvent, done: true });
+            },
           };
         },
       };
@@ -559,7 +566,7 @@ export function httpRequestStream(
       }
       options.signal.addEventListener('abort', () => {
         req.destroy();
-      });
+      }, { once: true });
     }
 
     if (options.body) {
