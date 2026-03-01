@@ -309,6 +309,17 @@ export const electronAPI: ElectronAPI = {
     setApiKey: (apiKey: string) => ipcRenderer.invoke('chat:setApiKey', apiKey),
     getApiKey: () => ipcRenderer.invoke('chat:getApiKey'),
 
+    // Mistral API Key Management
+    validateMistralApiKey: (apiKey: string) => ipcRenderer.invoke('chat:validateMistralApiKey', apiKey),
+    setMistralApiKey: (apiKey: string) => ipcRenderer.invoke('chat:setMistralApiKey', apiKey),
+    getMistralApiKey: () => ipcRenderer.invoke('chat:getMistralApiKey'),
+
+    // Per-Purpose Model Preferences
+    getTitleModel: () => ipcRenderer.invoke('chat:getTitleModel'),
+    setTitleModel: (modelId: string | null) => ipcRenderer.invoke('chat:setTitleModel', modelId),
+    getImageAnalysisModel: () => ipcRenderer.invoke('chat:getImageAnalysisModel'),
+    setImageAnalysisModel: (modelId: string | null) => ipcRenderer.invoke('chat:setImageAnalysisModel', modelId),
+
     // Settings
     getAvailableModels: () => ipcRenderer.invoke('chat:getAvailableModels'),
     setDefaultModel: (modelId: string) => ipcRenderer.invoke('chat:setDefaultModel', modelId),

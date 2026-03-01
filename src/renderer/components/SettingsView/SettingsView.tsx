@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
@@ -242,7 +242,12 @@ export const SettingsView: React.FC = () => {
   const [aiApiKeyMasked, setAiApiKeyMasked] = useState('');
   const [aiHasApiKey, setAiHasApiKey] = useState(false);
   const [newApiKey, setNewApiKey] = useState('');
-  const [availableModels, setAvailableModels] = useState<{id: string; name: string}[]>([]);
+  const [aiHasMistralKey, setAiHasMistralKey] = useState(false);
+  const [aiMistralKeyMasked, setAiMistralKeyMasked] = useState('');
+  const [newMistralKey, setNewMistralKey] = useState('');
+  const [titleModel, setTitleModel] = useState('claude-haiku-4-5');
+  const [imageAnalysisModel, setImageAnalysisModel] = useState('claude-sonnet-4-5');
+  const [availableModels, setAvailableModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [modelCatalog, setModelCatalog] = useState<Map<string, {
     maxOutputTokens: number | null;
@@ -401,6 +406,23 @@ export const SettingsView: React.FC = () => {
           if (modelsResult?.success && modelsResult.models) {
             setAvailableModels(modelsResult.models);
             setSelectedModel(modelsResult.selectedModel || '');
+          }
+
+          // Load Mistral API key status
+          const mistralKeyResult = await window.electronAPI?.chat.getMistralApiKey();
+          if (mistralKeyResult) {
+            setAiHasMistralKey(mistralKeyResult.hasKey);
+            setAiMistralKeyMasked(mistralKeyResult.maskedKey || '');
+          }
+
+          // Load per-purpose model preferences
+          const titleModelResult = await window.electronAPI?.chat.getTitleModel();
+          if (titleModelResult?.success && titleModelResult.modelId) {
+            setTitleModel(titleModelResult.modelId);
+          }
+          const imageModelResult = await window.electronAPI?.chat.getImageAnalysisModel();
+          if (imageModelResult?.success && imageModelResult.modelId) {
+            setImageAnalysisModel(imageModelResult.modelId);
           }
 
           // Load model catalog metadata
@@ -1080,12 +1102,67 @@ export const SettingsView: React.FC = () => {
         setAiApiKeyMasked('•'.repeat(Math.max(0, newApiKey.length - 4)) + newApiKey.slice(-4));
         setNewApiKey('');
         showToast.success(t('settings.toast.apiKeySaved'));
+
+        // Refresh models after key change
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+          setSelectedModel(modelsResult.selectedModel || '');
+        }
       } else {
         showToast.error(t('settings.toast.apiKeyInvalid'));
       }
     } catch (error) {
       console.error('Failed to save API key:', error);
       showToast.error(t('settings.toast.apiKeySaveFailed'));
+    }
+  };
+
+  const handleSaveMistralApiKey = async () => {
+    if (!newMistralKey.trim()) return;
+    try {
+      const validateResult = await window.electronAPI?.chat.validateMistralApiKey(newMistralKey.trim());
+      if (validateResult?.isValid) {
+        await window.electronAPI?.chat.setMistralApiKey(newMistralKey.trim());
+        setAiHasMistralKey(true);
+        setAiMistralKeyMasked('•'.repeat(Math.max(0, newMistralKey.length - 4)) + newMistralKey.slice(-4));
+        setNewMistralKey('');
+        showToast.success(t('settings.toast.apiKeySaved'));
+
+        // Refresh models after key change
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+          setSelectedModel(modelsResult.selectedModel || '');
+        }
+      } else {
+        showToast.error(t('settings.toast.apiKeyInvalid'));
+      }
+    } catch (error) {
+      console.error('Failed to save Mistral API key:', error);
+      showToast.error(t('settings.toast.apiKeySaveFailed'));
+    }
+  };
+
+  const handleTitleModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setTitleModel(modelId);
+      if (result?.success) {
+        setTitleModel(modelId);
+      }
+    } catch (error) {
+      console.error('Failed to set title model:', error);
+    }
+  };
+
+  const handleImageAnalysisModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setImageAnalysisModel(modelId);
+      if (result?.success) {
+        setImageAnalysisModel(modelId);
+      }
+    } catch (error) {
+      console.error('Failed to set image analysis model:', error);
     }
   };
 
@@ -1137,6 +1214,37 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  // Group models by provider for optgroup display
+  const groupedModels = useMemo(() => {
+    const groups: Record<string, typeof availableModels> = {};
+    for (const model of availableModels) {
+      const provider = model.provider || 'other';
+      if (!groups[provider]) groups[provider] = [];
+      groups[provider].push(model);
+    }
+    return groups;
+  }, [availableModels]);
+
+  const providerLabel = (provider: string) => {
+    if (provider === 'anthropic' || provider === 'openai' || provider === 'google' || provider === 'other') return t('settings.ai.providerOpenCode');
+    if (provider === 'mistral') return t('settings.ai.providerMistral');
+    return provider;
+  };
+
+  // Render a model <select> with optgroup by provider
+  const renderModelSelect = (id: string, value: string, onChange: (v: string) => void, disabled?: boolean) => (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+      {availableModels.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
+      {Object.entries(groupedModels).map(([provider, models]) => (
+        <optgroup key={provider} label={providerLabel(provider)}>
+          {models.map(model => (
+            <option key={model.id} value={model.id}>{model.name}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+
   const renderAISettings = () => (
     <SettingSection
       id="settings-section-ai"
@@ -1186,26 +1294,57 @@ export const SettingsView: React.FC = () => {
       </SettingRow>
 
       <SettingRow
+        id="ai-mistral-key"
+        label={t('settings.ai.mistralApiKeyLabel')}
+        description={t('settings.ai.mistralApiKeyDescription')}
+      >
+        <div className="setting-input-group">
+          {aiHasMistralKey ? (
+            <>
+              <input
+                id="ai-mistral-key"
+                type="text"
+                value={aiMistralKeyMasked}
+                disabled
+                placeholder={t('settings.ai.mistralApiKeyConfigured')}
+              />
+              <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+            </>
+          ) : (
+            <>
+              <input
+                id="ai-mistral-key"
+                type="password"
+                value={newMistralKey}
+                onChange={(e) => setNewMistralKey(e.target.value)}
+                placeholder={t('chat.apiKeyPlaceholder')}
+              />
+              <button className="primary" onClick={handleSaveMistralApiKey} disabled={!newMistralKey.trim()}>
+                {t('chat.apiKeySave')}
+              </button>
+            </>
+          )}
+        </div>
+        {aiHasMistralKey && (
+          <div className="setting-inline-action">
+            <button className="text-button" onClick={() => { setAiHasMistralKey(false); setAiMistralKeyMasked(''); }}>
+              {t('settings.ai.changeMistralApiKey')}
+            </button>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
         id="ai-model"
         label={t('settings.ai.defaultModelLabel')}
         description={t('settings.ai.defaultModelDescription')}
       >
         <div className="setting-input-group">
-          <select
-            id="ai-model"
-            value={selectedModel}
-            onChange={(e) => handleModelChange(e.target.value)}
-            disabled={!aiHasApiKey}
-          >
-            {availableModels.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
-            {availableModels.map(model => (
-              <option key={model.id} value={model.id}>{model.name}</option>
-            ))}
-          </select>
+          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey)}
           <button
             className="secondary"
             onClick={handleRefreshModelCatalog}
-            disabled={refreshingCatalog || !aiHasApiKey}
+            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey)}
             title={t('settings.ai.refreshModelCatalog')}
           >
             {refreshingCatalog ? t('settings.ai.refreshing') : t('settings.ai.refreshModelCatalog')}
@@ -1230,6 +1369,22 @@ export const SettingsView: React.FC = () => {
             <div className="model-catalog-info">{parts.join(' · ')}</div>
           ) : null;
         })()}
+      </SettingRow>
+
+      <SettingRow
+        id="ai-title-model"
+        label={t('settings.ai.titleModelLabel')}
+        description={t('settings.ai.titleModelDescription')}
+      >
+        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey)}
+      </SettingRow>
+
+      <SettingRow
+        id="ai-image-analysis-model"
+        label={t('settings.ai.imageAnalysisModelLabel')}
+        description={t('settings.ai.imageAnalysisModelDescription')}
+      >
+        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey)}
       </SettingRow>
 
       <SettingRow

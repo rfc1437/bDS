@@ -150,9 +150,9 @@ describe('OpenCodeManager model discovery', () => {
       const models = await manager.getAvailableModels();
 
       expect(models).toHaveLength(3);
-      expect(models[0]).toEqual({ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic' });
-      expect(models[1]).toEqual({ id: 'gpt-5.1-codex', name: 'GPT 5.1 Codex', provider: 'openai' });
-      expect(models[2]).toEqual({ id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'google' });
+      expect(models[0]).toEqual({ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic', vision: true });
+      expect(models[1]).toEqual({ id: 'gpt-5.1-codex', name: 'GPT 5.1 Codex', provider: 'openai', vision: false });
+      expect(models[2]).toEqual({ id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'google', vision: true });
     });
 
     it('falls back to known models when API fails', async () => {
@@ -238,12 +238,15 @@ describe('OpenCodeManager model discovery', () => {
     it('falls back to known models when no API key is set', async () => {
       const manager = createManager();
       (manager as any).apiKey = '';
+      // Set a key so fallback filtering works (at least one provider must have a key)
+      manager.setMistralApiKey('test-key');
 
       const models = await manager.getAvailableModels();
 
+      // Only Mistral models will be in fallback since only Mistral key is set
       expect(models.length).toBeGreaterThan(0);
-      const ids = models.map((m: ModelInfo) => m.id);
-      expect(ids).toContain('claude-sonnet-4');
+      const providers = new Set(models.map((m: ModelInfo) => m.provider));
+      expect(providers.has('mistral')).toBe(true);
     });
   });
 });

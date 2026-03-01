@@ -33,6 +33,10 @@ const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
 const ZEN_OPENAI_URL = 'https://opencode.ai/zen/v1/chat/completions';
 const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 
+// Mistral API endpoints
+const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
+const MISTRAL_MODELS_URL = 'https://api.mistral.ai/v1/models';
+
 // Known model display names: maps model IDs to polished names and serves as offline fallback
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   // Anthropic Claude
@@ -75,6 +79,12 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'kimi-k2-thinking': 'Kimi K2 Thinking',
   'big-pickle': 'Big Pickle',
   'trinity-large-preview-free': 'Trinity Large Preview Free',
+  // Mistral AI
+  'mistral-large-latest': 'Mistral Large',
+  'mistral-medium-latest': 'Mistral Medium',
+  'mistral-small-latest': 'Mistral Small',
+  'devstral-small-latest': 'Devstral Small',
+  'devstral-large-latest': 'Devstral Large',
 };
 
 
@@ -82,10 +92,49 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
 // Uppercase prefixes that should not be title-cased
 const UPPERCASE_PREFIXES = ['gpt', 'glm'];
 
+// Per-model context token budgets for truncation
+// OpenCode models default to 150,000; Mistral models have specific budgets
+const MODEL_CONTEXT_BUDGETS: Record<string, number> = {
+  'mistral-large-latest': 35_000,
+  'mistral-medium-latest': 35_000,
+  'mistral-small-latest': 120_000,
+  'devstral-small-latest': 120_000,
+  'devstral-large-latest': 240_000,
+};
+
+// Vision capabilities per model (APIs don't expose this)
+const MODEL_CAPABILITIES: Record<string, { vision: boolean }> = {
+  // Anthropic Claude — all vision-capable
+  'claude-opus-4-6': { vision: true },
+  'claude-opus-4-5': { vision: true },
+  'claude-opus-4-1': { vision: true },
+  'claude-sonnet-4-6': { vision: true },
+  'claude-sonnet-4-5': { vision: true },
+  'claude-sonnet-4': { vision: true },
+  'claude-haiku-4-5': { vision: true },
+  'claude-3-5-haiku': { vision: true },
+  // OpenAI GPT — most are vision-capable
+  'gpt-5': { vision: true },
+  'gpt-5.1': { vision: true },
+  'gpt-5.2': { vision: true },
+  'gpt-5-nano': { vision: true },
+  // Google Gemini — vision-capable
+  'gemini-3.1-pro': { vision: true },
+  'gemini-3-pro': { vision: true },
+  'gemini-3-flash': { vision: true },
+  // Mistral AI
+  'mistral-large-latest': { vision: true },
+  'mistral-medium-latest': { vision: true },
+  'mistral-small-latest': { vision: true },
+  'devstral-small-latest': { vision: false },
+  'devstral-large-latest': { vision: false },
+};
+
 export interface ModelInfo {
   id: string;
   name: string;
   provider: string;
+  vision?: boolean;
 }
 
 export interface SendMessageOptions {
@@ -171,6 +220,7 @@ export class OpenCodeManager {
   private postMediaEngine: PostMediaEngine;
   private getMainWindow: () => BrowserWindow | null;
   private apiKey: string = '';
+  private mistralApiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
   private cachedModels: ModelInfo[] | null = null;
   private cachedModelsAt: number = 0;
@@ -212,17 +262,38 @@ export class OpenCodeManager {
   }
 
   /**
-   * Check if the service is configured and ready
+   * Set API key for Mistral AI
    */
-  async checkReady(): Promise<{ ready: boolean; error?: string }> {
-    if (!this.apiKey) {
-      return { ready: false, error: 'API key not configured' };
-    }
-    return { ready: true };
+  setMistralApiKey(key: string): void {
+    this.mistralApiKey = key;
+    // Invalidate model cache so merged list is re-fetched
+    this.cachedModels = null;
+    this.cachedModelsAt = 0;
   }
 
   /**
-   * Validate an API key by calling the models endpoint
+   * Get current Mistral API key
+   */
+  getMistralApiKey(): string {
+    return this.mistralApiKey;
+  }
+
+  /**
+   * Check if the service is configured and ready
+   */
+  async checkReady(): Promise<{ ready: boolean; error?: string; providers?: { opencode: boolean; mistral: boolean } }> {
+    const providers = {
+      opencode: !!this.apiKey,
+      mistral: !!this.mistralApiKey,
+    };
+    if (!this.apiKey && !this.mistralApiKey) {
+      return { ready: false, error: 'API key not configured', providers };
+    }
+    return { ready: true, providers };
+  }
+
+  /**
+   * Validate an OpenCode API key by calling the models endpoint
    */
   async validateApiKey(apiKey: string): Promise<{ isValid: boolean; models: ModelInfo[] }> {
     if (!apiKey || apiKey.length < 3) {
@@ -242,7 +313,11 @@ export class OpenCodeManager {
           headers,
         });
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          return { isValid: true, models: Object.entries(MODEL_DISPLAY_NAMES).map(([id, name]) => ({ id, name, provider: this.detectProvider(id) })) };
+          // Filter to only OpenCode models (not Mistral)
+          const models = Object.entries(MODEL_DISPLAY_NAMES)
+            .map(([id, name]) => ({ id, name, provider: this.detectProvider(id), vision: MODEL_CAPABILITIES[id]?.vision ?? false }))
+            .filter(m => this.isProviderKeySet(m.provider) || m.provider !== 'mistral');
+          return { isValid: true, models };
         }
       } catch {
         // Try next auth method
@@ -253,7 +328,41 @@ export class OpenCodeManager {
   }
 
   /**
+   * Validate a Mistral API key by calling the Mistral models endpoint
+   */
+  async validateMistralApiKey(apiKey: string): Promise<{ isValid: boolean; models: ModelInfo[] }> {
+    if (!apiKey || apiKey.length < 3) {
+      return { isValid: false, models: [] };
+    }
+
+    try {
+      const response = await this.httpRequest(MISTRAL_MODELS_URL, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      });
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        const data = JSON.parse(response.body);
+        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+          // Return Mistral models from display name map
+          const models = Object.entries(MODEL_DISPLAY_NAMES)
+            .filter(([id]) => this.detectProvider(id) === 'mistral')
+            .map(([id, name]) => ({ id, name, provider: 'mistral', vision: MODEL_CAPABILITIES[id]?.vision ?? false }));
+          return { isValid: true, models };
+        }
+      }
+    } catch {
+      // Fall through
+    }
+
+    return { isValid: false, models: [] };
+  }
+
+  /**
    * Get available models (cached with 5-minute TTL)
+   * Merges models from all configured providers.
    */
   async getAvailableModels(): Promise<ModelInfo[]> {
     // Return cached models if within TTL
@@ -261,7 +370,10 @@ export class OpenCodeManager {
       return this.cachedModels;
     }
 
-    // Try fetching from API
+    const allModels: ModelInfo[] = [];
+    let fetched = false;
+
+    // Fetch OpenCode models
     if (this.apiKey) {
       try {
         const response = await this.httpRequest(ZEN_MODELS_URL, {
@@ -274,14 +386,15 @@ export class OpenCodeManager {
         if (response.statusCode === 200) {
           const data = JSON.parse(response.body);
           if (data.data && Array.isArray(data.data)) {
-            const models = data.data.map((m: { id: string }) => ({
-              id: m.id,
-              name: this.formatModelName(m.id),
-              provider: this.detectProvider(m.id),
-            }));
-            this.cachedModels = models;
-            this.cachedModelsAt = Date.now();
-            return models;
+            for (const m of data.data as Array<{ id: string }>) {
+              allModels.push({
+                id: m.id,
+                name: this.formatModelName(m.id),
+                provider: this.detectProvider(m.id),
+                vision: MODEL_CAPABILITIES[m.id]?.vision ?? false,
+              });
+            }
+            fetched = true;
           }
         }
       } catch {
@@ -289,12 +402,52 @@ export class OpenCodeManager {
       }
     }
 
-    // Build fallback from display name map
-    const fallback = Object.entries(MODEL_DISPLAY_NAMES).map(([id, name]) => ({
-      id,
-      name,
-      provider: this.detectProvider(id),
-    }));
+    // Fetch Mistral models
+    if (this.mistralApiKey) {
+      try {
+        const response = await this.httpRequest(MISTRAL_MODELS_URL, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${this.mistralApiKey}`,
+          },
+        });
+        if (response.statusCode === 200) {
+          const data = JSON.parse(response.body);
+          if (data.data && Array.isArray(data.data)) {
+            for (const m of data.data as Array<{ id: string }>) {
+              // Only include models we know about (have display names)
+              if (MODEL_DISPLAY_NAMES[m.id]) {
+                allModels.push({
+                  id: m.id,
+                  name: this.formatModelName(m.id),
+                  provider: 'mistral',
+                  vision: MODEL_CAPABILITIES[m.id]?.vision ?? false,
+                });
+              }
+            }
+            fetched = true;
+          }
+        }
+      } catch {
+        // Fall through to fallback
+      }
+    }
+
+    if (fetched && allModels.length > 0) {
+      this.cachedModels = allModels;
+      this.cachedModelsAt = Date.now();
+      return allModels;
+    }
+
+    // Build fallback from display name map, filtered by available provider keys
+    const fallback = Object.entries(MODEL_DISPLAY_NAMES)
+      .map(([id, name]) => ({
+        id,
+        name,
+        provider: this.detectProvider(id),
+        vision: MODEL_CAPABILITIES[id]?.vision ?? false,
+      }))
+      .filter(m => this.isProviderKeySet(m.provider));
     return fallback;
   }
 
@@ -334,6 +487,12 @@ export class OpenCodeManager {
 
       const modelId = conversation.model || 'claude-sonnet-4';
       const provider = this.detectProvider(modelId);
+
+      // Check that the provider's API key is available
+      if (!this.isProviderKeySet(provider)) {
+        const providerLabel = provider === 'mistral' ? 'Mistral' : 'OpenCode';
+        return { success: false, error: `The model '${modelId}' requires a ${providerLabel} API key. Configure it in Settings.` };
+      }
 
       // Get system prompt
       const systemMessage = conversation.messages.find(m => m.role === 'system');
@@ -387,6 +546,8 @@ export class OpenCodeManager {
           );
         }
 
+        // Get provider-specific config (URL, key, options)
+        const config = this.getProviderConfig(provider);
         return this.sendOpenAIMessage(
           modelId,
           prompt,
@@ -395,6 +556,9 @@ export class OpenCodeManager {
           { onDelta, onToolCall, onToolResult, onTokenUsage },
           conversationId,
           emitA2UIMessages,
+          config.apiUrl,
+          config.apiKey,
+          config.options,
         );
       };
 
@@ -735,7 +899,8 @@ export class OpenCodeManager {
   }
 
   /**
-   * Send via OpenAI-compatible API (non-Claude models)
+   * Send via OpenAI-compatible API (non-Claude models, including Mistral)
+   * Parameterized to support multiple providers with identical API format.
    */
   private async sendOpenAIMessage(
     modelId: string,
@@ -750,6 +915,9 @@ export class OpenCodeManager {
     },
     conversationId: string,
     emitA2UIMessages: (messages: A2UIServerMessage[]) => void,
+    apiUrl: string = ZEN_OPENAI_URL,
+    apiKey: string = this.apiKey,
+    providerOptions?: { parallelToolCalls?: boolean },
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
     // Build OpenAI-format messages
     const allMessages: Array<Record<string, unknown>> = [
@@ -775,12 +943,13 @@ export class OpenCodeManager {
 
     // Truncate conversation history to fit within context window
     // Keep system message (index 0), truncate from oldest conversation messages
+    const contextBudget = MODEL_CONTEXT_BUDGETS[modelId] ?? 150000;
     const conversationMessages = allMessages.slice(1);
     const anthropicFmt = conversationMessages.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: (m.content as string) || '',
     }));
-    const truncated = this.truncateToTokenBudget(anthropicFmt, systemPrompt, anthropicTools);
+    const truncated = this.truncateToTokenBudget(anthropicFmt, systemPrompt, anthropicTools, contextBudget);
     const messages: Array<Record<string, unknown>> = [
       allMessages[0],
       ...truncated.map(m => ({ role: m.role, content: m.content })),
@@ -804,14 +973,19 @@ export class OpenCodeManager {
         stream_options: { include_usage: true },
       };
 
+      // Set parallel_tool_calls based on provider options (Mistral needs false)
+      if (providerOptions?.parallelToolCalls === false) {
+        body.parallel_tool_calls = false;
+      }
+
       // Retry only the HTTP connection (429/502/503 are caught before any events are emitted).
       // Event processing is outside retry scope to prevent double-emission of onDelta on retry.
       const { events } = await withRetry(async () => {
-        return httpRequestStream(ZEN_OPENAI_URL, {
+        return httpRequestStream(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`,
+            'Authorization': `Bearer ${apiKey}`,
           },
           body: JSON.stringify(body),
           signal,
@@ -970,11 +1144,39 @@ export class OpenCodeManager {
           callbacks.onToolResult({ name: toolName, result });
         }
 
-        messages.push({
-          role: 'tool',
-          content: JSON.stringify(result),
-          tool_call_id: toolCall.id,
-        });
+        // Check for image result that needs multimodal formatting (OpenAI image_url format)
+        if (result && typeof result === 'object' && (result as Record<string, unknown>).__isImageResult) {
+          const imageResult = result as {
+            __isImageResult: boolean;
+            success: boolean;
+            mediaType: string;
+            base64: string;
+            metadata: Record<string, unknown>;
+          };
+
+          messages.push({
+            role: 'tool',
+            content: [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${imageResult.mediaType};base64,${imageResult.base64}`,
+                },
+              },
+              {
+                type: 'text',
+                text: JSON.stringify({ success: true, metadata: imageResult.metadata }),
+              },
+            ],
+            tool_call_id: toolCall.id,
+          });
+        } else {
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify(result),
+            tool_call_id: toolCall.id,
+          });
+        }
       }
 
       if (signal.aborted) break;
@@ -1850,7 +2052,9 @@ export class OpenCodeManager {
   }
 
   /**
-   * Generate a title for a conversation
+   * Generate a title for a conversation.
+   * Uses the configured title model (fallback: claude-haiku-4-5) and routes
+   * the request to the correct provider API.
    */
   private async generateConversationTitle(
     conversationId: string,
@@ -1858,32 +2062,40 @@ export class OpenCodeManager {
     _assistantResponse: string
   ): Promise<void> {
     try {
-      const body = {
-        model: 'claude-haiku-4-5',
-        max_tokens: 20,
-        system: 'Generate an ultra-short title (2-3 words, max 25 characters) for this conversation. Focus ONLY on the topic. Ignore any capability disclaimers. Output ONLY the title text.',
-        messages: [
-          {
-            role: 'user',
-            content: `Topic: ${userMessage.substring(0, 100)}`,
+      // Read configured title model
+      const titleModel = await this.chatEngine.getSetting('chat_title_model') || 'claude-haiku-4-5';
+      const provider = this.detectProvider(titleModel);
+
+      // Ensure we have the key for this provider
+      if (!this.isProviderKeySet(provider)) return;
+
+      const promptText = `Topic: ${userMessage.substring(0, 100)}`;
+      const systemText = 'Generate an ultra-short title (2-3 words, max 25 characters) for this conversation. Focus ONLY on the topic. Ignore any capability disclaimers. Output ONLY the title text.';
+
+      let title = '';
+
+      if (provider === 'anthropic') {
+        const body = {
+          model: titleModel,
+          max_tokens: 20,
+          system: systemText,
+          messages: [{ role: 'user', content: promptText }],
+        };
+
+        const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+            'Authorization': `Bearer ${this.apiKey}`,
+            'anthropic-version': '2023-06-01',
           },
-        ],
-      };
+          body: JSON.stringify(body),
+        });
 
-      const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
-          'Authorization': `Bearer ${this.apiKey}`,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-      });
+        if (response.statusCode !== 200) return;
 
-      if (response.statusCode === 200) {
         const data = JSON.parse(response.body);
-        let title = '';
         if (Array.isArray(data.content)) {
           title = data.content
             .filter((b: AnthropicContentBlock) => b.type === 'text')
@@ -1892,23 +2104,47 @@ export class OpenCodeManager {
         } else {
           title = data.content || '';
         }
+      } else {
+        // OpenAI-compatible (includes Mistral)
+        const config = this.getProviderConfig(provider);
+        const body = {
+          model: titleModel,
+          max_tokens: 20,
+          messages: [
+            { role: 'system', content: systemText },
+            { role: 'user', content: promptText },
+          ],
+        };
 
-        // Clean up and truncate title
-        title = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]+$/, '');
-        
-        // Hard limit on title length
-        const MAX_TITLE_LENGTH = 30;
-        if (title.length > MAX_TITLE_LENGTH) {
-          title = title.substring(0, MAX_TITLE_LENGTH - 1) + '…';
-        }
+        const response = await this.httpRequest(config.apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
 
-        if (title) {
-          await this.chatEngine.updateConversation(conversationId, { title });
+        if (response.statusCode !== 200) return;
 
-          const mainWindow = this.getMainWindow();
-          if (mainWindow) {
-            mainWindow.webContents.send('chat-title-updated', { conversationId, title });
-          }
+        const data = JSON.parse(response.body);
+        title = data.choices?.[0]?.message?.content || '';
+      }
+
+      // Clean up and truncate title
+      title = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]+$/, '');
+
+      const MAX_TITLE_LENGTH = 30;
+      if (title.length > MAX_TITLE_LENGTH) {
+        title = title.substring(0, MAX_TITLE_LENGTH - 1) + '…';
+      }
+
+      if (title) {
+        await this.chatEngine.updateConversation(conversationId, { title });
+
+        const mainWindow = this.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send('chat-title-updated', { conversationId, title });
         }
       }
     } catch (error) {
@@ -1996,11 +2232,32 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
     return this.modelCatalogEngine;
   }
 
+  /**
+   * Check whether the given provider's API key is configured.
+   * All non-mistral providers are routed through OpenCode Zen and share apiKey.
+   */
+  private isProviderKeySet(provider: string): boolean {
+    if (provider === 'mistral') return !!this.mistralApiKey;
+    return !!this.apiKey;
+  }
+
+  /**
+   * Return API URL, key and provider-specific options for a given provider.
+   * Used to parameterise sendOpenAIMessage() for non-Anthropic providers.
+   */
+  private getProviderConfig(provider: string): { apiUrl: string; apiKey: string; options?: { parallelToolCalls?: boolean } } {
+    if (provider === 'mistral') {
+      return { apiUrl: MISTRAL_API_URL, apiKey: this.mistralApiKey, options: { parallelToolCalls: false } };
+    }
+    return { apiUrl: ZEN_OPENAI_URL, apiKey: this.apiKey };
+  }
+
   private detectProvider(modelId: string): string {
     const id = modelId.toLowerCase();
     if (id.startsWith('claude')) return 'anthropic';
     if (id.startsWith('gpt') || id.startsWith('o3') || id.startsWith('o4')) return 'openai';
     if (id.startsWith('gemini')) return 'google';
+    if (id.startsWith('mistral') || id.startsWith('ministral') || id.startsWith('devstral') || id.startsWith('codestral') || id.startsWith('pixtral')) return 'mistral';
     return 'other';
   }
 
@@ -2053,11 +2310,11 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
     tagMappings?: Record<string, string>;
     error?: string;
   }> {
-    if (!this.apiKey) {
-      return { success: false, error: 'API key not set' };
-    }
-
     const provider = this.detectProvider(modelId);
+    if (!this.isProviderKeySet(provider)) {
+      const providerLabel = provider === 'mistral' ? 'Mistral' : 'OpenCode';
+      return { success: false, error: `${providerLabel} API key not set` };
+    }
     
     // Build the prompt for taxonomy analysis
     const existingCategories = categories.filter(c => c.existsInProject).map(c => c.name);
@@ -2148,7 +2405,8 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
           }
         }
       } else {
-        // OpenAI-compatible
+        // OpenAI-compatible (includes Mistral)
+        const config = this.getProviderConfig(provider);
         const body = {
           model: modelId,
           max_tokens: 4096,
@@ -2158,11 +2416,11 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
           ],
         };
 
-        const response = await this.httpRequest(ZEN_OPENAI_URL, {
+        const response = await this.httpRequest(config.apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${config.apiKey}`,
           },
           body: JSON.stringify(body),
         });
@@ -2224,7 +2482,8 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
 
   /**
    * Analyze a media image and generate title, alt text, and caption using AI
-   * This is a one-shot request that looks at the image and suggests metadata
+   * This is a one-shot request that looks at the image and suggests metadata.
+   * Uses the configured image analysis model and routes to the correct provider.
    */
   async analyzeMediaImage(mediaId: string, language: string = 'en'): Promise<{
     success: boolean;
@@ -2233,8 +2492,13 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     caption?: string;
     error?: string;
   }> {
-    if (!this.apiKey) {
-      return { success: false, error: 'API key not configured. Please set your OpenCode API key in Settings.' };
+    // Read configured image analysis model (default: claude-sonnet-4-5)
+    const modelId = await this.chatEngine.getSetting('chat_image_analysis_model') || 'claude-sonnet-4-5';
+    const provider = this.detectProvider(modelId);
+
+    if (!this.isProviderKeySet(provider)) {
+      const providerLabel = provider === 'mistral' ? 'Mistral' : 'OpenCode';
+      return { success: false, error: `API key not configured. Please set your ${providerLabel} API key in Settings.` };
     }
 
     // Get media metadata
@@ -2278,59 +2542,100 @@ CAPTION: Short, engaging blog caption (5-20 words).
 Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
 
     try {
-      // Using Claude Sonnet 4.5 for best image analysis
-      const modelId = 'claude-sonnet-4-5';
-      
-      const body = {
-        model: modelId,
-        max_tokens: 200,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: 'image/webp',
-                  data: base64Data,
-                },
-              },
-              {
-                type: 'text',
-                text: 'Analyze and respond with JSON.',
-              },
-            ],
-          },
-        ],
-      };
-
-      const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
-          'Authorization': `Bearer ${this.apiKey}`,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (response.statusCode !== 200) {
-        console.error('[OpenCodeManager] Image analysis failed:', response.body);
-        const errorMsg = this.parseErrorResponse(response);
-        return { success: false, error: errorMsg };
-      }
-
-      const data = JSON.parse(response.body);
-      
-      // Extract text from Anthropic response
       let responseText = '';
-      for (const block of data.content || []) {
-        if (block.type === 'text') {
-          responseText += block.text;
+
+      if (provider === 'anthropic') {
+        const body = {
+          model: modelId,
+          max_tokens: 200,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: 'image/webp',
+                    data: base64Data,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: 'Analyze and respond with JSON.',
+                },
+              ],
+            },
+          ],
+        };
+
+        const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+            'Authorization': `Bearer ${this.apiKey}`,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (response.statusCode !== 200) {
+          console.error('[OpenCodeManager] Image analysis failed:', response.body);
+          const errorMsg = this.parseErrorResponse(response);
+          return { success: false, error: errorMsg };
         }
+
+        const data = JSON.parse(response.body);
+        for (const block of data.content || []) {
+          if (block.type === 'text') {
+            responseText += block.text;
+          }
+        }
+      } else {
+        // OpenAI-compatible (includes Mistral)
+        const config = this.getProviderConfig(provider);
+        const body = {
+          model: modelId,
+          max_tokens: 200,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/webp;base64,${base64Data}`,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: 'Analyze and respond with JSON.',
+                },
+              ],
+            },
+          ],
+        };
+
+        const response = await this.httpRequest(config.apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (response.statusCode !== 200) {
+          console.error('[OpenCodeManager] Image analysis failed:', response.body);
+          const errorMsg = this.parseErrorResponse(response);
+          return { success: false, error: errorMsg };
+        }
+
+        const data = JSON.parse(response.body);
+        responseText = data.choices?.[0]?.message?.content || '';
       }
 
       // Parse the JSON response

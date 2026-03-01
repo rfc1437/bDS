@@ -78,6 +78,16 @@ async function getOpenCodeManager(): Promise<OpenCodeManager> {
       } catch {
         // Silently ignore errors loading the key
       }
+
+      // Load Mistral API key from encrypted storage
+      try {
+        const mistralKey = await keyStore.retrieve('mistral_api_key');
+        if (mistralKey) {
+          openCodeManager!.setMistralApiKey(mistralKey);
+        }
+      } catch {
+        // Silently ignore errors loading the Mistral key
+      }
     })();
   }
 
@@ -104,6 +114,7 @@ export function registerChatHandlers(): void {
         ready: result.ready,
         error: result.error,
         backend: 'opencode',
+        providers: result.providers,
       };
     } catch (error) {
       console.error('[Chat IPC] Error checking ready:', error);
@@ -157,6 +168,106 @@ export function registerChatHandlers(): void {
     } catch (error) {
       console.error('[Chat IPC] Error getting API key:', error);
       return { hasKey: false, maskedKey: '' };
+    }
+  });
+
+  // ============ Mistral API Key ============
+
+  // Validate Mistral API key
+  ipcMain.handle('chat:validateMistralApiKey', async (_, apiKey: string) => {
+    try {
+      const manager = await getOpenCodeManager();
+      const result = await manager.validateMistralApiKey(apiKey);
+      return result;
+    } catch (error) {
+      console.error('[Chat IPC] Error validating Mistral API key:', error);
+      return { isValid: false, models: [] };
+    }
+  });
+
+  // Set Mistral API key
+  ipcMain.handle('chat:setMistralApiKey', async (_, apiKey: string) => {
+    try {
+      const manager = await getOpenCodeManager();
+      const previousKey = manager.getMistralApiKey();
+      manager.setMistralApiKey(apiKey);
+
+      // Persist to encrypted storage — roll back in-memory key on failure
+      try {
+        await getSecureKeyStore().store('mistral_api_key', apiKey);
+      } catch (storeError) {
+        manager.setMistralApiKey(previousKey);
+        throw storeError;
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting Mistral API key:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get Mistral API key (masked)
+  ipcMain.handle('chat:getMistralApiKey', async () => {
+    try {
+      const manager = await getOpenCodeManager();
+      const key = manager.getMistralApiKey();
+      if (!key) return { hasKey: false, maskedKey: '' };
+      const masked = '•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4);
+      return { hasKey: true, maskedKey: masked };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting Mistral API key:', error);
+      return { hasKey: false, maskedKey: '' };
+    }
+  });
+
+  // ============ Per-Purpose Model Preferences ============
+
+  // Get title generation model
+  ipcMain.handle('chat:getTitleModel', async () => {
+    try {
+      const engine = getChatEngine();
+      const model = await engine.getSetting('chat_title_model');
+      return { success: true, modelId: model || 'claude-haiku-4-5' };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting title model:', error);
+      return { success: false, modelId: 'claude-haiku-4-5' };
+    }
+  });
+
+  // Set title generation model
+  ipcMain.handle('chat:setTitleModel', async (_, modelId: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.setSetting('chat_title_model', modelId);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting title model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get image analysis model
+  ipcMain.handle('chat:getImageAnalysisModel', async () => {
+    try {
+      const engine = getChatEngine();
+      const model = await engine.getSetting('chat_image_analysis_model');
+      return { success: true, modelId: model || 'claude-sonnet-4-5' };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting image analysis model:', error);
+      return { success: false, modelId: 'claude-sonnet-4-5' };
+    }
+  });
+
+  // Set image analysis model
+  ipcMain.handle('chat:setImageAnalysisModel', async (_, modelId: string) => {
+    try {
+      const engine = getChatEngine();
+      await engine.setSetting('chat_image_analysis_model', modelId);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting image analysis model:', error);
+      return { success: false, error: (error as Error).message };
     }
   });
 

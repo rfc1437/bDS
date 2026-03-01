@@ -355,15 +355,31 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             </button>
             {showModelSelector && (
               <div className="model-dropdown">
-                {availableModels.map(model => (
-                  <button
-                    key={model.id}
-                    className={`model-option ${conversation?.model === model.id ? 'active' : ''}`}
-                    onClick={() => handleModelChange(model.id)}
-                  >
-                    {model.name}
-                  </button>
-                ))}
+                {(() => {
+                  // Group models by provider for visual separation
+                  const groups: Record<string, ChatModel[]> = {};
+                  for (const model of availableModels) {
+                    const p = model.provider || 'other';
+                    if (!groups[p]) groups[p] = [];
+                    groups[p].push(model);
+                  }
+                  return Object.entries(groups).map(([provider, models]) => (
+                    <React.Fragment key={provider}>
+                      {Object.keys(groups).length > 1 && (
+                        <div className="model-group-header">{provider === 'mistral' ? 'Mistral' : 'OpenCode'}</div>
+                      )}
+                      {models.map(model => (
+                        <button
+                          key={model.id}
+                          className={`model-option ${conversation?.model === model.id ? 'active' : ''}`}
+                          onClick={() => handleModelChange(model.id)}
+                        >
+                          {model.name}
+                        </button>
+                      ))}
+                    </React.Fragment>
+                  ));
+                })()}
               </div>
             )}
           </div>
