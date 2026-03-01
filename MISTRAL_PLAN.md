@@ -20,7 +20,7 @@ This work is split into **3 sequential PRs** to reduce risk:
 | PR | Scope | Key Changes |
 |----|-------|-------------|
 | **PR 1 — SSE Streaming** ✅ | Standalone feature, no Mistral dependency | `httpRequestStream()`, SSE parsers (Anthropic + OpenAI formats), `stream: true` in request bodies, tool-call accumulation during streaming |
-| **PR 2 — Keychain Migration** | Standalone security improvement | Migrate OpenCode API key from plain-text SQLite to `safeStorage`; add encryption/decryption wrappers; delete old plain-text keys (no migration); cross-platform (macOS Keychain, Windows DPAPI, Linux libsecret) |
+| **PR 2 — Keychain Migration** ✅ | Standalone security improvement | Migrate OpenCode API key from plain-text SQLite to `safeStorage`; add encryption/decryption wrappers; delete old plain-text keys (no migration); cross-platform (macOS Keychain, Windows DPAPI, Linux libsecret) |
 | **PR 3 — Mistral Integration** | Builds on PR 1 + PR 2 | Mistral constants, model detection, key storage (using keychain from PR 2), parameterized `sendOpenAIMessage()`, vision fix, provider-aware routing, UI changes, i18n |
 
 ## Target Models
