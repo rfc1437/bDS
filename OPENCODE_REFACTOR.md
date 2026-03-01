@@ -403,5 +403,8 @@ Domain logic only — no AI protocol code survives.
 ## Open Questions
 
 1. ~~**Zen baseURL paths**~~ — **RESOLVED**: `@ai-sdk/anthropic` appends `/messages`, `@ai-sdk/openai.chat()` appends `/chat/completions`. Verified from SDK source code and mock tests.
-2. **Model listing** — Zen model list endpoint vs AI SDK model discovery. Likely keep thin HTTP for now.
-3. **DB message format** — Current `chatMessages` schema stores role/content/toolCallId/toolCalls. AI SDK `response.messages` may use a richer format. Evaluate whether to migrate schema or adapt at persistence layer.
+2. ~~**Model listing**~~ — **RESOLVED**: AI SDK has no model listing/discovery API. Keep thin HTTP GET to `ZEN_MODELS_URL` (`/v1/models`) and `MISTRAL_MODELS_URL`. Move into `providers.ts` as a utility method alongside the registry. This is provider-agnostic already (OpenAI-compatible `/models` endpoint).
+3. ~~**DB message format**~~ — **RESOLVED**: Formats differ significantly. Adapt at persistence layer — no schema migration.
+   - **Current DB**: flat rows with `role` (string), `content` (string), `toolCallId` (string), `toolCalls` (JSON string of `[{name, args}]`)
+   - **AI SDK `ResponseMessage`**: `AssistantModelMessage | ToolModelMessage` with structured `content` arrays (`TextPart | ToolCallPart | ReasoningPart | ToolResultPart`)
+   - **Decision**: Serialize/deserialize in `ChatService` at the persistence boundary. On save: flatten AI SDK messages → flat DB rows. On load: reconstruct AI SDK `ModelMessage[]` from DB rows. This avoids a schema migration, keeps DB simple for UI queries, and the adapter is ~30 lines. Schema migration would buy us nothing — the UI reads these same rows directly for rendering.
