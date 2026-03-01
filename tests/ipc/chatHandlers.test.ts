@@ -1,3 +1,9 @@
+/**
+ * chatHandlers IPC streaming tests
+ *
+ * Post-Phase 2: chatHandlers uses ChatService.sendMessage, not OpenCodeManager.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const registeredHandlers = new Map<string, (...args: any[]) => Promise<any>>();
@@ -10,7 +16,7 @@ const mainWindowMock = {
 };
 
 const chatEngineInstances: Array<Record<string, any>> = [];
-const openCodeManagerInstances: Array<Record<string, any>> = [];
+const chatServiceInstances: Array<Record<string, any>> = [];
 const secureKeyStoreInstances: Array<Record<string, any>> = [];
 
 vi.mock('electron', () => ({
@@ -52,42 +58,6 @@ vi.mock('../../src/main/engine/ChatEngine', () => ({
   },
 }));
 
-vi.mock('../../src/main/engine/OpenCodeManager', () => ({
-  OpenCodeManager: class {
-    constructor() {
-      const instance = {
-        setApiKey: vi.fn(),
-        checkReady: vi.fn(async () => ({ ready: true })),
-        validateApiKey: vi.fn(async () => ({ isValid: true, models: [] })),
-        getApiKey: vi.fn(() => 'abc12345'),
-        getAvailableModels: vi.fn(async () => []),
-        sendMessage: vi.fn(async (_conversationId: string, _message: string, options: any) => {
-          options?.onDelta?.('stream-delta');
-          options?.onToolCall?.({ name: 'search_posts', args: { query: 'q' } });
-          options?.onToolResult?.({ name: 'search_posts', result: { ok: true } });
-          options?.onTokenUsage?.({
-            inputTokens: 100, outputTokens: 50,
-            cacheReadTokens: 80, cacheWriteTokens: 20, totalTokens: 250,
-            cumulativeInputTokens: 100, cumulativeOutputTokens: 50,
-            cumulativeCacheReadTokens: 80, cumulativeCacheWriteTokens: 20,
-            cumulativeTotalTokens: 250,
-          });
-          return {
-            success: true,
-            message: 'assistant reply',
-          };
-        }),
-        abortMessage: vi.fn(async () => ({ success: true })),
-        analyzeTaxonomy: vi.fn(async () => ({ success: true })),
-        analyzeMediaImage: vi.fn(async () => ({ success: true })),
-        stop: vi.fn(async () => undefined),
-      };
-      openCodeManagerInstances.push(instance);
-      return instance;
-    }
-  },
-}));
-
 vi.mock('../../src/main/engine/SecureKeyStore', () => ({
   SecureKeyStore: class {
     constructor() {
@@ -104,12 +74,67 @@ vi.mock('../../src/main/engine/SecureKeyStore', () => ({
   },
 }));
 
+vi.mock('../../src/main/engine/ai/providers', () => ({
+  ProviderRegistry: class {
+    constructor() { /* no-op */ }
+    setOpencodeKey = vi.fn();
+    getOpencodeKey = vi.fn(() => 'abc12345');
+    setMistralKey = vi.fn();
+    getMistralKey = vi.fn(() => '');
+    isReady = vi.fn(() => true);
+    isProviderKeySet = vi.fn(() => true);
+    getProviderStatus = vi.fn(() => ({ opencode: true, mistral: false }));
+    resolveModel = vi.fn();
+    getAvailableModels = vi.fn(async () => []);
+    validateOpencodeKey = vi.fn(async () => ({ isValid: true, models: [] }));
+    validateMistralKey = vi.fn(async () => ({ isValid: true, models: [] }));
+    invalidateModelCache = vi.fn();
+    getModelCatalogEngine = vi.fn(() => ({ refresh: vi.fn(async () => ({})), getAll: vi.fn(async () => []) }));
+  },
+  detectProvider: vi.fn(() => 'anthropic'),
+  createOpenCodeGateway: vi.fn(),
+}));
+
+vi.mock('../../src/main/engine/ai/chat', () => ({
+  ChatService: class {
+    constructor() {
+      const instance = {
+        sendMessage: vi.fn(async (_conversationId: string, _message: string, callbacks: any) => {
+          callbacks?.onDelta?.('stream-delta');
+          callbacks?.onToolCall?.({ name: 'search_posts', args: { query: 'q' } });
+          callbacks?.onToolResult?.({ name: 'search_posts', result: { ok: true } });
+          callbacks?.onTokenUsage?.({
+            inputTokens: 100, outputTokens: 50,
+            cacheReadTokens: 80, cacheWriteTokens: 20, totalTokens: 250,
+            cumulativeInputTokens: 100, cumulativeOutputTokens: 50,
+            cumulativeCacheReadTokens: 80, cumulativeCacheWriteTokens: 20,
+            cumulativeTotalTokens: 250,
+          });
+          return { success: true, message: 'assistant reply' };
+        }),
+        abortMessage: vi.fn(async () => ({ success: true })),
+        stop: vi.fn(async () => undefined),
+      };
+      chatServiceInstances.push(instance);
+      return instance;
+    }
+  },
+}));
+
+vi.mock('../../src/main/engine/ai/tasks', () => ({
+  OneShotTasks: class {
+    constructor() { /* no-op */ }
+    analyzeTaxonomy = vi.fn(async () => ({ success: true }));
+    analyzeMediaImage = vi.fn(async () => ({ success: true }));
+  },
+}));
+
 describe('chatHandlers', () => {
   beforeEach(() => {
     registeredHandlers.clear();
     webContentsSend.mockReset();
     chatEngineInstances.length = 0;
-    openCodeManagerInstances.length = 0;
+    chatServiceInstances.length = 0;
     secureKeyStoreInstances.length = 0;
     vi.resetModules();
   });
@@ -141,13 +166,11 @@ describe('chatHandlers', () => {
 
     expect(result.success).toBe(true);
 
-    const manager = openCodeManagerInstances[0];
-    expect(manager.setApiKey).toHaveBeenCalledWith('stored-key');
-    expect(manager.sendMessage).toHaveBeenCalledWith(
+    const service = chatServiceInstances[0];
+    expect(service.sendMessage).toHaveBeenCalledWith(
       'conversation-1',
       'hello assistant',
       expect.objectContaining({
-        metadata: { surface: 'sidebar' },
         onDelta: expect.any(Function),
         onToolCall: expect.any(Function),
         onToolResult: expect.any(Function),

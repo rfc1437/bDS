@@ -383,13 +383,13 @@ Domain logic only — no AI protocol code survives.
 7. ~~Wire MCPServer to `blog-tools.ts` for `check_term` / `search_posts` — delete duplication~~ ✅
 8. ~~Unit tests for all tools (mock engines, no AI calls)~~ ✅ 45 tests
 
-### Phase 2: Providers + Chat + Tasks (1-2 sessions)
-9. Create `ai/providers.ts` — `ProviderRegistry` with OpenCode gateway + Mistral direct
-10. Extend `SecureKeyStore` for multi-provider keys (`provider_${id}_api_key`)
-11. Create `ai/chat.ts` — `ChatService` with `streamText()`
-12. Create `ai/tasks.ts` — `OneShotTasks` with `generateText()`
-13. Update IPC handlers: generic provider management, wire to new modules
-14. Integration tests
+### Phase 2: Providers + Chat + Tasks (1-2 sessions) ✅ DONE
+9. ~~Create `ai/providers.ts` — `ProviderRegistry` with OpenCode gateway + Mistral direct~~ ✅
+10. ~~Extend `SecureKeyStore` for multi-provider keys~~ ✅ (no changes needed — existing SecureKeyStore works)
+11. ~~Create `ai/chat.ts` — `ChatService` with `streamText()`~~ ✅
+12. ~~Create `ai/tasks.ts` — `OneShotTasks` with `generateText()`~~ ✅
+13. ~~Update IPC handlers: generic provider management, wire to new modules~~ ✅
+14. ~~Integration tests~~ ✅ 34 tests
 
 ### Phase 3: Delete + ship (1 session)
 15. Delete `OpenCodeManager.ts` (2,745 lines)
