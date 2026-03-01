@@ -64,6 +64,13 @@
       "when": 1772369331600,
       "tag": "0008_third_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1772380619098,
+      "tag": "0009_model_catalog_v2",
+      "breakpoints": true
     }
   ]
 }

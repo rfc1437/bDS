@@ -85,6 +85,21 @@
   color: var(--vscode-list-activeSelectionForeground);
 }
 
+.model-group-header {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground);
+  pointer-events: none;
+  border-top: 1px solid var(--vscode-dropdown-border);
+}
+
+.model-group-header:first-child {
+  border-top: none;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;

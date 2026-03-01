@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 
 // Projects table - stores blog projects/websites
 export const projects = sqliteTable('projects', {
@@ -206,27 +206,64 @@ export const dbNotifications = sqliteTable('db_notifications', {
   createdAt: integer('created_at').notNull(),
 });
 
-// Model catalog table - cached model metadata from models.dev API
-// Stores per-model data (limits, pricing, capabilities) for the OpenCode provider.
+// ── Model Catalog ──
+// Normalised tables from models.dev API.
 // Refreshed on user action via conditional GET (ETag). Survives offline use.
-export const modelCatalog = sqliteTable('model_catalog', {
-  id: text('id').primaryKey(), // model ID (e.g. 'claude-sonnet-4-5')
-  name: text('name').notNull(), // display name
-  family: text('family'), // model family (e.g. 'claude-sonnet')
-  contextWindow: integer('context_window'), // max context tokens
-  maxInputTokens: integer('max_input_tokens'), // max input tokens (null = same as context)
-  maxOutputTokens: integer('max_output_tokens'), // max output tokens
-  inputPrice: real('input_price'), // cost per 1M input tokens (USD)
-  outputPrice: real('output_price'), // cost per 1M output tokens (USD)
-  cacheReadPrice: real('cache_read_price'), // cost per 1M cached input tokens (USD)
-  supportsAttachments: integer('supports_attachments', { mode: 'boolean' }).default(false),
-  supportsReasoning: integer('supports_reasoning', { mode: 'boolean' }).default(false),
-  supportsToolCall: integer('supports_tool_call', { mode: 'boolean' }).default(false),
+
+// Provider table — one row per models.dev top-level provider
+export const modelCatalogProviders = sqliteTable('ai_providers', {
+  id: text('id').primaryKey(),                  // provider key (e.g. 'opencode', 'mistral')
+  name: text('name').notNull(),                 // display name (e.g. 'OpenCode Zen')
+  env: text('env'),                             // JSON array of env var names
+  npm: text('npm'),                             // primary npm package
+  api: text('api'),                             // API base URL
+  doc: text('doc'),                             // documentation URL
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
-// Model catalog HTTP cache metadata (ETag for conditional GET)
-export const modelCatalogMeta = sqliteTable('model_catalog_meta', {
+// Model table — one row per (provider, modelId) pair
+export const modelCatalog = sqliteTable('ai_models', {
+  provider: text('provider').notNull(),         // FK → ai_providers.id
+  modelId: text('model_id').notNull(),
+  name: text('name').notNull(),                 // display name (e.g. 'Claude Sonnet 4.5')
+  family: text('family'),                       // model family (e.g. 'claude-sonnet')
+  attachment: integer('attachment', { mode: 'boolean' }).default(false),
+  reasoning: integer('reasoning', { mode: 'boolean' }).default(false),
+  toolCall: integer('tool_call', { mode: 'boolean' }).default(false),
+  structuredOutput: integer('structured_output', { mode: 'boolean' }).default(false),
+  temperature: integer('temperature', { mode: 'boolean' }).default(false),
+  knowledge: text('knowledge'),                 // knowledge cutoff (e.g. '2025-03-31')
+  releaseDate: text('release_date'),
+  lastUpdatedDate: text('last_updated_date'),
+  openWeights: integer('open_weights', { mode: 'boolean' }).default(false),
+  inputPrice: real('input_price'),              // USD per 1M input tokens
+  outputPrice: real('output_price'),            // USD per 1M output tokens
+  cacheReadPrice: real('cache_read_price'),
+  cacheWritePrice: real('cache_write_price'),
+  contextWindow: integer('context_window'),     // max context tokens
+  maxInputTokens: integer('max_input_tokens'),
+  maxOutputTokens: integer('max_output_tokens'),
+  interleaved: text('interleaved'),             // JSON object (e.g. '{"field":"reasoning_content"}')
+  status: text('status'),                       // e.g. 'deprecated'
+  providerNpm: text('provider_npm'),            // per-model npm override
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.provider, table.modelId] }),
+}));
+
+// Modality junction table — each row is one (direction, modality) tag for a model
+// e.g. ('opencode', 'claude-sonnet-4', 'input', 'image')
+export const modelCatalogModalities = sqliteTable('ai_model_modalities', {
+  provider: text('provider').notNull(),
+  modelId: text('model_id').notNull(),
+  direction: text('direction').notNull(),       // 'input' | 'output'
+  modality: text('modality').notNull(),         // 'text' | 'image' | 'pdf' | 'audio' | 'video'
+}, (table) => ({
+  pk: primaryKey({ columns: [table.provider, table.modelId, table.direction, table.modality] }),
+}));
+
+// HTTP cache metadata (ETag for conditional GET)
+export const modelCatalogMeta = sqliteTable('ai_catalog_meta', {
   key: text('key').primaryKey(), // 'etag' | 'lastFetchedAt'
   value: text('value').notNull(),
 });
@@ -260,7 +297,11 @@ export type Template = typeof templates.$inferSelect;
 export type NewTemplate = typeof templates.$inferInsert;
 export type DbNotification = typeof dbNotifications.$inferSelect;
 export type NewDbNotification = typeof dbNotifications.$inferInsert;
+export type ModelCatalogProviderEntry = typeof modelCatalogProviders.$inferSelect;
+export type NewModelCatalogProviderEntry = typeof modelCatalogProviders.$inferInsert;
 export type ModelCatalogEntry = typeof modelCatalog.$inferSelect;
 export type NewModelCatalogEntry = typeof modelCatalog.$inferInsert;
+export type ModelCatalogModalityEntry = typeof modelCatalogModalities.$inferSelect;
+export type NewModelCatalogModalityEntry = typeof modelCatalogModalities.$inferInsert;
 export type ModelCatalogMetaEntry = typeof modelCatalogMeta.$inferSelect;
 export type NewModelCatalogMetaEntry = typeof modelCatalogMeta.$inferInsert;

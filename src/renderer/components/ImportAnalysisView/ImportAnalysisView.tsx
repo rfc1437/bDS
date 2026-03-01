@@ -1371,15 +1371,30 @@ const TaxonomySection: React.FC<{
               </button>
               {showModelSelector && (
                 <div className="taxonomy-model-dropdown">
-                  {availableModels.map(model => (
-                    <button
-                      key={model.id}
-                      className="taxonomy-model-option"
-                      onClick={() => handleAnalyze(model.id)}
-                    >
-                      {model.name}
-                    </button>
-                  ))}
+                  {(() => {
+                    const groups: Record<string, ChatModel[]> = {};
+                    for (const model of availableModels) {
+                      const p = model.provider || 'other';
+                      if (!groups[p]) groups[p] = [];
+                      groups[p].push(model);
+                    }
+                    return Object.entries(groups).map(([provider, models]) => (
+                      <React.Fragment key={provider}>
+                        {Object.keys(groups).length > 1 && (
+                          <div className="model-group-header">{provider === 'mistral' ? t('settings.ai.providerMistral') : t('settings.ai.providerOpenCode')}</div>
+                        )}
+                        {models.map(model => (
+                          <button
+                            key={model.id}
+                            className="taxonomy-model-option"
+                            onClick={() => handleAnalyze(model.id)}
+                          >
+                            {model.name}
+                          </button>
+                        ))}
+                      </React.Fragment>
+                    ));
+                  })()}
                 </div>
               )}
             </div>

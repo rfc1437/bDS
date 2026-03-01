@@ -39,6 +39,13 @@ describe('AssistantSidebar wiring', () => {
       onA2UIMessage: vi.fn(() => vi.fn()),
       onTokenUsage: vi.fn(() => vi.fn()),
       dispatchA2UIAction: vi.fn(),
+      validateMistralApiKey: vi.fn().mockResolvedValue({ isValid: false, models: [] }),
+      setMistralApiKey: vi.fn().mockResolvedValue({ success: true }),
+      getMistralApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+      getTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: 'claude-haiku-4-5' }),
+      setTitleModel: vi.fn().mockResolvedValue({ success: true }),
+      getImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: 'claude-sonnet-4-5' }),
+      setImageAnalysisModel: vi.fn().mockResolvedValue({ success: true }),
     } as never;
   });
 

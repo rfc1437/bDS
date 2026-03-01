@@ -23,9 +23,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [needsApiKey, setNeedsApiKey] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [apiKeyError, setApiKeyError] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -174,29 +171,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     scrollToBottom();
   }, [messages, streamingContent, scrollToBottom]);
 
-  const handleApiKeySubmit = async () => {
-    if (!apiKeyInput.trim()) return;
-
-    setIsValidating(true);
-    setApiKeyError('');
-
-    try {
-      const result = await window.electronAPI?.chat.validateApiKey(apiKeyInput.trim());
-      if (result?.isValid) {
-        await window.electronAPI?.chat.setApiKey(apiKeyInput.trim());
-        setNeedsApiKey(false);
-        setApiKeyInput('');
-        loadData();
-      } else {
-        setApiKeyError(tr('chat.apiKeyInvalid'));
-      }
-    } catch {
-      setApiKeyError(tr('chat.apiKeyValidationFailed'));
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
   const handleSend = async () => {
     const message = inputValue.trim();
     if (!message || isStreaming) return;
@@ -303,6 +277,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
 
   // API key setup screen
   if (needsApiKey) {
+    const handleOpenSettings = () => {
+      useAppStore.getState().setActiveView('settings');
+      useAppStore.getState().openTab({ type: 'settings', id: 'settings', isTransient: false });
+    };
+
     return (
       <div className="chat-panel chat-surface">
         <div className="chat-panel-header">
@@ -314,23 +293,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             <h2>{tr('chat.apiKeyRequiredTitle')}</h2>
             <p>{tr('chat.apiKeyRequiredDescription')}</p>
             <div className="api-key-form">
-              <input
-                type="password"
-                className="api-key-input"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-                placeholder={tr('chat.apiKeyPlaceholder')}
-                disabled={isValidating}
-              />
               <button
                 className="api-key-submit"
-                onClick={handleApiKeySubmit}
-                disabled={!apiKeyInput.trim() || isValidating}
+                onClick={handleOpenSettings}
               >
-                {isValidating ? tr('chat.apiKeyValidating') : tr('chat.apiKeySave')}
+                {tr('chat.openSettings')}
               </button>
-              {apiKeyError && <div className="api-key-error">{apiKeyError}</div>}
             </div>
           </div>
         </div>
@@ -355,15 +323,31 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
             </button>
             {showModelSelector && (
               <div className="model-dropdown">
-                {availableModels.map(model => (
-                  <button
-                    key={model.id}
-                    className={`model-option ${conversation?.model === model.id ? 'active' : ''}`}
-                    onClick={() => handleModelChange(model.id)}
-                  >
-                    {model.name}
-                  </button>
-                ))}
+                {(() => {
+                  // Group models by provider for visual separation
+                  const groups: Record<string, ChatModel[]> = {};
+                  for (const model of availableModels) {
+                    const p = model.provider || 'other';
+                    if (!groups[p]) groups[p] = [];
+                    groups[p].push(model);
+                  }
+                  return Object.entries(groups).map(([provider, models]) => (
+                    <React.Fragment key={provider}>
+                      {Object.keys(groups).length > 1 && (
+                        <div className="model-group-header">{provider === 'mistral' ? tr('settings.ai.providerMistral') : tr('settings.ai.providerOpenCode')}</div>
+                      )}
+                      {models.map(model => (
+                        <button
+                          key={model.id}
+                          className={`model-option ${conversation?.model === model.id ? 'active' : ''}`}
+                          onClick={() => handleModelChange(model.id)}
+                        >
+                          {model.name}
+                        </button>
+                      ))}
+                    </React.Fragment>
+                  ));
+                })()}
               </div>
             )}
           </div>

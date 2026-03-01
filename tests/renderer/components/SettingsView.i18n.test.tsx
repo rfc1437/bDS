@@ -45,6 +45,10 @@ describe('SettingsView i18n', () => {
         getSystemPrompt: vi.fn().mockResolvedValue({ success: true, prompt: '' }),
         getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
         getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
+        getMistralApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: 'claude-haiku-4-5' }),
+        getImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: 'claude-sonnet-4-5' }),
+        getModelCatalog: vi.fn().mockResolvedValue({ success: true, entries: [] }),
       },
       templates: {
         ...(window as Window & { electronAPI: any }).electronAPI?.templates,

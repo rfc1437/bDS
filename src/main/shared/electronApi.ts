@@ -421,7 +421,8 @@ export interface ChatMessage {
 export interface ChatModel {
   id: string;
   name: string;
-  provider?: string;
+  provider: string;
+  vision?: boolean;
 }
 
 export interface ModelCatalogEntry {
@@ -450,6 +451,7 @@ export interface ChatReadyStatus {
   ready: boolean;
   error?: string;
   backend?: string;
+  providers?: { opencode: boolean; mistral: boolean };
 }
 
 export interface ChatApiKeyStatus {
@@ -825,11 +827,22 @@ export interface ElectronAPI {
     setApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
     getApiKey: () => Promise<ChatApiKeyStatus>;
 
+    // Mistral API Key
+    validateMistralApiKey: (apiKey: string) => Promise<{ isValid: boolean; models: ChatModel[] }>;
+    setMistralApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+    getMistralApiKey: () => Promise<ChatApiKeyStatus>;
+
     // Settings
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;
     setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
     getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
     setSystemPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+
+    // Per-purpose model preferences
+    getTitleModel: () => Promise<{ success: boolean; modelId?: string | null; error?: string }>;
+    setTitleModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
+    getImageAnalysisModel: () => Promise<{ success: boolean; modelId?: string | null; error?: string }>;
+    setImageAnalysisModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
 
     // Model Catalog
     refreshModelCatalog: () => Promise<ModelCatalogRefreshResult>;

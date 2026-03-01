@@ -33,7 +33,6 @@ export {
   OpenCodeManager,
   type SendMessageOptions,
   type SendMessageResult,
-  type ModelInfo,
 } from './OpenCodeManager';
 export {
   WxrParser,
