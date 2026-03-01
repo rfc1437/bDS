@@ -19,6 +19,14 @@
       <article class="single-post" data-template="single-post">
         <div class="post">{{ post.content | markdown: post.id, post_data_json_by_id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}</div>
       </article>
+      {% if backlinks.size > 0 %}
+      <div class="single-post-backlinks" aria-label="{{ 'render.backlinks.ariaLabel' | i18n: language }}">
+        <span class="single-post-backlinks-label">{{ 'render.backlinks.label' | i18n: language }}</span>
+        {% for backlink in backlinks %}
+        <a class="single-post-taxonomy-bubble single-post-backlink-bubble" href="{{ backlink.path }}">{{ backlink.display_slug }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
     </main>
   </body>
 </html>

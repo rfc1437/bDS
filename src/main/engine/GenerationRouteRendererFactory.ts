@@ -62,6 +62,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
       getPost: (postId: string) => Promise<PostData | null>;
       hasPublishedVersion: (postId: string) => Promise<boolean>;
+      getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
       setProjectContext: (projectId: string, dataDir?: string) => void;
     };
     mediaEngine: {
@@ -176,6 +177,9 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     },
     getPost: (postId: string) => params.engines.postEngine.getPost(postId),
     hasPublishedVersion: (postId: string) => params.engines.postEngine.hasPublishedVersion(postId),
+    getLinkedBy: params.engines.postEngine.getLinkedBy
+      ? (postId: string) => params.engines.postEngine.getLinkedBy!(postId)
+      : undefined,
     setProjectContext: (projectId: string, dataDir?: string) => {
       params.engines.postEngine.setProjectContext(projectId, dataDir);
     },

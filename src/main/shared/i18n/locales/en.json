@@ -63,6 +63,8 @@
   "render.calendar.loading": "Loading calendar…",
   "render.calendar.error": "Calendar data could not be loaded.",
   "render.taxonomy.ariaLabel": "Taxonomy",
+  "render.backlinks.label": "Linked from",
+  "render.backlinks.ariaLabel": "Backlinks",
   "render.video.youtubeTitle": "YouTube video",
   "render.video.vimeoTitle": "Vimeo video",
   "render.month.1": "January",

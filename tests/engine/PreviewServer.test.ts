@@ -919,6 +919,123 @@ describe('PreviewServer', () => {
     expect(categoryIndex).toBeLessThan(tagIndex);
   });
 
+  it('renders backlinks section at the bottom of a single post with slug bubbles linking to source posts', async () => {
+    const sourcePost = makePost({
+      id: 'source-post',
+      title: 'Source Post',
+      slug: 'source-post',
+      createdAt: new Date('2025-03-10T10:00:00.000Z'),
+      content: 'Links to [target](/2025/2/14/target-post)',
+    });
+
+    const longSlugPost = makePost({
+      id: 'long-slug-post',
+      title: 'A Very Long Slug Post Title',
+      slug: 'a-very-long-slug-post-that-exceeds-thirty-characters',
+      createdAt: new Date('2025-03-12T10:00:00.000Z'),
+      content: 'Links to [target](/2025/2/14/target-post)',
+    });
+
+    const targetPost = makePost({
+      id: 'target-post',
+      title: 'Target Post',
+      slug: 'target-post',
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+      content: 'This is the target post',
+    });
+
+    const engine = makeEngine([sourcePost, longSlugPost, targetPost]);
+    (engine as any).getLinkedBy = async (postId: string) => {
+      if (postId === 'target-post') {
+        return [
+          { id: 'source-post', title: 'Source Post', slug: 'source-post' },
+          { id: 'long-slug-post', title: 'A Very Long Slug Post Title', slug: 'a-very-long-slug-post-that-exceeds-thirty-characters' },
+        ];
+      }
+      return [];
+    };
+
+    server = new PreviewServer({
+      postEngine: engine,
+      settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/2025/2/14/target-post/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    // Backlinks section exists
+    expect(html).toContain('class="single-post-backlinks"');
+
+    // "Linked from" label
+    expect(html).toContain('Linked from');
+
+    // Backlink bubbles with correct class
+    expect(html).toContain('class="single-post-taxonomy-bubble single-post-backlink-bubble"');
+
+    // Slug text appears
+    expect(html).toContain('source-post');
+
+    // Long slugs are truncated to 30 chars + "..." in display text
+    expect(html).toContain('a-very-long-slug-post-that-exc...');
+
+    // The display text should NOT show the full slug (only the href contains it)
+    expect(html).toContain('>a-very-long-slug-post-that-exc...</a>');
+    expect(html).not.toContain('>a-very-long-slug-post-that-exceeds-thirty-characters</a>');
+
+    // Links point to the canonical post path
+    expect(html).toContain('href="/2025/03/10/source-post"');
+    expect(html).toContain('href="/2025/03/12/a-very-long-slug-post-that-exceeds-thirty-characters"');
+
+    // Backlinks use pico accent color
+    expect(html).toContain('.single-post-backlink-bubble');
+    expect(html).toContain('--pico-primary');
+
+    // Backlinks section is after the article
+    const articleEndIndex = html.indexOf('</article>');
+    const backlinksIndex = html.indexOf('class="single-post-backlinks"');
+    expect(articleEndIndex).toBeGreaterThan(-1);
+    expect(backlinksIndex).toBeGreaterThan(-1);
+    expect(backlinksIndex).toBeGreaterThan(articleEndIndex);
+  });
+
+  it('does not render backlinks section when no posts link to the current post', async () => {
+    const post = makePost({
+      id: 'lonely-post',
+      title: 'Lonely Post',
+      slug: 'lonely-post',
+      createdAt: new Date('2025-02-14T10:00:00.000Z'),
+      content: 'No one links to me',
+    });
+
+    const engine = makeEngine([post]);
+    (engine as any).getLinkedBy = async () => [];
+
+    server = new PreviewServer({
+      postEngine: engine,
+      settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/2025/2/14/lonely-post/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).not.toContain('class="single-post-backlinks"');
+    expect(html).not.toContain('Linked from');
+  });
+
   it('uses blog description as h1 on first date archive page and date range h1 on later pages', async () => {
     const posts = [
       makePost({

@@ -106,6 +106,12 @@ export interface PostListTemplateContext {
   day_blocks: DayBlockContext[];
 }
 
+export interface BacklinkEntry {
+  slug: string;
+  display_slug: string;
+  path: string;
+}
+
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
@@ -121,6 +127,7 @@ export interface SinglePostTemplateContext {
   canonical_post_path_by_slug: Record<string, string>;
   canonical_media_path_by_source_path: Record<string, string>;
   post_data_json_by_id: Record<string, string>;
+  backlinks: BacklinkEntry[];
 }
 
 export interface NotFoundTemplateContext {
@@ -1437,6 +1444,7 @@ export class PageRenderer {
       tag_color_by_name?: Record<string, string>;
       tagSettings?: Record<string, { postTemplateSlug?: string | null }>;
       categorySettings?: Record<string, { postTemplateSlug?: string | null }>;
+      backlinks?: BacklinkEntry[];
     },
     postEngine?: PostEngineContract,
   ): Promise<string> {
@@ -1450,6 +1458,8 @@ export class PageRenderer {
     const postTags = Array.isArray(renderablePost.tags)
       ? Array.from(new Set(renderablePost.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)))
       : [];
+
+    const canonicalPostPathBySlug = mapToRecord(rewriteContext.canonicalPostPathBySlug);
 
     const context: SinglePostTemplateContext = {
       ...pageContext,
@@ -1466,11 +1476,12 @@ export class PageRenderer {
       tag_color_by_name: pageContext.tag_color_by_name ?? {},
       calendar_initial_year: renderablePost.createdAt.getFullYear(),
       calendar_initial_month: renderablePost.createdAt.getMonth() + 1,
-      canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
+      canonical_post_path_by_slug: canonicalPostPathBySlug,
       canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
       post_data_json_by_id: {
         [renderablePost.id]: JSON.stringify(serializePostDataForMacro(renderablePost)),
       },
+      backlinks: pageContext.backlinks ?? [],
     };
 
     const postTemplateName = resolvePostTemplateName(

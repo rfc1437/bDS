@@ -43,6 +43,7 @@ interface PostEngineContract {
   hasPublishedVersion: (id: string) => Promise<boolean>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
   findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
+  getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 }
 
@@ -203,6 +204,7 @@ export class PreviewServer {
       loadPublishedSnapshots: (filter, pagination) => loadPublishedSnapshots(this.postEngine, filter, pagination),
       loadPostsForDayPage: (year, month, day, pagination) => loadPostsForDayPage(this.postEngine, year, month, day, pagination),
       findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => findSinglePostBySlug(this.postEngine, slug, singlePostOptions, dateFilter),
+      getLinkedBy: this.postEngine.getLinkedBy ? (postId) => this.postEngine.getLinkedBy!(postId) : undefined,
     });
   }
 

@@ -6,6 +6,7 @@ import {
   clampMaxPostsPerPage,
   parseRoutePagination,
   resolvePageTitle,
+  type BacklinkEntry,
   type PostEngineContract,
   type CategoryRenderSettings,
   type HtmlRewriteContext,
@@ -81,6 +82,36 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
     singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
     dateFilter?: { year: number; month: number; day?: number },
   ) => Promise<PostData | null>;
+  getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
+}
+
+const MAX_BACKLINK_SLUG_LENGTH = 30;
+
+function truncateSlug(slug: string): string {
+  if (slug.length <= MAX_BACKLINK_SLUG_LENGTH) return slug;
+  return slug.slice(0, MAX_BACKLINK_SLUG_LENGTH) + '...';
+}
+
+async function resolveBacklinks(
+  postId: string,
+  rewriteContext: HtmlRewriteContext,
+  getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>,
+): Promise<BacklinkEntry[]> {
+  if (!getLinkedBy) return [];
+  const linkedPosts = await getLinkedBy(postId);
+  if (linkedPosts.length === 0) return [];
+
+  return linkedPosts
+    .map((linked) => {
+      const canonical = rewriteContext.canonicalPostPathBySlug.get(linked.slug);
+      if (!canonical) return null;
+      return {
+        slug: linked.slug,
+        display_slug: truncateSlug(linked.slug),
+        path: canonical,
+      };
+    })
+    .filter((entry): entry is BacklinkEntry => entry !== null);
 }
 
 async function resolveRouteWithSharedServices(
@@ -182,6 +213,7 @@ async function resolveRouteWithSharedServices(
     const slug = daySlugMatch[4];
     const post = await services.findSinglePostBySlug(slug, singlePostOptions, { year, month, day });
     if (!post) return null;
+    const backlinks = await resolveBacklinks(post.id, rewriteContext, services.getLinkedBy);
     return services.pageRenderer.renderSinglePost(post, rewriteContext, {
       page_title: pageContext.pageTitle,
       language: pageContext.language,
@@ -191,6 +223,7 @@ async function resolveRouteWithSharedServices(
       tag_color_by_name: tagColorByName,
       tagSettings: tagTemplateSettings,
       categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
+      backlinks,
     }, services.postEngineForMacros);
   }
 
@@ -267,6 +300,7 @@ async function resolveRouteWithSharedServices(
     const pages = await services.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
     const pagePost = pages.find((candidate) => candidate.slug === slug) || null;
     if (!pagePost) return null;
+    const backlinks = await resolveBacklinks(pagePost.id, rewriteContext, services.getLinkedBy);
     return services.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
       page_title: pageContext.pageTitle,
       language: pageContext.language,
@@ -276,6 +310,7 @@ async function resolveRouteWithSharedServices(
       tag_color_by_name: tagColorByName,
       tagSettings: tagTemplateSettings,
       categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
+      backlinks,
     }, services.postEngineForMacros);
   }
 

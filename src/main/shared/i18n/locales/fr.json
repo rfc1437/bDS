@@ -63,6 +63,8 @@
   "render.calendar.loading": "Chargement du calendrier…",
   "render.calendar.error": "Impossible de charger les données du calendrier.",
   "render.taxonomy.ariaLabel": "Taxonomie",
+  "render.backlinks.label": "Lié depuis",
+  "render.backlinks.ariaLabel": "Rétroliens",
   "render.video.youtubeTitle": "Vidéo YouTube",
   "render.video.vimeoTitle": "Vidéo Vimeo",
   "render.month.1": "janvier",
