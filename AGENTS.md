@@ -10,6 +10,7 @@ This document provides context and best practices for GitHub Copilot when workin
 ## Commits
 
 - commit messages are short - one sentence. do not write long articles.
+- pull requests are more verbose and especialy give reasoning for changes
 
 ---
 
