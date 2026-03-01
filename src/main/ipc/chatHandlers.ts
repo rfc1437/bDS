@@ -330,6 +330,9 @@ export function registerChatHandlers(): void {
     try {
       const manager = await getOpenCodeManager();
       const result = await manager.getModelCatalogEngine().refresh();
+      // Invalidate the in-memory model cache so vision/name data
+      // from the freshly populated catalog is picked up immediately.
+      manager.invalidateModelCache();
       return result;
     } catch (error) {
       console.error('[Chat IPC] Error refreshing model catalog:', error);

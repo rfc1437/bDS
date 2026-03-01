@@ -2168,6 +2168,15 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
   }
 
   /**
+   * Invalidate the in-memory model cache so the next getAvailableModels()
+   * re-fetches and re-cross-references with the catalog.
+   */
+  invalidateModelCache(): void {
+    this.cachedModels = null;
+    this.cachedModelsAt = 0;
+  }
+
+  /**
    * Check whether the given provider's API key is configured.
    * All non-mistral providers are routed through OpenCode Zen and share apiKey.
    */
