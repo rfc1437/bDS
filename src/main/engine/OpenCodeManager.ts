@@ -12,6 +12,14 @@ import https from 'https';
 import http from 'http';
 import { URL } from 'url';
 import { BrowserWindow } from 'electron';
+import {
+  parseAnthropicStreamEvent,
+  parseOpenAIStreamEvent,
+  createAnthropicStreamAccumulator,
+  createOpenAIStreamAccumulator,
+  httpRequestStream,
+  withRetry,
+} from './streaming';
 import { ChatEngine } from './ChatEngine';
 import { PostEngine, type PostData } from './PostEngine';
 import { MediaEngine, type MediaData } from './MediaEngine';
@@ -129,6 +137,8 @@ interface AnthropicContentBlock {
   input?: unknown;
   tool_use_id?: string;
   content?: string | AnthropicToolResultContent[];
+  is_error?: boolean;
+  signature?: string;
   source?: {
     type: 'base64';
     media_type: string;
@@ -463,6 +473,7 @@ export class OpenCodeManager {
 
     while (round < MAX_TOOL_ROUNDS) {
       round++;
+      if (signal.aborted) break;
 
       const body: Record<string, unknown> = {
         model: modelId,
@@ -470,42 +481,79 @@ export class OpenCodeManager {
         system: systemPrompt,
         messages,
         tools,
+        stream: true,
         cache_control: { type: 'ephemeral' },
       };
 
-      const response = await this.httpRequest(ZEN_ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
-          'Authorization': `Bearer ${this.apiKey}`,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-        signal,
+      // Retry only the HTTP connection (429/502/503 are caught before any events are emitted).
+      // Event processing is outside retry scope to prevent double-emission of onDelta on retry.
+      const { events } = await withRetry(async () => {
+        return httpRequestStream(ZEN_ANTHROPIC_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+            'Authorization': `Bearer ${this.apiKey}`,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(body),
+          signal,
+        });
       });
 
-      if (response.statusCode >= 400) {
-        const errorMsg = this.parseErrorResponse(response);
-        throw new Error(errorMsg);
+      // Process stream events outside retry scope — onDelta is never called twice for the same text
+      const streamAccumulator = createAnthropicStreamAccumulator();
+      let stopReason = '';
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let cacheReadTokens = 0;
+      let cacheWriteTokens = 0;
+      let roundText = '';
+      let receivedUsage = false;
+
+      try {
+        for await (const event of events) {
+          const result = parseAnthropicStreamEvent(event, streamAccumulator);
+
+          if (result.textDelta) {
+            roundText += result.textDelta;
+            if (callbacks.onDelta) {
+              callbacks.onDelta(result.textDelta);
+            }
+          }
+
+          if (result.usage) {
+            receivedUsage = true;
+            if (result.usage.inputTokens !== undefined) inputTokens = result.usage.inputTokens;
+            if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
+            if (result.usage.cacheWriteTokens !== undefined) cacheWriteTokens = result.usage.cacheWriteTokens;
+            if (result.usage.outputTokens !== undefined) outputTokens = result.usage.outputTokens;
+          }
+
+          if (result.finishReason) {
+            stopReason = result.finishReason;
+          }
+
+          if (result.done) break;
+        }
+      } finally {
+        // Preserve text already emitted via onDelta even if the stream errors mid-round
+        accumulatedText += roundText;
       }
 
-      const data = JSON.parse(response.body);
+      const streamToolCalls = streamAccumulator.toolCalls;
+      const streamThinkingBlocks = streamAccumulator.thinkingBlocks;
 
-      // Extract and emit token usage
-      if (data.usage && callbacks.onTokenUsage) {
-        const usage = data.usage;
-        const cacheReadTokens = usage.cache_read_input_tokens || 0;
-        const cacheWriteTokens = usage.cache_creation_input_tokens || 0;
-        const inputTokens = (usage.input_tokens || 0) - cacheReadTokens - cacheWriteTokens;
-        const outputTokens = usage.output_tokens || 0;
-        const totalTokens = (usage.input_tokens || 0) + outputTokens;
+      // Emit token usage after stream completes (only when usage data was received)
+      if (callbacks.onTokenUsage && receivedUsage) {
+        const adjustedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
+        const totalTokens = inputTokens + outputTokens;
 
         const prev = this.conversationUsage.get(conversationId) || {
           inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
         };
         const cumulative = {
-          inputTokens: prev.inputTokens + inputTokens,
+          inputTokens: prev.inputTokens + adjustedInputTokens,
           outputTokens: prev.outputTokens + outputTokens,
           cacheReadTokens: prev.cacheReadTokens + cacheReadTokens,
           cacheWriteTokens: prev.cacheWriteTokens + cacheWriteTokens,
@@ -513,7 +561,7 @@ export class OpenCodeManager {
         this.conversationUsage.set(conversationId, cumulative);
 
         callbacks.onTokenUsage({
-          inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens,
+          inputTokens: adjustedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens,
           cumulativeInputTokens: cumulative.inputTokens,
           cumulativeOutputTokens: cumulative.outputTokens,
           cumulativeCacheReadTokens: cumulative.cacheReadTokens,
@@ -522,35 +570,20 @@ export class OpenCodeManager {
         });
       }
 
-      console.log('[OpenCodeManager] Round', round, 'stop_reason:', data.stop_reason, 'content blocks:', JSON.stringify(data.content?.map((b: AnthropicContentBlock) => ({ type: b.type, textLen: b.text?.length, name: b.name }))));
-
-      if (!data.content) {
-        throw new Error('API response missing content field');
-      }
-
-      // Check if there are tool_use blocks
-      const toolUseBlocks = (data.content as AnthropicContentBlock[]).filter(
-        (b: AnthropicContentBlock) => b.type === 'tool_use'
-      );
-      
-      // Capture text from any block type that has a text field (text, thinking, etc.)
-      const textBlocks = (data.content as AnthropicContentBlock[]).filter(
-        (b: AnthropicContentBlock) => b.text
-      );
-
-      // Accumulate and stream text content to frontend
-      for (const block of textBlocks) {
-        if (block.text) {
-          accumulatedText += block.text;
-          if (callbacks.onDelta) {
-            callbacks.onDelta(block.text);
-          }
+      // Collect tool calls from stream accumulator
+      const toolUseBlocks: Array<{ id: string; name: string; input: unknown; parseError?: string }> = [];
+      for (const [, tc] of streamToolCalls) {
+        try {
+          toolUseBlocks.push({ id: tc.id, name: tc.name, input: JSON.parse(tc.arguments) });
+        } catch (e) {
+          console.error(`[OpenCodeManager] Failed to parse tool arguments for ${tc.name}:`, tc.arguments);
+          toolUseBlocks.push({ id: tc.id, name: tc.name, input: {}, parseError: `Failed to parse tool arguments: ${(e as Error).message}` });
         }
       }
 
-      console.log('[OpenCodeManager] Round', round, 'accumulatedText length:', accumulatedText.length, 'toolUseBlocks:', toolUseBlocks.length);
+      console.log('[OpenCodeManager] Round', round, 'stopReason:', stopReason, 'accumulatedText length:', accumulatedText.length, 'toolCalls:', toolUseBlocks.length);
 
-      if (toolUseBlocks.length === 0 || data.stop_reason !== 'tool_use') {
+      if (toolUseBlocks.length === 0 || stopReason !== 'tool_use') {
         // No more tool calls - return all accumulated text
         console.log('[OpenCodeManager] Returning accumulated text length:', accumulatedText.length);
         return { content: accumulatedText, toolCalls: allToolCalls };
@@ -558,16 +591,57 @@ export class OpenCodeManager {
 
       // Execute tool calls
       const toolResults: AnthropicContentBlock[] = [];
+      // Build assistant content blocks for the next message round
+      const assistantContentBlocks: AnthropicContentBlock[] = [];
+
+      // Add thinking blocks first (Anthropic requires thinking before text when extended thinking is enabled)
+      for (const [, tb] of streamThinkingBlocks) {
+        if (tb.text) {
+          const thinkingBlock: AnthropicContentBlock = { type: 'thinking', text: tb.text };
+          if (tb.signature) {
+            thinkingBlock.signature = tb.signature;
+          }
+          assistantContentBlocks.push(thinkingBlock);
+        }
+      }
+
+      // Add text block with text from this round
+      if (roundText) {
+        assistantContentBlocks.push({ type: 'text', text: roundText });
+      }
 
       for (const toolBlock of toolUseBlocks) {
-        const toolName = toolBlock.name!;
+        const toolName = toolBlock.name;
         const toolArgs = toolBlock.input;
-        const toolUseId = toolBlock.id!;
+        const toolUseId = toolBlock.id;
+
+        // Add tool_use block to assistant content
+        assistantContentBlocks.push({
+          type: 'tool_use',
+          id: toolUseId,
+          name: toolName,
+          input: toolArgs,
+        });
 
         allToolCalls.push({ name: toolName, args: toolArgs });
 
         if (callbacks.onToolCall) {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
+        }
+
+        // If JSON parsing of tool arguments failed, report the error to the model
+        if (toolBlock.parseError) {
+          const errorResult = { error: true, message: toolBlock.parseError };
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: errorResult });
+          }
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: JSON.stringify(errorResult),
+            is_error: true,
+          });
+          continue;
         }
 
         // Check if this is a render tool — generate A2UI messages instead of executing
@@ -593,7 +667,8 @@ export class OpenCodeManager {
           continue;
         }
 
-        // Execute the tool
+        // Execute the tool (check abort before each tool execution)
+        if (signal.aborted) break;
         const result = await this.executeTool(toolName, toolArgs as Record<string, unknown>);
 
         if (callbacks.onToolResult) {
@@ -640,10 +715,12 @@ export class OpenCodeManager {
         }
       }
 
+      if (signal.aborted) break;
+
       // Add assistant response and tool results to messages for next round
       messages = [
         ...messages,
-        { role: 'assistant' as const, content: data.content },
+        { role: 'assistant' as const, content: assistantContentBlocks },
         { role: 'user' as const, content: toolResults },
       ];
     }
@@ -712,39 +789,77 @@ export class OpenCodeManager {
 
     while (round < MAX_TOOL_ROUNDS) {
       round++;
+      if (signal.aborted) break;
 
       const body: Record<string, unknown> = {
         model: modelId,
         max_tokens: 4096,
         messages,
         tools: openaiTools,
+        stream: true,
+        stream_options: { include_usage: true },
       };
 
-      const response = await this.httpRequest(ZEN_OPENAI_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal,
+      // Retry only the HTTP connection (429/502/503 are caught before any events are emitted).
+      // Event processing is outside retry scope to prevent double-emission of onDelta on retry.
+      const { events } = await withRetry(async () => {
+        return httpRequestStream(ZEN_OPENAI_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(body),
+          signal,
+        });
       });
 
-      if (response.statusCode >= 400) {
-        const errorMsg = this.parseErrorResponse(response);
-        throw new Error(errorMsg);
+      // Process stream events outside retry scope — onDelta is never called twice for the same text
+      const streamAccumulator = createOpenAIStreamAccumulator();
+      let finishReason = '';
+      let promptTokens = 0;
+      let completionTokens = 0;
+      let totalTokens = 0;
+      let cacheReadTokens = 0;
+      let roundText = '';
+      let receivedUsage = false;
+
+      try {
+        for await (const event of events) {
+          const result = parseOpenAIStreamEvent(event, streamAccumulator);
+
+          if (result.textDelta) {
+            roundText += result.textDelta;
+            if (callbacks.onDelta) {
+              callbacks.onDelta(result.textDelta);
+            }
+          }
+
+          if (result.usage) {
+            receivedUsage = true;
+            if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
+            if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
+            if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
+            if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
+          }
+
+          if (result.finishReason) {
+            finishReason = result.finishReason;
+          }
+
+          if (result.done) break;
+        }
+      } finally {
+        // Preserve text already emitted via onDelta even if the stream errors mid-round
+        accumulatedText += roundText;
       }
 
-      const data = JSON.parse(response.body);
-      const choice = data.choices?.[0];
+      const streamToolCalls = streamAccumulator.toolCalls;
 
-      // Extract and emit token usage (OpenAI format)
-      if (data.usage && callbacks.onTokenUsage) {
-        const usage = data.usage;
-        const cacheReadTokens = usage.prompt_tokens_details?.cached_tokens || 0;
-        const inputTokens = (usage.prompt_tokens || 0) - cacheReadTokens;
-        const outputTokens = usage.completion_tokens || 0;
-        const totalTokens = usage.total_tokens || (usage.prompt_tokens || 0) + outputTokens;
+      // Emit token usage after stream completes (only when usage data was received)
+      if (callbacks.onTokenUsage && receivedUsage) {
+        const inputTokens = promptTokens - cacheReadTokens;
+        const outputTokens = completionTokens;
 
         const prev = this.conversationUsage.get(conversationId) || {
           inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
@@ -758,7 +873,9 @@ export class OpenCodeManager {
         this.conversationUsage.set(conversationId, cumulative);
 
         callbacks.onTokenUsage({
-          inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens: 0, totalTokens,
+          inputTokens, outputTokens, cacheReadTokens,
+          cacheWriteTokens: 0, // OpenAI streaming does not report cache write tokens
+          totalTokens: totalTokens || inputTokens + outputTokens,
           cumulativeInputTokens: cumulative.inputTokens,
           cumulativeOutputTokens: cumulative.outputTokens,
           cumulativeCacheReadTokens: cumulative.cacheReadTokens,
@@ -767,66 +884,64 @@ export class OpenCodeManager {
         });
       }
 
-      console.log('[OpenCodeManager:OpenAI] Round', round, 'status:', response.statusCode, 'content type:', typeof choice?.message?.content, 'content length:', choice?.message?.content?.length, 'tool_calls:', choice?.message?.tool_calls?.length);
+      // Collect tool calls from stream accumulator
+      const parsedToolCalls: Array<{ id: string; name: string; args: unknown; parseError?: string }> = [];
+      for (const [, tc] of streamToolCalls) {
+        try {
+          parsedToolCalls.push({ id: tc.id, name: tc.name, args: JSON.parse(tc.arguments) });
+        } catch (e) {
+          console.error(`[OpenCodeManager:OpenAI] Failed to parse tool arguments for ${tc.name}:`, tc.arguments);
+          parsedToolCalls.push({ id: tc.id, name: tc.name, args: {}, parseError: `Failed to parse tool arguments: ${(e as Error).message}` });
+        }
+      }
 
-      if (!choice?.message) {
-        throw new Error('API response missing expected message content');
-      }
-
-      // Handle content that might be a string or an array of content parts
-      let textContent = '';
-      const content = choice.message.content;
-      if (typeof content === 'string') {
-        textContent = content;
-      } else if (Array.isArray(content)) {
-        // Handle array of content parts (some models return this format)
-        // Accept any part that has a text field, regardless of type
-        textContent = content
-          .filter((part: { type?: string; text?: string }) => part.text)
-          .map((part: { text: string }) => part.text)
-          .join('');
-        
-        // Log what types we're seeing for debugging
-        const types = content.map((p: { type?: string }) => p.type).filter(Boolean);
-        if (types.length > 0) {
-          console.log('[OpenCodeManager:OpenAI] Content block types:', types);
-        }
-      } else if (content && typeof content === 'object') {
-        // Handle single object with text field
-        if ('text' in content && typeof content.text === 'string') {
-          textContent = content.text;
-        }
-      }
-      
-      if (textContent) {
-        accumulatedText += textContent;
-        if (callbacks.onDelta) {
-          callbacks.onDelta(textContent);
-        }
-      }
+      console.log('[OpenCodeManager:OpenAI] Round', round, 'finishReason:', finishReason, 'text length:', accumulatedText.length, 'toolCalls:', parsedToolCalls.length);
 
       // If no tool calls, we're done
-      if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
+      if (parsedToolCalls.length === 0 || finishReason !== 'tool_calls') {
         console.log('[OpenCodeManager:OpenAI] Done. Accumulated text length:', accumulatedText.length);
         return { content: accumulatedText, toolCalls: allToolCalls };
       }
 
-      // Add assistant message (with tool_calls) to conversation
-      messages.push(choice.message);
+      // Build the assistant message with tool_calls for conversation history
+      const assistantMessage: Record<string, unknown> = {
+        role: 'assistant',
+        content: roundText || null,
+        tool_calls: parsedToolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+        })),
+      };
+      messages.push(assistantMessage);
 
       // Execute tool calls and add results
-      for (const toolCall of choice.message.tool_calls) {
-        const toolName = toolCall.function.name;
-        const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+      for (const toolCall of parsedToolCalls) {
+        const toolName = toolCall.name;
+        const toolArgs = toolCall.args;
 
         allToolCalls.push({ name: toolName, args: toolArgs });
         if (callbacks.onToolCall) {
           callbacks.onToolCall({ name: toolName, args: toolArgs });
         }
 
+        // If JSON parsing of tool arguments failed, report the error to the model
+        if (toolCall.parseError) {
+          const errorResult = { error: true, message: toolCall.parseError };
+          if (callbacks.onToolResult) {
+            callbacks.onToolResult({ name: toolName, result: errorResult });
+          }
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify(errorResult),
+            tool_call_id: toolCall.id,
+          });
+          continue;
+        }
+
         // Check if this is a render tool
         if (isRenderTool(toolName)) {
-          const a2uiMessages = generateFromToolCall(conversationId, toolName, toolArgs);
+          const a2uiMessages = generateFromToolCall(conversationId, toolName, toolArgs as Record<string, unknown>);
           if (a2uiMessages) {
             emitA2UIMessages(a2uiMessages);
           }
@@ -843,7 +958,9 @@ export class OpenCodeManager {
           continue;
         }
 
-        const result = await this.executeTool(toolName, toolArgs);
+        // Check abort before each tool execution
+        if (signal.aborted) break;
+        const result = await this.executeTool(toolName, toolArgs as Record<string, unknown>);
 
         if (callbacks.onToolResult) {
           callbacks.onToolResult({ name: toolName, result });
@@ -855,6 +972,8 @@ export class OpenCodeManager {
           tool_call_id: toolCall.id,
         });
       }
+
+      if (signal.aborted) break;
     }
 
     // Hit max rounds
@@ -2251,7 +2370,7 @@ Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
         options.signal.addEventListener('abort', () => {
           req.destroy();
           reject(new Error('Request cancelled'));
-        });
+        }, { once: true });
       }
 
       if (options.body) {
