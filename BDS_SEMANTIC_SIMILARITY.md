@@ -1,125 +1,125 @@
-# Semantic Similarity in bDS: A Zettelkasten-inspired Feature
+# Semantic Similarity in bDS
 
-## Concept
-
-The goal is to surface **thematically related posts** when writing or viewing a post in bDS — not as an authoritative classification, but as an *impulse*: "Have I written something similar before? Where could I explore further?"
-
-This is inspired by Niklas Luhmann's Zettelkasten method, where the system would surprise its author with unexpected connections. The key difference from Luhmann's academic use case: bDS serves a **personal epistemic network** across diverse topics (programming, board games, social topics, professional interests), not a focused research domain. Cross-domain connections are a feature, not a flaw.
-
-The algorithm finds the surface. The human finds the depth.
+Surface thematically related posts as an impulse — "Have I written something similar?" — inspired by Luhmann's Zettelkasten. Cross-domain connections across 10k+ posts over 20 years are the point, not a flaw. The algorithm finds the surface. The human finds the depth.
 
 ---
 
-## Technical Approach
+## Integration Point
 
-### Why not full-text search?
+**InsertModal** (`src/renderer/components/InsertModal/InsertModal.tsx`), link mode.
 
-Text search (BM25, LIKE queries) only finds shared words. Semantic similarity finds shared *meaning* — a post about emergent structures in game design can surface next to one about software architecture, even with zero word overlap.
+When the search field is empty (`query.length < 2`), instead of showing "type at least 2 characters", show 3–5 semantically similar posts to the currently edited post. These are default suggestions — "posts you might want to link to."
 
-### Embeddings
+Requires threading `currentPostId` from `Editor.tsx` → `InsertModal` (currently only passes `currentPostTags` / `currentPostCategories`).
 
-Text is converted into high-dimensional vectors. Similarity becomes geometric proximity. Small, distilled models can do this efficiently without requiring a GPU or external API.
+---
 
-**Recommended model:** `Xenova/all-MiniLM-L6-v2`
-- ~90 MB on disk (ONNX format)
-- ~150–200 MB RAM at runtime
-- 50–150ms inference time per post on CPU
-- 384-dimensional vectors
-- Works well for mixed German/English content
-- No API key, fully local
+## Stack
 
-**Lighter alternative:** `all-MiniLM-L4-v2` (~50 MB, minimal quality difference for this use case)
+| Purpose | Library | npm | Notes |
+|---|---|---|---|
+| Embeddings | Hugging Face Transformers.js | `@huggingface/transformers` | ONNX, local, no API key |
+| Vector index | USearch | `usearch` | HNSW, native C++ via N-API, prebuilt binaries |
 
-**Node.js library:** [`@huggingface/transformers`](https://github.com/xenova/transformers.js)
-- Runs ONNX models natively in Node.js
-- Downloads and caches model to `~/.cache/huggingface/` on first run
-- Subsequent runs load from local cache
+**Embedding model:** `Xenova/all-MiniLM-L6-v2` — 384 dimensions, ~90 MB on disk, ~150–200 MB RAM, ~100ms/post inference, handles mixed DE/EN.
+
+**Why USearch over alternatives:**
+- `sqlite-vec` — requires `loadExtension()` on the SQLite driver; bDS uses `@libsql/client` which doesn't expose it. Eliminated.
+- `hnswlib-node` — no prebuilt binaries, requires `node-gyp` compile. Last published 2 years ago. Risk with Electron packaging.
+- `vectra` — pure JS, zero build issues, but JSON storage (~30 MB for 10k posts). Acceptable fallback.
+- Brute-force in JS — works at 10k (~15ms for the math) but requires loading all embeddings from DB first. DB read overhead with `@libsql/client` FFI is unknown and potentially dominant.
+- **USearch** — prebuilt binaries via `prebuildify` (matches `sharp`, `@libsql/client` pattern), actively maintained, HNSW with SIMD, <1ms queries, binary persistence (~6 MB for 10k×384).
+
+**USearch specifics:**
+- Keys are `BigUint64Array` — need a `Map<bigint, string>` (numeric label → post UUID) persisted alongside the index
+- `index.load()` loads everything into RAM (~6 MB). `index.save()` is a full rewrite. Fine for this scale.
+- No incremental flush / WAL — acceptable since mutations are one-at-a-time post edits
 
 ---
 
 ## Architecture
 
-### Storage: sqlite-vec
+### Files on disk
 
-Since bDS already uses SQLite (via Drizzle ORM) as a caching layer, the natural fit is [`sqlite-vec`](https://github.com/asg017/sqlite-vec) — a SQLite extension for vector search by Alex Garcia (the actively maintained successor to `sqlite-vss`).
-
-**Node.js integration:**
-```js
-import Database from 'better-sqlite3'
-import * as sqliteVec from 'sqlite-vec'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
-
-const sqlite = new Database('bds.sqlite')
-sqliteVec.load(sqlite)  // must happen before Drizzle init
-const db = drizzle(sqlite)
+```
+<project-dir>/.bds/
+  embeddings.usearch       # USearch binary index
+  embeddings-keys.json     # { [numericLabel]: postId } mapping
 ```
 
-**Schema** (raw SQL migration, outside Drizzle schema — virtual tables are not supported by Drizzle):
-```sql
-CREATE VIRTUAL TABLE IF NOT EXISTS post_embeddings
-USING vec0(
-  post_id TEXT PRIMARY KEY,
-  embedding FLOAT[384]
-);
-```
+### Engine: `EmbeddingEngine` (`src/main/engine/EmbeddingEngine.ts`)
 
-**Similarity query:**
-```sql
-SELECT p.id, p.title, e.distance
-FROM post_embeddings e
-JOIN posts p ON e.post_id = p.id
-WHERE e.embedding MATCH ?
-  AND k = 5
-ORDER BY distance;
-```
+Responsibilities:
+- Load/save USearch index + key map on startup/shutdown
+- Embed post content via `@huggingface/transformers`
+- Add/update/remove embeddings when posts change
+- Query: given a post ID, return top-k similar post IDs with distances
 
----
-
-## Integration with bDS Hooks
-
-bDS already has file system hooks that fire when posts change (triggered by external edits, e.g. via git sync across machines). The embedding step fits naturally into the existing cache-update hook:
-
-```js
-async function onPostChanged(filePath) {
-  const post = parseMarkdownFile(filePath)
-  const embedding = await embedText(post.content)  // ~100ms
-
-  db.transaction(() => {
-    updatePostCache(post)           // existing cache logic
-    db.run(sql`
-      INSERT OR REPLACE INTO post_embeddings(post_id, embedding)
-      VALUES (${post.id}, ${serializeVector(embedding)})
-    `)
-  })()
+Key interface:
+```ts
+class EmbeddingEngine {
+  async initialize(): Promise<void>           // load index + model
+  async embedPost(postId: string, content: string): Promise<void>
+  async removePost(postId: string): Promise<void>
+  async findSimilar(postId: string, k?: number): Promise<SimilarPost[]>
+  async getIndexingProgress(): Promise<{ indexed: number; total: number }>
+  async save(): Promise<void>
 }
 ```
 
-**Git sync bonus:** On first `git pull` to a new machine, hooks fire for all posts, automatically building the full vector index — no separate setup step needed.
+### IPC
+
+```
+embeddings:findSimilar(postId: string, k?: number) → SimilarPost[]
+embeddings:getProgress() → { indexed: number; total: number }
+```
+
+### Hook into existing post lifecycle
+
+Post create/update/delete events already exist in `PostEngine`. On post content change → call `embeddingEngine.embedPost()`. On delete → call `embeddingEngine.removePost()`. Save index after each mutation.
+
+### Initial indexing (10k+ posts)
+
+- ~100ms per post × 10k = **~17 minutes** one-time background job
+- Must run as a low-priority background task after app startup
+- Emit progress events so UI can show "Indexing 3,421 / 10,247…"
+- On git sync to new machine, file watchers fire for all posts → triggers full reindex automatically
+- Model download (~90 MB) on first run — needs progress indicator or opt-in preference
 
 ---
 
-## UX Recommendation
+## UI Changes
 
-- Show **3–5 related posts** maximum — enough for an impulse, not so many it becomes a management task
-- Label them clearly as *"thematically related"*, not *"you should read"*
-- A low similarity threshold is fine — unexpected connections are often the most valuable
-- No need for user-facing controls over the algorithm; simplicity serves the use case
+### InsertModal (link mode, internal tab)
 
----
+**When `query.length < 2` and `currentPostId` is set:**
+1. Call `embeddings:findSimilar(currentPostId, 5)` on mount
+2. Show results in the same result list format, with a subtle header like "Related posts"
+3. Clicking a suggestion works identically to a search result — inserts the link
 
-## Key Libraries
+**When `query.length >= 2`:** existing search behavior, unchanged.
 
-| Purpose | Library | npm |
-|---|---|---|
-| Embedding model (local) | Hugging Face Transformers.js | `@huggingface/transformers` |
-| Vector search in SQLite | sqlite-vec | `sqlite-vec` |
-| SQLite driver | better-sqlite3 | `better-sqlite3` |
-| ORM (already in bDS) | Drizzle ORM | `drizzle-orm` |
+**Fallback:** if embeddings aren't ready (indexing in progress, feature disabled), show the existing "type at least 2 characters" message.
 
 ---
 
-## Philosophical Note
+## Implementation Steps
 
-Luhmann's Zettelkasten was monothematic by design — everything fed into a single sociological theory. A personal blog spanning programming, board games, MTG, and everyday life is structurally different. The vector space will reflect that diversity and occasionally bridge domains in ways no intentional tagging system would — which is precisely the point.
+1. **Test + implement `EmbeddingEngine`** — model loading, embed, add/remove/query against USearch index, save/load persistence
+2. **SQLite key map** — persist the `bigint → postId` mapping (simple JSON file or a small Drizzle table)
+3. **Wire into post lifecycle** — hook create/update/delete → embedding updates
+4. **Background indexer** — on startup, diff indexed vs. existing posts, queue unindexed for background embedding with progress events
+5. **IPC endpoints** — `findSimilar`, `getProgress`
+6. **InsertModal integration** — add `currentPostId` prop, fetch similar on mount, render as default suggestions
+7. **Settings** — opt-in preference to enable semantic similarity (triggers model download + initial index)
+8. **I18n** — all new UI strings through locale files
 
-The system is not meant to organize knowledge. It is meant to make existing connections *visible*.
+---
+
+## Constraints
+
+- Feature must be opt-in (model download + 17 min indexing is not a silent default)
+- No external API calls — fully local
+- Model cached in `~/.cache/huggingface/`, index in project `.bds/` directory
+- .bds/ directory inside project directory must be added to .gitignore (cache is kept local not versioned)
+- Total added footprint: ~140 MB on disk (onnxruntime-node ~50 MB + model ~90 MB), ~200 MB RAM at runtime for model + index
