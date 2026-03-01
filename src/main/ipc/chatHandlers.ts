@@ -228,10 +228,10 @@ export function registerChatHandlers(): void {
     try {
       const engine = getChatEngine();
       const model = await engine.getSetting('chat_title_model');
-      return { success: true, modelId: model || 'claude-haiku-4-5' };
+      return { success: true, modelId: model || null };
     } catch (error) {
       console.error('[Chat IPC] Error getting title model:', error);
-      return { success: false, modelId: 'claude-haiku-4-5' };
+      return { success: false, modelId: null };
     }
   });
 
@@ -252,10 +252,10 @@ export function registerChatHandlers(): void {
     try {
       const engine = getChatEngine();
       const model = await engine.getSetting('chat_image_analysis_model');
-      return { success: true, modelId: model || 'claude-sonnet-4-5' };
+      return { success: true, modelId: model || null };
     } catch (error) {
       console.error('[Chat IPC] Error getting image analysis model:', error);
-      return { success: false, modelId: 'claude-sonnet-4-5' };
+      return { success: false, modelId: null };
     }
   });
 

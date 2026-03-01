@@ -1215,15 +1215,23 @@ export const SettingsView: React.FC = () => {
   };
 
   // Group models by provider for optgroup display
-  const groupedModels = useMemo(() => {
+  const groupModelsByProvider = useCallback((models: typeof availableModels) => {
     const groups: Record<string, typeof availableModels> = {};
-    for (const model of availableModels) {
+    for (const model of models) {
       const provider = model.provider || 'other';
       if (!groups[provider]) groups[provider] = [];
       groups[provider].push(model);
     }
     return groups;
-  }, [availableModels]);
+  }, []);
+
+  const groupedModels = useMemo(() => groupModelsByProvider(availableModels), [availableModels, groupModelsByProvider]);
+
+  // Vision-capable models only (for image analysis model selector)
+  const groupedVisionModels = useMemo(
+    () => groupModelsByProvider(availableModels.filter(m => m.vision)),
+    [availableModels, groupModelsByProvider]
+  );
 
   const providerLabel = (provider: string) => {
     if (provider === 'anthropic' || provider === 'openai' || provider === 'google' || provider === 'other') return t('settings.ai.providerOpenCode');
@@ -1232,18 +1240,22 @@ export const SettingsView: React.FC = () => {
   };
 
   // Render a model <select> with optgroup by provider
-  const renderModelSelect = (id: string, value: string, onChange: (v: string) => void, disabled?: boolean) => (
-    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
-      {availableModels.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
-      {Object.entries(groupedModels).map(([provider, models]) => (
-        <optgroup key={provider} label={providerLabel(provider)}>
-          {models.map(model => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
+  const renderModelSelect = (id: string, value: string, onChange: (v: string) => void, disabled?: boolean, groups?: Record<string, typeof availableModels>) => {
+    const modelGroups = groups || groupedModels;
+    const modelList = Object.values(modelGroups).flat();
+    return (
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+        {modelList.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
+        {Object.entries(modelGroups).map(([provider, models]) => (
+          <optgroup key={provider} label={providerLabel(provider)}>
+            {models.map(model => (
+              <option key={model.id} value={model.id}>{model.name}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    );
+  };
 
   const renderAISettings = () => (
     <SettingSection
@@ -1384,7 +1396,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.imageAnalysisModelLabel')}
         description={t('settings.ai.imageAnalysisModelDescription')}
       >
-        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey)}
+        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey, groupedVisionModels)}
       </SettingRow>
 
       <SettingRow

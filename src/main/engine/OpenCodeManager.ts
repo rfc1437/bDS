@@ -252,6 +252,9 @@ export class OpenCodeManager {
    */
   setApiKey(key: string): void {
     this.apiKey = key;
+    // Invalidate model cache so merged list is re-fetched
+    this.cachedModels = null;
+    this.cachedModelsAt = 0;
   }
 
   /**
@@ -316,7 +319,7 @@ export class OpenCodeManager {
           // Filter to only OpenCode models (not Mistral)
           const models = Object.entries(MODEL_DISPLAY_NAMES)
             .map(([id, name]) => ({ id, name, provider: this.detectProvider(id), vision: MODEL_CAPABILITIES[id]?.vision ?? false }))
-            .filter(m => this.isProviderKeySet(m.provider) || m.provider !== 'mistral');
+            .filter(m => this.isProviderKeySet(m.provider));
           return { isValid: true, models };
         }
       } catch {
@@ -2062,12 +2065,13 @@ export class OpenCodeManager {
     _assistantResponse: string
   ): Promise<void> {
     try {
-      // Read configured title model
-      const titleModel = await this.chatEngine.getSetting('chat_title_model') || 'claude-haiku-4-5';
+      // Read configured title model, with smart fallback based on available keys
+      let titleModel = await this.chatEngine.getSetting('chat_title_model');
+      if (!titleModel || !this.isProviderKeySet(this.detectProvider(titleModel))) {
+        titleModel = this.apiKey ? 'claude-haiku-4-5' : this.mistralApiKey ? 'mistral-small-latest' : null;
+      }
+      if (!titleModel) return;
       const provider = this.detectProvider(titleModel);
-
-      // Ensure we have the key for this provider
-      if (!this.isProviderKeySet(provider)) return;
 
       const promptText = `Topic: ${userMessage.substring(0, 100)}`;
       const systemText = 'Generate an ultra-short title (2-3 words, max 25 characters) for this conversation. Focus ONLY on the topic. Ignore any capability disclaimers. Output ONLY the title text.';
@@ -2492,14 +2496,15 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     caption?: string;
     error?: string;
   }> {
-    // Read configured image analysis model (default: claude-sonnet-4-5)
-    const modelId = await this.chatEngine.getSetting('chat_image_analysis_model') || 'claude-sonnet-4-5';
-    const provider = this.detectProvider(modelId);
-
-    if (!this.isProviderKeySet(provider)) {
-      const providerLabel = provider === 'mistral' ? 'Mistral' : 'OpenCode';
-      return { success: false, error: `API key not configured. Please set your ${providerLabel} API key in Settings.` };
+    // Read configured image analysis model, with smart fallback based on available keys
+    let modelId = await this.chatEngine.getSetting('chat_image_analysis_model');
+    if (!modelId || !this.isProviderKeySet(this.detectProvider(modelId))) {
+      modelId = this.apiKey ? 'claude-sonnet-4-5' : this.mistralApiKey ? 'mistral-large-latest' : null;
     }
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+    const provider = this.detectProvider(modelId);
 
     // Get media metadata
     const mediaItem = await this.mediaEngine.getMedia(mediaId);

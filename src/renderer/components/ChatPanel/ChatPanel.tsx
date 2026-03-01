@@ -366,7 +366,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
                   return Object.entries(groups).map(([provider, models]) => (
                     <React.Fragment key={provider}>
                       {Object.keys(groups).length > 1 && (
-                        <div className="model-group-header">{provider === 'mistral' ? 'Mistral' : 'OpenCode'}</div>
+                        <div className="model-group-header">{provider === 'mistral' ? tr('settings.ai.providerMistral') : tr('settings.ai.providerOpenCode')}</div>
                       )}
                       {models.map(model => (
                         <button

@@ -1381,7 +1381,7 @@ const TaxonomySection: React.FC<{
                     return Object.entries(groups).map(([provider, models]) => (
                       <React.Fragment key={provider}>
                         {Object.keys(groups).length > 1 && (
-                          <div className="model-group-header">{provider === 'mistral' ? 'Mistral' : 'OpenCode'}</div>
+                          <div className="model-group-header">{provider === 'mistral' ? t('settings.ai.providerMistral') : t('settings.ai.providerOpenCode')}</div>
                         )}
                         {models.map(model => (
                           <button
