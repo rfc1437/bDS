@@ -1071,6 +1071,122 @@ describe('mid-stream retry with withRetry', () => {
   });
 });
 
+// ── Connection-only retry (no double-emission) ──
+
+describe('connection-only retry pattern (withRetry wrapping httpRequestStream)', () => {
+  function startTestServer(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void): Promise<{ url: string; close: () => Promise<void> }> {
+    return new Promise((resolve) => {
+      const server = http.createServer(handler);
+      server.listen(0, () => {
+        const addr = server.address() as { port: number };
+        resolve({
+          url: `http://localhost:${addr.port}`,
+          close: () => new Promise<void>((r) => server.close(() => r())),
+        });
+      });
+    });
+  }
+
+  it('retries 429 at connection time without emitting duplicate deltas', async () => {
+    let requestCount = 0;
+    const srv = await startTestServer((_req, res) => {
+      requestCount++;
+      if (requestCount === 1) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '0' });
+        res.end(JSON.stringify({ error: { message: 'Rate limited' } }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n');
+      res.write('data: {"choices":[{"delta":{"content":" world"}}]}\n\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+    });
+
+    try {
+      const deltas: string[] = [];
+
+      // Retry only the connection, process events outside retry
+      const { events } = await withRetry(() => httpRequestStream(srv.url, { method: 'POST', body: '{}' }));
+
+      const acc = createOpenAIStreamAccumulator();
+      for await (const event of events) {
+        const result = parseOpenAIStreamEvent(event, acc);
+        if (result.textDelta) deltas.push(result.textDelta);
+      }
+
+      // Each delta appears exactly once — no double-emission
+      expect(deltas).toEqual(['Hello', ' world']);
+      expect(requestCount).toBe(2); // 1 failed + 1 success
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('mid-stream TCP error propagates without retry when only connection is wrapped', async () => {
+    const srv = await startTestServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n');
+      // Destroy socket to simulate mid-stream TCP disconnect
+      setTimeout(() => res.destroy(), 20);
+    });
+
+    try {
+      const deltas: string[] = [];
+
+      // Only connection is retried — mid-stream errors propagate
+      const { events } = await withRetry(() => httpRequestStream(srv.url, { method: 'POST', body: '{}' }));
+
+      const acc = createOpenAIStreamAccumulator();
+      await expect(async () => {
+        for await (const event of events) {
+          const result = parseOpenAIStreamEvent(event, acc);
+          if (result.textDelta) deltas.push(result.textDelta);
+        }
+      }).rejects.toThrow();
+
+      // Partial delta was received before the error — no duplication
+      expect(deltas).toEqual(['Hi']);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('retries 502 at connection time then streams successfully', async () => {
+    let requestCount = 0;
+    const srv = await startTestServer((_req, res) => {
+      requestCount++;
+      if (requestCount === 1) {
+        res.writeHead(502);
+        res.end('Bad Gateway');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":10}}}\n\n');
+      res.write('event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}\n\n');
+      res.write('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+      res.end();
+    });
+
+    try {
+      const deltas: string[] = [];
+
+      const { events } = await withRetry(() => httpRequestStream(srv.url, { method: 'POST', body: '{}' }));
+
+      const acc = createAnthropicStreamAccumulator();
+      for await (const event of events) {
+        const result = parseAnthropicStreamEvent(event, acc);
+        if (result.textDelta) deltas.push(result.textDelta);
+      }
+
+      expect(deltas).toEqual(['OK']);
+      expect(requestCount).toBe(2);
+    } finally {
+      await srv.close();
+    }
+  });
+});
+
 // ── SSE spec compliance ──
 
 describe('SSE spec compliance - single space removal', () => {

@@ -13,14 +13,12 @@ import http from 'http';
 import { URL } from 'url';
 import { BrowserWindow } from 'electron';
 import {
-  parseSSELines,
   parseAnthropicStreamEvent,
   parseOpenAIStreamEvent,
   createAnthropicStreamAccumulator,
   createOpenAIStreamAccumulator,
   httpRequestStream,
   withRetry,
-  type HttpStreamError,
 } from './streaming';
 import { ChatEngine } from './ChatEngine';
 import { PostEngine, type PostData } from './PostEngine';
@@ -485,17 +483,10 @@ export class OpenCodeManager {
         cache_control: { type: 'ephemeral' },
       };
 
-      // Stream the response with retry for transient errors (including mid-stream failures)
-      const streamResult = await withRetry(async () => {
-        const streamAccumulator = createAnthropicStreamAccumulator();
-        let stopReason = '';
-        let inputTokens = 0;
-        let outputTokens = 0;
-        let cacheReadTokens = 0;
-        let cacheWriteTokens = 0;
-        let roundText = '';
-
-        const { events } = await httpRequestStream(ZEN_ANTHROPIC_URL, {
+      // Retry only the HTTP connection (429/502/503 are caught before any events are emitted).
+      // Event processing is outside retry scope to prevent double-emission of onDelta on retry.
+      const { events } = await withRetry(async () => {
+        return httpRequestStream(ZEN_ANTHROPIC_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -506,35 +497,42 @@ export class OpenCodeManager {
           body: JSON.stringify(body),
           signal,
         });
-
-        for await (const event of events) {
-          const result = parseAnthropicStreamEvent(event, streamAccumulator);
-
-          if (result.textDelta) {
-            roundText += result.textDelta;
-            if (callbacks.onDelta) {
-              callbacks.onDelta(result.textDelta);
-            }
-          }
-
-          if (result.usage) {
-            if (result.usage.inputTokens !== undefined) inputTokens = result.usage.inputTokens;
-            if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
-            if (result.usage.cacheWriteTokens !== undefined) cacheWriteTokens = result.usage.cacheWriteTokens;
-            if (result.usage.outputTokens !== undefined) outputTokens = result.usage.outputTokens;
-          }
-
-          if (result.finishReason) {
-            stopReason = result.finishReason;
-          }
-
-          if (result.done) break;
-        }
-
-        return { roundText, stopReason, toolCalls: streamAccumulator.toolCalls, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens };
       });
 
-      const { roundText, stopReason, toolCalls: streamToolCalls, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = streamResult;
+      // Process stream events outside retry scope — onDelta is never called twice for the same text
+      const streamAccumulator = createAnthropicStreamAccumulator();
+      let stopReason = '';
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let cacheReadTokens = 0;
+      let cacheWriteTokens = 0;
+      let roundText = '';
+
+      for await (const event of events) {
+        const result = parseAnthropicStreamEvent(event, streamAccumulator);
+
+        if (result.textDelta) {
+          roundText += result.textDelta;
+          if (callbacks.onDelta) {
+            callbacks.onDelta(result.textDelta);
+          }
+        }
+
+        if (result.usage) {
+          if (result.usage.inputTokens !== undefined) inputTokens = result.usage.inputTokens;
+          if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
+          if (result.usage.cacheWriteTokens !== undefined) cacheWriteTokens = result.usage.cacheWriteTokens;
+          if (result.usage.outputTokens !== undefined) outputTokens = result.usage.outputTokens;
+        }
+
+        if (result.finishReason) {
+          stopReason = result.finishReason;
+        }
+
+        if (result.done) break;
+      }
+
+      const streamToolCalls = streamAccumulator.toolCalls;
       accumulatedText += roundText;
 
       // Emit token usage after stream completes
@@ -681,6 +679,8 @@ export class OpenCodeManager {
         }
       }
 
+      if (signal.aborted) break;
+
       // Add assistant response and tool results to messages for next round
       messages = [
         ...messages,
@@ -764,17 +764,10 @@ export class OpenCodeManager {
         stream_options: { include_usage: true },
       };
 
-      // Stream the response with retry for transient errors (including mid-stream failures)
-      const streamResult = await withRetry(async () => {
-        const streamAccumulator = createOpenAIStreamAccumulator();
-        let finishReason = '';
-        let promptTokens = 0;
-        let completionTokens = 0;
-        let totalTokens = 0;
-        let cacheReadTokens = 0;
-        let roundText = '';
-
-        const { events } = await httpRequestStream(ZEN_OPENAI_URL, {
+      // Retry only the HTTP connection (429/502/503 are caught before any events are emitted).
+      // Event processing is outside retry scope to prevent double-emission of onDelta on retry.
+      const { events } = await withRetry(async () => {
+        return httpRequestStream(ZEN_OPENAI_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -783,35 +776,42 @@ export class OpenCodeManager {
           body: JSON.stringify(body),
           signal,
         });
-
-        for await (const event of events) {
-          const result = parseOpenAIStreamEvent(event, streamAccumulator);
-
-          if (result.textDelta) {
-            roundText += result.textDelta;
-            if (callbacks.onDelta) {
-              callbacks.onDelta(result.textDelta);
-            }
-          }
-
-          if (result.usage) {
-            if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
-            if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
-            if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
-            if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
-          }
-
-          if (result.finishReason) {
-            finishReason = result.finishReason;
-          }
-
-          if (result.done) break;
-        }
-
-        return { roundText, finishReason, toolCalls: streamAccumulator.toolCalls, promptTokens, completionTokens, totalTokens, cacheReadTokens };
       });
 
-      const { roundText, finishReason, toolCalls: streamToolCalls, promptTokens, completionTokens, totalTokens, cacheReadTokens } = streamResult;
+      // Process stream events outside retry scope — onDelta is never called twice for the same text
+      const streamAccumulator = createOpenAIStreamAccumulator();
+      let finishReason = '';
+      let promptTokens = 0;
+      let completionTokens = 0;
+      let totalTokens = 0;
+      let cacheReadTokens = 0;
+      let roundText = '';
+
+      for await (const event of events) {
+        const result = parseOpenAIStreamEvent(event, streamAccumulator);
+
+        if (result.textDelta) {
+          roundText += result.textDelta;
+          if (callbacks.onDelta) {
+            callbacks.onDelta(result.textDelta);
+          }
+        }
+
+        if (result.usage) {
+          if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
+          if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
+          if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
+          if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
+        }
+
+        if (result.finishReason) {
+          finishReason = result.finishReason;
+        }
+
+        if (result.done) break;
+      }
+
+      const streamToolCalls = streamAccumulator.toolCalls;
       accumulatedText += roundText;
 
       // Emit token usage after stream completes
@@ -915,6 +915,8 @@ export class OpenCodeManager {
           tool_call_id: toolCall.id,
         });
       }
+
+      if (signal.aborted) break;
     }
 
     // Hit max rounds

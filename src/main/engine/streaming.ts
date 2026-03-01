@@ -323,8 +323,15 @@ const RETRYABLE_STATUS_CODES = new Set([429, 502, 503]);
  * Retry a function with exponential backoff for transient HTTP errors.
  *
  * Retries on 429 (rate limit), 502 (bad gateway), 503 (service unavailable).
- * Does NOT retry on other 4xx errors or abort.
+ * Also retries errors without a statusCode (e.g. ECONNRESET, EPIPE) since
+ * these indicate transient network failures during connection.
+ *
+ * Does NOT retry on other 4xx errors (400, 401, 403 — client errors) or abort.
  * Respects Retry-After header for 429 responses.
+ *
+ * Best practice: wrap only the HTTP connection (httpRequestStream) in withRetry,
+ * NOT the event processing loop. This ensures onDelta callbacks are never
+ * called twice for the same text on retry.
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
