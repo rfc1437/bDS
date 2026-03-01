@@ -377,11 +377,11 @@ Domain logic only — no AI protocol code survives.
 - **Zod v4 schemas work with `tool()`**: Parameterized schemas, `toModelOutput()` for multimodal results
 - **Anthropic `providerOptions`**: Cache control on system+tools, context management — all confirmed working
 
-### Phase 1: Tools + MCP dedup (1 session)
-5. Create `ai/blog-tools.ts` — 16 tools with Zod + execute (port from `executeTool` switch)
-6. Create `ai/a2ui-tools.ts` — 7 render tools
-7. Wire MCPServer to `blog-tools.ts` for `check_term` / `search_posts` — delete duplication
-8. Unit tests for all tools (mock engines, no AI calls)
+### Phase 1: Tools + MCP dedup (1 session) ✅ DONE
+5. ~~Create `ai/blog-tools.ts` — 16 tools with Zod + execute (port from `executeTool` switch)~~ ✅
+6. ~~Create `ai/a2ui-tools.ts` — 7 render tools~~ ✅
+7. ~~Wire MCPServer to `blog-tools.ts` for `check_term` / `search_posts` — delete duplication~~ ✅
+8. ~~Unit tests for all tools (mock engines, no AI calls)~~ ✅ 45 tests
 
 ### Phase 2: Providers + Chat + Tasks (1-2 sessions)
 9. Create `ai/providers.ts` — `ProviderRegistry` with OpenCode gateway + Mistral direct

@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/ext-apps/server';
 import { createServer as createHttpServer, type Server } from 'http';
 import { z } from 'zod';
+import { buildAmbiguityHints } from './ai/blog-tools';
 import { ProposalStore, type ProposalType } from './ProposalStore';
 import {
   reviewPostHtml,
@@ -586,9 +587,9 @@ export class MCPServer {
         const content: Array<{ type: 'text'; text: string }> = [
           { type: 'text' as const, text: JSON.stringify(enriched) },
         ];
-        const hints = await this.buildAmbiguityHints(args.category, args.tags);
-        if (hints) {
-          content.push({ type: 'text' as const, text: hints });
+        const hintsList = await buildAmbiguityHints(this.deps.postEngine, args.category, args.tags);
+        if (hintsList.length > 0) {
+          content.push({ type: 'text' as const, text: hintsList.join(' ') });
         }
         return { content };
       }
@@ -603,41 +604,13 @@ export class MCPServer {
       ];
 
       // Ambiguity hints: check if category/tag terms exist in the other namespace
-      const hints = await this.buildAmbiguityHints(args.category, args.tags);
-      if (hints) {
-        content.push({ type: 'text' as const, text: hints });
+      const hintsList = await buildAmbiguityHints(this.deps.postEngine, args.category, args.tags);
+      if (hintsList.length > 0) {
+        content.push({ type: 'text' as const, text: hintsList.join(' ') });
       }
 
       return { content };
     });
-  }
-
-  /** Build a hint string when category/tag terms overlap across namespaces. */
-  private async buildAmbiguityHints(
-    category: string | undefined,
-    tags: string[] | undefined,
-  ): Promise<string | null> {
-    const hints: string[] = [];
-
-    if (category) {
-      const allTags = await this.deps.postEngine.getTagsWithCounts();
-      const tagMatch = allTags.find(t => t.tag.toLowerCase() === category.toLowerCase());
-      if (tagMatch) {
-        hints.push(`Note: "${category}" also exists as a tag (${tagMatch.count} post${tagMatch.count !== 1 ? 's' : ''}). Use the tags parameter to filter by tag instead.`);
-      }
-    }
-
-    if (tags && tags.length > 0) {
-      const allCats = await this.deps.postEngine.getCategoriesWithCounts();
-      for (const tag of tags) {
-        const catMatch = allCats.find(c => c.category.toLowerCase() === tag.toLowerCase());
-        if (catMatch) {
-          hints.push(`Note: "${tag}" also exists as a category (${catMatch.count} post${catMatch.count !== 1 ? 's' : ''}). Use the category parameter to filter by category instead.`);
-        }
-      }
-    }
-
-    return hints.length > 0 ? hints.join(' ') : null;
   }
 
   private registerProposalTools(server: McpServer): void {
