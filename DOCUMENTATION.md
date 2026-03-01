@@ -13,10 +13,12 @@
 - [Using scripting](#using-scripting)
 - [Using the AI assistant](#using-the-ai-assistant)
 - [Organizing with tags](#organizing-with-tags)
+- [Using blogmarks](#using-blogmarks)
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
 - [Configuring settings](#configuring-settings)
-- [Publishing in bDS (current scope)](#publishing-in-bds-current-scope)
+- [Managing templates](#managing-templates)
+- [Generating and publishing](#generating-and-publishing)
 - [Typical editorial workflows](#typical-editorial-workflows)
 - [Working fully offline](#working-fully-offline)
 - [Troubleshooting and recovery](#troubleshooting-and-recovery)
@@ -382,6 +384,26 @@ After significant taxonomy cleanup, create a commit that captures the transition
 
 ---
 
+## Using blogmarks
+
+Blogmarks provide a quick way to save links from any browser directly into bDS as new posts. bDS registers the custom `bds://new-post` protocol, so clicking a blogmark link or bookmarklet opens bDS and creates a draft post pre-filled with the page title, URL, and selected text.
+
+To set up blogmarks, generate a bookmarklet from the Settings view and drag it to your browser bookmark bar. When you find a page worth saving, click the bookmarklet. bDS opens (or comes to the foreground) and creates a draft post automatically.
+
+Transform scripts can modify incoming blogmark posts before they are created. This is useful for normalizing titles, adding default categories or tags, or restructuring content. If you have multiple active transforms, they run in sequence. When a transform fails, bDS surfaces an error toast and writes diagnostics to the Output panel so you can adjust and retry.
+
+Transform scripts can also receive a `context` argument containing `source` (always `"blogmark"`) and `url` (the original bookmarked URL), which is helpful for URL-based routing or domain-specific formatting.
+
+### Key takeaways
+
+- Blogmarks turn any browser into a one-click content capture tool.
+- Generate the bookmarklet from Settings and add it to your browser bar.
+- Use transform scripts to normalize or enrich incoming posts automatically.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
 ## Importing from WordPress (WXR)
 
 The Import section supports migration from WordPress exports and should be treated as a structured process rather than a one-click operation. A good migration flow reduces surprises by separating analysis from execution.
@@ -436,19 +458,46 @@ Data maintenance actions are repair tools for specific situations, such as exter
 
 ---
 
-## Publishing in bDS (current scope)
+## Managing templates
 
-In the current product stage, publishing in bDS means marking local content state and generating supported local outputs, not automatically deploying to remote hosting. This distinction is important for planning release workflows and setting team expectations.
+Templates control the Liquid layout used when bDS generates your blog's HTML pages. bDS ships with built-in templates, but you can create and manage your own through the Templates view in the Activity Bar.
 
-At present, the key publishing output is sitemap generation. To generate a sitemap successfully, ensure the Public Base URL is configured in project settings before running the sitemap command. If generation fails, URL configuration should be your first verification step.
+Each template has a kind that determines where it is used: **post** templates render individual post pages, **list** templates render archive and index pages, **not-found** templates render 404 pages, and **partial** templates are reusable fragments included by other templates. You edit template code using the built-in Monaco editor, which provides syntax highlighting for Liquid and HTML.
 
-Because publish does not equal deploy, Source Control remains the mechanism for versioned distribution and collaboration. Teams should treat publish plus commit as the minimum handoff standard.
+Templates are stored as files with YAML frontmatter in your project's data directory, which means they are Git-friendly and portable between machines. bDS validates template syntax when you save, reporting any Liquid parse errors before the template can be used in generation.
+
+Templates follow the same draft/published workflow as scripts. You can iterate on a template in draft state, preview the results, and then enable it for generation when satisfied. If your project uses Git, bDS reconciles template files with the database on sync so that templates added or modified externally are picked up automatically.
 
 ### Key takeaways
 
-- Current publish behavior is local-state focused.
-- Sitemap generation depends on a valid Public Base URL.
-- For team workflows, publish should be followed by commit.
+- Templates define the HTML layout for generated pages.
+- Four template kinds: post, list, not-found, and partial.
+- Templates are files with YAML frontmatter — Git-reviewable and portable.
+- Validate before enabling; preview before generating.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Generating and publishing
+
+Publishing in bDS is a two-stage process: first you generate the static site locally, then you optionally deploy it to a remote server.
+
+**Generation** produces a complete static blog from your published content. This includes individual post pages, paginated category, tag, and date archive routes, standalone pages, plus `sitemap.xml`, `rss.xml`, `atom.xml`, and `calendar.json`. Generation uses content-hash-based incremental writes, so only changed pages are rewritten. Before generating, ensure the Public Base URL is configured in project settings — sitemap and feed URLs depend on it.
+
+After generation, you can run **site validation** to compare the sitemap against generated HTML files. Validation detects missing, extra, or stale pages and can auto-repair by re-rendering only the affected routes.
+
+**SSH publishing** uploads generated files to a remote server via `scp` or `rsync`. Configure your SSH connection details in project settings, then publish from the application. bDS uploads HTML, thumbnails, and media in parallel for efficiency.
+
+The recommended lifecycle is: publish content locally (mark as published), generate the site, validate, commit the generated output, and then deploy via SSH when ready.
+
+### Key takeaways
+
+- Generation produces a full static site with incremental writes.
+- Public Base URL must be set before generation.
+- Site validation catches inconsistencies between sitemap and generated files.
+- SSH publishing deploys via `scp` or `rsync` with parallel uploads.
+- Commit generated output before deploying for recoverability.
 
 [↑ Back to In this article](#in-this-article)
 
