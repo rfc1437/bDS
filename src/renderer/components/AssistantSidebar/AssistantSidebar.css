@@ -454,6 +454,10 @@
   stroke-width: 1.5;
 }
 
+.assistant-panel-mindmap-arrow {
+  fill: var(--vscode-panel-border);
+}
+
 .assistant-panel-mindmap-label {
   font-size: 13px;
   fill: var(--vscode-foreground);

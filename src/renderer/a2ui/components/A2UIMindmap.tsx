@@ -262,6 +262,22 @@ export const A2UIMindmap: React.FC<A2UIComponentProps> = ({ component }) => {
         viewBox={`0 0 ${layout.svgWidth} ${layout.svgHeight}`}
         preserveAspectRatio="xMidYMid meet"
       >
+        <defs>
+          <marker
+            id={`${component.id}-arrow`}
+            viewBox="0 0 10 6"
+            refX="9"
+            refY="3"
+            markerWidth="8"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path
+              d="M0,0 L10,3 L0,6"
+              className="assistant-panel-mindmap-arrow"
+            />
+          </marker>
+        </defs>
         {/* Links */}
         {layout.links.map((link, i) => (
           <path
@@ -269,6 +285,7 @@ export const A2UIMindmap: React.FC<A2UIComponentProps> = ({ component }) => {
             className="assistant-panel-mindmap-link"
             d={edgePath(link.points)}
             fill="none"
+            markerEnd={`url(#${component.id}-arrow)`}
           />
         ))}
         {/* Nodes */}
