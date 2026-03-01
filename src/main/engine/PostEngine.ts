@@ -1003,11 +1003,11 @@ export class PostEngine extends EventEmitter {
     for (const dim of groupBy) {
       switch (dim) {
         case 'year':
-          selectExprs.push("CAST(strftime('%Y', posts.created_at) AS INTEGER) AS g_year");
+          selectExprs.push("CAST(strftime('%Y', posts.created_at, 'unixepoch') AS INTEGER) AS g_year");
           groupByCols.push('g_year');
           break;
         case 'month':
-          selectExprs.push("CAST(strftime('%m', posts.created_at) AS INTEGER) AS g_month");
+          selectExprs.push("CAST(strftime('%m', posts.created_at, 'unixepoch') AS INTEGER) AS g_month");
           groupByCols.push('g_month');
           break;
         case 'tag':
@@ -1034,22 +1034,22 @@ export class PostEngine extends EventEmitter {
     const args: (string | number)[] = [this.currentProjectId];
 
     if (filter?.year !== undefined) {
-      const start = `${filter.year}-01-01`;
-      const end = `${filter.year + 1}-01-01`;
+      const startEpoch = Math.floor(new Date(`${filter.year}-01-01T00:00:00Z`).getTime() / 1000);
+      const endEpoch = Math.floor(new Date(`${filter.year + 1}-01-01T00:00:00Z`).getTime() / 1000);
       conditions.push('posts.created_at >= ?');
-      args.push(start);
+      args.push(startEpoch);
       conditions.push('posts.created_at < ?');
-      args.push(end);
+      args.push(endEpoch);
     }
     if (filter?.month !== undefined && filter?.year !== undefined) {
-      const start = `${filter.year}-${String(filter.month).padStart(2, '0')}-01`;
+      const startEpoch = Math.floor(new Date(`${filter.year}-${String(filter.month).padStart(2, '0')}-01T00:00:00Z`).getTime() / 1000);
       const endMonth = filter.month === 12 ? 1 : filter.month + 1;
       const endYear = filter.month === 12 ? filter.year + 1 : filter.year;
-      const end = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+      const endEpoch = Math.floor(new Date(`${endYear}-${String(endMonth).padStart(2, '0')}-01T00:00:00Z`).getTime() / 1000);
       conditions.push('posts.created_at >= ?');
-      args.push(start);
+      args.push(startEpoch);
       conditions.push('posts.created_at < ?');
-      args.push(end);
+      args.push(endEpoch);
     }
     if (filter?.status) {
       conditions.push('posts.status = ?');
