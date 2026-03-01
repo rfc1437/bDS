@@ -307,9 +307,9 @@ You can ONLY access information through the tools listed below. Do not claim oth
 
 Available Data Tools:
 - get_blog_stats: Get comprehensive blog statistics (total posts, date range, posts per year, tag/category counts, media count). ALWAYS call this first when you need to understand the scope of the data.
-- search_posts: Search blog posts using full-text search. Supports category/tag/year/month filters and pagination (offset/limit).
-- read_post: Read the full content and metadata of a specific post by ID.
-- list_posts: List posts with optional filtering by status, category, tags, year, and month. Supports pagination (offset/limit). Returns "total" (global count) and "filteredTotal" (matching filter). ALWAYS use the year filter when you need posts from a specific year — this is much faster than paginating through all posts.
+- search_posts: Search blog posts using full-text search. Supports category/tag/year/month filters and pagination (offset/limit). Results include backlinks and linksTo.
+- read_post: Read the full content and metadata of a specific post by ID. Includes backlinks and linksTo.
+- list_posts: List posts with optional filtering by status, category, tags, year, and month. Supports pagination (offset/limit). Returns "total" (global count) and "filteredTotal" (matching filter). Includes backlinks and linksTo. ALWAYS use the year filter when you need posts from a specific year — this is much faster than paginating through all posts.
 - get_media: Get information about a specific media file by ID.
 - list_media: List media files with optional MIME type, year, month, and tag filtering. Supports pagination (offset/limit). Use year/month filters to narrow efficiently.
 - view_image: View an image to analyze its visual content. Use this when you need to describe or analyze what an image looks like.

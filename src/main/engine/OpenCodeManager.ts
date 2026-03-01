@@ -1283,13 +1283,17 @@ export class OpenCodeManager {
             offset,
             limit,
             posts: await Promise.all(filteredPosts.map(async p => {
-              const backlinks = await this.postEngine.getLinkedBy(p.id);
+              const [backlinks, linksTo] = await Promise.all([
+                this.postEngine.getLinkedBy(p.id),
+                this.postEngine.getLinksTo(p.id),
+              ]);
               return {
                 id: p.id, title: p.title, slug: p.slug,
                 excerpt: p.excerpt, status: p.status,
                 categories: p.categories, tags: p.tags,
                 createdAt: p.createdAt, updatedAt: p.updatedAt,
                 backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+                linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
               };
             })),
           };
@@ -1298,7 +1302,10 @@ export class OpenCodeManager {
         case 'read_post': {
           const post = await this.postEngine.getPost(args.postId as string);
           if (!post) return { success: false, error: 'Post not found' };
-          const backlinks = await this.postEngine.getLinkedBy(post.id);
+          const [backlinks, linksTo] = await Promise.all([
+            this.postEngine.getLinkedBy(post.id),
+            this.postEngine.getLinksTo(post.id),
+          ]);
           return {
             success: true,
             post: {
@@ -1309,6 +1316,7 @@ export class OpenCodeManager {
               createdAt: post.createdAt, updatedAt: post.updatedAt,
               publishedAt: post.publishedAt,
               backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+              linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
             },
           };
         }
@@ -1350,12 +1358,16 @@ export class OpenCodeManager {
             offset,
             limit,
             posts: await Promise.all(pageItems.map(async p => {
-              const backlinks = await this.postEngine.getLinkedBy(p.id);
+              const [backlinks, linksTo] = await Promise.all([
+                this.postEngine.getLinkedBy(p.id),
+                this.postEngine.getLinksTo(p.id),
+              ]);
               return {
                 id: p.id, title: p.title, slug: p.slug,
                 status: p.status, categories: p.categories,
                 tags: p.tags, createdAt: p.createdAt, updatedAt: p.updatedAt,
                 backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+                linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
               };
             })),
           };

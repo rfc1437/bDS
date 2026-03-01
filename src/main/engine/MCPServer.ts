@@ -431,8 +431,15 @@ export class MCPServer {
     server.registerResource('post', new ResourceTemplate('bds://posts/{id}', { list: undefined }), { description: 'A single post by ID' }, async (uri, { id }) => {
       const postId = id as string;
       const result = await this.deps.postEngine.getPost(postId);
-      const backlinks = await this.deps.postEngine.getLinkedBy(postId);
-      const enriched = { ...result, backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })) };
+      const [backlinks, linksTo] = await Promise.all([
+        this.deps.postEngine.getLinkedBy(postId),
+        this.deps.postEngine.getLinksTo(postId),
+      ]);
+      const enriched = {
+        ...result,
+        backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+        linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
+      };
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(enriched) }] };
     });
 
@@ -483,7 +490,7 @@ export class MCPServer {
   private registerReadTools(server: McpServer): void {
     server.registerTool('search_posts', {
       title: 'Search Posts',
-      description: 'Search blog posts by query, category, tags, or date range. Each result includes backlinks (posts linking to it).',
+      description: 'Search blog posts by query, category, tags, or date range. Each result includes backlinks (posts linking to it) and linksTo (posts it links to).',
       inputSchema: {
         query: z.string().optional().describe('Full-text search query'),
         category: z.string().optional().describe('Filter by category'),
@@ -500,11 +507,18 @@ export class MCPServer {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 50;
 
-      // Helper: enrich posts with backlinks
-      const enrichWithBacklinks = async <T extends { id: string }>(posts: T[]) => {
+      // Helper: enrich posts with backlinks and linksTo
+      const enrichWithLinks = async <T extends { id: string }>(posts: T[]) => {
         return Promise.all(posts.map(async (p) => {
-          const backlinks = await this.deps.postEngine.getLinkedBy(p.id);
-          return { ...p, backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })) };
+          const [backlinks, linksTo] = await Promise.all([
+            this.deps.postEngine.getLinkedBy(p.id),
+            this.deps.postEngine.getLinksTo(p.id),
+          ]);
+          return {
+            ...p,
+            backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+            linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
+          };
         }));
       };
 
@@ -512,7 +526,7 @@ export class MCPServer {
         // Pure text search — use FTS
         const results = await this.deps.postEngine.searchPosts(args.query);
         const paginated = results.slice(offset, offset + limit);
-        const enriched = await enrichWithBacklinks(paginated);
+        const enriched = await enrichWithLinks(paginated);
         return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
       }
 
@@ -529,14 +543,14 @@ export class MCPServer {
         const results = await this.deps.postEngine.searchPostsFiltered(
           args.query, filter, { offset, limit },
         );
-        const enriched = await enrichWithBacklinks(results);
+        const enriched = await enrichWithLinks(results);
         return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
       }
 
       // Filter-only query (no text search)
       const results = await this.deps.postEngine.getPostsFiltered(filter);
       const paginated = results.slice(offset, offset + limit);
-      const enriched = await enrichWithBacklinks(paginated);
+      const enriched = await enrichWithLinks(paginated);
       return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
     });
   }
