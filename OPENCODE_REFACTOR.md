@@ -391,11 +391,11 @@ Domain logic only — no AI protocol code survives.
 13. ~~Update IPC handlers: generic provider management, wire to new modules~~ ✅
 14. ~~Integration tests~~ ✅ 34 tests
 
-### Phase 3: Delete + ship (1 session)
-15. Delete `OpenCodeManager.ts` (2,745 lines)
-16. Delete `streaming.ts` (621 lines)
-17. Delete old MCPServer duplication
-18. Update all tests, full build pass
+### Phase 3: Delete + ship (1 session) ✅ DONE
+15. ~~Delete `OpenCodeManager.ts` (2,745 lines)~~ ✅
+16. ~~Delete `streaming.ts` (621 lines)~~ ✅
+17. ~~Delete old MCPServer duplication~~ ✅ (shared `enrichWithLinks`, `executeCheckTerm`, `buildAmbiguityHints`)
+18. ~~Update all tests, full build pass~~ ✅ 2599 tests, 0 failures
 19. Smoke test: chat conversation end-to-end, taxonomy analysis, image analysis
 
 ---

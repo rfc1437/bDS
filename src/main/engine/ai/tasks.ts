@@ -1,7 +1,7 @@
 /**
  * OneShotTasks — non-streaming AI tasks using generateText().
  *
- * Replaces OpenCodeManager.analyzeTaxonomy() and analyzeMediaImage()
+ * One-shot AI tasks: taxonomy analysis and image analysis.
  * with provider-agnostic AI SDK calls.
  */
 

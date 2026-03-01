@@ -1,7 +1,7 @@
 /**
  * Chat IPC handlers — AI chat via AI SDK v6.
  *
- * Uses ProviderRegistry, ChatService, and OneShotTasks instead of OpenCodeManager.
+ * Uses ProviderRegistry, ChatService, and OneShotTasks.
  */
 
 import { ipcMain, BrowserWindow } from 'electron';

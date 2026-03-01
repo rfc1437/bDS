@@ -135,7 +135,7 @@ export class ModelCatalogEngine {
   }
 
   /**
-   * Get the max output tokens for a model (used by OpenCodeManager for max_tokens).
+   * Get the max output tokens for a model (used for maxOutputTokens).
    * Returns DEFAULT_MAX_OUTPUT_TOKENS if the model is not in the catalog.
    */
   async getMaxOutputTokens(modelId: string, provider?: string): Promise<number> {

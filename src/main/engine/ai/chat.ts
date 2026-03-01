@@ -1,8 +1,7 @@
 /**
  * ChatService — streaming chat using AI SDK's streamText().
  *
- * Replaces OpenCodeManager's sendAnthropicMessage/sendOpenAIMessage/
- * streaming.ts with a single, provider-agnostic code path.
+ * Streaming chat service using AI SDK v6 streamText().
  *
  * AI SDK handles:
  *   - SSE parsing, reconnection, abort
@@ -78,7 +77,7 @@ function dbMessagesToAIMessages(
       messages.push({ role: 'user', content: msg.content || '' });
     } else if (msg.role === 'assistant') {
       let content = msg.content || '';
-      // Append tool-call annotation from previous turns (same as OpenCodeManager)
+      // Append tool-call annotation from previous turns
       if (msg.toolCalls) {
         try {
           const calls = JSON.parse(msg.toolCalls) as Array<{ name: string; args: unknown }>;
@@ -216,7 +215,7 @@ export class ChatService {
 
   /**
    * Send a user message, stream the AI response with tool use.
-   * This is the main entry point — replaces OpenCodeManager.sendMessage().
+   * Send a message in a conversation, streaming the response.
    */
   async sendMessage(
     conversationId: string,

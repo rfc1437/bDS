@@ -57,10 +57,16 @@ export interface BlogToolDeps {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/** Deps contract for link enrichment — narrow so MCPServer can also use it. */
+export interface LinkEnrichmentDeps {
+  getLinkedBy: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
+  getLinksTo: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
+}
+
 /** Enrich posts with backlinks and outlinks. */
-async function enrichWithLinks<T extends { id: string }>(
+export async function enrichWithLinks<T extends { id: string }>(
   posts: T[],
-  postEngine: BlogToolDeps['postEngine'],
+  postEngine: LinkEnrichmentDeps,
 ): Promise<Array<T & { backlinks: Array<{ id: string; title: string; slug: string }>; linksTo: Array<{ id: string; title: string; slug: string }> }>> {
   return Promise.all(posts.map(async (p) => {
     const [backlinks, linksTo] = await Promise.all([
@@ -113,6 +119,27 @@ export async function buildAmbiguityHints(
   return hints;
 }
 
+/** Shared check_term logic — returns a plain result object. */
+export async function executeCheckTerm(
+  term: string,
+  postEngine: AmbiguityHintDeps,
+): Promise<{ term: string; asCategory: boolean; categoryPostCount: number; asTag: boolean; tagPostCount: number }> {
+  const [categories, tags] = await Promise.all([
+    postEngine.getCategoriesWithCounts(),
+    postEngine.getTagsWithCounts(),
+  ]);
+  const termLower = term.toLowerCase();
+  const catMatch = categories.find(c => c.category.toLowerCase() === termLower);
+  const tagMatch = tags.find(t => t.tag.toLowerCase() === termLower);
+  return {
+    term,
+    asCategory: !!catMatch,
+    categoryPostCount: catMatch?.count ?? 0,
+    asTag: !!tagMatch,
+    tagPostCount: tagMatch?.count ?? 0,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -127,21 +154,8 @@ export function createBlogTools(deps: BlogToolDeps) {
         term: z.string().describe('The term to look up'),
       }),
       execute: async ({ term }) => {
-        const [categories, tags] = await Promise.all([
-          postEngine.getCategoriesWithCounts(),
-          postEngine.getTagsWithCounts(),
-        ]);
-        const termLower = term.toLowerCase();
-        const catMatch = categories.find(c => c.category.toLowerCase() === termLower);
-        const tagMatch = tags.find(t => t.tag.toLowerCase() === termLower);
-        return {
-          success: true,
-          term,
-          asCategory: !!catMatch,
-          categoryPostCount: catMatch?.count ?? 0,
-          asTag: !!tagMatch,
-          tagPostCount: tagMatch?.count ?? 0,
-        };
+        const result = await executeCheckTerm(term, postEngine);
+        return { success: true, ...result };
       },
     }),
 

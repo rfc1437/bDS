@@ -8,7 +8,7 @@ import {
 } from '@modelcontextprotocol/ext-apps/server';
 import { createServer as createHttpServer, type Server } from 'http';
 import { z } from 'zod';
-import { buildAmbiguityHints } from './ai/blog-tools';
+import { buildAmbiguityHints, enrichWithLinks, executeCheckTerm } from './ai/blog-tools';
 import { ProposalStore, type ProposalType } from './ProposalStore';
 import {
   reviewPostHtml,
@@ -498,25 +498,8 @@ export class MCPServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     }, async (args) => {
-      const [categories, tags] = await Promise.all([
-        this.deps.postEngine.getCategoriesWithCounts(),
-        this.deps.postEngine.getTagsWithCounts(),
-      ]);
-      const termLower = args.term.toLowerCase();
-      const catMatch = categories.find(c => c.category.toLowerCase() === termLower);
-      const tagMatch = tags.find(t => t.tag.toLowerCase() === termLower);
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            term: args.term,
-            asCategory: !!catMatch,
-            categoryPostCount: catMatch?.count ?? 0,
-            asTag: !!tagMatch,
-            tagPostCount: tagMatch?.count ?? 0,
-          }),
-        }],
-      };
+      const result = await executeCheckTerm(args.term, this.deps.postEngine);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     });
 
     // ── search_posts ──
@@ -535,7 +518,6 @@ export class MCPServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     }, async (args) => {
-      // Validate: month requires year
       if (args.month && !args.year) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'month requires year. Example: year: 2025, month: 3' }) }],
@@ -547,30 +529,13 @@ export class MCPServer {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 50;
 
-      // Helper: enrich posts with backlinks and linksTo
-      const enrichWithLinks = async <T extends { id: string }>(posts: T[]) => {
-        return Promise.all(posts.map(async (p) => {
-          const [backlinks, linksTo] = await Promise.all([
-            this.deps.postEngine.getLinkedBy(p.id),
-            this.deps.postEngine.getLinksTo(p.id),
-          ]);
-          return {
-            ...p,
-            backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
-            linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
-          };
-        }));
-      };
-
       if (args.query && !hasFilters) {
-        // Pure text search — use FTS
         const results = await this.deps.postEngine.searchPosts(args.query);
         const paginated = results.slice(offset, offset + limit);
-        const enriched = await enrichWithLinks(paginated);
+        const enriched = await enrichWithLinks(paginated, this.deps.postEngine);
         return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
       }
 
-      // Build structural filter
       const filter: PostFilter = {};
       if (args.category) filter.categories = [args.category];
       if (args.tags) filter.tags = args.tags;
@@ -578,37 +543,23 @@ export class MCPServer {
       if (args.month) filter.month = args.month;
       if (args.status) filter.status = args.status;
 
+      let enriched;
       if (args.query && hasFilters) {
-        // FTS + structural filters: single SQL JOIN query, ranked by FTS score
-        const results = await this.deps.postEngine.searchPostsFiltered(
-          args.query, filter, { offset, limit },
-        );
-        const enriched = await enrichWithLinks(results);
-        const content: Array<{ type: 'text'; text: string }> = [
-          { type: 'text' as const, text: JSON.stringify(enriched) },
-        ];
-        const hintsList = await buildAmbiguityHints(this.deps.postEngine, args.category, args.tags);
-        if (hintsList.length > 0) {
-          content.push({ type: 'text' as const, text: hintsList.join(' ') });
-        }
-        return { content };
+        const results = await this.deps.postEngine.searchPostsFiltered(args.query, filter, { offset, limit });
+        enriched = await enrichWithLinks(results, this.deps.postEngine);
+      } else {
+        const results = await this.deps.postEngine.getPostsFiltered(filter);
+        const paginated = results.slice(offset, offset + limit);
+        enriched = await enrichWithLinks(paginated, this.deps.postEngine);
       }
-
-      // Filter-only query (no text search)
-      const results = await this.deps.postEngine.getPostsFiltered(filter);
-      const paginated = results.slice(offset, offset + limit);
-      const enriched = await enrichWithLinks(paginated);
 
       const content: Array<{ type: 'text'; text: string }> = [
         { type: 'text' as const, text: JSON.stringify(enriched) },
       ];
-
-      // Ambiguity hints: check if category/tag terms exist in the other namespace
       const hintsList = await buildAmbiguityHints(this.deps.postEngine, args.category, args.tags);
       if (hintsList.length > 0) {
         content.push({ type: 'text' as const, text: hintsList.join(' ') });
       }
-
       return { content };
     });
   }
