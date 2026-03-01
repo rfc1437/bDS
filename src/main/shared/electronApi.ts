@@ -421,7 +421,7 @@ export interface ChatMessage {
 export interface ChatModel {
   id: string;
   name: string;
-  provider?: string;
+  provider: string;
   vision?: boolean;
 }
 

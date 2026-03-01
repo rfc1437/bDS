@@ -45,7 +45,8 @@ vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => ({})),
 }));
 
-import { OpenCodeManager, type ModelInfo } from '../../src/main/engine/OpenCodeManager';
+import { OpenCodeManager } from '../../src/main/engine/OpenCodeManager';
+import type { ChatModel } from '../../src/main/shared/electronApi';
 
 // Helper to create manager with mocked httpRequest
 function createManager(): OpenCodeManager {
@@ -278,7 +279,7 @@ describe('OpenCodeManager Mistral integration', () => {
       });
 
       const models = await manager.getAvailableModels();
-      const providers = new Set(models.map((m: ModelInfo) => m.provider));
+      const providers = new Set(models.map((m: ChatModel) => m.provider));
       expect(providers.has('mistral')).toBe(false);
     });
 
@@ -301,7 +302,7 @@ describe('OpenCodeManager Mistral integration', () => {
 
       const models = await manager.getAvailableModels();
       expect(models.length).toBe(2);
-      expect(models.every((m: ModelInfo) => m.provider === 'mistral')).toBe(true);
+      expect(models.every((m: ChatModel) => m.provider === 'mistral')).toBe(true);
     });
 
     it('merges models from both providers when both keys are set', async () => {
@@ -330,7 +331,7 @@ describe('OpenCodeManager Mistral integration', () => {
       const models = await manager.getAvailableModels();
       expect(models.length).toBe(4);
 
-      const providers = new Set(models.map((m: ModelInfo) => m.provider));
+      const providers = new Set(models.map((m: ChatModel) => m.provider));
       expect(providers.has('anthropic')).toBe(true);
       expect(providers.has('mistral')).toBe(true);
     });
@@ -353,8 +354,8 @@ describe('OpenCodeManager Mistral integration', () => {
       });
 
       const models = await manager.getAvailableModels();
-      const large = models.find((m: ModelInfo) => m.id === 'mistral-large-latest');
-      const devstral = models.find((m: ModelInfo) => m.id === 'devstral-small-latest');
+      const large = models.find((m: ChatModel) => m.id === 'mistral-large-latest');
+      const devstral = models.find((m: ChatModel) => m.id === 'devstral-small-latest');
 
       expect(large?.vision).toBe(true);
       expect(devstral?.vision).toBe(false);
@@ -369,7 +370,7 @@ describe('OpenCodeManager Mistral integration', () => {
 
       const models = await manager.getAvailableModels();
       // Should only have Mistral models from fallback
-      const providers = new Set(models.map((m: ModelInfo) => m.provider));
+      const providers = new Set(models.map((m: ChatModel) => m.provider));
       expect(providers.has('mistral')).toBe(true);
       expect(providers.has('anthropic')).toBe(false);
       expect(providers.has('openai')).toBe(false);
@@ -580,13 +581,13 @@ describe('OpenCodeManager Mistral integration', () => {
       const models = await manager.getAvailableModels();
 
       // Vision-capable models
-      expect(models.find((m: ModelInfo) => m.id === 'mistral-large-latest')?.vision).toBe(true);
-      expect(models.find((m: ModelInfo) => m.id === 'mistral-medium-latest')?.vision).toBe(true);
-      expect(models.find((m: ModelInfo) => m.id === 'mistral-small-latest')?.vision).toBe(true);
+      expect(models.find((m: ChatModel) => m.id === 'mistral-large-latest')?.vision).toBe(true);
+      expect(models.find((m: ChatModel) => m.id === 'mistral-medium-latest')?.vision).toBe(true);
+      expect(models.find((m: ChatModel) => m.id === 'mistral-small-latest')?.vision).toBe(true);
 
       // Non-vision models
-      expect(models.find((m: ModelInfo) => m.id === 'devstral-small-latest')?.vision).toBe(false);
-      expect(models.find((m: ModelInfo) => m.id === 'devstral-large-latest')?.vision).toBe(false);
+      expect(models.find((m: ChatModel) => m.id === 'devstral-small-latest')?.vision).toBe(false);
+      expect(models.find((m: ChatModel) => m.id === 'devstral-large-latest')?.vision).toBe(false);
     });
   });
 

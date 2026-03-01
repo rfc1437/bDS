@@ -29,7 +29,8 @@ vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => ({})),
 }));
 
-import { OpenCodeManager, ModelInfo } from '../../src/main/engine/OpenCodeManager';
+import { OpenCodeManager } from '../../src/main/engine/OpenCodeManager';
+import type { ChatModel } from '../../src/main/shared/electronApi';
 
 // Helper to create manager with mocked httpRequest
 function createManager(): OpenCodeManager {
@@ -163,13 +164,13 @@ describe('OpenCodeManager model discovery', () => {
 
       expect(models.length).toBeGreaterThan(0);
       // Should include well-known models from the display name map
-      const ids = models.map((m: ModelInfo) => m.id);
+      const ids = models.map((m: ChatModel) => m.id);
       expect(ids).toContain('claude-sonnet-4');
       expect(ids).toContain('gpt-5');
       // Every model should have proper provider detection
-      const claudeModel = models.find((m: ModelInfo) => m.id === 'claude-sonnet-4');
+      const claudeModel = models.find((m: ChatModel) => m.id === 'claude-sonnet-4');
       expect(claudeModel?.provider).toBe('anthropic');
-      const gptModel = models.find((m: ModelInfo) => m.id === 'gpt-5');
+      const gptModel = models.find((m: ChatModel) => m.id === 'gpt-5');
       expect(gptModel?.provider).toBe('openai');
     });
 
@@ -183,7 +184,7 @@ describe('OpenCodeManager model discovery', () => {
       const models = await manager.getAvailableModels();
 
       expect(models.length).toBeGreaterThan(0);
-      const ids = models.map((m: ModelInfo) => m.id);
+      const ids = models.map((m: ChatModel) => m.id);
       expect(ids).toContain('claude-sonnet-4');
     });
 
@@ -245,7 +246,7 @@ describe('OpenCodeManager model discovery', () => {
 
       // Only Mistral models will be in fallback since only Mistral key is set
       expect(models.length).toBeGreaterThan(0);
-      const providers = new Set(models.map((m: ModelInfo) => m.provider));
+      const providers = new Set(models.map((m: ChatModel) => m.provider));
       expect(providers.has('mistral')).toBe(true);
     });
   });

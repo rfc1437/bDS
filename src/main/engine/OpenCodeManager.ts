@@ -27,6 +27,7 @@ import type { PostMediaEngine } from './PostMediaEngine';
 import { ModelCatalogEngine, DEFAULT_MAX_OUTPUT_TOKENS } from './ModelCatalogEngine';
 import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
 import type { A2UIServerMessage } from '../a2ui/types';
+import type { ChatModel } from '../shared/electronApi';
 
 // OpenCode Zen API endpoints
 const ZEN_ANTHROPIC_URL = 'https://opencode.ai/zen/v1/messages';
@@ -130,13 +131,6 @@ const MODEL_CAPABILITIES: Record<string, { vision: boolean }> = {
   'devstral-large-latest': { vision: false },
 };
 
-export interface ModelInfo {
-  id: string;
-  name: string;
-  provider: string;
-  vision?: boolean;
-}
-
 export interface SendMessageOptions {
   metadata?: {
     surface?: 'tab' | 'sidebar';
@@ -222,7 +216,7 @@ export class OpenCodeManager {
   private apiKey: string = '';
   private mistralApiKey: string = '';
   private abortControllers: Map<string, AbortController> = new Map();
-  private cachedModels: ModelInfo[] | null = null;
+  private cachedModels: ChatModel[] | null = null;
   private cachedModelsAt: number = 0;
   private static MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   private modelCatalogEngine = new ModelCatalogEngine();
@@ -298,7 +292,7 @@ export class OpenCodeManager {
   /**
    * Validate an OpenCode API key by calling the models endpoint
    */
-  async validateApiKey(apiKey: string): Promise<{ isValid: boolean; models: ModelInfo[] }> {
+  async validateApiKey(apiKey: string): Promise<{ isValid: boolean; models: ChatModel[] }> {
     if (!apiKey || apiKey.length < 3) {
       return { isValid: false, models: [] };
     }
@@ -333,7 +327,7 @@ export class OpenCodeManager {
   /**
    * Validate a Mistral API key by calling the Mistral models endpoint
    */
-  async validateMistralApiKey(apiKey: string): Promise<{ isValid: boolean; models: ModelInfo[] }> {
+  async validateMistralApiKey(apiKey: string): Promise<{ isValid: boolean; models: ChatModel[] }> {
     if (!apiKey || apiKey.length < 3) {
       return { isValid: false, models: [] };
     }
@@ -367,13 +361,13 @@ export class OpenCodeManager {
    * Get available models (cached with 5-minute TTL)
    * Merges models from all configured providers.
    */
-  async getAvailableModels(): Promise<ModelInfo[]> {
+  async getAvailableModels(): Promise<ChatModel[]> {
     // Return cached models if within TTL
     if (this.cachedModels && Date.now() - this.cachedModelsAt < OpenCodeManager.MODEL_CACHE_TTL) {
       return this.cachedModels;
     }
 
-    const allModels: ModelInfo[] = [];
+    const allModels: ChatModel[] = [];
     let fetched = false;
 
     // Fetch OpenCode models
@@ -908,7 +902,7 @@ export class OpenCodeManager {
   private async sendOpenAIMessage(
     modelId: string,
     systemPrompt: string,
-    dbMessages: Array<{ role: string; content?: string }>,
+    dbMessages: Array<{ role: string; content?: string; toolCalls?: string; toolCallId?: string }>,
     signal: AbortSignal,
     callbacks: {
       onDelta?: (delta: string) => void;
@@ -922,15 +916,18 @@ export class OpenCodeManager {
     apiKey: string = this.apiKey,
     providerOptions?: { parallelToolCalls?: boolean },
   ): Promise<{ content: string; toolCalls: Array<{ name: string; args: unknown }> }> {
-    // Build OpenAI-format messages
+    // Build OpenAI-format messages (with tool-call summaries for context parity with Anthropic path)
     const allMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
       ...dbMessages
         .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({
-          role: m.role,
-          content: m.content || '',
-        })),
+        .map(m => {
+          let content = m.content || '';
+          if (m.role === 'assistant') {
+            content += this.buildToolCallSummary(m.toolCalls);
+          }
+          return { role: m.role, content };
+        }),
     ];
 
     // Build OpenAI tools format
@@ -2017,6 +2014,25 @@ export class OpenCodeManager {
   }
 
   /**
+   * Build a human-readable summary of tool calls from a serialized JSON string.
+   * Used by both Anthropic and OpenAI message builders to annotate assistant
+   * messages with tool-use context when resuming a conversation from DB history.
+   */
+  private buildToolCallSummary(toolCallsJson?: string): string {
+    if (!toolCallsJson) return '';
+    try {
+      const toolCalls = JSON.parse(toolCallsJson) as Array<{ name: string; args: unknown }>;
+      if (toolCalls.length === 0) return '';
+      const summary = toolCalls
+        .map(tc => `- ${tc.name}(${JSON.stringify(tc.args)})`)
+        .join('\n');
+      return `\n\n[Tools used in this turn:\n${summary}\n]`;
+    } catch {
+      return '';
+    }
+  }
+
+  /**
    * Build Anthropic-format messages from DB message history.
    * For assistant messages that had tool calls, appends a summary annotation
    * so the model retains context about what tools were used on resume.
@@ -2030,23 +2046,7 @@ export class OpenCodeManager {
       if (msg.role === 'user') {
         messages.push({ role: 'user', content: msg.content || '' });
       } else if (msg.role === 'assistant') {
-        let content = msg.content || '';
-
-        // If this message had tool calls, append a summary for context on resume
-        if (msg.toolCalls) {
-          try {
-            const toolCalls = JSON.parse(msg.toolCalls) as Array<{ name: string; args: unknown }>;
-            if (toolCalls.length > 0) {
-              const summary = toolCalls
-                .map(tc => `- ${tc.name}(${JSON.stringify(tc.args)})`)
-                .join('\n');
-              content += `\n\n[Tools used in this turn:\n${summary}\n]`;
-            }
-          } catch {
-            // Ignore malformed toolCalls JSON
-          }
-        }
-
+        const content = (msg.content || '') + this.buildToolCallSummary(msg.toolCalls);
         messages.push({ role: 'assistant', content });
       }
     }
