@@ -30,7 +30,8 @@ export type A2UIComponentType =
   | 'list'
   | 'row'
   | 'column'
-  | 'divider';
+  | 'divider'
+  | 'mindmap';
 
 export interface A2UIComponent {
   id: string;

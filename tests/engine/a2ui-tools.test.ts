@@ -22,10 +22,11 @@ describe('A2UI Tools — createA2UITools', () => {
     'render_metric',
     'render_list',
     'render_tabs',
+    'render_mindmap',
   ];
 
-  it('returns all 7 tools', () => {
-    expect(Object.keys(tools)).toHaveLength(7);
+  it('returns all 8 tools', () => {
+    expect(Object.keys(tools)).toHaveLength(8);
     for (const name of expectedToolNames) {
       expect(tools).toHaveProperty(name);
     }
@@ -53,6 +54,9 @@ describe('A2UI Tools — createA2UITools', () => {
         render_tabs: {
           title: 'Test',
           tabs: [{ label: 'Tab1', content: [{ type: 'text', data: 'Hello' }] }],
+        },
+        render_mindmap: {
+          nodes: [{ id: 'root', label: 'Topic' }],
         },
       };
 

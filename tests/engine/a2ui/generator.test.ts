@@ -9,6 +9,7 @@ import {
   generateMetric,
   generateList,
   generateTabs,
+  generateMindmap,
 } from '../../../src/main/a2ui/generator';
 import type { A2UIServerMessage } from '../../../src/main/a2ui/types';
 
@@ -22,6 +23,7 @@ describe('A2UI generator', () => {
       expect(isRenderTool('render_metric')).toBe(true);
       expect(isRenderTool('render_list')).toBe(true);
       expect(isRenderTool('render_tabs')).toBe(true);
+      expect(isRenderTool('render_mindmap')).toBe(true);
     });
 
     it('returns false for non-render tools', () => {
@@ -363,6 +365,70 @@ describe('A2UI generator', () => {
         ['Hello', 'published'],
         ['Draft', 'draft'],
       ]);
+    });
+  });
+
+  describe('generateMindmap', () => {
+    it('creates surface with mindmap component and node data', () => {
+      const messages = generateMindmap('conv-1', {
+        title: 'Project Plan',
+        nodes: [
+          { id: 'root', label: 'Project', children: ['a', 'b'] },
+          { id: 'a', label: 'Design', children: ['a1'] },
+          { id: 'b', label: 'Development' },
+          { id: 'a1', label: 'Wireframes' },
+        ],
+      });
+
+      expect(messages).toHaveLength(3); // createSurface + updateComponents + updateDataModel
+
+      const createMsg = messages[0] as Extract<A2UIServerMessage, { type: 'createSurface' }>;
+      expect(createMsg.type).toBe('createSurface');
+      expect(createMsg.conversationId).toBe('conv-1');
+
+      const updateMsg = messages[1] as Extract<A2UIServerMessage, { type: 'updateComponents' }>;
+      expect(updateMsg.type).toBe('updateComponents');
+      expect(updateMsg.components).toHaveLength(1);
+      expect(updateMsg.components[0].type).toBe('mindmap');
+      expect(updateMsg.components[0].properties.title).toBe('Project Plan');
+      expect(updateMsg.components[0].dataBinding).toBe('/mindmapNodes');
+      expect(updateMsg.rootIds).toHaveLength(1);
+
+      const dataMsg = messages[2] as Extract<A2UIServerMessage, { type: 'updateDataModel' }>;
+      expect(dataMsg.type).toBe('updateDataModel');
+      expect(dataMsg.path).toBe('/mindmapNodes');
+      expect(dataMsg.value).toEqual([
+        { id: 'root', label: 'Project', children: ['a', 'b'] },
+        { id: 'a', label: 'Design', children: ['a1'] },
+        { id: 'b', label: 'Development' },
+        { id: 'a1', label: 'Wireframes' },
+      ]);
+    });
+
+    it('works with a single root node', () => {
+      const messages = generateMindmap('conv-1', {
+        nodes: [{ id: 'root', label: 'Central Topic' }],
+      });
+
+      expect(messages).toHaveLength(3);
+
+      const dataMsg = messages[2] as Extract<A2UIServerMessage, { type: 'updateDataModel' }>;
+      expect(dataMsg.value).toEqual([
+        { id: 'root', label: 'Central Topic' },
+      ]);
+    });
+
+    it('is dispatched via generateFromToolCall', () => {
+      const messages = generateFromToolCall('conv-1', 'render_mindmap', {
+        nodes: [
+          { id: 'root', label: 'Topic', children: ['a'] },
+          { id: 'a', label: 'Sub' },
+        ],
+      });
+
+      expect(messages).not.toBeNull();
+      expect(messages!.length).toBeGreaterThanOrEqual(2);
+      expect(messages![0].type).toBe('createSurface');
     });
   });
 });

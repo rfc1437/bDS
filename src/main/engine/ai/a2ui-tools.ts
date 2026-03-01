@@ -138,6 +138,19 @@ export function createA2UITools() {
       }),
       execute: async (_input) => ({ success: true }),
     }),
+
+    render_mindmap: tool({
+      description: 'Render a mind map diagram in the chat UI. Use this when the user asks for a mind map, concept map, topic tree, brainstorming diagram, or hierarchical overview of ideas.',
+      inputSchema: z.object({
+        title: z.string().optional().describe('Optional mind map title'),
+        nodes: z.array(z.object({
+          id: z.string().describe('Unique node identifier'),
+          label: z.string().describe('Node label text'),
+          children: z.array(z.string()).optional().describe('IDs of child nodes'),
+        })).describe('Flat array of nodes. The first node is the root. Each node references children by ID.'),
+      }),
+      execute: async (_input) => ({ success: true }),
+    }),
   };
 }
 

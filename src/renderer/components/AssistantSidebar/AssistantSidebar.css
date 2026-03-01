@@ -430,3 +430,32 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* ---- Mindmap ---- */
+
+.assistant-panel-mindmap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-panel-mindmap-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.assistant-panel-mindmap-svg {
+  width: 100%;
+  max-height: 400px;
+}
+
+.assistant-panel-mindmap-link {
+  stroke: var(--vscode-panel-border);
+  stroke-width: 1.5;
+}
+
+.assistant-panel-mindmap-label {
+  font-size: 12px;
+  fill: var(--vscode-foreground);
+  pointer-events: none;
+}

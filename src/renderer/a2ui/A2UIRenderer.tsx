@@ -24,6 +24,7 @@ import { A2UIList } from './components/A2UIList';
 import { A2UIRow } from './components/A2UIRow';
 import { A2UIColumn } from './components/A2UIColumn';
 import { A2UIDivider } from './components/A2UIDivider';
+import { A2UIMindmap } from './components/A2UIMindmap';
 
 export interface A2UIComponentProps {
   component: A2UIResolvedComponent;
@@ -53,6 +54,7 @@ const COMPONENT_REGISTRY: Record<string, ComponentRenderer> = {
   row: A2UIRow,
   column: A2UIColumn,
   divider: A2UIDivider,
+  mindmap: A2UIMindmap,
 };
 
 interface A2UIRendererProps {

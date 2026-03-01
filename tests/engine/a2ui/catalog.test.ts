@@ -9,9 +9,9 @@ import {
 import { BDS_CATALOG_ID } from '../../../src/main/a2ui/types';
 
 describe('A2UI catalog', () => {
-  it('returns all 17 catalog entries', () => {
+  it('returns all 18 catalog entries', () => {
     const entries = getCatalogEntries();
-    expect(entries).toHaveLength(17);
+    expect(entries).toHaveLength(18);
   });
 
   it('returns a copy of catalog entries to prevent mutation', () => {
@@ -25,7 +25,7 @@ describe('A2UI catalog', () => {
     const types = [
       'text', 'button', 'card', 'chart', 'table', 'form',
       'textField', 'checkBox', 'dateTimeInput', 'choicePicker',
-      'image', 'tabs', 'metric', 'list', 'row', 'column', 'divider',
+      'image', 'tabs', 'metric', 'list', 'mindmap', 'row', 'column', 'divider',
     ];
 
     for (const type of types) {
@@ -74,6 +74,7 @@ describe('A2UI catalog', () => {
     expect(customTypes).toContain('table');
     expect(customTypes).toContain('metric');
     expect(customTypes).toContain('form');
+    expect(customTypes).toContain('mindmap');
     expect(customTypes).not.toContain('text');
     expect(customTypes).not.toContain('button');
   });

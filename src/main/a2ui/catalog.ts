@@ -26,6 +26,7 @@ const CATALOG_ENTRIES: A2UICatalogEntry[] = [
   { type: 'metric', description: 'Key-value metric display', custom: true },
   { type: 'list', description: 'Ordered or unordered item list' },
   { type: 'form', description: 'Form container with fields and submit button', custom: true },
+  { type: 'mindmap', description: 'Mind map tree diagram with a central topic and branching nodes', custom: true },
   { type: 'row', description: 'Horizontal layout container' },
   { type: 'column', description: 'Vertical layout container' },
   { type: 'divider', description: 'Visual separator' },

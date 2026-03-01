@@ -113,6 +113,17 @@ export interface RenderTabsArgs {
   tabs: RenderTabArgs[];
 }
 
+export interface RenderMindmapNodeArgs {
+  id: string;
+  label: string;
+  children?: string[];
+}
+
+export interface RenderMindmapArgs {
+  title?: string;
+  nodes: RenderMindmapNodeArgs[];
+}
+
 // ---- Generators ----
 
 export function generateChart(
@@ -359,6 +370,28 @@ export function generateTabs(
 
 // ---- Tool name to generator dispatch ----
 
+export function generateMindmap(
+  conversationId: string,
+  args: RenderMindmapArgs,
+): A2UIServerMessage[] {
+  const mindmapId = makeId('mindmap');
+  const component: A2UIComponent = {
+    id: mindmapId,
+    type: 'mindmap',
+    properties: {
+      title: args.title,
+    },
+    dataBinding: '/mindmapNodes',
+  };
+
+  return createSurfaceMessages(
+    conversationId,
+    [component],
+    [mindmapId],
+    [{ path: '/mindmapNodes', value: args.nodes }],
+  );
+}
+
 const GENERATORS: Record<string, (conversationId: string, args: Record<string, unknown>) => A2UIServerMessage[]> = {
   render_chart: (cid, args) => generateChart(cid, args as unknown as RenderChartArgs),
   render_table: (cid, args) => generateTable(cid, args as unknown as RenderTableArgs),
@@ -367,6 +400,7 @@ const GENERATORS: Record<string, (conversationId: string, args: Record<string, u
   render_metric: (cid, args) => generateMetric(cid, args as unknown as RenderMetricArgs),
   render_list: (cid, args) => generateList(cid, args as unknown as RenderListArgs),
   render_tabs: (cid, args) => generateTabs(cid, args as unknown as RenderTabsArgs),
+  render_mindmap: (cid, args) => generateMindmap(cid, args as unknown as RenderMindmapArgs),
 };
 
 /**
