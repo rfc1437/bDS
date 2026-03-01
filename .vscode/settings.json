@@ -4,6 +4,8 @@
         "npx tsc": true,
         "git remote": true,
         "npx asar": true,
-        "npx tsx": true
+        "npx tsx": true,
+        "gh": true,
+        "git add": true
     }
 }

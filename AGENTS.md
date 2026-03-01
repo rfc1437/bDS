@@ -7,6 +7,10 @@ This document provides context and best practices for GitHub Copilot when workin
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
 
+## Commits
+
+- commit messages are short - one sentence. do not write long articles.
+
 ---
 
 ## ⚠️ MANDATORY: Test-First Development
