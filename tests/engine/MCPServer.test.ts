@@ -8,7 +8,7 @@ function createMockPostEngine() {
     getAllPosts: vi.fn().mockResolvedValue({ items: [], hasMore: false, total: 0 }),
     getPost: vi.fn().mockResolvedValue(null),
     searchPosts: vi.fn().mockResolvedValue([]),
-    searchPostsFiltered: vi.fn().mockResolvedValue([]),
+    searchPostsFiltered: vi.fn().mockResolvedValue({ posts: [], total: 0 }),
     createPost: vi.fn().mockResolvedValue({
       id: 'post-1', title: 'Test', slug: 'test', content: '', status: 'draft',
       tags: [], categories: [], createdAt: new Date(), updatedAt: new Date(),
@@ -727,7 +727,11 @@ describe('MCPServer', () => {
       const result = await tool.handler({ query: 'test' }, {}) as { content: Array<{ text: string }> };
       expect(mockPostEngine.searchPosts).toHaveBeenCalledWith('test');
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed[0].backlinks).toEqual([{ id: 'px', title: 'Ref', slug: 'ref' }]);
+      expect(parsed.posts[0].backlinks).toEqual([{ id: 'px', title: 'Ref', slug: 'ref' }]);
+      expect(parsed.total).toBe(1);
+      expect(parsed.offset).toBe(0);
+      expect(parsed.limit).toBe(50);
+      expect(parsed.hasMore).toBe(false);
     });
 
     it('search_posts with query applies offset and limit', async () => {
@@ -737,9 +741,11 @@ describe('MCPServer', () => {
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ query: 'test', offset: 2, limit: 3 }, {}) as { content: Array<{ text: string }> };
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveLength(3);
-      expect(parsed[0].id).toBe('p2');
-      expect(parsed[2].id).toBe('p4');
+      expect(parsed.posts).toHaveLength(3);
+      expect(parsed.posts[0].id).toBe('p2');
+      expect(parsed.posts[2].id).toBe('p4');
+      expect(parsed.total).toBe(10);
+      expect(parsed.hasMore).toBe(true);
     });
 
     it('search_posts defaults to limit 50 when not specified', async () => {
@@ -749,7 +755,9 @@ describe('MCPServer', () => {
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ query: 'test' }, {}) as { content: Array<{ text: string }> };
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveLength(50);
+      expect(parsed.posts).toHaveLength(50);
+      expect(parsed.total).toBe(60);
+      expect(parsed.hasMore).toBe(true);
     });
 
     it('search_posts with filters only calls getPostsFiltered and includes backlinks', async () => {
@@ -761,7 +769,9 @@ describe('MCPServer', () => {
       const result = await tool.handler({ category: 'tech', status: 'published' }, {}) as { content: Array<{ text: string }> };
       expect(mockPostEngine.getPostsFiltered).toHaveBeenCalledWith({ categories: ['tech'], status: 'published' });
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed[0].backlinks).toEqual([]);
+      expect(parsed.posts[0].backlinks).toEqual([]);
+      expect(parsed.total).toBe(1);
+      expect(parsed.hasMore).toBe(false);
       expect(mockPostEngine.getLinkedBy).toHaveBeenCalledWith('p2');
     });
 
@@ -772,15 +782,17 @@ describe('MCPServer', () => {
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ category: 'tech', offset: 3, limit: 2 }, {}) as { content: Array<{ text: string }> };
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveLength(2);
-      expect(parsed[0].id).toBe('p3');
+      expect(parsed.posts).toHaveLength(2);
+      expect(parsed.posts[0].id).toBe('p3');
+      expect(parsed.total).toBe(10);
+      expect(parsed.hasMore).toBe(true);
     });
 
     it('search_posts with query + filters calls searchPostsFiltered and includes backlinks', async () => {
       const combined = [
         { id: 'p1', title: 'TypeScript Guide', categories: ['tech'] },
       ];
-      mockPostEngine.searchPostsFiltered.mockResolvedValue(combined);
+      mockPostEngine.searchPostsFiltered.mockResolvedValue({ posts: combined, total: 1 });
       mockPostEngine.getLinkedBy.mockResolvedValue([{ id: 'p9', title: 'See Also', slug: 'see-also' }]);
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
@@ -794,25 +806,30 @@ describe('MCPServer', () => {
       expect(mockPostEngine.searchPosts).not.toHaveBeenCalled();
       expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveLength(1);
-      expect(parsed[0].id).toBe('p1');
-      expect(parsed[0].backlinks).toEqual([{ id: 'p9', title: 'See Also', slug: 'see-also' }]);
+      expect(parsed.posts).toHaveLength(1);
+      expect(parsed.posts[0].id).toBe('p1');
+      expect(parsed.posts[0].backlinks).toEqual([{ id: 'p9', title: 'See Also', slug: 'see-also' }]);
+      expect(parsed.total).toBe(1);
+      expect(parsed.hasMore).toBe(false);
     });
 
     it('search_posts with query + filters passes pagination to searchPostsFiltered', async () => {
-      mockPostEngine.searchPostsFiltered.mockResolvedValue([{ id: 'p3', title: 'Result' }]);
+      mockPostEngine.searchPostsFiltered.mockResolvedValue({ posts: [{ id: 'p3', title: 'Result' }], total: 20 });
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
-      await tool.handler({ query: 'keyword', status: 'published', offset: 5, limit: 10 }, {});
+      const result = await tool.handler({ query: 'keyword', status: 'published', offset: 5, limit: 10 }, {}) as { content: Array<{ text: string }> };
       expect(mockPostEngine.searchPostsFiltered).toHaveBeenCalledWith(
         'keyword',
         { status: 'published' },
         { offset: 5, limit: 10 },
       );
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.total).toBe(20);
+      expect(parsed.hasMore).toBe(true);
     });
 
     it('search_posts with query + multiple filters builds correct filter', async () => {
-      mockPostEngine.searchPostsFiltered.mockResolvedValue([]);
+      mockPostEngine.searchPostsFiltered.mockResolvedValue({ posts: [], total: 0 });
       const mcpServer = server.createMcpServer();
       const tool = getTool(mcpServer, 'search_posts');
       await tool.handler({ query: 'test', category: 'tech', tags: ['js'], year: 2025, status: 'published' }, {});

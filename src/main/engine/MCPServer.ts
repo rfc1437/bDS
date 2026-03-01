@@ -53,7 +53,7 @@ interface PostEngineContract {
   getAllPosts: (options?: PaginationOptions) => Promise<PaginatedResult<PostData>>;
   getPost: (id: string) => Promise<PostData | null>;
   searchPosts: (query: string) => Promise<SearchResult[]>;
-  searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<PostData[]>;
+  searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<{ posts: PostData[]; total: number }>;
   createPost: (data: Partial<PostData>) => Promise<PostData>;
   updatePost: (id: string, data: Partial<PostData>) => Promise<PostData | null>;
   publishPost: (id: string) => Promise<PostData | null>;
@@ -505,7 +505,7 @@ export class MCPServer {
     // ── search_posts ──
     server.registerTool('search_posts', {
       title: 'Search Posts',
-      description: 'Search blog posts by query, category, tags, or date range. Each result includes backlinks (posts linking to it) and linksTo (posts it links to). Use check_term first if unsure whether a term is a category or tag. Also available as resources: bds://categories (categories with counts), bds://tags (tags with counts).',
+      description: 'Search blog posts by query, category, tags, or date range. Returns a paginated envelope with total (matching count), offset, limit, hasMore, and posts array. Each post includes backlinks (posts linking to it) and linksTo (posts it links to). When hasMore is true, increase offset by limit to fetch the next page. Use check_term first if unsure whether a term is a category or tag. Also available as resources: bds://categories (categories with counts), bds://tags (tags with counts).',
       inputSchema: {
         query: z.string().optional().describe('Full-text search query'),
         category: z.string().optional().describe('Filter by category'),
@@ -529,32 +529,37 @@ export class MCPServer {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 50;
 
+      let enriched;
+      let total: number;
+
       if (args.query && !hasFilters) {
         const results = await this.deps.postEngine.searchPosts(args.query);
-        const paginated = results.slice(offset, offset + limit);
-        const enriched = await enrichWithLinks(paginated, this.deps.postEngine);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(enriched) }] };
-      }
-
-      const filter: PostFilter = {};
-      if (args.category) filter.categories = [args.category];
-      if (args.tags) filter.tags = args.tags;
-      if (args.year) filter.year = args.year;
-      if (args.month) filter.month = args.month;
-      if (args.status) filter.status = args.status;
-
-      let enriched;
-      if (args.query && hasFilters) {
-        const results = await this.deps.postEngine.searchPostsFiltered(args.query, filter, { offset, limit });
-        enriched = await enrichWithLinks(results, this.deps.postEngine);
-      } else {
-        const results = await this.deps.postEngine.getPostsFiltered(filter);
+        total = results.length;
         const paginated = results.slice(offset, offset + limit);
         enriched = await enrichWithLinks(paginated, this.deps.postEngine);
+      } else {
+        const filter: PostFilter = {};
+        if (args.category) filter.categories = [args.category];
+        if (args.tags) filter.tags = args.tags;
+        if (args.year) filter.year = args.year;
+        if (args.month) filter.month = args.month;
+        if (args.status) filter.status = args.status;
+
+        if (args.query && hasFilters) {
+          const { posts, total: t } = await this.deps.postEngine.searchPostsFiltered(args.query, filter, { offset, limit });
+          total = t;
+          enriched = await enrichWithLinks(posts, this.deps.postEngine);
+        } else {
+          const results = await this.deps.postEngine.getPostsFiltered(filter);
+          total = results.length;
+          const paginated = results.slice(offset, offset + limit);
+          enriched = await enrichWithLinks(paginated, this.deps.postEngine);
+        }
       }
 
+      const envelope = { total, offset, limit, hasMore: offset + limit < total, posts: enriched };
       const content: Array<{ type: 'text'; text: string }> = [
-        { type: 'text' as const, text: JSON.stringify(enriched) },
+        { type: 'text' as const, text: JSON.stringify(envelope) },
       ];
       const hintsList = await buildAmbiguityHints(this.deps.postEngine, args.category, args.tags);
       if (hintsList.length > 0) {

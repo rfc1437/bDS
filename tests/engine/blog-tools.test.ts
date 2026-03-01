@@ -166,7 +166,7 @@ describe('Blog Tools — search_posts', () => {
   });
 
   it('calls searchPostsFiltered with correct filter', async () => {
-    vi.mocked(deps.postEngine.searchPostsFiltered).mockResolvedValueOnce([samplePost]);
+    vi.mocked(deps.postEngine.searchPostsFiltered).mockResolvedValueOnce({ posts: [samplePost], total: 5 });
 
     const result = await tools.search_posts.execute!(
       { query: 'hello', category: 'article', year: 2025 },
@@ -177,11 +177,11 @@ describe('Blog Tools — search_posts', () => {
       { categories: ['article'], year: 2025 },
       { offset: 0, limit: 10 },
     );
-    expect(result).toMatchObject({ success: true, count: 1 });
+    expect(result).toMatchObject({ success: true, count: 1, totalMatches: 5, hasMore: false });
   });
 
   it('includes ambiguity hints when category also exists as tag', async () => {
-    vi.mocked(deps.postEngine.searchPostsFiltered).mockResolvedValueOnce([]);
+    vi.mocked(deps.postEngine.searchPostsFiltered).mockResolvedValueOnce({ posts: [], total: 0 });
     vi.mocked(deps.postEngine.getTagsWithCounts).mockResolvedValueOnce([
       { tag: 'article', count: 2 },
     ]);

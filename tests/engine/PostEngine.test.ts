@@ -2419,9 +2419,9 @@ Published snapshot content`);
   });
 
   describe('searchPostsFiltered', () => {
-    it('should return empty array for empty query', async () => {
+    it('should return empty result for empty query', async () => {
       const result = await postEngine.searchPostsFiltered('', {});
-      expect(result).toEqual([]);
+      expect(result).toEqual({ posts: [], total: 0 });
     });
 
     it('should use FTS JOIN with posts table to combine search and filters', async () => {
@@ -2432,8 +2432,9 @@ Published snapshot content`);
       });
 
       const result = await postEngine.searchPostsFiltered('search term', { status: 'published' });
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('p1');
+      expect(result.posts).toHaveLength(1);
+      expect(result.posts[0].id).toBe('p1');
+      expect(result.total).toBe(1);
 
       // Verify SQL includes both MATCH and status filter
       const call = vi.mocked(mockLocalClient.execute).mock.calls[0]?.[0] as { sql?: string } | undefined;
@@ -2464,8 +2465,9 @@ Published snapshot content`);
       });
 
       const result = await postEngine.searchPostsFiltered('term', { tags: ['js'] });
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('p1');
+      expect(result.posts).toHaveLength(1);
+      expect(result.posts[0].id).toBe('p1');
+      expect(result.total).toBe(1);
     });
 
     it('should apply pagination with offset and limit', async () => {
@@ -2475,9 +2477,21 @@ Published snapshot content`);
       mockLocalClient.execute.mockResolvedValueOnce({ rows });
 
       const result = await postEngine.searchPostsFiltered('term', {}, { offset: 1, limit: 2 });
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('p1');
-      expect(result[1].id).toBe('p2');
+      expect(result.posts).toHaveLength(2);
+      expect(result.posts[0].id).toBe('p1');
+      expect(result.posts[1].id).toBe('p2');
+      expect(result.total).toBe(5);
+    });
+
+    it('should return total count reflecting tag filtering but not pagination', async () => {
+      const rows = Array.from({ length: 4 }, (_, i) => ({
+        id: `p${i}`, projectId: 'test-project', title: `Post ${i}`, slug: `post-${i}`, excerpt: null, content: '', status: 'published', author: null, createdAt: new Date(), updatedAt: new Date(), publishedAt: null, tags: i < 3 ? '["js"]' : '["python"]', categories: '[]', filePath: null, version: 1, stemmedTitle: '', stemmedContent: '', language: 'en', translationOfId: null, templateSlug: null,
+      }));
+      mockLocalClient.execute.mockResolvedValueOnce({ rows });
+
+      const result = await postEngine.searchPostsFiltered('term', { tags: ['js'] }, { offset: 0, limit: 2 });
+      expect(result.posts).toHaveLength(2);
+      expect(result.total).toBe(3); // 3 posts have 'js' tag, not 4 total
     });
   });
 

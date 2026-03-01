@@ -21,7 +21,7 @@ export interface BlogToolDeps {
     getPost: (id: string) => Promise<PostData | null>;
     getAllPosts: (options?: PaginationOptions) => Promise<{ items: PostData[]; total: number }>;
     getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
-    searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<PostData[]>;
+    searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<{ posts: PostData[]; total: number }>;
     getCategoriesWithCounts: () => Promise<Array<{ category: string; count: number }>>;
     getTagsWithCounts: () => Promise<Array<{ tag: string; count: number }>>;
     getLinkedBy: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
@@ -184,8 +184,7 @@ export function createBlogTools(deps: BlogToolDeps) {
         const offset = off ?? 0;
         const limit = lim ?? 10;
 
-        const filteredPosts = await postEngine.searchPostsFiltered(query, filter, { offset, limit });
-        const totalMatches = filteredPosts.length;
+        const { posts: filteredPosts, total: totalMatches } = await postEngine.searchPostsFiltered(query, filter, { offset, limit });
         const hints = await buildAmbiguityHints(postEngine, category, tags);
 
         const posts = await enrichWithLinks(
@@ -202,7 +201,7 @@ export function createBlogTools(deps: BlogToolDeps) {
           success: true,
           count: posts.length,
           totalMatches,
-          hasMore: false,
+          hasMore: offset + limit < totalMatches,
           offset,
           limit,
           posts,

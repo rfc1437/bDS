@@ -891,11 +891,11 @@ export class PostEngine extends EventEmitter {
     query: string,
     filter: PostFilter,
     pagination?: PaginationOptions,
-  ): Promise<PostData[]> {
-    if (!query.trim()) return [];
+  ): Promise<{ posts: PostData[]; total: number }> {
+    if (!query.trim()) return { posts: [], total: 0 };
 
     const client = getDatabase().getLocalClient();
-    if (!client) return [];
+    if (!client) return { posts: [], total: 0 };
 
     try {
       const stemmedQuery = stemQuery(query, this.searchLanguage);
@@ -974,12 +974,13 @@ export class PostEngine extends EventEmitter {
       }
 
       // Apply pagination
+      const total = postDataList.length;
       const offset = pagination?.offset ?? 0;
       const limit = pagination?.limit ?? postDataList.length;
-      return postDataList.slice(offset, offset + limit);
+      return { posts: postDataList.slice(offset, offset + limit), total };
     } catch (error) {
       console.error('Search with filters failed:', error);
-      return [];
+      return { posts: [], total: 0 };
     }
   }
 
