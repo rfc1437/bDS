@@ -57,25 +57,27 @@ bDS currently routes all AI chat through the OpenCode Zen gateway (`opencode.ai/
 - Extend `ChatReadyStatus` to report per-provider availability, e.g. `providers: { opencode: boolean, mistral: boolean }`
 - Callers (`Sidebar.tsx`, `sendMessage()`) must gate on the relevant provider, not a single boolean
 
-**F. Add Mistral request path in `sendMessage()`**
-- Route `provider === 'mistral'` to new `sendMistralRequest()` method
-- Similar to OpenAI path but:
-  - URL: `MISTRAL_API_URL` (direct, not through OpenCode gateway)
-  - Auth: `Authorization: Bearer ${this.mistralApiKey}`
-  - Context budget: per-model (see Target Models table above)
-  - `tool_choice: "auto"` — Mistral's default; do **not** set `"any"` (which forces a tool call every turn even when the model should respond with text). Omit `tool_choice` entirely, since `"auto"` is the default, matching existing OpenCode behavior
-  - `parallel_tool_calls: false` — set explicitly; our tool executor runs tools sequentially, so parallel tool calls would break the execution loop
+**F. Parameterize `sendOpenAIMessage()` for Mistral (no separate method)**
+- Mistral uses the identical OpenAI-compatible chat/completions format — creating a separate `sendMistralRequest()` would be a near-duplicate
+- Instead, parameterize `sendOpenAIMessage()` to accept URL, API key, and provider-specific options:
+  - Add params: `apiUrl: string`, `apiKey: string`, `providerOptions?: { parallelToolCalls?: boolean }`
+  - `sendMessage()` determines provider via `detectProvider()` and calls `sendOpenAIMessage()` with the correct URL/key/options
+  - For OpenCode OpenAI path: URL = `ZEN_OPENAI_URL`, key = `this.apiKey`
+  - For Mistral: URL = `MISTRAL_API_URL`, key = `this.mistralApiKey`, `parallelToolCalls: false`
+- `tool_choice`: omit entirely for all OpenAI-compatible providers (default `"auto"` is correct)
+- `parallel_tool_calls: false` — set explicitly for Mistral only; our tool executor runs tools sequentially, so parallel tool calls would break the execution loop
 
 **F2. Add `MODEL_CONTEXT_BUDGETS` map**
 - New constant map `MODEL_CONTEXT_BUDGETS: Record<string, number>` with per-model token budgets
 - `truncateToTokenBudget()` (L1654) currently defaults to `maxContextTokens = 150000`
 - In `sendAnthropicMessage()` and `sendOpenAIMessage()`: pass the model's context budget from the map (defaulting to 150,000 for OpenCode models)
-- In `sendMistralRequest()`: look up `MODEL_CONTEXT_BUDGETS[modelId]` and pass to truncation
+- The parameterized `sendOpenAIMessage()` looks up `MODEL_CONTEXT_BUDGETS[modelId]` for Mistral models and passes to truncation
 - Values from Target Models table (35k, 120k, 240k)
 
 **G. Fix tool-call message history in OpenAI-compatible path**
-- `sendOpenAIMessage()` currently only keeps `user`/`assistant` messages in history, discarding `tool` role messages
-- Tool results must be persisted in conversation history so follow-up rounds have context
+- Within a single `sendMessage()` call, the tool loop correctly tracks tool results across rounds
+- However, `tool` role messages are not persisted to DB-backed conversation history — on conversation resume, the model loses context about prior tool results
+- Ensure `tool` role messages are included when persisting conversation history so cross-session continuity works
 - This affects all OpenAI-compatible providers (OpenCode OpenAI path + Mistral)
 
 **H. Fix vision in OpenAI-compatible path (affects Mistral too)**
@@ -84,10 +86,12 @@ bDS currently routes all AI chat through the OpenCode Zen gateway (`opencode.ai/
   `{ type: 'image_url', image_url: { url: 'data:image/webp;base64,...' } }`
 - This fixes vision for all OpenAI-compatible providers, not just Mistral
 
-**I. Update `getAvailableModels()`**
-- When Mistral key is set, include Mistral models in returned list
-- Add `provider` field to model entries so UI can group them
-- Invalidate `cachedModels`/`cachedModelsAt` when Mistral key is added or removed
+**I. Update `getAvailableModels()` — merge from both providers**
+- **Model list merge strategy**: fetch models from each configured provider's API endpoint and merge into a single list. When both keys are configured, return models from both; when only one key is set, return only that provider's models; when no key is set, return an empty list (UI disables the dropdown)
+- OpenCode models: fetched from existing OpenCode API (as today)
+- Mistral models: fetched from `GET https://api.mistral.ai/v1/models` when Mistral key is set; cross-reference returned IDs with `MODEL_DISPLAY_NAMES` to use display names + static `vision`/`contextBudget` metadata
+- Every model entry carries `provider: 'opencode' | 'mistral'` so the UI and engine can resolve the correct API URL + key
+- Invalidate `cachedModels`/`cachedModelsAt` when any provider key is added or removed
 
 **J. Update `generateConversationTitle()` — make configurable in Preferences**
 - Currently hardcoded to `claude-haiku-4-5` via `ZEN_ANTHROPIC_URL` with OpenCode key
@@ -107,8 +111,14 @@ bDS currently routes all AI chat through the OpenCode Zen gateway (`opencode.ai/
 
 **L. Update `analyzeTaxonomy()`**
 - Currently uses `this.apiKey` (OpenCode) for both Anthropic and OpenAI paths
+- Has an early-return guard `if (!this.apiKey)` that must become provider-aware — check Mistral key when provider is Mistral
 - When a Mistral model is selected: use Mistral API key + `MISTRAL_API_URL`
 - Must branch on provider to select correct key and URL
+
+**L2. Update `analyzeMediaImage()` API key guard**
+- Same issue: has `if (!this.apiKey)` early-return guard
+- Must become provider-aware — check the relevant provider's key based on the selected image analysis model
+- When routed to Mistral: check `this.mistralApiKey` instead of `this.apiKey`
 
 **M. Convert chat HTTP calls to SSE streaming**
 
@@ -185,7 +195,7 @@ data: {"type":"message_stop"}
 
 **M4. Request body changes**
 - `sendAnthropicMessage()`: add `"stream": true` to request body
-- `sendOpenAIMessage()` / `sendMistralRequest()`: add `"stream": true` and `"stream_options": { "include_usage": true }` to request body — this is **required** to receive token usage in streaming mode (without it, usage is omitted from streamed responses)
+- `sendOpenAIMessage()` (used for both OpenCode OpenAI and Mistral): add `"stream": true` and `"stream_options": { "include_usage": true }` to request body — this is **required** to receive token usage in streaming mode (without it, usage is omitted from streamed responses)
 
 **M5. Tool call accumulation during streaming**
 - Tool call arguments arrive as partial JSON fragments across many SSE events
@@ -217,9 +227,8 @@ data: {"type":"message_stop"}
 ### 2. `src/main/engine/ChatEngine.ts` - Settings persistence
 
 **A. Add Mistral key helpers**
-- `getMistralApiKey()` - read from settings table
-- `setMistralApiKey(key)` - persist to settings table
-- Settings key: `'mistral_api_key'`
+- Use existing generic `getSetting()`/`setSetting()` with key `'mistral_api_key'` — no dedicated methods needed, avoids unnecessary boilerplate
+- ChatEngine already exposes generic helpers for reading/writing the settings table
 
 **B. Default model is user-driven**
 - `getSelectedModel()` defaults to `'claude-sonnet-4-5'`
@@ -284,8 +293,10 @@ data: {"type":"message_stop"}
 - Same pattern: masked display, change button, validation on save
 
 **B. Update model selector**
-- Group models by provider in dropdown (optgroup: "OpenCode Zen", "Mistral AI")
-- Show provider badge next to selected model
+- SettingsView uses a native `<select>` element — group models by provider using `<optgroup>` labels ("OpenCode Zen", "Mistral AI")
+- When no API key is configured for any provider, disable the `<select>` dropdown
+- When both keys configured, show merged list from both providers; when only one key set, show only that provider's models
+- **Note**: `availableModels` state is currently typed as `{id: string; name: string}[]` — must be updated to `ChatModel[]` (which includes `provider` and `vision` fields) so provider grouping and vision filtering work
 
 **C. Add per-purpose model preferences**
 - "Title generation model" dropdown — select cheapest/fastest model for auto-titling conversations
@@ -296,8 +307,9 @@ data: {"type":"message_stop"}
 ### 6. `src/renderer/components/ChatPanel/ChatPanel.tsx` - Chat UI
 
 **A. Update model selector in chat**
-- Group by provider in dropdown
-- Only show models for configured providers
+- ChatPanel uses a custom dropdown (CSS `model-dropdown` with `<button>` elements, not a native `<select>`) — add provider group headers (non-clickable divider labels) within the dropdown to visually separate providers
+- Only show models for configured providers; when no keys configured, hide the model selector entirely
+- When both providers configured, merge models from both with visual grouping
 
 ### 7. `src/renderer/components/AssistantSidebar/` - Assistant UI
 
@@ -318,18 +330,24 @@ data: {"type":"message_stop"}
 **A. Update model selector**
 - Has its own model selector (`ChatModel[]` state + `getAvailableModels()` call) for taxonomy analysis
 - Currently renders a flat model list with no provider grouping
-- Apply same provider grouping as ChatPanel (optgroup by provider)
+- Apply provider grouping matching the component's existing dropdown pattern
 - Default to whatever is set in Preferences as default model (via `getSelectedModel()`)
-- Use the shared `ModelSelector` component (see section 9b)
 
-### 9b. `src/renderer/components/shared/ModelSelector.tsx` - Shared model selector component (NEW)
+### 9b. Model selector UI approach
 
-**Extract a reusable `ModelSelector` component** used by SettingsView, ChatPanel, and ImportAnalysisView:
-- Props: `models: ChatModel[]`, `selectedModelId: string`, `onChange: (modelId: string) => void`, `filterVisionOnly?: boolean`, `allowDefault?: boolean`, `disabled?: boolean`
-- Groups models into `<optgroup>` by `model.provider` (labels: "OpenCode Zen", "Mistral AI")
-- When `filterVisionOnly` is true, only shows models with `vision: true` (for image analysis model selector)
-- When `allowDefault` is true, adds a "Default" option at the top (for per-purpose model preferences)
-- All three surfaces currently duplicate this dropdown logic — extracting prevents drift
+**Two different dropdown patterns exist** — keep each surface consistent with its current UX:
+- **SettingsView** uses native `<select>` elements → use `<optgroup>` for provider grouping (standard HTML pattern)
+- **ChatPanel** uses a custom CSS dropdown (`model-dropdown` with `<button>` elements) → add non-clickable provider group headers as dividers
+- **ImportAnalysisView** — check which pattern it uses and match accordingly
+- Shared logic (filtering by vision, adding "Default" option, provider grouping) can be extracted into a utility function or hook rather than a full component, since the rendering pattern differs per surface
+- Props for the shared utility: `models: ChatModel[]`, `filterVisionOnly?: boolean`, `includeDefault?: boolean` → returns grouped/filtered model list
+
+### 9c. `src/renderer/navigation/useChatMessageSender.ts` - Shared chat hook
+
+**A. Verify no provider assumptions**
+- Used by both ChatPanel and AssistantSidebar to send messages
+- Currently delegates to `sendConversationMessage()` from `chatSession.ts` — verify neither has hardcoded provider/model assumptions
+- No code changes expected, but must be verified during implementation
 
 ### 10. Preload/IPC registration
 
@@ -355,8 +373,8 @@ Keys needed:
 - `settings.ai.imageAnalysisModelLabel` — "Image analysis model"
 - `settings.ai.imageAnalysisModelDescription` — description text
 - `settings.ai.defaultOption` — "Default" (for per-purpose model selectors)
-- `settings.ai.providerGroupOpenCode` — "OpenCode Zen" (optgroup label)
-- `settings.ai.providerGroupMistral` — "Mistral AI" (optgroup label)
+- `settings.ai.providerGroupOpenCode` — "OpenCode Zen" (provider group label)
+- `settings.ai.providerGroupMistral` — "Mistral AI" (provider group label)
 - `chat.providerKeyMissing` — "The model '{model}' requires a {provider} API key. Go to Settings to configure it."
 - `chat.apiKeyRequiredTitle` — make generic or multi-provider (currently hardcoded to "OpenCode Zen API Key Required")
 - `chat.apiKeyRequiredDescription` — make generic or multi-provider (currently hardcoded to OpenCode-specific text)
@@ -369,11 +387,16 @@ Keys needed:
 
 - No changes needed — AI/chat features are explicitly not exposed via Python API
 
+### 14. Main-process i18n locales - `src/main/shared/i18n/locales/`
+
+- No changes expected — chat-related strings are renderer-only
+- Verify no main-process strings reference "OpenCode" in a way that needs updating for multi-provider support
+
 ## Tests to Update
 
 ### New tests
-- OpenCodeManager: Mistral key storage, `detectProvider('mistral-*')` + `detectProvider('devstral-*')` + `detectProvider('codestral-*')` + `detectProvider('pixtral-*')`, `sendMistralRequest()`, vision image conversion in OpenAI path, tool-call message persistence in OpenAI path, `generateConversationTitle()` Mistral routing, model cache invalidation, `MODEL_CONTEXT_BUDGETS` correctness, SSE line parsing (both OpenAI/Mistral and Anthropic formats), `[DONE]` sentinel handling, tool-call argument accumulation during streaming, mid-stream error handling, `stream_options` in request bodies
-- ChatEngine: `getMistralApiKey()`/`setMistralApiKey()`, `getTitleModel()`/`setTitleModel()`, `getImageAnalysisModel()`/`setImageAnalysisModel()`, default model fallback
+- OpenCodeManager: Mistral key storage, `detectProvider('mistral-*')` + `detectProvider('devstral-*')` + `detectProvider('codestral-*')` + `detectProvider('pixtral-*')`, parameterized `sendOpenAIMessage()` with Mistral URL/key, vision image conversion in OpenAI path, tool-call message persistence in OpenAI path, `generateConversationTitle()` Mistral routing, model cache merge (both providers), `MODEL_CONTEXT_BUDGETS` correctness, SSE line parsing (both OpenAI/Mistral and Anthropic formats), `[DONE]` sentinel handling, tool-call argument accumulation during streaming, mid-stream error handling, `stream_options` in request bodies, provider-aware API key guards in `analyzeTaxonomy()`/`analyzeMediaImage()`
+- ChatEngine: Mistral key via generic `getSetting/setSetting`, `getTitleModel()`/`setTitleModel()`, `getImageAnalysisModel()`/`setImageAnalysisModel()`, default model fallback
 - chatHandlers: new Mistral IPC handlers, per-purpose model preference handlers
 
 ### Existing tests to update
@@ -383,7 +406,7 @@ Keys needed:
 - `electronApiContract.test.ts` — `ElectronAPI.chat` shape now includes Mistral methods
 - 10 renderer test files that mock `window.electronAPI.chat` (12 mock blocks total) — add Mistral method stubs to mocks:
   - `tests/renderer/components/SidebarChat.test.tsx`
-  - `tests/renderer/components/SettingsView.test.tsx` (2 mock blocks)
+  - `tests/renderer/components/SettingsView.test.tsx`
   - `tests/renderer/components/SettingsView.i18n.test.tsx`
   - `tests/renderer/components/TabBar.test.tsx`
   - `tests/renderer/components/EditorDashboardTimeline.test.tsx`
@@ -397,13 +420,13 @@ Keys needed:
 
 1. Tests first (per AGENTS.md)
 2. Types (`electronApi.ts` — `ChatModel`, `ChatReadyStatus`, `ElectronAPI.chat`)
-3. Engine (`OpenCodeManager.ts` — constants, `MODEL_CONTEXT_BUDGETS`, detection, key storage, `checkReady()`, request path, vision fix, title generation fallback)
+3. Engine (`OpenCodeManager.ts` — constants, `MODEL_CONTEXT_BUDGETS`, detection, key storage, `checkReady()`, parameterized `sendOpenAIMessage()`, vision fix, provider-aware guards, title generation fallback, model cache merge)
 4. SSE streaming (`OpenCodeManager.ts` — `httpRequestStream()`, SSE parsers for Anthropic + OpenAI/Mistral formats, `stream: true` + `stream_options` in request bodies)
 5. Persistence (`ChatEngine.ts` — settings helpers, per-purpose model preferences, default model fallback)
 6. IPC (`chatHandlers.ts` — new handlers, init flow update)
 7. Preload (`preload.ts` — bridge new channels)
 8. i18n (all 5 locale files)
-9. Shared components (`ModelSelector.tsx` — extract reusable model selector with provider grouping)
+9. Shared utilities (model grouping/filtering utility for provider-aware dropdowns)
 10. UI (`SettingsView/SettingsView.tsx`, `ChatPanel.tsx`, `ImportAnalysisView.tsx`, `Sidebar.tsx` — use shared `ModelSelector`)
 11. Update existing test mocks
 12. Build verification (`npm run build`)
@@ -414,6 +437,7 @@ Keys needed:
 |--------|-------------------|----------------------|---------|
 | Base URL | `opencode.ai/zen/v1/messages` | `opencode.ai/zen/v1/chat/completions` | `api.mistral.ai/v1/chat/completions` |
 | Auth header | `Bearer ${openCodeKey}` | `Bearer ${openCodeKey}` | `Bearer ${mistralKey}` |
+| Request method | `sendAnthropicMessage()` | `sendOpenAIMessage(url, key)` | `sendOpenAIMessage(url, key, opts)` (same method, parameterized) |
 | Tool choice | not set | not set | not set (default `"auto"`) |
 | Parallel tools | not set | not set | `parallel_tool_calls: false` |
 | Context budget | 150k tokens | 150k tokens | per-model (see Target Models table) |
@@ -422,6 +446,7 @@ Keys needed:
 | HTTP mode | SSE streaming (`stream: true`) | SSE streaming (`stream: true`) | SSE streaming (`stream: true`) |
 | Title generation | `claude-haiku-4-5` default | N/A | `mistral-small-2506` default |
 | Image analysis | `claude-sonnet-4-5` default | N/A | user-selected vision model |
+| Model source | fetched from OpenCode API | fetched from OpenCode API | fetched from `api.mistral.ai/v1/models` |
 
 ## Verification
 
@@ -448,15 +473,21 @@ Keys needed:
 5. **Vision in OpenAI path** — Fix `image_url` conversion for all OpenAI-compatible providers (not just Mistral)
 6. **MCP server** — N/A; only exposes tools, no bDS-side AI runs
 7. **Python API** — N/A; AI/chat not exposed via Python API
-8. **Model dropdown grouping** — Use `<optgroup>` labels ("OpenCode Zen", "Mistral AI"); extract shared `ModelSelector` component to avoid duplication across 3 surfaces
+8. **Model dropdown grouping** — SettingsView uses native `<select>` with `<optgroup>`; ChatPanel uses custom CSS dropdown with provider header dividers; shared utility extracts grouping/filtering logic while each surface keeps its own rendering pattern
 9. **SSE streaming** — Convert all chat HTTP calls to `stream: true` + SSE parsing; keep one-shot requests (title, image analysis, taxonomy, validation) non-streaming. Renderer needs zero changes — existing `onDelta` pipeline already supports incremental tokens. Token usage requires `stream_options: { include_usage: true }` for OpenAI/Mistral format; Anthropic provides usage in `message_start` + `message_delta` events
-10. **OpenAI tool-call history** — Fix `sendOpenAIMessage()` to persist `tool` role messages in conversation history (not just `user`/`assistant`), so follow-up tool rounds have context
+10. **OpenAI tool-call history** — Within a single `sendMessage()` call, tool results are tracked correctly across rounds. The fix is about persisting `tool` role messages to DB-backed conversation history so cross-session resume works
 11. **ImportAnalysisView** — Has its own model selector; apply same provider grouping; default to Preferences model
 12. **AssistantSidebar** — No model selector of its own; uses Preferences default model; no code changes needed
 13. **`tool_choice`** — Do NOT set `tool_choice: "any"` for Mistral (this forces tool use every turn). Omit it entirely; Mistral defaults to `"auto"`, same as OpenCode. Set `parallel_tool_calls: false` explicitly since our tool executor is sequential
-14. **`detectProvider()` prefixes** — Cover all Mistral model families: `mistral`, `ministral`, `devstral`, `codestral`, `pixtral`
+14. **No separate `sendMistralRequest()`** — Parameterize `sendOpenAIMessage()` with URL/key/options instead of creating a near-duplicate method; Mistral uses the identical OpenAI-compatible format
+15. **`detectProvider()` prefixes** — Cover all Mistral model families: `mistral`, `ministral`, `devstral`, `codestral`, `pixtral`
 15. **`formatModelName()` / `UPPERCASE_PREFIXES`** — No changes needed; all 5 Mistral models are in `MODEL_DISPLAY_NAMES`; auto-format fallback handles future unknown models correctly
 16. **Context budgets** — Stored in `MODEL_CONTEXT_BUDGETS` map; passed explicitly to `truncateToTokenBudget()` per provider path; OpenCode defaults to 150k, Mistral per-model (see Target Models table)
 17. **Error UX for removed provider key** — Inline error banner in ChatPanel (not a toast) with link to Settings; `sendMessage()` returns descriptive error string; `checkReady()` stays true if any provider available
 18. **Zustand store** — No changes needed; provider readiness is ephemeral (fetched on mount), token usage tracking is already in store and is provider-agnostic
 19. **`validateMistralApiKey()`** — Calls `GET https://api.mistral.ai/v1/models` with Bearer token; checks for HTTP 200 + non-empty `data` array; Mistral returns `{ data: [{ id, object, created, owned_by }] }` format
+20. **Model cache merge** — `getAvailableModels()` fetches from both provider endpoints when both keys are set, merges into a single list with `provider` field on each model; when only one key is set, only that provider's models are returned; when no keys are set, returns empty list and UI disables the model dropdown
+21. **Provider-aware API key guards** — `analyzeTaxonomy()` and `analyzeMediaImage()` have `if (!this.apiKey)` early-return guards that must become provider-aware (check the relevant provider's key based on the selected model)
+22. **`useChatMessageSender` hook** — Shared by ChatPanel and AssistantSidebar; verify no provider assumptions exist (expected: no changes needed)
+23. **ChatEngine generic settings** — Use existing `getSetting()`/`setSetting()` for Mistral key storage; no dedicated methods needed
+24. **SettingsView model state type** — Currently `{id: string; name: string}[]`; must be updated to `ChatModel[]` to include `provider` and `vision` fields for grouping and filtering
