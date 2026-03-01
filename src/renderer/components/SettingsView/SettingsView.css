@@ -242,6 +242,18 @@
   flex: 1;
 }
 
+.setting-input-group select {
+  flex: 1;
+}
+
+/* Model catalog metadata line */
+.model-catalog-info {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #888);
+  padding: 4px 0 0;
+  line-height: 1.4;
+}
+
 .setting-toggle-visibility {
   background: transparent;
   border: none;

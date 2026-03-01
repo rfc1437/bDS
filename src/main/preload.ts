@@ -315,6 +315,10 @@ export const electronAPI: ElectronAPI = {
     getSystemPrompt: () => ipcRenderer.invoke('chat:getSystemPrompt'),
     setSystemPrompt: (prompt: string) => ipcRenderer.invoke('chat:setSystemPrompt', prompt),
 
+    // Model Catalog
+    refreshModelCatalog: () => ipcRenderer.invoke('chat:refreshModelCatalog'),
+    getModelCatalog: () => ipcRenderer.invoke('chat:getModelCatalog'),
+
     // Conversations
     getConversations: () => ipcRenderer.invoke('chat:getConversations'),
     createConversation: (title?: string, model?: string) => ipcRenderer.invoke('chat:createConversation', title, model),

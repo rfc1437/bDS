@@ -200,3 +200,35 @@ describe('OpenCodeManager tool execution – backlinks & linksTo', () => {
     });
   });
 });
+
+describe('OpenCodeManager – getMaxOutputTokens (ModelCatalogEngine delegate)', () => {
+  let manager: OpenCodeManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    manager = createManager(createMockPostEngine());
+  });
+
+  it('delegates to ModelCatalogEngine.getMaxOutputTokens', async () => {
+    const engine = (manager as any).modelCatalogEngine;
+    vi.spyOn(engine, 'getMaxOutputTokens').mockResolvedValue(64000);
+
+    const result = await (manager as any).getMaxOutputTokens('claude-sonnet-4-5');
+    expect(result).toBe(64000);
+    expect(engine.getMaxOutputTokens).toHaveBeenCalledWith('claude-sonnet-4-5');
+  });
+
+  it('returns default when ModelCatalogEngine has no data', async () => {
+    const engine = (manager as any).modelCatalogEngine;
+    vi.spyOn(engine, 'getMaxOutputTokens').mockResolvedValue(16384);
+
+    const result = await (manager as any).getMaxOutputTokens('unknown-model');
+    expect(result).toBe(16384);
+  });
+
+  it('exposes ModelCatalogEngine via getModelCatalogEngine()', () => {
+    const engine = manager.getModelCatalogEngine();
+    expect(engine).toBeDefined();
+    expect(engine).toBeInstanceOf(Object);
+  });
+});

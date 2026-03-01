@@ -57,6 +57,13 @@
       "when": 1772301340810,
       "tag": "0007_closed_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1772369331600,
+      "tag": "0008_third_cable",
+      "breakpoints": true
     }
   ]
 }

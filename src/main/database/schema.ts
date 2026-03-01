@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // Projects table - stores blog projects/websites
 export const projects = sqliteTable('projects', {
@@ -206,6 +206,31 @@ export const dbNotifications = sqliteTable('db_notifications', {
   createdAt: integer('created_at').notNull(),
 });
 
+// Model catalog table - cached model metadata from models.dev API
+// Stores per-model data (limits, pricing, capabilities) for the OpenCode provider.
+// Refreshed on user action via conditional GET (ETag). Survives offline use.
+export const modelCatalog = sqliteTable('model_catalog', {
+  id: text('id').primaryKey(), // model ID (e.g. 'claude-sonnet-4-5')
+  name: text('name').notNull(), // display name
+  family: text('family'), // model family (e.g. 'claude-sonnet')
+  contextWindow: integer('context_window'), // max context tokens
+  maxInputTokens: integer('max_input_tokens'), // max input tokens (null = same as context)
+  maxOutputTokens: integer('max_output_tokens'), // max output tokens
+  inputPrice: real('input_price'), // cost per 1M input tokens (USD)
+  outputPrice: real('output_price'), // cost per 1M output tokens (USD)
+  cacheReadPrice: real('cache_read_price'), // cost per 1M cached input tokens (USD)
+  supportsAttachments: integer('supports_attachments', { mode: 'boolean' }).default(false),
+  supportsReasoning: integer('supports_reasoning', { mode: 'boolean' }).default(false),
+  supportsToolCall: integer('supports_tool_call', { mode: 'boolean' }).default(false),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// Model catalog HTTP cache metadata (ETag for conditional GET)
+export const modelCatalogMeta = sqliteTable('model_catalog_meta', {
+  key: text('key').primaryKey(), // 'etag' | 'lastFetchedAt'
+  value: text('value').notNull(),
+});
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -235,3 +260,7 @@ export type Template = typeof templates.$inferSelect;
 export type NewTemplate = typeof templates.$inferInsert;
 export type DbNotification = typeof dbNotifications.$inferSelect;
 export type NewDbNotification = typeof dbNotifications.$inferInsert;
+export type ModelCatalogEntry = typeof modelCatalog.$inferSelect;
+export type NewModelCatalogEntry = typeof modelCatalog.$inferInsert;
+export type ModelCatalogMetaEntry = typeof modelCatalogMeta.$inferSelect;
+export type NewModelCatalogMetaEntry = typeof modelCatalogMeta.$inferInsert;

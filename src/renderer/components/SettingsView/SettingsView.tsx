@@ -244,6 +244,13 @@ export const SettingsView: React.FC = () => {
   const [newApiKey, setNewApiKey] = useState('');
   const [availableModels, setAvailableModels] = useState<{id: string; name: string}[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
+  const [modelCatalog, setModelCatalog] = useState<Map<string, {
+    maxOutputTokens: number | null;
+    contextWindow: number | null;
+    inputPrice: number | null;
+    outputPrice: number | null;
+  }>>(new Map());
+  const [refreshingCatalog, setRefreshingCatalog] = useState(false);
 
   // Check if a section has any matching settings
   const sectionHasMatches = useCallback((sectionKeywords: string[]) => {
@@ -394,6 +401,21 @@ export const SettingsView: React.FC = () => {
           if (modelsResult?.success && modelsResult.models) {
             setAvailableModels(modelsResult.models);
             setSelectedModel(modelsResult.selectedModel || '');
+          }
+
+          // Load model catalog metadata
+          const catalogResult = await window.electronAPI?.chat.getModelCatalog();
+          if (catalogResult?.success && catalogResult.entries) {
+            const map = new Map<string, { maxOutputTokens: number | null; contextWindow: number | null; inputPrice: number | null; outputPrice: number | null }>();
+            for (const entry of catalogResult.entries) {
+              map.set(entry.id, {
+                maxOutputTokens: entry.maxOutputTokens,
+                contextWindow: entry.contextWindow,
+                inputPrice: entry.inputPrice,
+                outputPrice: entry.outputPrice,
+              });
+            }
+            setModelCatalog(map);
           }
         } catch (error) {
           console.error('Failed to load AI settings:', error);
@@ -1080,6 +1102,41 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleRefreshModelCatalog = async () => {
+    setRefreshingCatalog(true);
+    try {
+      const result = await window.electronAPI?.chat.refreshModelCatalog();
+      if (result?.success) {
+        if (result.notModified) {
+          showToast.success(t('settings.toast.modelCatalogUpToDate'));
+        } else {
+          showToast.success(t('settings.toast.modelCatalogRefreshed', { count: String(result.modelsUpdated) }));
+        }
+        // Reload catalog data
+        const catalogResult = await window.electronAPI?.chat.getModelCatalog();
+        if (catalogResult?.success && catalogResult.entries) {
+          const map = new Map<string, { maxOutputTokens: number | null; contextWindow: number | null; inputPrice: number | null; outputPrice: number | null }>();
+          for (const entry of catalogResult.entries) {
+            map.set(entry.id, {
+              maxOutputTokens: entry.maxOutputTokens,
+              contextWindow: entry.contextWindow,
+              inputPrice: entry.inputPrice,
+              outputPrice: entry.outputPrice,
+            });
+          }
+          setModelCatalog(map);
+        }
+      } else {
+        showToast.error(t('settings.toast.modelCatalogRefreshFailed'));
+      }
+    } catch (error) {
+      console.error('Failed to refresh model catalog:', error);
+      showToast.error(t('settings.toast.modelCatalogRefreshFailed'));
+    } finally {
+      setRefreshingCatalog(false);
+    }
+  };
+
   const renderAISettings = () => (
     <SettingSection
       id="settings-section-ai"
@@ -1133,17 +1190,46 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.defaultModelLabel')}
         description={t('settings.ai.defaultModelDescription')}
       >
-        <select
-          id="ai-model"
-          value={selectedModel}
-          onChange={(e) => handleModelChange(e.target.value)}
-          disabled={!aiHasApiKey}
-        >
-          {availableModels.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
-          {availableModels.map(model => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
-        </select>
+        <div className="setting-input-group">
+          <select
+            id="ai-model"
+            value={selectedModel}
+            onChange={(e) => handleModelChange(e.target.value)}
+            disabled={!aiHasApiKey}
+          >
+            {availableModels.length === 0 && <option value="">{t('settings.ai.noModels')}</option>}
+            {availableModels.map(model => (
+              <option key={model.id} value={model.id}>{model.name}</option>
+            ))}
+          </select>
+          <button
+            className="secondary"
+            onClick={handleRefreshModelCatalog}
+            disabled={refreshingCatalog || !aiHasApiKey}
+            title={t('settings.ai.refreshModelCatalog')}
+          >
+            {refreshingCatalog ? t('settings.ai.refreshing') : t('settings.ai.refreshModelCatalog')}
+          </button>
+        </div>
+        {selectedModel && modelCatalog.has(selectedModel) && (() => {
+          const info = modelCatalog.get(selectedModel)!;
+          const parts: string[] = [];
+          if (info.maxOutputTokens != null) {
+            parts.push(`${t('settings.ai.modelInfoMaxOutput')}: ${info.maxOutputTokens.toLocaleString()} ${t('settings.ai.modelInfoTokens')}`);
+          }
+          if (info.contextWindow != null) {
+            parts.push(`${t('settings.ai.modelInfoContext')}: ${info.contextWindow.toLocaleString()} ${t('settings.ai.modelInfoTokens')}`);
+          }
+          if (info.inputPrice != null) {
+            parts.push(`${t('settings.ai.modelInfoInputPrice')}: $${info.inputPrice}${t('settings.ai.modelInfoPerMTok')}`);
+          }
+          if (info.outputPrice != null) {
+            parts.push(`${t('settings.ai.modelInfoOutputPrice')}: $${info.outputPrice}${t('settings.ai.modelInfoPerMTok')}`);
+          }
+          return parts.length > 0 ? (
+            <div className="model-catalog-info">{parts.join(' · ')}</div>
+          ) : null;
+        })()}
       </SettingRow>
 
       <SettingRow

@@ -24,6 +24,7 @@ import { ChatEngine } from './ChatEngine';
 import { PostEngine, type PostData } from './PostEngine';
 import { MediaEngine, type MediaData } from './MediaEngine';
 import type { PostMediaEngine } from './PostMediaEngine';
+import { ModelCatalogEngine, DEFAULT_MAX_OUTPUT_TOKENS } from './ModelCatalogEngine';
 import { isRenderTool, generateFromToolCall } from '../a2ui/generator';
 import type { A2UIServerMessage } from '../a2ui/types';
 
@@ -75,6 +76,8 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'big-pickle': 'Big Pickle',
   'trinity-large-preview-free': 'Trinity Large Preview Free',
 };
+
+
 
 // Uppercase prefixes that should not be title-cased
 const UPPERCASE_PREFIXES = ['gpt', 'glm'];
@@ -172,6 +175,7 @@ export class OpenCodeManager {
   private cachedModels: ModelInfo[] | null = null;
   private cachedModelsAt: number = 0;
   private static MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private modelCatalogEngine = new ModelCatalogEngine();
   private conversationUsage: Map<string, {
     inputTokens: number;
     outputTokens: number;
@@ -477,7 +481,7 @@ export class OpenCodeManager {
 
       const body: Record<string, unknown> = {
         model: modelId,
-        max_tokens: 4096,
+        max_tokens: await this.getMaxOutputTokens(modelId),
         system: systemPrompt,
         messages,
         tools,
@@ -793,7 +797,7 @@ export class OpenCodeManager {
 
       const body: Record<string, unknown> = {
         model: modelId,
-        max_tokens: 4096,
+        max_tokens: await this.getMaxOutputTokens(modelId),
         messages,
         tools: openaiTools,
         stream: true,
@@ -1975,6 +1979,21 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
       console.error('[OpenCodeManager] Failed to append blog stats:', error);
       return basePrompt;
     }
+  }
+
+  /**
+   * Get max output tokens for a model from the model catalog (DB-backed).
+   * Falls back to DEFAULT_MAX_OUTPUT_TOKENS (16384) when not catalogued.
+   */
+  private async getMaxOutputTokens(modelId: string): Promise<number> {
+    return this.modelCatalogEngine.getMaxOutputTokens(modelId);
+  }
+
+  /**
+   * Access the model catalog engine (used by IPC handlers).
+   */
+  getModelCatalogEngine(): ModelCatalogEngine {
+    return this.modelCatalogEngine;
   }
 
   private detectProvider(modelId: string): string {

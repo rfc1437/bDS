@@ -212,6 +212,32 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // ============ Model Catalog ============
+
+  // Refresh model catalog from models.dev (conditional GET with ETag)
+  ipcMain.handle('chat:refreshModelCatalog', async () => {
+    try {
+      const manager = await getOpenCodeManager();
+      const result = await manager.getModelCatalogEngine().refresh();
+      return result;
+    } catch (error) {
+      console.error('[Chat IPC] Error refreshing model catalog:', error);
+      return { success: false, modelsUpdated: 0, error: (error as Error).message };
+    }
+  });
+
+  // Get all model catalog entries
+  ipcMain.handle('chat:getModelCatalog', async () => {
+    try {
+      const manager = await getOpenCodeManager();
+      const entries = await manager.getModelCatalogEngine().getAll();
+      return { success: true, entries };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting model catalog:', error);
+      return { success: false, entries: [], error: (error as Error).message };
+    }
+  });
+
   // ============ Conversation CRUD ============
 
   // Get all conversations

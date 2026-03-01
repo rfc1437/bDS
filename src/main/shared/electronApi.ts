@@ -424,6 +424,28 @@ export interface ChatModel {
   provider?: string;
 }
 
+export interface ModelCatalogEntry {
+  id: string;
+  name: string;
+  family: string | null;
+  contextWindow: number | null;
+  maxInputTokens: number | null;
+  maxOutputTokens: number | null;
+  inputPrice: number | null;
+  outputPrice: number | null;
+  cacheReadPrice: number | null;
+  supportsAttachments: boolean | null;
+  supportsReasoning: boolean | null;
+  supportsToolCall: boolean | null;
+}
+
+export interface ModelCatalogRefreshResult {
+  success: boolean;
+  modelsUpdated: number;
+  notModified?: boolean;
+  error?: string;
+}
+
 export interface ChatReadyStatus {
   ready: boolean;
   error?: string;
@@ -808,6 +830,10 @@ export interface ElectronAPI {
     setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
     getSystemPrompt: () => Promise<{ success: boolean; prompt?: string; error?: string }>;
     setSystemPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+
+    // Model Catalog
+    refreshModelCatalog: () => Promise<ModelCatalogRefreshResult>;
+    getModelCatalog: () => Promise<{ success: boolean; entries: ModelCatalogEntry[]; error?: string }>;
 
     // Conversations
     getConversations: () => Promise<ChatConversation[]>;
