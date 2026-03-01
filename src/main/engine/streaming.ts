@@ -50,6 +50,7 @@ export interface OpenAIStreamAccumulator {
 
 export interface AnthropicStreamAccumulator {
   toolCalls: Map<number, ToolCallAccumulator>;
+  thinkingBlocks: Map<number, { text: string }>;
 }
 
 export interface HttpStreamError extends Error {
@@ -119,7 +120,7 @@ export function createOpenAIStreamAccumulator(): OpenAIStreamAccumulator {
 }
 
 export function createAnthropicStreamAccumulator(): AnthropicStreamAccumulator {
-  return { toolCalls: new Map() };
+  return { toolCalls: new Map(), thinkingBlocks: new Map() };
 }
 
 // ── OpenAI/Mistral SSE Parser ──
@@ -217,8 +218,8 @@ export function parseOpenAIStreamEvent(
  *
  * Anthropic streaming format uses named event types:
  * - message_start: input token usage
- * - content_block_start: text or tool_use block begins
- * - content_block_delta: text_delta or input_json_delta
+ * - content_block_start: text, tool_use, or thinking block begins
+ * - content_block_delta: text_delta, input_json_delta, or thinking_delta
  * - content_block_stop: block ends
  * - message_delta: output tokens + stop_reason
  * - message_stop: stream complete
@@ -260,6 +261,8 @@ export function parseAnthropicStreamEvent(
           name: block.name,
           arguments: '',
         });
+      } else if (block?.type === 'thinking') {
+        accumulator.thinkingBlocks.set(data.index as number, { text: '' });
       }
       // text block start is a no-op (empty initial text)
       break;
@@ -273,6 +276,11 @@ export function parseAnthropicStreamEvent(
         const tc = accumulator.toolCalls.get(data.index as number);
         if (tc) {
           tc.arguments += delta.partial_json;
+        }
+      } else if (delta?.type === 'thinking_delta' && delta.thinking) {
+        const tb = accumulator.thinkingBlocks.get(data.index as number);
+        if (tb) {
+          tb.text += delta.thinking;
         }
       }
       break;

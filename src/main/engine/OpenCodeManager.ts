@@ -509,32 +509,37 @@ export class OpenCodeManager {
       let cacheWriteTokens = 0;
       let roundText = '';
 
-      for await (const event of events) {
-        const result = parseAnthropicStreamEvent(event, streamAccumulator);
+      try {
+        for await (const event of events) {
+          const result = parseAnthropicStreamEvent(event, streamAccumulator);
 
-        if (result.textDelta) {
-          roundText += result.textDelta;
-          if (callbacks.onDelta) {
-            callbacks.onDelta(result.textDelta);
+          if (result.textDelta) {
+            roundText += result.textDelta;
+            if (callbacks.onDelta) {
+              callbacks.onDelta(result.textDelta);
+            }
           }
-        }
 
-        if (result.usage) {
-          if (result.usage.inputTokens !== undefined) inputTokens = result.usage.inputTokens;
-          if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
-          if (result.usage.cacheWriteTokens !== undefined) cacheWriteTokens = result.usage.cacheWriteTokens;
-          if (result.usage.outputTokens !== undefined) outputTokens = result.usage.outputTokens;
-        }
+          if (result.usage) {
+            if (result.usage.inputTokens !== undefined) inputTokens = result.usage.inputTokens;
+            if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
+            if (result.usage.cacheWriteTokens !== undefined) cacheWriteTokens = result.usage.cacheWriteTokens;
+            if (result.usage.outputTokens !== undefined) outputTokens = result.usage.outputTokens;
+          }
 
-        if (result.finishReason) {
-          stopReason = result.finishReason;
-        }
+          if (result.finishReason) {
+            stopReason = result.finishReason;
+          }
 
-        if (result.done) break;
+          if (result.done) break;
+        }
+      } finally {
+        // Preserve text already emitted via onDelta even if the stream errors mid-round
+        accumulatedText += roundText;
       }
 
       const streamToolCalls = streamAccumulator.toolCalls;
-      accumulatedText += roundText;
+      const streamThinkingBlocks = streamAccumulator.thinkingBlocks;
 
       // Emit token usage after stream completes (only when usage data was received)
       const hasUsageData = inputTokens > 0 || outputTokens > 0;
@@ -586,6 +591,13 @@ export class OpenCodeManager {
       const toolResults: AnthropicContentBlock[] = [];
       // Build assistant content blocks for the next message round
       const assistantContentBlocks: AnthropicContentBlock[] = [];
+
+      // Add thinking blocks first (Anthropic requires thinking before text when extended thinking is enabled)
+      for (const [, tb] of streamThinkingBlocks) {
+        if (tb.text) {
+          assistantContentBlocks.push({ type: 'thinking', text: tb.text });
+        }
+      }
 
       // Add text block with text from this round
       if (roundText) {
@@ -805,32 +817,36 @@ export class OpenCodeManager {
       let cacheReadTokens = 0;
       let roundText = '';
 
-      for await (const event of events) {
-        const result = parseOpenAIStreamEvent(event, streamAccumulator);
+      try {
+        for await (const event of events) {
+          const result = parseOpenAIStreamEvent(event, streamAccumulator);
 
-        if (result.textDelta) {
-          roundText += result.textDelta;
-          if (callbacks.onDelta) {
-            callbacks.onDelta(result.textDelta);
+          if (result.textDelta) {
+            roundText += result.textDelta;
+            if (callbacks.onDelta) {
+              callbacks.onDelta(result.textDelta);
+            }
           }
-        }
 
-        if (result.usage) {
-          if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
-          if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
-          if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
-          if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
-        }
+          if (result.usage) {
+            if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
+            if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
+            if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
+            if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
+          }
 
-        if (result.finishReason) {
-          finishReason = result.finishReason;
-        }
+          if (result.finishReason) {
+            finishReason = result.finishReason;
+          }
 
-        if (result.done) break;
+          if (result.done) break;
+        }
+      } finally {
+        // Preserve text already emitted via onDelta even if the stream errors mid-round
+        accumulatedText += roundText;
       }
 
       const streamToolCalls = streamAccumulator.toolCalls;
-      accumulatedText += roundText;
 
       // Emit token usage after stream completes (only when usage data was received)
       const hasUsageData = promptTokens > 0 || completionTokens > 0;
@@ -2347,7 +2363,7 @@ Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
         options.signal.addEventListener('abort', () => {
           req.destroy();
           reject(new Error('Request cancelled'));
-        });
+        }, { once: true });
       }
 
       if (options.body) {

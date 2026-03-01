@@ -449,6 +449,114 @@ describe('parseAnthropicStreamEvent', () => {
     const result = parseAnthropicStreamEvent(event, accumulator);
     expect(result.finishReason).toBe('tool_use');
   });
+
+  it('handles thinking content_block_start', () => {
+    const event: SSEEvent = {
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking', thinking: '' },
+      }),
+    };
+    const result = parseAnthropicStreamEvent(event, accumulator);
+    expect(result.textDelta).toBeUndefined();
+    expect(accumulator.thinkingBlocks.get(0)).toEqual({ text: '' });
+  });
+
+  it('accumulates thinking_delta fragments', () => {
+    // Start thinking block
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking', thinking: '' },
+      }),
+    }, accumulator);
+
+    // First thinking fragment
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: 'Let me think' },
+      }),
+    }, accumulator);
+
+    // Second thinking fragment
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: ' about this...' },
+      }),
+    }, accumulator);
+
+    expect(accumulator.thinkingBlocks.get(0)?.text).toBe('Let me think about this...');
+  });
+
+  it('does not emit thinking_delta as textDelta', () => {
+    // Start thinking block
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking', thinking: '' },
+      }),
+    }, accumulator);
+
+    const result = parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: 'Internal reasoning' },
+      }),
+    }, accumulator);
+
+    // thinking_delta must NOT leak to textDelta — it's internal model reasoning
+    expect(result.textDelta).toBeUndefined();
+  });
+
+  it('accumulates thinking and text blocks independently', () => {
+    // Thinking block at index 0
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking', thinking: '' },
+      }),
+    }, accumulator);
+
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: 'Reasoning...' },
+      }),
+    }, accumulator);
+
+    // Text block at index 1
+    const textResult = parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 1,
+        delta: { type: 'text_delta', text: 'Here is my answer' },
+      }),
+    }, accumulator);
+
+    // Thinking accumulated separately
+    expect(accumulator.thinkingBlocks.get(0)?.text).toBe('Reasoning...');
+    // Text still emitted as textDelta
+    expect(textResult.textDelta).toBe('Here is my answer');
+  });
 });
 
 // ── Tool Call Accumulation ──
