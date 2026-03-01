@@ -38,98 +38,7 @@ const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MISTRAL_MODELS_URL = 'https://api.mistral.ai/v1/models';
 
-// Known model display names: maps model IDs to polished names and serves as offline fallback
-const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  // Anthropic Claude
-  'claude-opus-4-6': 'Claude Opus 4.6',
-  'claude-opus-4-5': 'Claude Opus 4.5',
-  'claude-opus-4-1': 'Claude Opus 4.1',
-  'claude-sonnet-4-6': 'Claude Sonnet 4.6',
-  'claude-sonnet-4-5': 'Claude Sonnet 4.5',
-  'claude-sonnet-4': 'Claude Sonnet 4',
-  'claude-haiku-4-5': 'Claude Haiku 4.5',
-  'claude-3-5-haiku': 'Claude 3.5 Haiku',
-  // OpenAI GPT
-  'gpt-5.3-codex': 'GPT 5.3 Codex',
-  'gpt-5.2': 'GPT 5.2',
-  'gpt-5.2-codex': 'GPT 5.2 Codex',
-  'gpt-5.1': 'GPT 5.1',
-  'gpt-5.1-codex': 'GPT 5.1 Codex',
-  'gpt-5.1-codex-max': 'GPT 5.1 Codex Max',
-  'gpt-5.1-codex-mini': 'GPT 5.1 Codex Mini',
-  'gpt-5': 'GPT 5',
-  'gpt-5-codex': 'GPT 5 Codex',
-  'gpt-5-nano': 'GPT 5 Nano',
-  // Google Gemini
-  'gemini-3.1-pro': 'Gemini 3.1 Pro',
-  'gemini-3-pro': 'Gemini 3 Pro',
-  'gemini-3-flash': 'Gemini 3 Flash',
-  // Other providers
-  'glm-5': 'GLM 5',
-  'glm-5-free': 'GLM 5 Free',
-  'glm-4.7': 'GLM 4.7',
-  'glm-4.6': 'GLM 4.6',
-  'qwen3-coder': 'Qwen3 Coder',
-  'minimax-m2.5': 'MiniMax M2.5',
-  'minimax-m2.5-free': 'MiniMax M2.5 Free',
-  'minimax-m2.1': 'MiniMax M2.1',
-  'minimax-m2.1-free': 'MiniMax M2.1 Free',
-  'kimi-k2.5': 'Kimi K2.5',
-  'kimi-k2.5-free': 'Kimi K2.5 Free',
-  'kimi-k2': 'Kimi K2',
-  'kimi-k2-thinking': 'Kimi K2 Thinking',
-  'big-pickle': 'Big Pickle',
-  'trinity-large-preview-free': 'Trinity Large Preview Free',
-  // Mistral AI
-  'mistral-large-latest': 'Mistral Large',
-  'mistral-medium-latest': 'Mistral Medium',
-  'mistral-small-latest': 'Mistral Small',
-  'devstral-small-latest': 'Devstral Small',
-  'devstral-large-latest': 'Devstral Large',
-};
 
-
-
-// Uppercase prefixes that should not be title-cased
-const UPPERCASE_PREFIXES = ['gpt', 'glm'];
-
-// Per-model context token budgets for truncation
-// OpenCode models default to 150,000; Mistral models have specific budgets
-const MODEL_CONTEXT_BUDGETS: Record<string, number> = {
-  'mistral-large-latest': 35_000,
-  'mistral-medium-latest': 35_000,
-  'mistral-small-latest': 120_000,
-  'devstral-small-latest': 120_000,
-  'devstral-large-latest': 240_000,
-};
-
-// Vision capabilities per model (APIs don't expose this)
-const MODEL_CAPABILITIES: Record<string, { vision: boolean }> = {
-  // Anthropic Claude — all vision-capable
-  'claude-opus-4-6': { vision: true },
-  'claude-opus-4-5': { vision: true },
-  'claude-opus-4-1': { vision: true },
-  'claude-sonnet-4-6': { vision: true },
-  'claude-sonnet-4-5': { vision: true },
-  'claude-sonnet-4': { vision: true },
-  'claude-haiku-4-5': { vision: true },
-  'claude-3-5-haiku': { vision: true },
-  // OpenAI GPT — most are vision-capable
-  'gpt-5': { vision: true },
-  'gpt-5.1': { vision: true },
-  'gpt-5.2': { vision: true },
-  'gpt-5-nano': { vision: true },
-  // Google Gemini — vision-capable
-  'gemini-3.1-pro': { vision: true },
-  'gemini-3-pro': { vision: true },
-  'gemini-3-flash': { vision: true },
-  // Mistral AI
-  'mistral-large-latest': { vision: true },
-  'mistral-medium-latest': { vision: true },
-  'mistral-small-latest': { vision: true },
-  'devstral-small-latest': { vision: false },
-  'devstral-large-latest': { vision: false },
-};
 
 export interface SendMessageOptions {
   metadata?: {
@@ -303,6 +212,8 @@ export class OpenCodeManager {
       { 'x-api-key': apiKey },
     ];
 
+    const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
+
     for (const headers of attempts) {
       try {
         const response = await this.httpRequest(ZEN_MODELS_URL, {
@@ -310,10 +221,15 @@ export class OpenCodeManager {
           headers,
         });
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          // Filter to only OpenCode models (not Mistral)
-          const models = Object.entries(MODEL_DISPLAY_NAMES)
-            .map(([id, name]) => ({ id, name, provider: this.detectProvider(id), vision: MODEL_CAPABILITIES[id]?.vision ?? false }))
-            .filter(m => this.isProviderKeySet(m.provider));
+          const data = JSON.parse(response.body);
+          const models = (data.data && Array.isArray(data.data))
+            ? (data.data as Array<{ id: string }>).map(m => ({
+                id: m.id,
+                name: this.resolveName(m.id, catalogNames),
+                provider: this.detectProvider(m.id),
+                vision: this.resolveVision(m.id, catalogVision),
+              }))
+            : [];
           return { isValid: true, models };
         }
       } catch {
@@ -332,6 +248,8 @@ export class OpenCodeManager {
       return { isValid: false, models: [] };
     }
 
+    const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
+
     try {
       const response = await this.httpRequest(MISTRAL_MODELS_URL, {
         method: 'GET',
@@ -343,10 +261,14 @@ export class OpenCodeManager {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         const data = JSON.parse(response.body);
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-          // Return Mistral models from display name map
-          const models = Object.entries(MODEL_DISPLAY_NAMES)
-            .filter(([id]) => this.detectProvider(id) === 'mistral')
-            .map(([id, name]) => ({ id, name, provider: 'mistral', vision: MODEL_CAPABILITIES[id]?.vision ?? false }));
+          const models = (data.data as Array<{ id: string }>)
+            .filter(m => this.detectProvider(m.id) === 'mistral')
+            .map(m => ({
+              id: m.id,
+              name: this.resolveName(m.id, catalogNames),
+              provider: 'mistral',
+              vision: this.resolveVision(m.id, catalogVision),
+            }));
           return { isValid: true, models };
         }
       }
@@ -370,6 +292,9 @@ export class OpenCodeManager {
     const allModels: ChatModel[] = [];
     let fetched = false;
 
+    // Load catalog for vision + name cross-referencing
+    const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
+
     // Fetch OpenCode models
     if (this.apiKey) {
       try {
@@ -386,9 +311,9 @@ export class OpenCodeManager {
             for (const m of data.data as Array<{ id: string }>) {
               allModels.push({
                 id: m.id,
-                name: this.formatModelName(m.id),
+                name: this.resolveName(m.id, catalogNames),
                 provider: this.detectProvider(m.id),
-                vision: MODEL_CAPABILITIES[m.id]?.vision ?? false,
+                vision: this.resolveVision(m.id, catalogVision),
               });
             }
             fetched = true;
@@ -412,13 +337,12 @@ export class OpenCodeManager {
           const data = JSON.parse(response.body);
           if (data.data && Array.isArray(data.data)) {
             for (const m of data.data as Array<{ id: string }>) {
-              // Only include models we know about (have display names)
-              if (MODEL_DISPLAY_NAMES[m.id]) {
+              if (this.detectProvider(m.id) === 'mistral') {
                 allModels.push({
                   id: m.id,
-                  name: this.formatModelName(m.id),
+                  name: this.resolveName(m.id, catalogNames),
                   provider: 'mistral',
-                  vision: MODEL_CAPABILITIES[m.id]?.vision ?? false,
+                  vision: this.resolveVision(m.id, catalogVision),
                 });
               }
             }
@@ -436,16 +360,23 @@ export class OpenCodeManager {
       return allModels;
     }
 
-    // Build fallback from display name map, filtered by available provider keys
-    const fallback = Object.entries(MODEL_DISPLAY_NAMES)
-      .map(([id, name]) => ({
-        id,
-        name,
-        provider: this.detectProvider(id),
-        vision: MODEL_CAPABILITIES[id]?.vision ?? false,
-      }))
-      .filter(m => this.isProviderKeySet(m.provider));
-    return fallback;
+    // Fallback: build from model catalog database (models.dev), filtered by available provider keys
+    try {
+      const catalog = await this.modelCatalogEngine.getAll();
+      if (catalog.length > 0) {
+        return catalog
+          .map(m => ({
+            id: m.id,
+            name: m.name,
+            provider: this.detectProvider(m.id),
+            vision: m.inputModalities.includes('image'),
+          }))
+          .filter(m => this.isProviderKeySet(m.provider));
+      }
+    } catch {
+      // Fall through to empty
+    }
+    return [];
   }
 
   /**
@@ -943,7 +874,7 @@ export class OpenCodeManager {
 
     // Truncate conversation history to fit within context window
     // Keep system message (index 0), truncate from oldest conversation messages
-    const contextBudget = MODEL_CONTEXT_BUDGETS[modelId] ?? 150000;
+    const contextBudget = (await this.modelCatalogEngine.getContextWindow(modelId)) ?? 150000;
     const conversationMessages = allMessages.slice(1);
     const anthropicFmt = conversationMessages.map(m => ({
       role: m.role as 'user' | 'assistant',
@@ -2246,6 +2177,40 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
   }
 
   /**
+   * Load model catalog into maps for quick vision and name lookups.
+   * Vision = model has 'image' in its input modalities.
+   */
+  private async getCatalogLookups(): Promise<{ vision: Map<string, boolean>; names: Map<string, string> }> {
+    const vision = new Map<string, boolean>();
+    const names = new Map<string, string>();
+    try {
+      const catalog = await this.modelCatalogEngine.getAll();
+      for (const m of catalog) {
+        vision.set(m.id, m.inputModalities.includes('image'));
+        names.set(m.id, m.name);
+      }
+    } catch {
+      // Catalog unavailable — maps stay empty
+    }
+    return { vision, names };
+  }
+
+  /**
+   * Resolve vision capability for a model ID.
+   * Vision = 'image' is in the model's input modalities from the catalog.
+   */
+  private resolveVision(modelId: string, catalogVision: Map<string, boolean>): boolean {
+    return catalogVision.get(modelId) ?? false;
+  }
+
+  /**
+   * Resolve display name for a model ID. Falls back to raw model ID.
+   */
+  private resolveName(modelId: string, catalogNames: Map<string, string>): string {
+    return catalogNames.get(modelId) ?? modelId;
+  }
+
+  /**
    * Return API URL, key and provider-specific options for a given provider.
    * Used to parameterise sendOpenAIMessage() for non-Anthropic providers.
    */
@@ -2265,24 +2230,7 @@ NOTE: Use pagination (offset/limit) in list_posts and search_posts to access all
     return 'other';
   }
 
-  private formatModelName(modelId: string): string {
-    // Check display name map first
-    if (MODEL_DISPLAY_NAMES[modelId]) {
-      return MODEL_DISPLAY_NAMES[modelId];
-    }
-    // Auto-format: split on hyphens, handle uppercase prefixes and version dots
-    const words = modelId.split('-');
-    return words
-      .map((word, index) => {
-        // First word: check for uppercase prefixes
-        if (index === 0 && UPPERCASE_PREFIXES.includes(word.toLowerCase())) {
-          return word.toUpperCase();
-        }
-        // Capitalize first letter
-        return word.charAt(0).toUpperCase() + word.slice(1);
-      })
-      .join(' ');
-  }
+
 
   private parseErrorResponse(response: HttpResponse): string {
     let errorMsg = `API error: ${response.statusCode}`;

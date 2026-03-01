@@ -8,8 +8,7 @@
  * - getAvailableModels() merge from both providers
  * - getProviderConfig() helper
  * - isProviderKeySet() helper
- * - MODEL_CONTEXT_BUDGETS correctness
- * - MODEL_CAPABILITIES (vision flags)
+ * - Vision from catalog modalities
  * - validateMistralApiKey()
  * - Provider-aware routing in sendOpenAIMessage()
  * - generateConversationTitle() provider routing
@@ -336,9 +335,19 @@ describe('OpenCodeManager Mistral integration', () => {
       expect(providers.has('mistral')).toBe(true);
     });
 
-    it('includes vision field on models', async () => {
+    it('includes vision field from catalog modalities', async () => {
       const manager = createManager();
       manager.setMistralApiKey('mist-key');
+
+      // Mock catalog with modality data for vision resolution
+      (manager as any).modelCatalogEngine = {
+        getAll: vi.fn().mockResolvedValue([
+          { id: 'mistral-large-latest', name: 'Mistral Large', inputModalities: ['text', 'image'], outputModalities: ['text'] },
+          { id: 'devstral-small-latest', name: 'Devstral Small', inputModalities: ['text'], outputModalities: ['text'] },
+        ]),
+        getMaxOutputTokens: vi.fn().mockResolvedValue(16384),
+        getContextWindow: vi.fn().mockResolvedValue(null),
+      };
 
       (manager as any).httpRequest = vi.fn().mockImplementation((url: string) => {
         if (url.includes('mistral.ai')) {
@@ -367,6 +376,14 @@ describe('OpenCodeManager Mistral integration', () => {
       // No OpenCode key set
 
       (manager as any).httpRequest = vi.fn().mockRejectedValue(new Error('Network error'));
+      (manager as any).modelCatalogEngine = {
+        getAll: vi.fn().mockResolvedValue([
+          { id: 'mistral-large-latest', name: 'Mistral Large', inputModalities: ['text', 'image'], outputModalities: ['text'] },
+          { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', inputModalities: ['text', 'image'], outputModalities: ['text'] },
+        ]),
+        getMaxOutputTokens: vi.fn().mockResolvedValue(16384),
+        getContextWindow: vi.fn().mockResolvedValue(null),
+      };
 
       const models = await manager.getAvailableModels();
       // Should only have Mistral models from fallback
@@ -406,19 +423,6 @@ describe('OpenCodeManager Mistral integration', () => {
       const manager = createManager();
       const result = await manager.validateMistralApiKey('');
       expect(result.isValid).toBe(false);
-    });
-  });
-
-  describe('MODEL_DISPLAY_NAMES includes Mistral models', () => {
-    it('has display names for all target Mistral models', () => {
-      const manager = createManager();
-      const format = (manager as any).formatModelName.bind(manager);
-
-      expect(format('mistral-large-latest')).toBe('Mistral Large');
-      expect(format('mistral-medium-latest')).toBe('Mistral Medium');
-      expect(format('mistral-small-latest')).toBe('Mistral Small');
-      expect(format('devstral-small-latest')).toBe('Devstral Small');
-      expect(format('devstral-large-latest')).toBe('Devstral Large');
     });
   });
 
@@ -529,38 +533,23 @@ describe('OpenCodeManager Mistral integration', () => {
     });
   });
 
-  describe('MODEL_CONTEXT_BUDGETS', () => {
-    it('has correct budget values for all Mistral models', () => {
-      // Access the constant via a model that triggers truncation path
-      const manager = createManager();
-      // We verify the budgets via the getProviderConfig indirectly,
-      // but here we check them via the module-level constant accessed via the manager
-      // by using sendOpenAIMessage truncation behavior.
-      // Since the budgets map is not exported, we test the values are correct
-      // by checking the truncation call parameter via a mock.
-
-      // Access budgets through internal reference
-      const budgets: Record<string, number> = {
-        'mistral-large-latest': 35_000,
-        'mistral-medium-latest': 35_000,
-        'mistral-small-latest': 120_000,
-        'devstral-small-latest': 120_000,
-        'devstral-large-latest': 240_000,
-      };
-
-      // Verify each budget is reasonable (within expected ranges)
-      expect(budgets['mistral-large-latest']).toBe(35_000);
-      expect(budgets['mistral-medium-latest']).toBe(35_000);
-      expect(budgets['mistral-small-latest']).toBe(120_000);
-      expect(budgets['devstral-small-latest']).toBe(120_000);
-      expect(budgets['devstral-large-latest']).toBe(240_000);
-    });
-  });
-
-  describe('MODEL_CAPABILITIES', () => {
-    it('vision flags are correct for Mistral models via getAvailableModels', async () => {
+  describe('vision from catalog modalities', () => {
+    it('vision flags are derived from catalog input modalities via getAvailableModels', async () => {
       const manager = createManager();
       manager.setMistralApiKey('mist-key');
+
+      // Mock catalog with modality data
+      (manager as any).modelCatalogEngine = {
+        getAll: vi.fn().mockResolvedValue([
+          { id: 'mistral-large-latest', name: 'Mistral Large', inputModalities: ['text', 'image'], outputModalities: ['text'] },
+          { id: 'mistral-medium-latest', name: 'Mistral Medium', inputModalities: ['text', 'image'], outputModalities: ['text'] },
+          { id: 'mistral-small-latest', name: 'Mistral Small', inputModalities: ['text', 'image'], outputModalities: ['text'] },
+          { id: 'devstral-small-latest', name: 'Devstral Small', inputModalities: ['text'], outputModalities: ['text'] },
+          { id: 'devstral-large-latest', name: 'Devstral Large', inputModalities: ['text'], outputModalities: ['text'] },
+        ]),
+        getMaxOutputTokens: vi.fn().mockResolvedValue(16384),
+        getContextWindow: vi.fn().mockResolvedValue(null),
+      };
 
       (manager as any).httpRequest = vi.fn().mockImplementation((url: string) => {
         if (url.includes('mistral.ai')) {
@@ -580,12 +569,12 @@ describe('OpenCodeManager Mistral integration', () => {
 
       const models = await manager.getAvailableModels();
 
-      // Vision-capable models
+      // Vision-capable models (image in input modalities)
       expect(models.find((m: ChatModel) => m.id === 'mistral-large-latest')?.vision).toBe(true);
       expect(models.find((m: ChatModel) => m.id === 'mistral-medium-latest')?.vision).toBe(true);
       expect(models.find((m: ChatModel) => m.id === 'mistral-small-latest')?.vision).toBe(true);
 
-      // Non-vision models
+      // Non-vision models (no image in input modalities)
       expect(models.find((m: ChatModel) => m.id === 'devstral-small-latest')?.vision).toBe(false);
       expect(models.find((m: ChatModel) => m.id === 'devstral-large-latest')?.vision).toBe(false);
     });
@@ -670,10 +659,9 @@ describe('OpenCodeManager Mistral integration', () => {
     });
   });
 
-  describe('validateApiKey model filtering', () => {
-    it('filters out models whose provider key is not set', async () => {
+  describe('validateApiKey returns models from API response', () => {
+    it('returns models from the actual API response', async () => {
       const manager = createManager();
-      // Only OpenCode key — no Mistral key
       manager.setApiKey('oc-key');
 
       (manager as any).httpRequest = vi.fn().mockResolvedValue({
@@ -683,9 +671,9 @@ describe('OpenCodeManager Mistral integration', () => {
 
       const result = await manager.validateApiKey('oc-key');
       expect(result.isValid).toBe(true);
-      // Should NOT include Mistral models
-      const mistralModels = result.models.filter(m => m.provider === 'mistral');
-      expect(mistralModels.length).toBe(0);
+      expect(result.models).toHaveLength(1);
+      expect(result.models[0].id).toBe('claude-sonnet-4');
+      expect(result.models[0].provider).toBe('anthropic');
     });
   });
 });
