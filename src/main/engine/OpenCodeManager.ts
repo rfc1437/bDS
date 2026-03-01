@@ -761,6 +761,8 @@ export class OpenCodeManager {
       let promptTokens = 0;
       let completionTokens = 0;
       let totalTokens = 0;
+      let cacheReadTokens = 0;
+      let roundText = '';  // Text produced in this round only
 
       const { events } = await withRetry(() => httpRequestStream(ZEN_OPENAI_URL, {
         method: 'POST',
@@ -778,6 +780,7 @@ export class OpenCodeManager {
         // Emit text deltas immediately for real-time streaming
         if (result.textDelta) {
           accumulatedText += result.textDelta;
+          roundText += result.textDelta;
           if (callbacks.onDelta) {
             callbacks.onDelta(result.textDelta);
           }
@@ -788,6 +791,7 @@ export class OpenCodeManager {
           if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
           if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
           if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
+          if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
         }
 
         if (result.finishReason) {
@@ -799,8 +803,7 @@ export class OpenCodeManager {
 
       // Emit token usage after stream completes
       if (callbacks.onTokenUsage) {
-        const cacheReadTokens = 0; // OpenAI doesn't provide cache info in streaming
-        const inputTokens = promptTokens;
+        const inputTokens = promptTokens - cacheReadTokens;
         const outputTokens = completionTokens;
 
         const prev = this.conversationUsage.get(conversationId) || {
@@ -846,7 +849,7 @@ export class OpenCodeManager {
       // Build the assistant message with tool_calls for conversation history
       const assistantMessage: Record<string, unknown> = {
         role: 'assistant',
-        content: accumulatedText || null,
+        content: roundText || null,
         tool_calls: parsedToolCalls.map((tc) => ({
           id: tc.id,
           type: 'function',

@@ -142,8 +142,15 @@ export function parseOpenAIStreamEvent(
     return { done: true };
   }
 
-  const data = JSON.parse(event.data);
-  const choice = data.choices?.[0];
+  let data: Record<string, unknown>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data = JSON.parse(event.data) as any;
+  } catch {
+    // Skip corrupted SSE events (e.g. partial JSON from TCP split)
+    return { done: false };
+  }
+  const choice = (data as any).choices?.[0];
   const result: StreamEventResult = { done: false };
 
   if (choice) {
@@ -187,11 +194,14 @@ export function parseOpenAIStreamEvent(
   }
 
   // Token usage (arrives in final chunk with stream_options.include_usage)
-  if (data.usage) {
+  if ((data as any).usage) {
+    const usage = (data as any).usage;
+    const promptDetails = usage.prompt_tokens_details;
     result.usage = {
-      promptTokens: data.usage.prompt_tokens,
-      completionTokens: data.usage.completion_tokens,
-      totalTokens: data.usage.total_tokens,
+      promptTokens: usage.prompt_tokens,
+      completionTokens: usage.completion_tokens,
+      totalTokens: usage.total_tokens,
+      cacheReadTokens: promptDetails?.cached_tokens,
     };
   }
 
@@ -217,12 +227,19 @@ export function parseAnthropicStreamEvent(
   event: SSEEvent,
   accumulator: AnthropicStreamAccumulator,
 ): StreamEventResult {
-  const data = JSON.parse(event.data);
+  let data: Record<string, unknown>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data = JSON.parse(event.data) as any;
+  } catch {
+    // Skip corrupted SSE events (e.g. partial JSON from TCP split)
+    return { done: false };
+  }
   const result: StreamEventResult = { done: false };
 
   switch (event.event) {
     case 'message_start': {
-      const usage = data.message?.usage;
+      const usage = (data as any).message?.usage;
       if (usage) {
         result.usage = {
           inputTokens: usage.input_tokens || 0,
@@ -234,9 +251,9 @@ export function parseAnthropicStreamEvent(
     }
 
     case 'content_block_start': {
-      const block = data.content_block;
+      const block = (data as any).content_block;
       if (block?.type === 'tool_use') {
-        accumulator.toolCalls.set(data.index, {
+        accumulator.toolCalls.set(data.index as number, {
           id: block.id,
           name: block.name,
           arguments: '',
@@ -247,11 +264,11 @@ export function parseAnthropicStreamEvent(
     }
 
     case 'content_block_delta': {
-      const delta = data.delta;
+      const delta = (data as any).delta;
       if (delta?.type === 'text_delta' && delta.text) {
         result.textDelta = delta.text;
       } else if (delta?.type === 'input_json_delta' && delta.partial_json) {
-        const tc = accumulator.toolCalls.get(data.index);
+        const tc = accumulator.toolCalls.get(data.index as number);
         if (tc) {
           tc.arguments += delta.partial_json;
         }
@@ -264,13 +281,13 @@ export function parseAnthropicStreamEvent(
       break;
 
     case 'message_delta': {
-      if (data.usage) {
+      if ((data as any).usage) {
         result.usage = {
-          outputTokens: data.usage.output_tokens || 0,
+          outputTokens: (data as any).usage.output_tokens || 0,
         };
       }
-      if (data.delta?.stop_reason) {
-        result.finishReason = data.delta.stop_reason;
+      if ((data as any).delta?.stop_reason) {
+        result.finishReason = (data as any).delta.stop_reason;
       }
       break;
     }
@@ -284,7 +301,7 @@ export function parseAnthropicStreamEvent(
       break;
 
     case 'error': {
-      const errorMsg = data.error?.message || 'Unknown streaming error';
+      const errorMsg = (data as any).error?.message || 'Unknown streaming error';
       throw new Error(errorMsg);
     }
 
