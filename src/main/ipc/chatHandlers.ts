@@ -62,11 +62,15 @@ async function getOpenCodeManager(): Promise<OpenCodeManager> {
     // Load API key from encrypted storage
     const keyStore = getSecureKeyStore();
     openCodeManagerInitPromise = (async () => {
+      // Clean up old plain-text key from settings (pre-keychain storage)
       try {
-        // Clean up old plain-text key from settings (pre-keychain storage)
         await keyStore.cleanupPlainTextKey('opencode_api_key');
+      } catch {
+        // Best-effort cleanup; not critical
+      }
 
-        // Load API key from encrypted storage
+      // Load API key from encrypted storage
+      try {
         const key = await keyStore.retrieve('opencode_api_key');
         if (key) {
           openCodeManager!.setApiKey(key);

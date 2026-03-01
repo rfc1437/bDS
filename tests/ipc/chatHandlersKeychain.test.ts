@@ -240,7 +240,7 @@ describe('chatHandlers keychain integration', () => {
     expect(manager.setApiKey).not.toHaveBeenCalled();
   });
 
-  it('still initializes when cleanupPlainTextKey() throws on init', async () => {
+  it('still initializes and loads key when cleanupPlainTextKey() throws on init', async () => {
     secureKeyStoreCleanupError = new Error('delete failed');
 
     const mod = await import('../../src/main/ipc/chatHandlers');
@@ -252,6 +252,10 @@ describe('chatHandlers keychain integration', () => {
     const result = await handler!(undefined);
     // Init should complete even if cleanup fails
     expect(result.ready).toBe(true);
+
+    // The encrypted key should still be loaded despite cleanup failure
+    const manager = openCodeManagerInstances[0];
+    expect(manager.setApiKey).toHaveBeenCalledWith('encrypted-stored-key');
   });
 
   it('returns error when store() throws on chat:setApiKey', async () => {

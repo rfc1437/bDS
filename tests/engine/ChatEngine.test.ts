@@ -776,6 +776,23 @@ describe('ChatEngine', () => {
     });
   });
 
+  describe('deleteSetting', () => {
+    it('should delete a setting by key', async () => {
+      let capturedPredicate: any;
+      vi.mocked(mockLocalDb.delete).mockImplementation(() => ({
+        where: vi.fn((predicate) => {
+          capturedPredicate = predicate;
+          return Promise.resolve();
+        }),
+      } as any));
+
+      await chatEngine.deleteSetting('opencode_api_key');
+
+      expect(mockLocalDb.delete).toHaveBeenCalled();
+      expect(capturedPredicate).toBeDefined();
+    });
+  });
+
   describe('setSelectedModel', () => {
     it('should save selected model', async () => {
       let capturedValues: any;
