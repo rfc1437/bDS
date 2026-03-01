@@ -138,6 +138,7 @@ interface AnthropicContentBlock {
   tool_use_id?: string;
   content?: string | AnthropicToolResultContent[];
   is_error?: boolean;
+  signature?: string;
   source?: {
     type: 'base64';
     media_type: string;
@@ -508,6 +509,7 @@ export class OpenCodeManager {
       let cacheReadTokens = 0;
       let cacheWriteTokens = 0;
       let roundText = '';
+      let receivedUsage = false;
 
       try {
         for await (const event of events) {
@@ -521,6 +523,7 @@ export class OpenCodeManager {
           }
 
           if (result.usage) {
+            receivedUsage = true;
             if (result.usage.inputTokens !== undefined) inputTokens = result.usage.inputTokens;
             if (result.usage.cacheReadTokens !== undefined) cacheReadTokens = result.usage.cacheReadTokens;
             if (result.usage.cacheWriteTokens !== undefined) cacheWriteTokens = result.usage.cacheWriteTokens;
@@ -542,8 +545,7 @@ export class OpenCodeManager {
       const streamThinkingBlocks = streamAccumulator.thinkingBlocks;
 
       // Emit token usage after stream completes (only when usage data was received)
-      const hasUsageData = inputTokens > 0 || outputTokens > 0;
-      if (callbacks.onTokenUsage && hasUsageData) {
+      if (callbacks.onTokenUsage && receivedUsage) {
         const adjustedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
         const totalTokens = inputTokens + outputTokens;
 
@@ -595,7 +597,11 @@ export class OpenCodeManager {
       // Add thinking blocks first (Anthropic requires thinking before text when extended thinking is enabled)
       for (const [, tb] of streamThinkingBlocks) {
         if (tb.text) {
-          assistantContentBlocks.push({ type: 'thinking', text: tb.text });
+          const thinkingBlock: AnthropicContentBlock = { type: 'thinking', text: tb.text };
+          if (tb.signature) {
+            thinkingBlock.signature = tb.signature;
+          }
+          assistantContentBlocks.push(thinkingBlock);
         }
       }
 
@@ -816,6 +822,7 @@ export class OpenCodeManager {
       let totalTokens = 0;
       let cacheReadTokens = 0;
       let roundText = '';
+      let receivedUsage = false;
 
       try {
         for await (const event of events) {
@@ -829,6 +836,7 @@ export class OpenCodeManager {
           }
 
           if (result.usage) {
+            receivedUsage = true;
             if (result.usage.promptTokens !== undefined) promptTokens = result.usage.promptTokens;
             if (result.usage.completionTokens !== undefined) completionTokens = result.usage.completionTokens;
             if (result.usage.totalTokens !== undefined) totalTokens = result.usage.totalTokens;
@@ -849,8 +857,7 @@ export class OpenCodeManager {
       const streamToolCalls = streamAccumulator.toolCalls;
 
       // Emit token usage after stream completes (only when usage data was received)
-      const hasUsageData = promptTokens > 0 || completionTokens > 0;
-      if (callbacks.onTokenUsage && hasUsageData) {
+      if (callbacks.onTokenUsage && receivedUsage) {
         const inputTokens = promptTokens - cacheReadTokens;
         const outputTokens = completionTokens;
 

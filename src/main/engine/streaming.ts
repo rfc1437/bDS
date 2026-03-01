@@ -50,7 +50,7 @@ export interface OpenAIStreamAccumulator {
 
 export interface AnthropicStreamAccumulator {
   toolCalls: Map<number, ToolCallAccumulator>;
-  thinkingBlocks: Map<number, { text: string }>;
+  thinkingBlocks: Map<number, { text: string; signature?: string }>;
 }
 
 export interface HttpStreamError extends Error {
@@ -286,9 +286,18 @@ export function parseAnthropicStreamEvent(
       break;
     }
 
-    case 'content_block_stop':
+    case 'content_block_stop': {
       // Block is complete. Tool arguments can now be parsed by the caller.
+      // For thinking blocks, capture the signature (required by Anthropic when replaying thinking blocks).
+      const stopBlock = (data as any).content_block;
+      if (stopBlock?.type === 'thinking' && stopBlock.signature) {
+        const tb = accumulator.thinkingBlocks.get(data.index as number);
+        if (tb) {
+          tb.signature = stopBlock.signature;
+        }
+      }
       break;
+    }
 
     case 'message_delta': {
       if ((data as any).usage) {
@@ -343,7 +352,7 @@ const RETRYABLE_STATUS_CODES = new Set([429, 502, 503]);
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options: { maxRetries?: number; onRetry?: (attempt: number, error: Error) => void } = {},
+  options: { maxRetries?: number; onRetry?: (attempt: number, error: Error) => void; signal?: AbortSignal } = {},
 ): Promise<T> {
   const maxRetries = options.maxRetries ?? 3;
   let lastError: Error | undefined;
@@ -358,6 +367,13 @@ export async function withRetry<T>(
       // Don't retry on abort
       if (httpError.isAbort || httpError.message === 'Request cancelled') {
         throw error;
+      }
+
+      // Check signal before retrying
+      if (options.signal?.aborted) {
+        const abortError: HttpStreamError = new Error('Request cancelled') as HttpStreamError;
+        abortError.isAbort = true;
+        throw abortError;
       }
 
       // Don't retry on non-retryable status codes
@@ -384,7 +400,26 @@ export async function withRetry<T>(
         options.onRetry(attempt + 1, lastError);
       }
 
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Abort-aware delay: reject immediately if signal fires during wait
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, delay);
+        if (options.signal) {
+          const onAbort = () => {
+            clearTimeout(timer);
+            const abortError: HttpStreamError = new Error('Request cancelled') as HttpStreamError;
+            abortError.isAbort = true;
+            reject(abortError);
+          };
+          if (options.signal.aborted) {
+            clearTimeout(timer);
+            const abortError: HttpStreamError = new Error('Request cancelled') as HttpStreamError;
+            abortError.isAbort = true;
+            reject(abortError);
+            return;
+          }
+          options.signal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
     }
   }
 

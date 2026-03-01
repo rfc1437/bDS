@@ -1399,3 +1399,200 @@ describe('async iterator return() cleanup', () => {
     }
   });
 });
+
+// ── Thinking block signature capture ──
+
+describe('Anthropic thinking block signature', () => {
+  let accumulator: AnthropicStreamAccumulator;
+
+  beforeEach(() => {
+    accumulator = createAnthropicStreamAccumulator();
+  });
+
+  it('captures signature from content_block_stop for thinking blocks', () => {
+    // Start thinking block
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking', thinking: '' },
+      }),
+    }, accumulator);
+
+    // Accumulate thinking
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: 'Let me reason...' },
+      }),
+    }, accumulator);
+
+    // content_block_stop with signature
+    parseAnthropicStreamEvent({
+      event: 'content_block_stop',
+      data: JSON.stringify({
+        type: 'content_block_stop',
+        index: 0,
+        content_block: {
+          type: 'thinking',
+          thinking: 'Let me reason...',
+          signature: 'ErUBCkYIAxgCIkD+ybfICm10kSig...',
+        },
+      }),
+    }, accumulator);
+
+    const tb = accumulator.thinkingBlocks.get(0);
+    expect(tb).toBeDefined();
+    expect(tb!.text).toBe('Let me reason...');
+    expect(tb!.signature).toBe('ErUBCkYIAxgCIkD+ybfICm10kSig...');
+  });
+
+  it('leaves signature undefined when content_block_stop has no signature', () => {
+    // Start thinking block
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking', thinking: '' },
+      }),
+    }, accumulator);
+
+    // content_block_stop without signature
+    parseAnthropicStreamEvent({
+      event: 'content_block_stop',
+      data: JSON.stringify({
+        type: 'content_block_stop',
+        index: 0,
+      }),
+    }, accumulator);
+
+    const tb = accumulator.thinkingBlocks.get(0);
+    expect(tb).toBeDefined();
+    expect(tb!.signature).toBeUndefined();
+  });
+
+  it('does not affect tool_call blocks on content_block_stop', () => {
+    // Start tool_use block
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu_1', name: 'search_posts' },
+      }),
+    }, accumulator);
+
+    // Tool argument fragment
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: '{"query":"test"}' },
+      }),
+    }, accumulator);
+
+    // content_block_stop (no signature for tool blocks)
+    parseAnthropicStreamEvent({
+      event: 'content_block_stop',
+      data: JSON.stringify({
+        type: 'content_block_stop',
+        index: 0,
+      }),
+    }, accumulator);
+
+    // Tool call should be unaffected
+    const tc = accumulator.toolCalls.get(0);
+    expect(tc).toBeDefined();
+    expect(tc!.arguments).toBe('{"query":"test"}');
+  });
+
+  it('full thinking sequence produces signature on accumulator', () => {
+    // Full realistic sequence: thinking block -> text block -> tool_use
+    // Thinking at index 0
+    parseAnthropicStreamEvent({
+      event: 'content_block_start',
+      data: JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }),
+    }, accumulator);
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Step 1. ' } }),
+    }, accumulator);
+    parseAnthropicStreamEvent({
+      event: 'content_block_delta',
+      data: JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Step 2.' } }),
+    }, accumulator);
+    parseAnthropicStreamEvent({
+      event: 'content_block_stop',
+      data: JSON.stringify({ type: 'content_block_stop', index: 0, content_block: { type: 'thinking', thinking: 'Step 1. Step 2.', signature: 'sig_abc123' } }),
+    }, accumulator);
+
+    expect(accumulator.thinkingBlocks.get(0)).toEqual({ text: 'Step 1. Step 2.', signature: 'sig_abc123' });
+  });
+});
+
+// ── withRetry abort-aware delay ──
+
+describe('withRetry abort during delay', () => {
+  it('rejects quickly when signal is aborted during retry delay', async () => {
+    const controller = new AbortController();
+    const error429 = Object.assign(new Error('Rate limited'), { statusCode: 429 });
+    const fn = vi.fn().mockRejectedValue(error429);
+
+    const promise = withRetry(fn, {
+      maxRetries: 3,
+      signal: controller.signal,
+    });
+
+    // First attempt fails immediately, then enters retry delay.
+    // Wait a small amount for the first attempt to fail and delay to start.
+    await new Promise(r => setTimeout(r, 50));
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    // Abort during the delay
+    controller.abort();
+
+    // Should reject with abort error, not wait for delay to finish
+    await expect(promise).rejects.toThrow();
+    // Should NOT have made a second attempt — aborted during delay
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not abort delay when no signal is provided', async () => {
+    vi.useFakeTimers();
+    const error429 = Object.assign(new Error('Rate limited'), { statusCode: 429 });
+    const fn = vi.fn()
+      .mockRejectedValueOnce(error429)
+      .mockResolvedValue('ok');
+
+    const promise = withRetry(fn, { maxRetries: 3 });
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await promise;
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('works normally when signal is not aborted', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const error429 = Object.assign(new Error('Rate limited'), { statusCode: 429 });
+    const fn = vi.fn()
+      .mockRejectedValueOnce(error429)
+      .mockResolvedValue('ok');
+
+    const promise = withRetry(fn, {
+      maxRetries: 3,
+      signal: controller.signal,
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await promise;
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+});
