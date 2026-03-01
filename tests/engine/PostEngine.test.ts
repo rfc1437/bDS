@@ -2495,6 +2495,108 @@ Published snapshot content`);
     });
   });
 
+  describe('getPostCounts', () => {
+    it('should return empty groups when no posts exist', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      const result = await postEngine.getPostCounts(['year']);
+      expect(result).toEqual({ groups: [], totalPosts: 0 });
+    });
+
+    it('should group by year', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { g_year: 2024, cnt: 15 },
+          { g_year: 2023, cnt: 10 },
+        ],
+      });
+
+      const result = await postEngine.getPostCounts(['year']);
+      expect(result.groups).toEqual([
+        { year: 2024, count: 15 },
+        { year: 2023, count: 10 },
+      ]);
+      expect(result.totalPosts).toBe(25);
+    });
+
+    it('should group by month and tag with year filter', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { g_month: 1, g_tag: 'Politik', cnt: 12 },
+          { g_month: 1, g_tag: 'Medien', cnt: 8 },
+          { g_month: 2, g_tag: 'Politik', cnt: 5 },
+        ],
+      });
+
+      const result = await postEngine.getPostCounts(['month', 'tag'], { year: 2004 });
+      expect(result.groups).toEqual([
+        { month: 1, tag: 'Politik', count: 12 },
+        { month: 1, tag: 'Medien', count: 8 },
+        { month: 2, tag: 'Politik', count: 5 },
+      ]);
+      expect(result.totalPosts).toBe(25);
+    });
+
+    it('should group by category and status', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { g_category: 'article', g_status: 'published', cnt: 20 },
+          { g_category: 'wiki', g_status: 'draft', cnt: 3 },
+        ],
+      });
+
+      const result = await postEngine.getPostCounts(['category', 'status']);
+      expect(result.groups).toEqual([
+        { category: 'article', status: 'published', count: 20 },
+        { category: 'wiki', status: 'draft', count: 3 },
+      ]);
+    });
+
+    it('should include year and month filters in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['tag'], { year: 2004, month: 6 });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('json_each');
+      expect(sql).toContain('group by');
+      expect(sql).toContain('created_at >=');
+      expect(sql).toContain('created_at <');
+    });
+
+    it('should include status filter in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['year'], { status: 'published' });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain("status = ?");
+    });
+
+    it('should include category filter in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['month'], { year: 2024, category: 'tech' });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('json_each');
+      expect(sql).toContain('categories');
+    });
+
+    it('should include tags filter in SQL WHERE', async () => {
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      await postEngine.getPostCounts(['year'], { tags: ['js', 'react'] });
+
+      const call = mockLocalClient.execute.mock.calls[0]?.[0] as { sql?: string; args?: any[] } | undefined;
+      const sql = call?.sql?.toLowerCase() ?? '';
+      expect(sql).toContain('json_each');
+    });
+  });
+
   describe('getTagsWithCounts', () => {
     it('should return empty array when no posts have tags', async () => {
       vi.mocked(mockLocalDb.select).mockImplementation(() => {

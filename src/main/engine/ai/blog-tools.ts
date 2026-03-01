@@ -39,6 +39,7 @@ export interface BlogToolDeps {
       categoryCount: number;
     }>;
     getDashboardStats: () => Promise<{ totalPosts: number; draftCount: number; publishedCount: number; archivedCount: number }>;
+    getPostCounts: (groupBy: Array<'year' | 'month' | 'tag' | 'category' | 'status'>, filter?: { year?: number; month?: number; status?: string; category?: string; tags?: string[] }) => Promise<{ groups: Record<string, string | number>[]; totalPosts: number }>;
   };
   mediaEngine: {
     getMedia: (id: string) => Promise<MediaData | null>;
@@ -440,6 +441,37 @@ export function createBlogTools(deps: BlogToolDeps) {
           success: true,
           count: tagsWithCounts.length,
           tags: tagsWithCounts,
+        };
+      },
+    }),
+
+    count_posts: tool({
+      description: 'Count posts grouped by one or more dimensions (year, month, tag, category, status). Returns aggregated counts without transferring full post data. Ideal for analytics, heat maps, and distribution overviews. Example: groupBy=["month","tag"] with year=2004 returns post counts per month per tag.',
+      inputSchema: z.object({
+        groupBy: z.array(z.enum(['year', 'month', 'tag', 'category', 'status'])).describe('Dimensions to group by (1-3 recommended)'),
+        year: z.number().optional().describe('Filter to posts in this year'),
+        month: z.number().optional().describe('Filter to posts in this month (1-12). Requires year.'),
+        status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter by status'),
+        category: z.string().optional().describe('Filter by category'),
+        tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
+      }),
+      execute: async ({ groupBy, year, month, status, category, tags }) => {
+        if (month !== undefined && year === undefined) {
+          return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
+        }
+        const filter: { year?: number; month?: number; status?: string; category?: string; tags?: string[] } = {};
+        if (year !== undefined) filter.year = year;
+        if (month !== undefined) filter.month = month;
+        if (status) filter.status = status;
+        if (category) filter.category = category;
+        if (tags && tags.length > 0) filter.tags = tags;
+
+        const result = await postEngine.getPostCounts(groupBy, Object.keys(filter).length > 0 ? filter : undefined);
+        return {
+          success: true,
+          groupCount: result.groups.length,
+          totalPosts: result.totalPosts,
+          groups: result.groups,
         };
       },
     }),

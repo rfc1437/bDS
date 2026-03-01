@@ -25,6 +25,7 @@ function createMockPostEngine() {
     getLinkedBy: vi.fn().mockResolvedValue([]),
     getLinksTo: vi.fn().mockResolvedValue([]),
     getPostsFiltered: vi.fn().mockResolvedValue([]),
+    getPostCounts: vi.fn().mockResolvedValue({ groups: [], totalPosts: 0 }),
   };
 }
 
@@ -188,6 +189,11 @@ describe('MCPServer', () => {
     it('registers propose_post_metadata tool', () => {
       const mcpServer = server.createMcpServer();
       expect(hasRegistered(mcpServer, '_registeredTools', 'propose_post_metadata')).toBe(true);
+    });
+
+    it('registers count_posts tool', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredTools', 'count_posts')).toBe(true);
     });
 
     it('registers accept_proposal tool', () => {
@@ -838,6 +844,35 @@ describe('MCPServer', () => {
         { categories: ['tech'], tags: ['js'], year: 2025, status: 'published' },
         { offset: 0, limit: 50 },
       );
+    });
+
+    // ── count_posts ──────────────────────────────────────────────────
+
+    it('count_posts calls getPostCounts with correct args', async () => {
+      mockPostEngine.getPostCounts.mockResolvedValue({
+        groups: [
+          { month: 1, tag: 'Politik', count: 12 },
+          { month: 2, tag: 'Politik', count: 5 },
+        ],
+        totalPosts: 300,
+      });
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'count_posts');
+      const result = await tool.handler({ groupBy: ['month', 'tag'], year: 2004 }, {}) as { content: Array<{ text: string }> };
+      expect(mockPostEngine.getPostCounts).toHaveBeenCalledWith(
+        ['month', 'tag'],
+        { year: 2004 },
+      );
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.totalPosts).toBe(300);
+      expect(parsed.groups).toHaveLength(2);
+    });
+
+    it('count_posts returns error when month without year', async () => {
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'count_posts');
+      const result = await tool.handler({ groupBy: ['tag'], month: 6 }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
     });
 
     it('draft_post creates a draft and stores proposal', async () => {

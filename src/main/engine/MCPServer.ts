@@ -74,6 +74,7 @@ interface PostEngineContract {
   getLinkedBy: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
   getLinksTo: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
+  getPostCounts: (groupBy: Array<'year' | 'month' | 'tag' | 'category' | 'status'>, filter?: { year?: number; month?: number; status?: string; category?: string; tags?: string[] }) => Promise<{ groups: Record<string, string | number>[]; totalPosts: number }>;
 }
 
 interface MediaEngineContract {
@@ -566,6 +567,44 @@ export class MCPServer {
         content.push({ type: 'text' as const, text: hintsList.join(' ') });
       }
       return { content };
+    });
+
+    // ── count_posts ──
+    server.registerTool('count_posts', {
+      title: 'Count Posts',
+      description: 'Count posts grouped by one or more dimensions (year, month, tag, category, status). Returns aggregated counts without full post data — ideal for analytics, heat maps, and distribution overviews. Example: groupBy=["month","tag"] with year=2004 returns post counts per month per tag.',
+      inputSchema: {
+        groupBy: z.array(z.enum(['year', 'month', 'tag', 'category', 'status'])).describe('Dimensions to group by (1-3 recommended)'),
+        year: z.number().optional().describe('Filter to posts in this year'),
+        month: z.number().optional().describe('Filter to posts in this month (1-12). Requires year.'),
+        status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter by status'),
+        category: z.string().optional().describe('Filter by category'),
+        tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    }, async (args) => {
+      if (args.month && !args.year) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'month requires year. Example: year: 2025, month: 3' }) }],
+          isError: true,
+        };
+      }
+
+      const filter: { year?: number; month?: number; status?: string; category?: string; tags?: string[] } = {};
+      if (args.year !== undefined) filter.year = args.year;
+      if (args.month !== undefined) filter.month = args.month;
+      if (args.status) filter.status = args.status;
+      if (args.category) filter.category = args.category;
+      if (args.tags) filter.tags = args.tags;
+
+      const result = await this.deps.postEngine.getPostCounts(
+        args.groupBy,
+        Object.keys(filter).length > 0 ? filter : undefined,
+      );
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
     });
   }
 

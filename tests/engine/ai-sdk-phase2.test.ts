@@ -54,6 +54,7 @@ function createMockBlogToolDeps(): BlogToolDeps {
       getAllPosts: vi.fn(),
       getPostsFiltered: vi.fn(),
       searchPostsFiltered: vi.fn(),
+      getPostCounts: vi.fn(),
       getCategoriesWithCounts: vi.fn().mockResolvedValue([]),
       getTagsWithCounts: vi.fn().mockResolvedValue([]),
       getLinkedBy: vi.fn().mockResolvedValue([]),

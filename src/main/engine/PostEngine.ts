@@ -984,6 +984,127 @@ export class PostEngine extends EventEmitter {
     }
   }
 
+  /**
+   * Server-side aggregation: count posts grouped by one or more dimensions.
+   * Returns flat groups with counts — avoids transferring full post data for analytics.
+   */
+  async getPostCounts(
+    groupBy: Array<'year' | 'month' | 'tag' | 'category' | 'status'>,
+    filter?: { year?: number; month?: number; status?: string; category?: string; tags?: string[] },
+  ): Promise<{ groups: Record<string, string | number>[]; totalPosts: number }> {
+    const client = getDatabase().getLocalClient();
+    if (!client) return { groups: [], totalPosts: 0 };
+
+    // Build SELECT expressions and GROUP BY columns
+    const selectExprs: string[] = [];
+    const groupByCols: string[] = [];
+    const joins: string[] = [];
+
+    for (const dim of groupBy) {
+      switch (dim) {
+        case 'year':
+          selectExprs.push("CAST(strftime('%Y', posts.created_at) AS INTEGER) AS g_year");
+          groupByCols.push('g_year');
+          break;
+        case 'month':
+          selectExprs.push("CAST(strftime('%m', posts.created_at) AS INTEGER) AS g_month");
+          groupByCols.push('g_month');
+          break;
+        case 'tag':
+          selectExprs.push('t.value AS g_tag');
+          joins.push('JOIN json_each(posts.tags) AS t');
+          groupByCols.push('g_tag');
+          break;
+        case 'category':
+          selectExprs.push('c.value AS g_category');
+          joins.push('JOIN json_each(posts.categories) AS c');
+          groupByCols.push('g_category');
+          break;
+        case 'status':
+          selectExprs.push('posts.status AS g_status');
+          groupByCols.push('g_status');
+          break;
+      }
+    }
+
+    selectExprs.push('COUNT(*) AS cnt');
+
+    // Build WHERE conditions
+    const conditions: string[] = ['posts.project_id = ?'];
+    const args: (string | number)[] = [this.currentProjectId];
+
+    if (filter?.year !== undefined) {
+      const start = `${filter.year}-01-01`;
+      const end = `${filter.year + 1}-01-01`;
+      conditions.push('posts.created_at >= ?');
+      args.push(start);
+      conditions.push('posts.created_at < ?');
+      args.push(end);
+    }
+    if (filter?.month !== undefined && filter?.year !== undefined) {
+      const start = `${filter.year}-${String(filter.month).padStart(2, '0')}-01`;
+      const endMonth = filter.month === 12 ? 1 : filter.month + 1;
+      const endYear = filter.month === 12 ? filter.year + 1 : filter.year;
+      const end = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+      conditions.push('posts.created_at >= ?');
+      args.push(start);
+      conditions.push('posts.created_at < ?');
+      args.push(end);
+    }
+    if (filter?.status) {
+      conditions.push('posts.status = ?');
+      args.push(filter.status);
+    }
+    if (filter?.category) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM json_each(posts.categories) AS fc WHERE fc.value = ?)`,
+      );
+      args.push(filter.category);
+    }
+    if (filter?.tags && filter.tags.length > 0) {
+      for (const tag of filter.tags) {
+        conditions.push(
+          `EXISTS (SELECT 1 FROM json_each(posts.tags) AS ft WHERE ft.value = ?)`,
+        );
+        args.push(tag);
+      }
+    }
+
+    const sql = `
+      SELECT ${selectExprs.join(', ')}
+      FROM posts
+      ${joins.join(' ')}
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY ${groupByCols.join(', ')}
+      ORDER BY cnt DESC
+    `;
+
+    try {
+      const result = await client.execute({ sql, args });
+
+      // Map dimension aliases back to clean names
+      const dimMap: Record<string, string> = {
+        g_year: 'year', g_month: 'month', g_tag: 'tag',
+        g_category: 'category', g_status: 'status',
+      };
+
+      const groups: Record<string, string | number>[] = result.rows.map((row: any) => {
+        const group: Record<string, string | number> = {};
+        for (const col of groupByCols) {
+          group[dimMap[col]] = row[col];
+        }
+        group.count = Number(row.cnt);
+        return group;
+      });
+
+      const totalPosts = groups.reduce((sum, g) => sum + (g.count as number), 0);
+      return { groups, totalPosts };
+    } catch (error) {
+      console.error('getPostCounts failed:', error);
+      return { groups: [], totalPosts: 0 };
+    }
+  }
+
   async getAvailableTags(): Promise<string[]> {
     const allPosts = await this.getAllPostsUnpaginated();
     const tags = new Set<string>();

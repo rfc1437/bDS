@@ -17,6 +17,7 @@ function createMockDeps(): BlogToolDeps {
       getAllPosts: vi.fn(),
       getPostsFiltered: vi.fn(),
       searchPostsFiltered: vi.fn(),
+      getPostCounts: vi.fn(),
       getCategoriesWithCounts: vi.fn().mockResolvedValue([]),
       getTagsWithCounts: vi.fn().mockResolvedValue([]),
       getLinkedBy: vi.fn().mockResolvedValue([]),
@@ -71,9 +72,9 @@ describe('Blog Tools — createBlogTools', () => {
     tools = createBlogTools(deps);
   });
 
-  it('returns all 16 tools', () => {
+  it('returns all 17 tools', () => {
     const names = Object.keys(tools);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(17);
     expect(names).toContain('check_term');
     expect(names).toContain('search_posts');
     expect(names).toContain('read_post');
@@ -84,6 +85,7 @@ describe('Blog Tools — createBlogTools', () => {
     expect(names).toContain('update_media_metadata');
     expect(names).toContain('list_tags');
     expect(names).toContain('list_categories');
+    expect(names).toContain('count_posts');
     expect(names).toContain('get_blog_stats');
     expect(names).toContain('view_image');
     expect(names).toContain('get_post_backlinks');
@@ -426,6 +428,69 @@ describe('Blog Tools — update_media_metadata', () => {
       { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
     );
     expect(result).toMatchObject({ success: false, error: 'No updates provided' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// count_posts
+// ---------------------------------------------------------------------------
+
+describe('Blog Tools — count_posts', () => {
+  let deps: BlogToolDeps;
+  let tools: ReturnType<typeof createBlogTools>;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    tools = createBlogTools(deps);
+  });
+
+  it('calls getPostCounts with groupBy and filters', async () => {
+    vi.mocked(deps.postEngine.getPostCounts).mockResolvedValueOnce({
+      groups: [
+        { month: 1, tag: 'Politik', count: 12 },
+        { month: 2, tag: 'Politik', count: 5 },
+      ],
+      totalPosts: 200,
+    });
+
+    const result = await tools.count_posts.execute!(
+      { groupBy: ['month', 'tag'], year: 2004 },
+      { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
+    );
+    expect(deps.postEngine.getPostCounts).toHaveBeenCalledWith(
+      ['month', 'tag'],
+      { year: 2004 },
+    );
+    expect(result).toMatchObject({
+      success: true,
+      totalPosts: 200,
+      groupCount: 2,
+    });
+    expect((result as any).groups).toHaveLength(2);
+  });
+
+  it('passes all optional filters', async () => {
+    vi.mocked(deps.postEngine.getPostCounts).mockResolvedValueOnce({
+      groups: [],
+      totalPosts: 0,
+    });
+
+    await tools.count_posts.execute!(
+      { groupBy: ['status'], year: 2024, month: 6, status: 'published', category: 'tech', tags: ['js'] },
+      { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
+    );
+    expect(deps.postEngine.getPostCounts).toHaveBeenCalledWith(
+      ['status'],
+      { year: 2024, month: 6, status: 'published', category: 'tech', tags: ['js'] },
+    );
+  });
+
+  it('returns error when month without year', async () => {
+    const result = await tools.count_posts.execute!(
+      { groupBy: ['tag'], month: 3 },
+      { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
+    );
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining('month requires year') });
   });
 });
 
