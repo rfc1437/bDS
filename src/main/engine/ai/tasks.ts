@@ -9,6 +9,7 @@ import { generateText } from 'ai';
 import type { ChatEngine } from '../ChatEngine';
 import type { MediaEngine } from '../MediaEngine';
 import { ProviderRegistry } from './providers';
+import { resolveSupportedRenderLanguage, translateRender } from '../../shared/i18n';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,17 +29,6 @@ export interface ImageAnalysisResult {
   caption?: string;
   error?: string;
 }
-
-// ---------------------------------------------------------------------------
-// Language map for image analysis prompts
-// ---------------------------------------------------------------------------
-
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English', de: 'German', es: 'Spanish', fr: 'French', it: 'Italian',
-  pt: 'Portuguese', nl: 'Dutch', pl: 'Polish', ru: 'Russian', ja: 'Japanese',
-  zh: 'Chinese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish',
-  sv: 'Swedish', da: 'Danish', no: 'Norwegian', fi: 'Finnish', cs: 'Czech',
-};
 
 // ---------------------------------------------------------------------------
 // OneShotTasks
@@ -222,17 +212,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       .toBuffer();
     const jpegBase64 = jpegBuffer.toString('base64');
 
-    const languageName = LANGUAGE_NAMES[language] || language;
-
-    const systemPrompt = `You generate image metadata. You MUST write ALL text values in ${languageName}. Never use English unless the target language is English.
-
-Rules:
-- "title": short descriptive title (3-8 words, in ${languageName})
-- "alt": factual description of what is visible (5-12 words, in ${languageName}). No interpretations. No "Image of" prefix.
-- "caption": engaging blog caption (5-20 words, in ${languageName})
-
-Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}
-All values MUST be in ${languageName}.`;
+    const renderLanguage = resolveSupportedRenderLanguage(language);
+    const systemPrompt = translateRender(renderLanguage, 'ai.imageAnalysis.system');
+    const userPrompt = translateRender(renderLanguage, 'ai.imageAnalysis.user');
 
     try {
       const model = this.providers.resolveModel(modelId);
@@ -245,7 +227,7 @@ All values MUST be in ${languageName}.`;
           role: 'user',
           content: [
             { type: 'image', image: `data:image/jpeg;base64,${jpegBase64}` },
-            { type: 'text', text: `Analyze this image. Respond with JSON in ${languageName}.` },
+            { type: 'text', text: userPrompt },
           ],
         }],
         maxOutputTokens: 200,
