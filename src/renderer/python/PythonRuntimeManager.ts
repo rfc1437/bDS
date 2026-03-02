@@ -3,12 +3,22 @@ import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol
 import type { PythonSyntaxError } from './runtimeProtocol';
 import { parseMacroContextV1, parseMacroResultV1, type MacroContextV1, type MacroResultV1 } from './abiV1';
 import { invokePythonApiMethodV1 } from './pythonApiInvokerV1';
+import { showToast } from '../components/Toast';
 
 type WorkerFactory = () => Worker;
 type PythonApiInvoker = (method: string, args: unknown) => Promise<unknown>;
+type ToastHandler = (message: string, toastType?: string) => void;
+
+const TOAST_TYPES = new Set(['success', 'error', 'info']);
+
+function defaultToastHandler(message: string, toastType?: string): void {
+  const resolvedType = (toastType && TOAST_TYPES.has(toastType) ? toastType : 'info') as 'success' | 'error' | 'info';
+  showToast[resolvedType](message);
+}
 
 interface PythonRuntimeManagerOptions {
   invokeApiCall?: PythonApiInvoker;
+  onToast?: ToastHandler;
 }
 
 interface InitializeDeferred {
@@ -68,12 +78,14 @@ export class PythonRuntimeManager {
   private activeRequestId: string | null = null;
   private requestCounter = 0;
   private readonly invokeApiCall: PythonApiInvoker;
+  private readonly onToast: ToastHandler;
 
   constructor(
     private readonly workerFactory: WorkerFactory = createPythonRuntimeWorker,
     options: PythonRuntimeManagerOptions = {}
   ) {
     this.invokeApiCall = options.invokeApiCall ?? invokePythonApiMethodV1;
+    this.onToast = options.onToast ?? defaultToastHandler;
   }
 
   initialize(): Promise<void> {
@@ -263,6 +275,11 @@ export class PythonRuntimeManager {
 
     if (payload.type === 'apiCall') {
       void this.handleApiCall(payload);
+      return;
+    }
+
+    if (payload.type === 'toast') {
+      this.onToast(payload.message, payload.toastType);
       return;
     }
 

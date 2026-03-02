@@ -581,4 +581,36 @@ describe('PythonRuntimeManager', () => {
     expect(stdoutChunks).toEqual(['a\n', 'b\n']);
     expect(result.stdout).toBe('a\nb\n');
   });
+
+  it('calls onToast handler when worker sends a toast message', async () => {
+    const worker = new MockWorker();
+    const toasts: Array<{ message: string; toastType?: string }> = [];
+    const manager = new PythonRuntimeManager(
+      () => worker as unknown as Worker,
+      {
+        onToast: (message, toastType) => { toasts.push({ message, toastType }); },
+      }
+    );
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const runPromise = manager.execute('toast("hello")');
+    await Promise.resolve();
+
+    const request = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'toast', message: 'hello', toastType: 'success' });
+    worker.emitMessage({ type: 'toast', message: 'oops', toastType: 'error' });
+    worker.emitMessage({ type: 'toast', message: 'note' });
+
+    expect(toasts).toEqual([
+      { message: 'hello', toastType: 'success' },
+      { message: 'oops', toastType: 'error' },
+      { message: 'note', toastType: undefined },
+    ]);
+
+    worker.emitMessage({ type: 'runResult', requestId: request.requestId, result: '' });
+    await expect(runPromise).resolves.toEqual({ result: '', stdout: '' });
+  });
 });
