@@ -22,6 +22,7 @@ interface PendingRun {
   resolve: (value: PythonRunResult | PythonMacroV1Result | string[] | PythonSyntaxCheckResult) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout> | null;
+  timeoutMs: number;
   onStdout?: (chunk: string) => void;
 }
 
@@ -118,20 +119,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonRunResult>((resolve, reject) => {
-      const timeoutId = timeoutMs > 0
-        ? setTimeout(() => {
-            this.pendingRuns.delete(requestId);
-            this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-            reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-          }, timeoutMs)
-        : null;
-
       this.pendingRuns.set(requestId, {
         kind: 'run',
         stdout: '',
         resolve: (value) => resolve(value as PythonRunResult),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
         onStdout: options?.onStdout,
       });
 
@@ -160,18 +154,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonMacroV1Result>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'macro-v1',
         stdout: '',
         resolve: (value) => resolve(value as PythonMacroV1Result),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
       });
 
       const message: PythonWorkerRequest = {
@@ -199,18 +188,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<string[]>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'inspect-entrypoints',
         stdout: '',
         resolve: (value) => resolve(value as string[]),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
       });
 
       const message: PythonWorkerRequest = {
@@ -235,18 +219,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonSyntaxCheckResult>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'syntax-check',
         stdout: '',
         resolve: (value) => resolve(value as PythonSyntaxCheckResult),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
       });
 
       const message: PythonWorkerRequest = {
@@ -446,6 +425,7 @@ export class PythonRuntimeManager {
     }
 
     this.activeRequestId = request.requestId;
+    this.startTimeoutForRequest(request.requestId);
     this.worker.postMessage(request);
   }
 
@@ -460,7 +440,21 @@ export class PythonRuntimeManager {
     }
 
     this.activeRequestId = nextRequest.requestId;
+    this.startTimeoutForRequest(nextRequest.requestId);
     this.worker.postMessage(nextRequest);
+  }
+
+  private startTimeoutForRequest(requestId: string): void {
+    const pendingRun = this.pendingRuns.get(requestId);
+    if (!pendingRun || pendingRun.timeoutMs <= 0) {
+      return;
+    }
+
+    pendingRun.timeoutId = setTimeout(() => {
+      this.pendingRuns.delete(requestId);
+      this.resetRuntime(`Python script execution timed out after ${pendingRun.timeoutMs}ms`);
+      pendingRun.reject(new Error(`Python script execution timed out after ${pendingRun.timeoutMs}ms`));
+    }, pendingRun.timeoutMs);
   }
 
   private finishRequest(requestId: string): void {

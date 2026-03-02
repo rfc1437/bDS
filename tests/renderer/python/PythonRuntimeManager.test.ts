@@ -524,6 +524,40 @@ describe('PythonRuntimeManager', () => {
     await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
   });
 
+  it('queued inspectEntrypoints with timeoutMs 0 does not kill running execute', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    // Start a long-running execute with no timeout
+    const runPromise = manager.execute('long_running()', { timeoutMs: 0 });
+    await Promise.resolve();
+
+    // Queue inspectEntrypoints (default timeout) while execute is running
+    const inspectPromise = manager.inspectEntrypoints('def render(): pass');
+    await Promise.resolve();
+
+    // Advance past the default 5000ms timeout
+    vi.advanceTimersByTime(6000);
+
+    // Worker must still be alive — the queued inspect must not kill it
+    expect(worker.terminated).toBe(false);
+
+    // Finish the execute
+    const runRequest = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'runResult', requestId: runRequest.requestId, result: 'done' });
+    await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
+
+    // Now the inspect request dispatches — respond to it
+    await Promise.resolve();
+    const inspectRequest = worker.postedMessages[1] as { requestId: string };
+    worker.emitMessage({ type: 'entrypoints', requestId: inspectRequest.requestId, entrypoints: ['render'] });
+    await expect(inspectPromise).resolves.toEqual(['render']);
+  });
+
   it('calls onStdout callback for each stdout chunk during execution', async () => {
     const worker = new MockWorker();
     const manager = new PythonRuntimeManager(() => worker as unknown as Worker);

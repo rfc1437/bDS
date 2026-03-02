@@ -375,17 +375,15 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
       const result = await runtimeManager.execute(scriptContent, {
         cacheKey: buildCacheKey(script, scriptContent),
         entrypoint,
-        ...(isUtility ? {
-          timeoutMs: 0,
-          onStdout: (chunk: string) => {
-            appendPanelOutputEntry({
-              id: `output-${Date.now()}-stdout-stream`,
-              message: chunk,
-              createdAt: new Date().toISOString(),
-              kind: 'stdout',
-            });
-          },
-        } : {}),
+        timeoutMs: 0,
+        onStdout: (chunk: string) => {
+          appendPanelOutputEntry({
+            id: `output-${Date.now()}-stdout-stream`,
+            message: chunk,
+            createdAt: new Date().toISOString(),
+            kind: 'stdout',
+          });
+        },
       });
 
       const now = new Date().toISOString();
@@ -395,16 +393,6 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
           message: result.result,
           createdAt: now,
           kind: 'result',
-        });
-      }
-
-      // Only append final stdout for non-utility scripts (utility streams it live)
-      if (!isUtility && result.stdout.trim().length > 0) {
-        appendPanelOutputEntry({
-          id: `output-${Date.now()}-stdout`,
-          message: result.stdout,
-          createdAt: now,
-          kind: 'stdout',
         });
       }
 

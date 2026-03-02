@@ -404,7 +404,7 @@ describe('ScriptsView', () => {
     });
   });
 
-  it('runs macro/transform scripts with default timeout and no task', async () => {
+  it('runs macro/transform scripts without timeout but no task', async () => {
     (window as any).electronAPI.scripts.get = vi.fn().mockResolvedValue({
       id: 'script-1',
       projectId: 'default',
@@ -431,7 +431,7 @@ describe('ScriptsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
 
     await vi.waitFor(() => {
-      expect(executeMock).toHaveBeenCalledWith('print("hello")', expect.not.objectContaining({
+      expect(executeMock).toHaveBeenCalledWith('print("hello")', expect.objectContaining({
         timeoutMs: 0,
       }));
       expect(startTaskMock).not.toHaveBeenCalled();
