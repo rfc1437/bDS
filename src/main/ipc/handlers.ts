@@ -837,6 +837,20 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return true;
   });
 
+  // ============ Script Task Lifecycle (external tasks for utility scripts) ====
+
+  safeHandle('scripts:startTask', async (_, taskId: string, name: string) => {
+    bundle.taskManager.startExternalTask(taskId, name);
+  });
+
+  safeHandle('scripts:completeTask', async (_, taskId: string) => {
+    bundle.taskManager.completeExternalTask(taskId);
+  });
+
+  safeHandle('scripts:failTask', async (_, taskId: string, error: string) => {
+    bundle.taskManager.failExternalTask(taskId, error);
+  });
+
   // ============ Template Handlers ============
 
   safeHandle('templates:create', async (_, data: CreateTemplateInput) => {

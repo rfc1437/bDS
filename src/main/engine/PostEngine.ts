@@ -450,7 +450,9 @@ export class PostEngine extends EventEmitter {
                                        data.title !== undefined ||
                                        data.tags !== undefined ||
                                        data.categories !== undefined ||
-                                       data.excerpt !== undefined;
+                                       data.excerpt !== undefined ||
+                                       data.language !== undefined ||
+                                       data.author !== undefined;
 
     let newStatus = data.status || existing.status;
     if (existing.status === 'published' && isContentOrMetadataChange && !data.status) {

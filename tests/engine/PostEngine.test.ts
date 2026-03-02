@@ -799,6 +799,94 @@ Original content`);
       expect(result?.content).toBe('New draft content');
     });
 
+    it('should auto-transition published post to draft when language changes', async () => {
+      const created = await postEngine.createPost({ title: 'Language Draft Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'published',
+            content: null,
+            filePath: '/mock/published-lang.md',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      mockFiles.set('/mock/published-lang.md', `---
+id: ${created.id}
+projectId: default
+title: ${created.title}
+slug: ${created.slug}
+status: published
+createdAt: ${created.createdAt.toISOString()}
+updatedAt: ${created.updatedAt.toISOString()}
+tags: []
+categories: []
+---
+Original content`);
+
+      const result = await postEngine.updatePost(created.id, { language: 'fr' });
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe('draft');
+      expect(result?.language).toBe('fr');
+    });
+
+    it('should auto-transition published post to draft when author changes', async () => {
+      const created = await postEngine.createPost({ title: 'Author Draft Test' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'published',
+            content: null,
+            filePath: '/mock/published-author.md',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      mockFiles.set('/mock/published-author.md', `---
+id: ${created.id}
+projectId: default
+title: ${created.title}
+slug: ${created.slug}
+status: published
+createdAt: ${created.createdAt.toISOString()}
+updatedAt: ${created.updatedAt.toISOString()}
+tags: []
+categories: []
+---
+Original content`);
+
+      const result = await postEngine.updatePost(created.id, { author: 'New Author' });
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe('draft');
+      expect(result?.author).toBe('New Author');
+    });
+
     it('should update tags and categories', async () => {
       const created = await postEngine.createPost({ 
         title: 'Tag Update Test',

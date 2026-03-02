@@ -299,6 +299,89 @@ Content here`);
       expect(result?.differences.categories?.fileValue).toEqual(['cat1']);
     });
 
+    it('should detect language differences between DB and file', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        language: 'en',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+tags: []
+categories: []
+language: fr
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-1');
+
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.language).toBeDefined();
+      expect(result?.differences.language?.dbValue).toBe('en');
+      expect(result?.differences.language?.fileValue).toBe('fr');
+    });
+
+    it('should detect missing language in file when DB has language', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        language: 'de',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-1');
+
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.language).toBeDefined();
+      expect(result?.differences.language?.dbValue).toBe('de');
+      expect(result?.differences.language?.fileValue).toBe('');
+    });
+
     it('should return hasDifferences=false when metadata matches', async () => {
       const dbPost = {
         id: 'post-1',
@@ -551,6 +634,47 @@ Content here`);
 
       // Verify the database update was called
       expect(mockLocalDb.update).toHaveBeenCalled();
+    });
+
+    it('should sync language field from file to database', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        language: 'en',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+language: fr
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      await engine.syncFileToDb(['post-1'], 'language');
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      // Verify the set call includes language
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      expect(setCall.language).toBe('fr');
     });
 
     it('should report progress on first and final items based on cadence', async () => {

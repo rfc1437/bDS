@@ -27,6 +27,7 @@ export interface Task<T = unknown> {
 export class TaskManager extends EventEmitter {
   private tasks: Map<string, TaskProgress> = new Map();
   private runningTasks: Map<string, AbortController> = new Map();
+  private externalTasks: Set<string> = new Set();
   private maxConcurrentTasks = 3;
   private taskQueue: Task[] = [];
 
@@ -136,7 +137,80 @@ export class TaskManager extends EventEmitter {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // External tasks — lifecycle controlled by the caller (e.g. renderer-side
+  // utility script execution) rather than an execute() callback.
+  // ---------------------------------------------------------------------------
+
+  startExternalTask(taskId: string, name: string): void {
+    const progress: TaskProgress = {
+      taskId,
+      name,
+      status: 'running',
+      progress: 0,
+      message: 'Running…',
+      startTime: new Date(),
+    };
+
+    this.tasks.set(taskId, progress);
+    this.externalTasks.add(taskId);
+    this.emit('taskCreated', progress);
+    this.emit('taskStarted', progress);
+  }
+
+  updateExternalTaskProgress(taskId: string, progress: number, message: string): void {
+    const entry = this.tasks.get(taskId);
+    if (!entry || !this.externalTasks.has(taskId)) {
+      return;
+    }
+
+    entry.progress = progress;
+    entry.message = message;
+    this.emit('taskProgress', { ...entry });
+  }
+
+  completeExternalTask(taskId: string): void {
+    const entry = this.tasks.get(taskId);
+    if (!entry || !this.externalTasks.has(taskId)) {
+      return;
+    }
+
+    entry.status = 'completed';
+    entry.progress = 100;
+    entry.message = 'Completed';
+    entry.endTime = new Date();
+    this.externalTasks.delete(taskId);
+    this.emit('taskCompleted', entry);
+  }
+
+  failExternalTask(taskId: string, error: string): void {
+    const entry = this.tasks.get(taskId);
+    if (!entry || !this.externalTasks.has(taskId)) {
+      return;
+    }
+
+    entry.status = 'failed';
+    entry.error = error;
+    entry.message = `Failed: ${error}`;
+    entry.endTime = new Date();
+    this.externalTasks.delete(taskId);
+    this.emit('taskFailed', entry);
+  }
+
   cancelTask(taskId: string): boolean {
+    // Check external tasks first
+    if (this.externalTasks.has(taskId)) {
+      this.externalTasks.delete(taskId);
+      const progress = this.tasks.get(taskId);
+      if (progress) {
+        progress.status = 'cancelled';
+        progress.message = 'Cancelled';
+        progress.endTime = new Date();
+        this.emit('taskCancelled', progress);
+      }
+      return true;
+    }
+
     const controller = this.runningTasks.get(taskId);
     if (controller) {
       controller.abort();

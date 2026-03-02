@@ -22,6 +22,7 @@ interface PendingRun {
   resolve: (value: PythonRunResult | PythonMacroV1Result | string[] | PythonSyntaxCheckResult) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout> | null;
+  onStdout?: (chunk: string) => void;
 }
 
 export interface PythonRunResult {
@@ -33,6 +34,7 @@ export interface PythonExecuteOptions {
   timeoutMs?: number;
   cacheKey?: string;
   entrypoint?: string;
+  onStdout?: (chunk: string) => void;
 }
 
 export interface PythonMacroSourceOptions {
@@ -116,11 +118,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonRunResult>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
+      const timeoutId = timeoutMs > 0
+        ? setTimeout(() => {
+            this.pendingRuns.delete(requestId);
+            this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
+            reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
+          }, timeoutMs)
+        : null;
 
       this.pendingRuns.set(requestId, {
         kind: 'run',
@@ -128,6 +132,7 @@ export class PythonRuntimeManager {
         resolve: (value) => resolve(value as PythonRunResult),
         reject,
         timeoutId,
+        onStdout: options?.onStdout,
       });
 
       const message: PythonWorkerRequest = {
@@ -293,6 +298,7 @@ export class PythonRuntimeManager {
 
     if (payload.type === 'stdout') {
       pendingRun.stdout += payload.chunk;
+      pendingRun.onStdout?.(payload.chunk);
       return;
     }
 

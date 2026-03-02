@@ -502,4 +502,49 @@ describe('PythonRuntimeManager', () => {
     worker.emitMessage({ type: 'runResult', requestId: runRequest.requestId, result: 'done' });
     await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
   });
+
+  it('does not time out when timeoutMs is 0', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const runPromise = manager.execute('long_running()', { timeoutMs: 0 });
+    await Promise.resolve();
+
+    // Advance time well past any default timeout — script must still be pending
+    vi.advanceTimersByTime(60_000);
+    expect(worker.terminated).toBe(false);
+
+    const request = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'runResult', requestId: request.requestId, result: 'done' });
+
+    await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
+  });
+
+  it('calls onStdout callback for each stdout chunk during execution', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const stdoutChunks: string[] = [];
+    const runPromise = manager.execute('print("a")\nprint("b")', {
+      onStdout: (chunk) => { stdoutChunks.push(chunk); },
+    });
+    await Promise.resolve();
+
+    const request = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'stdout', requestId: request.requestId, chunk: 'a\n' });
+    worker.emitMessage({ type: 'stdout', requestId: request.requestId, chunk: 'b\n' });
+    worker.emitMessage({ type: 'runResult', requestId: request.requestId, result: '' });
+
+    const result = await runPromise;
+    expect(stdoutChunks).toEqual(['a\n', 'b\n']);
+    expect(result.stdout).toBe('a\nb\n');
+  });
 });

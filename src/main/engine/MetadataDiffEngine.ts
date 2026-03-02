@@ -25,7 +25,7 @@ export interface FieldDifference<T = unknown> {
 /**
  * The fields that can have differences
  */
-export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author';
+export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language';
 
 /**
  * Metadata differences for a single post
@@ -248,6 +248,11 @@ export class MetadataDiffEngine extends EventEmitter {
       differences.author = { dbValue: dbPost.author || '', fileValue: fileData.author || '' };
     }
 
+    // Compare language
+    if ((dbPost.language || '') !== (fileData.language || '')) {
+      differences.language = { dbValue: dbPost.language || '', fileValue: fileData.language || '' };
+    }
+
     return {
       postId: dbPost.id,
       title: dbPost.title,
@@ -279,7 +284,7 @@ export class MetadataDiffEngine extends EventEmitter {
 
     // Get all published posts with file paths
     const result = await client.execute({
-      sql: `SELECT id, title, slug, file_path, tags, categories, excerpt, author 
+      sql: `SELECT id, title, slug, file_path, tags, categories, excerpt, author, language 
             FROM posts 
             WHERE project_id = ? 
               AND status = 'published' 
@@ -331,6 +336,7 @@ export class MetadataDiffEngine extends EventEmitter {
       title: 'Title',
       excerpt: 'Excerpt',
       author: 'Author',
+      language: 'Language',
     };
 
     for (const diff of diffs) {
@@ -427,6 +433,9 @@ export class MetadataDiffEngine extends EventEmitter {
         }
         if (!field || field === 'author') {
           updateData.author = fileData.author || null;
+        }
+        if (!field || field === 'language') {
+          updateData.language = fileData.language || null;
         }
 
         // Update database

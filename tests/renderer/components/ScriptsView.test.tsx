@@ -79,6 +79,9 @@ describe('ScriptsView', () => {
           updatedAt: '2026-02-22T00:00:00.000Z',
         }),
         getAll: vi.fn(),
+        startTask: vi.fn().mockResolvedValue(undefined),
+        completeTask: vi.fn().mockResolvedValue(undefined),
+        failTask: vi.fn().mockResolvedValue(undefined),
       },
     };
 
@@ -246,17 +249,18 @@ describe('ScriptsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
 
     await vi.waitFor(() => {
-      expect(executeMock).toHaveBeenCalledWith('print("hello")', {
+      expect(executeMock).toHaveBeenCalledWith('print("hello")', expect.objectContaining({
         cacheKey: expect.stringMatching(/^script-1:1:/),
         entrypoint: 'render',
-      });
+        timeoutMs: 0,
+      }));
     });
 
     const state = useAppStore.getState();
     expect(state.panelVisible).toBe(false);
     expect(state.panelActiveTab).toBe('tasks');
     expect(state.panelOutputEntries.length).toBeGreaterThan(0);
-    expect(state.panelOutputEntries[state.panelOutputEntries.length - 1].message).toContain('hello');
+    expect(state.panelOutputEntries.some(e => e.message.includes('2'))).toBe(true);
   });
 
   it('checks syntax manually and writes editor markers for syntax errors', async () => {
@@ -358,6 +362,79 @@ describe('ScriptsView', () => {
     await vi.waitFor(() => {
       expect(deleteMock).toHaveBeenCalledWith('script-1');
       expect(useAppStore.getState().tabs).toEqual([]);
+    });
+  });
+
+  it('runs utility script without timeout and creates a task', async () => {
+    const startTaskMock = vi.fn().mockResolvedValue(undefined);
+    const completeTaskMock = vi.fn().mockResolvedValue(undefined);
+    (window as any).electronAPI.scripts.startTask = startTaskMock;
+    (window as any).electronAPI.scripts.completeTask = completeTaskMock;
+    (window as any).electronAPI.scripts.failTask = vi.fn();
+
+    render(<ScriptsView scriptId="script-1" />);
+
+    await screen.findByLabelText('Script Content');
+    fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
+
+    await vi.waitFor(() => {
+      expect(executeMock).toHaveBeenCalledWith('print("hello")', expect.objectContaining({
+        timeoutMs: 0,
+      }));
+      expect(startTaskMock).toHaveBeenCalledWith(expect.stringContaining('script-'), 'Hello Script');
+      expect(completeTaskMock).toHaveBeenCalledWith(expect.stringContaining('script-'));
+    });
+  });
+
+  it('reports failure to task manager when utility script errors', async () => {
+    executeMock.mockRejectedValueOnce(new Error('Script crashed'));
+    const startTaskMock = vi.fn().mockResolvedValue(undefined);
+    const failTaskMock = vi.fn().mockResolvedValue(undefined);
+    (window as any).electronAPI.scripts.startTask = startTaskMock;
+    (window as any).electronAPI.scripts.completeTask = vi.fn();
+    (window as any).electronAPI.scripts.failTask = failTaskMock;
+
+    render(<ScriptsView scriptId="script-1" />);
+
+    await screen.findByLabelText('Script Content');
+    fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
+
+    await vi.waitFor(() => {
+      expect(failTaskMock).toHaveBeenCalledWith(expect.stringContaining('script-'), 'Script crashed');
+    });
+  });
+
+  it('runs macro/transform scripts with default timeout and no task', async () => {
+    (window as any).electronAPI.scripts.get = vi.fn().mockResolvedValue({
+      id: 'script-1',
+      projectId: 'default',
+      slug: 'hello-script',
+      title: 'Hello Script',
+      kind: 'macro',
+      entrypoint: 'render',
+      enabled: true,
+      version: 1,
+      filePath: '/tmp/hello-script.py',
+      content: 'print("hello")',
+      createdAt: '2026-02-22T00:00:00.000Z',
+      updatedAt: '2026-02-22T00:00:00.000Z',
+    });
+
+    const startTaskMock = vi.fn();
+    (window as any).electronAPI.scripts.startTask = startTaskMock;
+    (window as any).electronAPI.scripts.completeTask = vi.fn();
+    (window as any).electronAPI.scripts.failTask = vi.fn();
+
+    render(<ScriptsView scriptId="script-1" />);
+
+    await screen.findByLabelText('Script Content');
+    fireEvent.click(screen.getByRole('button', { name: 'Run Script' }));
+
+    await vi.waitFor(() => {
+      expect(executeMock).toHaveBeenCalledWith('print("hello")', expect.not.objectContaining({
+        timeoutMs: 0,
+      }));
+      expect(startTaskMock).not.toHaveBeenCalled();
     });
   });
 });

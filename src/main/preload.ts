@@ -110,6 +110,9 @@ export const electronAPI: ElectronAPI = {
     getAll: () => ipcRenderer.invoke('scripts:getAll'),
     getEnabledMacroSlugs: () => ipcRenderer.invoke('scripts:getEnabledMacroSlugs'),
     rebuildFromFiles: () => ipcRenderer.invoke('scripts:rebuildFromFiles'),
+    startTask: (taskId: string, name: string) => ipcRenderer.invoke('scripts:startTask', taskId, name),
+    completeTask: (taskId: string) => ipcRenderer.invoke('scripts:completeTask', taskId),
+    failTask: (taskId: string, error: string) => ipcRenderer.invoke('scripts:failTask', taskId, error),
   },
 
   // Templates
