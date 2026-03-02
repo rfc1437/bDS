@@ -224,13 +224,15 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
 
     const languageName = LANGUAGE_NAMES[language] || language;
 
-    const systemPrompt = `Generate title, alt text, and caption for this image in ${languageName}.
+    const systemPrompt = `You generate image metadata. You MUST write ALL text values in ${languageName}. Never use English unless the target language is English.
 
-TITLE: A short, descriptive title for display in lists and search results (3-8 words). Should identify the main subject.
-ALT: Describe ONLY what is visually present in the image. Be factual, neutral, and concise (5-12 words max). No interpretations, emotions, or "Image of" prefix. Example: "Red bicycle leaning against white brick wall"
-CAPTION: Short, engaging blog caption (5-20 words).
+Rules:
+- "title": short descriptive title (3-8 words, in ${languageName})
+- "alt": factual description of what is visible (5-12 words, in ${languageName}). No interpretations. No "Image of" prefix.
+- "caption": engaging blog caption (5-20 words, in ${languageName})
 
-Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
+Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}
+All values MUST be in ${languageName}.`;
 
     try {
       const model = this.providers.resolveModel(modelId);
@@ -243,7 +245,7 @@ Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
           role: 'user',
           content: [
             { type: 'image', image: `data:image/jpeg;base64,${jpegBase64}` },
-            { type: 'text', text: 'Analyze and respond with JSON.' },
+            { type: 'text', text: `Analyze this image. Respond with JSON in ${languageName}.` },
           ],
         }],
         maxOutputTokens: 200,
