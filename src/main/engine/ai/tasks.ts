@@ -213,6 +213,15 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     }
 
     const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+    // Convert WebP thumbnail to JPEG for universal model compatibility.
+    // Local providers like LM Studio reject WebP in the data URL.
+    const sharp = (await import('sharp')).default;
+    const jpegBuffer = await sharp(Buffer.from(base64Data, 'base64'))
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    const jpegBase64 = jpegBuffer.toString('base64');
+
     const languageName = LANGUAGE_NAMES[language] || language;
 
     const systemPrompt = `Generate title, alt text, and caption for this image in ${languageName}.
@@ -233,7 +242,7 @@ Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
         messages: [{
           role: 'user',
           content: [
-            { type: 'image', image: `data:image/webp;base64,${base64Data}` },
+            { type: 'image', image: `data:image/jpeg;base64,${jpegBase64}` },
             { type: 'text', text: 'Analyze and respond with JSON.' },
           ],
         }],
