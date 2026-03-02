@@ -62,6 +62,14 @@ function getProviders(): ProviderRegistry {
 }
 
 /**
+ * Check whether airplane (offline) mode is currently active.
+ * Exported so other handler modules can guard network operations.
+ */
+export function isOfflineModeActive(): boolean {
+  return getProviders().isOfflineMode();
+}
+
+/**
  * Get the ChatService (lazy-init).
  */
 function getChatService(): ChatService {

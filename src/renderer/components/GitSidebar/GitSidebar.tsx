@@ -390,7 +390,10 @@ export const GitSidebar: React.FC = () => {
                   recentCommitsToKeep: 2,
                 });
       if (!result.success) {
-        setError(result.error || tr('gitSidebar.error.actionFailed', { action }));
+        const msg = result.code === 'offline'
+          ? tr('gitSidebar.error.offlineMode')
+          : (result.error || tr('gitSidebar.error.actionFailed', { action }));
+        setError(msg);
         setErrorGuidance('guidance' in result ? result.guidance || [] : []);
         return;
       }

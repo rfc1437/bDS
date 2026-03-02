@@ -333,6 +333,11 @@ vi.mock('fs/promises', () => ({
   unlink: vi.fn(),
 }));
 
+let mockOfflineMode = false;
+vi.mock('../../src/main/ipc/chatHandlers', () => ({
+  isOfflineModeActive: vi.fn(() => mockOfflineMode),
+}));
+
 // Helper to invoke a registered handler
 async function invokeHandler(channel: string, ...args: any[]): Promise<any> {
   const handler = registeredHandlers.get(channel);
@@ -383,6 +388,7 @@ describe('IPC Handlers', () => {
     registeredHandlers.clear();
     mockGeneratedFileHashStore.clear();
     resetMockCounters();
+    mockOfflineMode = false;
 
     // Create a real BlogGenerationEngine with mock engines for blog handler tests
     const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
@@ -512,6 +518,64 @@ describe('IPC Handlers', () => {
           ahead: 2,
           behind: 1,
         });
+      });
+
+      it('should return zeroed state when offline mode is active', async () => {
+        mockOfflineMode = true;
+
+        const result = await invokeHandler('git:remoteState', '/repo');
+
+        expect(mockGitEngine.getRemoteState).not.toHaveBeenCalled();
+        expect(result).toEqual({ ahead: 0, behind: 0 });
+      });
+    });
+
+    describe('offline mode blocks network git operations', () => {
+      it('should block git:fetch when offline mode is active', async () => {
+        mockOfflineMode = true;
+
+        const result = await invokeHandler('git:fetch', '/repo');
+
+        expect(mockGitEngine.fetch).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, code: 'offline' });
+      });
+
+      it('should block git:pull when offline mode is active', async () => {
+        mockOfflineMode = true;
+
+        const result = await invokeHandler('git:pull', '/repo');
+
+        expect(mockGitEngine.pull).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, code: 'offline' });
+      });
+
+      it('should block git:push when offline mode is active', async () => {
+        mockOfflineMode = true;
+
+        const result = await invokeHandler('git:push', '/repo');
+
+        expect(mockGitEngine.push).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, code: 'offline' });
+      });
+
+      it('should allow git:fetch when offline mode is inactive', async () => {
+        mockOfflineMode = false;
+        mockGitEngine.fetch.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:fetch', '/repo');
+
+        expect(mockGitEngine.fetch).toHaveBeenCalledWith('/repo');
+        expect(result).toEqual({ success: true });
+      });
+
+      it('should allow git:commitAll regardless of offline mode', async () => {
+        mockOfflineMode = true;
+        mockGitEngine.commitAll.mockResolvedValue({ success: true });
+
+        const result = await invokeHandler('git:commitAll', '/repo', 'test commit');
+
+        expect(mockGitEngine.commitAll).toHaveBeenCalledWith('/repo', 'test commit');
+        expect(result).toEqual({ success: true });
       });
     });
 
@@ -734,6 +798,21 @@ describe('IPC Handlers', () => {
 
         expect(mockGitEngine.commitAll).toHaveBeenCalledWith('/repo', 'feat: commit');
         expect(result).toEqual({ success: true });
+      });
+    });
+  });
+
+  // ============ Publish Handlers ============
+  describe('Publish Handlers', () => {
+    describe('publish:uploadSite offline guard', () => {
+      it('should throw when offline mode is active', async () => {
+        mockOfflineMode = true;
+
+        await expect(invokeHandler('publish:uploadSite', {
+          sshHost: 'example.com',
+          sshUser: 'deploy',
+          sshRemotePath: '/var/www',
+        })).rejects.toThrow('Airplane mode');
       });
     });
   });
