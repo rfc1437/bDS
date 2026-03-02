@@ -87,33 +87,44 @@ describe('ProviderRegistry offline mode', () => {
   it('getAvailableModels returns only local models when offline', async () => {
     registry.setOpencodeKey('test-key');
     registry.setOllamaEnabled(true);
+    registry.registerOllamaModel('llama3:latest');
     registry.setOfflineMode(true);
 
-    // Mock fetch — Ollama returns models, OpenCode should NOT be called
+    // No fetch should happen at all in offline mode
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('11434')) {
-        return new Response(JSON.stringify({
-          models: [{ name: 'llama3:latest' }],
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }
-      if (typeof url === 'string' && url.includes('1234')) {
-        return new Response(JSON.stringify({ data: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      // Should not reach cloud endpoints when offline
       throw new Error(`Unexpected fetch to ${url} in offline mode`);
     });
 
     try {
       const models = await registry.getAvailableModels();
       // Only local model should appear
+      expect(models.length).toBe(1);
       expect(models.every(m => m.provider === 'ollama' || m.provider === 'lmstudio')).toBe(true);
+      // fetch should NOT have been called
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  // ---------- getKnownLocalModels ----------
+
+  it('getKnownLocalModels returns registered Ollama and LM Studio models', () => {
+    registry.setOllamaEnabled(true);
+    registry.setLmstudioEnabled(true);
+    registry.registerOllamaModel('llama3:latest');
+    registry.registerLmstudioModel('gemma-3-12b-it');
+
+    const models = registry.getKnownLocalModels();
+    expect(models.length).toBe(2);
+    expect(models.find(m => m.id === 'llama3:latest')?.provider).toBe('ollama');
+    expect(models.find(m => m.id === 'gemma-3-12b-it')?.provider).toBe('lmstudio');
+  });
+
+  it('getKnownLocalModels returns empty when no models registered', () => {
+    const models = registry.getKnownLocalModels();
+    expect(models.length).toBe(0);
   });
 
   // ---------- getProviderStatus includes offline ----------

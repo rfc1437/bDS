@@ -255,6 +255,7 @@ export const SettingsView: React.FC = () => {
   const [offlineChatModel, setOfflineChatModel] = useState('');
   const [offlineTitleModel, setOfflineTitleModel] = useState('');
   const [offlineImageAnalysisModel, setOfflineImageAnalysisModel] = useState('');
+  const [knownLocalModels, setKnownLocalModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
   const [titleModel, setTitleModel] = useState('claude-haiku-4-5');
   const [imageAnalysisModel, setImageAnalysisModel] = useState('claude-sonnet-4-5');
   const [availableModels, setAvailableModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
@@ -472,6 +473,12 @@ export const SettingsView: React.FC = () => {
           if (offlineTitle?.success && offlineTitle.modelId) setOfflineTitleModel(offlineTitle.modelId);
           const offlineImage = await window.electronAPI?.chat.getOfflineImageAnalysisModel();
           if (offlineImage?.success && offlineImage.modelId) setOfflineImageAnalysisModel(offlineImage.modelId);
+
+          // Load known local models (persisted, no network needed)
+          try {
+            const locals = await window.electronAPI?.chat.getKnownLocalModels();
+            if (locals && locals.length > 0) setKnownLocalModels(locals);
+          } catch { /* ignore */ }
 
           // Load model catalog metadata
           const catalogResult = await window.electronAPI?.chat.getModelCatalog();
@@ -1419,13 +1426,18 @@ export const SettingsView: React.FC = () => {
   );
 
   // Local-only models (for offline / airplane mode selectors)
+  // Prefer knownLocalModels (persisted, always available) over filtering availableModels (needs network)
+  const localModelSource = useMemo(() => {
+    const fromAvailable = availableModels.filter(m => m.provider === 'ollama' || m.provider === 'lmstudio');
+    return fromAvailable.length > 0 ? fromAvailable : knownLocalModels;
+  }, [availableModels, knownLocalModels]);
   const groupedLocalModels = useMemo(
-    () => groupModelsByProvider(availableModels.filter(m => m.provider === 'ollama' || m.provider === 'lmstudio')),
-    [availableModels, groupModelsByProvider]
+    () => groupModelsByProvider(localModelSource),
+    [localModelSource, groupModelsByProvider]
   );
   const groupedLocalVisionModels = useMemo(
-    () => groupModelsByProvider(availableModels.filter(m => (m.provider === 'ollama' || m.provider === 'lmstudio') && m.vision)),
-    [availableModels, groupModelsByProvider]
+    () => groupModelsByProvider(localModelSource.filter(m => m.vision)),
+    [localModelSource, groupModelsByProvider]
   );
 
   const providerLabel = (provider: string) => {

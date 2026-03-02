@@ -125,6 +125,14 @@ async function ensureInitialized(): Promise<void> {
         }
       } catch { /* ignore */ }
 
+      // Restore known Ollama model IDs (so offline mode works without a fresh fetch)
+      try {
+        const ollamaIds = await getChatEngine().getSetting('ollama_known_model_ids');
+        if (ollamaIds) {
+          for (const id of JSON.parse(ollamaIds) as string[]) reg.registerOllamaModel(id);
+        }
+      } catch { /* ignore */ }
+
       // Restore LM Studio enabled state from settings DB
       try {
         const lmstudioEnabled = await getChatEngine().getSetting('lmstudio_enabled');
@@ -137,6 +145,14 @@ async function ensureInitialized(): Promise<void> {
         if (lmCapsJson) {
           const caps = JSON.parse(lmCapsJson) as Record<string, { tools: boolean; vision: boolean }>;
           reg.loadLmstudioModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
+
+      // Restore known LM Studio model IDs (so offline mode works without a fresh fetch)
+      try {
+        const lmIds = await getChatEngine().getSetting('lmstudio_known_model_ids');
+        if (lmIds) {
+          for (const id of JSON.parse(lmIds) as string[]) reg.registerLmstudioModel(id);
         }
       } catch { /* ignore */ }
 
@@ -443,6 +459,16 @@ export function registerChatHandlers(): void {
     }
   });
 
+  ipcMain.handle('chat:getKnownLocalModels', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getKnownLocalModels();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting known local models:', error);
+      return [];
+    }
+  });
+
   ipcMain.handle('chat:getOfflineChatModel', async () => {
     try {
       const model = await getChatEngine().getSetting('offline_chat_model');
@@ -559,9 +585,21 @@ export function registerChatHandlers(): void {
   ipcMain.handle('chat:getAvailableModels', async () => {
     try {
       await ensureInitialized();
-      const models = await getProviders().getAvailableModels();
+      const reg = getProviders();
+      const models = await reg.getAvailableModels();
       const engine = getChatEngine();
       const selectedModel = await engine.getSelectedModel();
+
+      // Persist known local model IDs so offline mode survives restarts
+      const ollamaModels = models.filter(m => m.provider === 'ollama').map(m => m.id);
+      const lmstudioModels = models.filter(m => m.provider === 'lmstudio').map(m => m.id);
+      if (ollamaModels.length > 0) {
+        await engine.setSetting('ollama_known_model_ids', JSON.stringify(ollamaModels)).catch(() => {});
+      }
+      if (lmstudioModels.length > 0) {
+        await engine.setSetting('lmstudio_known_model_ids', JSON.stringify(lmstudioModels)).catch(() => {});
+      }
+
       return { success: true, models, selectedModel };
     } catch (error) {
       console.error('[Chat IPC] Error getting models:', error);

@@ -855,6 +855,7 @@ export interface ElectronAPI {
     setOfflineTitleModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
     getOfflineImageAnalysisModel: () => Promise<{ success: boolean; modelId?: string | null }>;
     setOfflineImageAnalysisModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
+    getKnownLocalModels: () => Promise<ChatModel[]>;
 
     // Settings
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;

@@ -121,7 +121,7 @@ export const StatusBar: React.FC = () => {
           onClick={toggleOfflineMode}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOfflineMode(); } }}
         >
-          <span>{offlineMode ? t('statusBar.offlineModeActive') : t('statusBar.offlineMode')}</span>
+          <span>✈</span>
         </div>
 
         <div className="status-bar-item language-badge">

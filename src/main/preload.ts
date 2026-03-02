@@ -337,6 +337,7 @@ export const electronAPI: ElectronAPI = {
     setOfflineTitleModel: (modelId: string | null) => ipcRenderer.invoke('chat:setOfflineTitleModel', modelId),
     getOfflineImageAnalysisModel: () => ipcRenderer.invoke('chat:getOfflineImageAnalysisModel'),
     setOfflineImageAnalysisModel: (modelId: string | null) => ipcRenderer.invoke('chat:setOfflineImageAnalysisModel', modelId),
+    getKnownLocalModels: () => ipcRenderer.invoke('chat:getKnownLocalModels'),
 
     // Per-Purpose Model Preferences
     getTitleModel: () => ipcRenderer.invoke('chat:getTitleModel'),

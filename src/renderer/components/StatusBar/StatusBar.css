@@ -124,14 +124,15 @@
 }
 
 .status-bar-item.offline-badge {
-  border: 1px solid var(--vscode-statusBar-border, transparent);
-  border-radius: 3px;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.4;
+  font-size: 13px;
+  padding: 0 4px;
 }
 
 .status-bar-item.offline-badge.active {
   background-color: var(--vscode-notificationsWarningIcon-foreground);
+  border-radius: 3px;
   opacity: 1;
 }
 

@@ -399,10 +399,35 @@ export class ProviderRegistry {
     return this.modelCatalogEngine;
   }
 
+  /**
+   * Return models already known to belong to local providers (Ollama + LM Studio)
+   * from in-memory sets, without any network fetch.
+   */
+  getKnownLocalModels(): ChatModel[] {
+    const models: ChatModel[] = [];
+    for (const id of this.ollamaModelIds) {
+      models.push({ id, name: id, provider: 'ollama', vision: this.ollamaModelSupportsVision(id) });
+    }
+    for (const id of this.lmstudioModelIds) {
+      models.push({ id, name: id, provider: 'lmstudio', vision: this.lmstudioModelSupportsVision(id) });
+    }
+    return models;
+  }
+
   /** Get available models across all configured providers (cached 5 min). */
   async getAvailableModels(): Promise<ChatModel[]> {
     if (this.cachedModels && Date.now() - this.cachedModelsAt < MODEL_CACHE_TTL) {
       return this.cachedModels;
+    }
+
+    // In offline mode, return known local models instantly — no network.
+    if (this._offlineMode) {
+      const local = this.getKnownLocalModels();
+      if (local.length > 0) {
+        this.cachedModels = local;
+        this.cachedModelsAt = Date.now();
+      }
+      return local;
     }
 
     const allModels: ChatModel[] = [];
@@ -535,16 +560,15 @@ export class ProviderRegistry {
       const data = await response.json() as { data?: Array<{ id: string }> };
       if (!data.data || !Array.isArray(data.data)) return [];
 
+      const models: ChatModel[] = data.data.map(m => ({
+        id: m.id,
+        name: m.id,
+        provider: 'lmstudio',
+        vision: this.lmstudioModelSupportsVision(m.id),
+      }));
+      // Only replace registered IDs on successful fetch
       this.clearLmstudioModels();
-      const models: ChatModel[] = data.data.map(m => {
-        this.registerLmstudioModel(m.id);
-        return {
-          id: m.id,
-          name: m.id,
-          provider: 'lmstudio',
-          vision: this.lmstudioModelSupportsVision(m.id),
-        };
-      });
+      for (const m of models) this.registerLmstudioModel(m.id);
       return models;
     } catch {
       return [];
@@ -568,16 +592,15 @@ export class ProviderRegistry {
       const data = await response.json() as { models?: Array<{ name: string; details?: { family?: string } }> };
       if (!data.models || !Array.isArray(data.models)) return [];
 
+      const models: ChatModel[] = data.models.map(m => ({
+        id: m.name,
+        name: m.name,
+        provider: 'ollama',
+        vision: this.ollamaModelSupportsVision(m.name),
+      }));
+      // Only replace registered IDs on successful fetch
       this.clearOllamaModels();
-      const models: ChatModel[] = data.models.map(m => {
-        this.registerOllamaModel(m.name);
-        return {
-          id: m.name,
-          name: m.name,
-          provider: 'ollama',
-          vision: this.ollamaModelSupportsVision(m.name),
-        };
-      });
+      for (const m of models) this.registerOllamaModel(m.id);
       return models;
     } catch {
       return [];
