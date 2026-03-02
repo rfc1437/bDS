@@ -184,6 +184,17 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
           ? 'mistral-large-latest'
           : null;
     }
+
+    // In offline mode, swap to the configured offline image analysis model
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_image_analysis_model');
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline image analysis model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
     if (!modelId) {
       return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
     }
