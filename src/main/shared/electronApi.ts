@@ -451,7 +451,7 @@ export interface ChatReadyStatus {
   ready: boolean;
   error?: string;
   backend?: string;
-  providers?: { opencode: boolean; mistral: boolean; ollama: boolean };
+  providers?: { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean };
 }
 
 export interface ChatApiKeyStatus {
@@ -838,6 +838,13 @@ export interface ElectronAPI {
     getOllamaModels: () => Promise<ChatModel[]>;
     getOllamaModelCapabilities: () => Promise<Record<string, { tools: boolean; vision: boolean }>>;
     setOllamaModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => Promise<{ success: boolean; error?: string }>;
+
+    // LM Studio (local)
+    getLmstudioEnabled: () => Promise<boolean>;
+    setLmstudioEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+    getLmstudioModels: () => Promise<ChatModel[]>;
+    getLmstudioModelCapabilities: () => Promise<Record<string, { tools: boolean; vision: boolean }>>;
+    setLmstudioModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => Promise<{ success: boolean; error?: string }>;
 
     // Settings
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;

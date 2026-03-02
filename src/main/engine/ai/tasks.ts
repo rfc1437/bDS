@@ -70,7 +70,7 @@ export class OneShotTasks {
   ): Promise<TaxonomyAnalysisResult> {
     const provider = this.providers.detectModelProvider(modelId);
     if (!this.providers.isProviderKeySet(provider)) {
-      const providerLabel = provider === 'mistral' ? 'Mistral' : provider === 'ollama' ? 'Ollama' : 'OpenCode';
+      const providerLabel = provider === 'mistral' ? 'Mistral' : provider === 'ollama' ? 'Ollama' : provider === 'lmstudio' ? 'LM Studio' : 'OpenCode';
       return { success: false, error: `${providerLabel} API key not set` };
     }
 

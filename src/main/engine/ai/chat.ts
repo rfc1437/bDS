@@ -271,9 +271,11 @@ export class ChatService {
 
       const aiMessages = dbMessagesToAIMessages(dbMessages);
 
-      // Build tools (skip for Ollama models unless capability override is set)
+      // Build tools (skip for Ollama/LM Studio models unless capability override is set)
       const isOllama = this.providers.isOllamaModel(modelId);
-      const skipTools = isOllama && !this.providers.ollamaModelSupportsTools(modelId);
+      const isLmstudio = this.providers.isLmstudioModel(modelId);
+      const skipTools = (isOllama && !this.providers.ollamaModelSupportsTools(modelId))
+        || (isLmstudio && !this.providers.lmstudioModelSupportsTools(modelId));
       const blogTools = skipTools ? {} : createBlogTools(this.blogToolDeps);
       const a2uiToolsRaw = skipTools ? {} : createA2UITools();
       const allTools = { ...blogTools, ...a2uiToolsRaw };

@@ -124,6 +124,21 @@ async function ensureInitialized(): Promise<void> {
           reg.loadOllamaModelCapabilities(caps);
         }
       } catch { /* ignore */ }
+
+      // Restore LM Studio enabled state from settings DB
+      try {
+        const lmstudioEnabled = await getChatEngine().getSetting('lmstudio_enabled');
+        if (lmstudioEnabled === 'true') reg.setLmstudioEnabled(true);
+      } catch { /* ignore */ }
+
+      // Restore LM Studio model capability overrides
+      try {
+        const lmCapsJson = await getChatEngine().getSetting('lmstudio_model_capabilities');
+        if (lmCapsJson) {
+          const caps = JSON.parse(lmCapsJson) as Record<string, { tools: boolean; vision: boolean }>;
+          reg.loadLmstudioModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
     })();
   }
   await initPromise;
@@ -316,6 +331,74 @@ export function registerChatHandlers(): void {
       return { success: true };
     } catch (error) {
       console.error('[Chat IPC] Error setting Ollama model capabilities:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ LM Studio (Local) ============
+
+  // Get LM Studio enabled state
+  ipcMain.handle('chat:getLmstudioEnabled', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().isLmstudioEnabled();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting LM Studio enabled state:', error);
+      return false;
+    }
+  });
+
+  // Set LM Studio enabled state
+  ipcMain.handle('chat:setLmstudioEnabled', async (_, enabled: boolean) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setLmstudioEnabled(enabled);
+
+      // Persist to settings DB
+      await getChatEngine().setSetting('lmstudio_enabled', enabled ? 'true' : 'false');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting LM Studio enabled state:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get LM Studio models (probe local server)
+  ipcMain.handle('chat:getLmstudioModels', async () => {
+    try {
+      await ensureInitialized();
+      return await getProviders().fetchLmstudioModels();
+    } catch (error) {
+      console.error('[Chat IPC] Error fetching LM Studio models:', error);
+      return [];
+    }
+  });
+
+  // Get LM Studio model capability overrides
+  ipcMain.handle('chat:getLmstudioModelCapabilities', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getAllLmstudioModelCapabilities();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting LM Studio model capabilities:', error);
+      return {};
+    }
+  });
+
+  // Set capability overrides for a single LM Studio model
+  ipcMain.handle('chat:setLmstudioModelCapabilities', async (_, modelId: string, caps: { tools: boolean; vision: boolean }) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setLmstudioModelCapabilities(modelId, caps);
+
+      // Persist all capabilities to settings DB
+      const allCaps = reg.getAllLmstudioModelCapabilities();
+      await getChatEngine().setSetting('lmstudio_model_capabilities', JSON.stringify(allCaps));
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting LM Studio model capabilities:', error);
       return { success: false, error: (error as Error).message };
     }
   });

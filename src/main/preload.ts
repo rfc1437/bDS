@@ -321,6 +321,13 @@ export const electronAPI: ElectronAPI = {
     getOllamaModelCapabilities: () => ipcRenderer.invoke('chat:getOllamaModelCapabilities'),
     setOllamaModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setOllamaModelCapabilities', modelId, caps),
 
+    // LM Studio (Local)
+    getLmstudioEnabled: () => ipcRenderer.invoke('chat:getLmstudioEnabled'),
+    setLmstudioEnabled: (enabled: boolean) => ipcRenderer.invoke('chat:setLmstudioEnabled', enabled),
+    getLmstudioModels: () => ipcRenderer.invoke('chat:getLmstudioModels'),
+    getLmstudioModelCapabilities: () => ipcRenderer.invoke('chat:getLmstudioModelCapabilities'),
+    setLmstudioModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setLmstudioModelCapabilities', modelId, caps),
+
     // Per-Purpose Model Preferences
     getTitleModel: () => ipcRenderer.invoke('chat:getTitleModel'),
     setTitleModel: (modelId: string | null) => ipcRenderer.invoke('chat:setTitleModel', modelId),

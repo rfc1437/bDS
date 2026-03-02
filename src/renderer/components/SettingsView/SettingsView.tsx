@@ -248,6 +248,9 @@ export const SettingsView: React.FC = () => {
   const [ollamaEnabled, setOllamaEnabled] = useState(false);
   const [ollamaCapabilities, setOllamaCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
   const [ollamaModels, setOllamaModels] = useState<{id: string; name: string}[]>([]);
+  const [lmstudioEnabled, setLmstudioEnabled] = useState(false);
+  const [lmstudioCapabilities, setLmstudioCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
+  const [lmstudioModels, setLmstudioModels] = useState<{id: string; name: string}[]>([]);
   const [titleModel, setTitleModel] = useState('claude-haiku-4-5');
   const [imageAnalysisModel, setImageAnalysisModel] = useState('claude-sonnet-4-5');
   const [availableModels, setAvailableModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
@@ -432,6 +435,20 @@ export const SettingsView: React.FC = () => {
             if (models) setOllamaModels(models.map(m => ({ id: m.id, name: m.name })));
           }
 
+          // Load LM Studio enabled state
+          const lmstudioState = await window.electronAPI?.chat.getLmstudioEnabled();
+          setLmstudioEnabled(!!lmstudioState);
+
+          // Load LM Studio model capabilities and models list
+          if (lmstudioState) {
+            const [lmCaps, lmModels] = await Promise.all([
+              window.electronAPI?.chat.getLmstudioModelCapabilities(),
+              window.electronAPI?.chat.getLmstudioModels(),
+            ]);
+            if (lmCaps) setLmstudioCapabilities(lmCaps);
+            if (lmModels) setLmstudioModels(lmModels.map(m => ({ id: m.id, name: m.name })));
+          }
+
           // Load per-purpose model preferences
           const titleModelResult = await window.electronAPI?.chat.getTitleModel();
           if (titleModelResult?.success && titleModelResult.modelId) {
@@ -553,7 +570,7 @@ export const SettingsView: React.FC = () => {
   const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'url', 'public', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page', 'bookmarklet', 'blogmark'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
-  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode', 'ollama', 'local'];
+  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode', 'ollama', 'lmstudio', 'lm studio', 'local'];
   const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
   const publishingKeywords = ['publishing', 'ssh', 'deploy', 'server', 'host', 'upload', 'scp', 'rsync'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
@@ -1210,6 +1227,55 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleLmstudioToggle = async (enabled: boolean) => {
+    try {
+      const result = await window.electronAPI?.chat.setLmstudioEnabled(enabled);
+      if (result?.success) {
+        setLmstudioEnabled(enabled);
+        showToast.success(t(enabled ? 'settings.toast.lmstudioEnabled' : 'settings.toast.lmstudioDisabled'));
+
+        // Refresh models after toggle
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+          setSelectedModel(modelsResult.selectedModel || '');
+        }
+
+        // Load LM Studio models and capabilities when enabling
+        if (enabled) {
+          const [caps, lmstudioModelsList] = await Promise.all([
+            window.electronAPI?.chat.getLmstudioModelCapabilities(),
+            window.electronAPI?.chat.getLmstudioModels(),
+          ]);
+          if (caps) setLmstudioCapabilities(caps);
+          if (lmstudioModelsList) setLmstudioModels(lmstudioModelsList.map(m => ({ id: m.id, name: m.name })));
+        } else {
+          setLmstudioModels([]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle LM Studio:', error);
+    }
+  };
+
+  const handleLmstudioCapabilityToggle = async (modelId: string, field: 'tools' | 'vision', value: boolean) => {
+    const current = lmstudioCapabilities[modelId] ?? { tools: false, vision: false };
+    const updated = { ...current, [field]: value };
+    try {
+      const result = await window.electronAPI?.chat.setLmstudioModelCapabilities(modelId, updated);
+      if (result?.success) {
+        setLmstudioCapabilities(prev => ({ ...prev, [modelId]: updated }));
+        // Refresh available models to reflect vision change
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update LM Studio model capabilities:', error);
+    }
+  };
+
   const handleTitleModelChange = async (modelId: string) => {
     try {
       const result = await window.electronAPI?.chat.setTitleModel(modelId);
@@ -1303,6 +1369,7 @@ export const SettingsView: React.FC = () => {
     if (provider === 'anthropic' || provider === 'openai' || provider === 'google' || provider === 'other') return t('settings.ai.providerOpenCode');
     if (provider === 'mistral') return t('settings.ai.providerMistral');
     if (provider === 'ollama') return t('settings.ai.providerOllama');
+    if (provider === 'lmstudio') return t('settings.ai.providerLmstudio');
     return provider;
   };
 
@@ -1473,16 +1540,75 @@ export const SettingsView: React.FC = () => {
       </SettingRow>
 
       <SettingRow
+        id="ai-lmstudio"
+        label={t('settings.ai.lmstudioLabel')}
+        description={t('settings.ai.lmstudioDescription')}
+      >
+        <div className="setting-input-group">
+          <label className="toggle-label">
+            <input
+              id="ai-lmstudio"
+              type="checkbox"
+              checked={lmstudioEnabled}
+              onChange={(e) => handleLmstudioToggle(e.target.checked)}
+            />
+            {t('settings.ai.lmstudioEnable')}
+          </label>
+          {lmstudioEnabled && (
+            <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+          )}
+        </div>
+        {lmstudioEnabled && lmstudioModels.length > 0 && (
+          <div className="lmstudio-model-capabilities">
+            <small className="setting-description">{t('settings.ai.lmstudioCapabilitiesDescription')}</small>
+            <table className="lmstudio-caps-table">
+              <thead>
+                <tr>
+                  <th>{t('settings.ai.lmstudioCapModel')}</th>
+                  <th>{t('settings.ai.lmstudioCapTools')}</th>
+                  <th>{t('settings.ai.lmstudioCapVision')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lmstudioModels.map(m => {
+                  const caps = lmstudioCapabilities[m.id] ?? { tools: false, vision: false };
+                  return (
+                    <tr key={m.id}>
+                      <td>{m.name}</td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={caps.tools}
+                          onChange={(e) => handleLmstudioCapabilityToggle(m.id, 'tools', e.target.checked)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={caps.vision}
+                          onChange={(e) => handleLmstudioCapabilityToggle(m.id, 'vision', e.target.checked)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
         id="ai-model"
         label={t('settings.ai.defaultModelLabel')}
         description={t('settings.ai.defaultModelDescription')}
       >
         <div className="setting-input-group">
-          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
+          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled)}
           <button
             className="secondary"
             onClick={handleRefreshModelCatalog}
-            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
+            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled)}
             title={t('settings.ai.refreshModelCatalog')}
           >
             {refreshingCatalog ? t('settings.ai.refreshing') : t('settings.ai.refreshModelCatalog')}
@@ -1514,7 +1640,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.titleModelLabel')}
         description={t('settings.ai.titleModelDescription')}
       >
-        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
+        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled)}
       </SettingRow>
 
       <SettingRow
@@ -1522,7 +1648,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.imageAnalysisModelLabel')}
         description={t('settings.ai.imageAnalysisModelDescription')}
       >
-        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled, groupedVisionModels)}
+        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled, groupedVisionModels)}
       </SettingRow>
 
       <SettingRow
