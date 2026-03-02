@@ -129,7 +129,7 @@ export interface GitLfsPruneResult {
 
 export interface GitActionResult {
   success: boolean;
-  code?: 'auth-required' | 'conflict' | 'network' | 'action-failed';
+  code?: 'auth-required' | 'conflict' | 'network' | 'action-failed' | 'offline';
   error?: string;
   guidance?: string[];
 }

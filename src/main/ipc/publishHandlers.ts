@@ -1,10 +1,15 @@
 import type { PublishCredentials } from '../engine/PublishEngine';
 import type { EngineBundle } from '../engine/EngineBundle';
+import { isOfflineModeActive } from './chatHandlers';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
 export function registerPublishHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   safeHandle('publish:uploadSite', async (_event: unknown, credentials: PublishCredentials) => {
+    if (isOfflineModeActive()) {
+      throw new Error('Airplane mode is active. Disable it to upload the site.');
+    }
+
     const projectEngine = bundle.projectEngine;
     const project = await projectEngine.getActiveProject();
     if (!project) {

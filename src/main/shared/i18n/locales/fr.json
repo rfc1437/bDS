@@ -78,5 +78,7 @@
   "render.month.9": "septembre",
   "render.month.10": "octobre",
   "render.month.11": "novembre",
-  "render.month.12": "décembre"
+  "render.month.12": "décembre",
+  "ai.imageAnalysis.system": "Tu génères des métadonnées d'image. Écris toutes les valeurs en français.\n\nRègles :\n- \"title\" : titre descriptif court (3-8 mots)\n- \"alt\" : description factuelle de ce qui est visible (5-12 mots). Pas d'interprétations. Pas de préfixe \"Image de\".\n- \"caption\" : légende de blog engageante (5-20 mots)\n\nRéponds uniquement en JSON : {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
+  "ai.imageAnalysis.user": "Analyse cette image. Réponds en JSON en français."
 }

@@ -520,9 +520,13 @@ const App: React.FC = () => {
             return;
           }
           await window.electronAPI?.publish.uploadSite(prefs);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Site upload failed:', error);
-          showToast.error(tr('app.uploadSiteFailed'));
+          if (error?.message?.includes('Airplane mode')) {
+            useAppStore.getState().showErrorModal({ message: tr('app.uploadSiteOfflineMode') });
+          } else {
+            showToast.error(tr('app.uploadSiteFailed'));
+          }
         }
       }) || (() => {})
     );

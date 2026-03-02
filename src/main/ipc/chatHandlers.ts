@@ -4,7 +4,7 @@
  * Uses ProviderRegistry, ChatService, and OneShotTasks.
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, net } from 'electron';
 import { ChatEngine } from '../engine/ChatEngine';
 import { SecureKeyStore } from '../engine/SecureKeyStore';
 import { ProviderRegistry } from '../engine/ai/providers';
@@ -59,6 +59,14 @@ function getProviders(): ProviderRegistry {
     providers = new ProviderRegistry();
   }
   return providers;
+}
+
+/**
+ * Check whether airplane (offline) mode is currently active.
+ * Exported so other handler modules can guard network operations.
+ */
+export function isOfflineModeActive(): boolean {
+  return getProviders().isOfflineMode();
 }
 
 /**
@@ -122,6 +130,52 @@ async function ensureInitialized(): Promise<void> {
         if (capsJson) {
           const caps = JSON.parse(capsJson) as Record<string, { tools: boolean; vision: boolean }>;
           reg.loadOllamaModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
+
+      // Restore known Ollama model IDs (so offline mode works without a fresh fetch)
+      try {
+        const ollamaIds = await getChatEngine().getSetting('ollama_known_model_ids');
+        if (ollamaIds) {
+          for (const id of JSON.parse(ollamaIds) as string[]) reg.registerOllamaModel(id);
+        }
+      } catch { /* ignore */ }
+
+      // Restore LM Studio enabled state from settings DB
+      try {
+        const lmstudioEnabled = await getChatEngine().getSetting('lmstudio_enabled');
+        if (lmstudioEnabled === 'true') reg.setLmstudioEnabled(true);
+      } catch { /* ignore */ }
+
+      // Restore LM Studio model capability overrides
+      try {
+        const lmCapsJson = await getChatEngine().getSetting('lmstudio_model_capabilities');
+        if (lmCapsJson) {
+          const caps = JSON.parse(lmCapsJson) as Record<string, { tools: boolean; vision: boolean }>;
+          reg.loadLmstudioModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
+
+      // Restore known LM Studio model IDs (so offline mode works without a fresh fetch)
+      try {
+        const lmIds = await getChatEngine().getSetting('lmstudio_known_model_ids');
+        if (lmIds) {
+          for (const id of JSON.parse(lmIds) as string[]) reg.registerLmstudioModel(id);
+        }
+      } catch { /* ignore */ }
+
+      // Restore offline mode from settings or auto-detect via OS network status
+      try {
+        const savedOffline = await getChatEngine().getSetting('offline_mode');
+        if (savedOffline === 'true') {
+          reg.setOfflineMode(true);
+        } else if (savedOffline === null || savedOffline === undefined) {
+          // No explicit preference saved — auto-detect using Electron net API
+          const online = net.isOnline();
+          if (!online && (reg.getProviderStatus().ollama || reg.getProviderStatus().lmstudio)) {
+            reg.setOfflineMode(true);
+            await getChatEngine().setSetting('offline_mode', 'true');
+          }
         }
       } catch { /* ignore */ }
     })();
@@ -320,6 +374,169 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // ============ LM Studio (Local) ============
+
+  // Get LM Studio enabled state
+  ipcMain.handle('chat:getLmstudioEnabled', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().isLmstudioEnabled();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting LM Studio enabled state:', error);
+      return false;
+    }
+  });
+
+  // Set LM Studio enabled state
+  ipcMain.handle('chat:setLmstudioEnabled', async (_, enabled: boolean) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setLmstudioEnabled(enabled);
+
+      // Persist to settings DB
+      await getChatEngine().setSetting('lmstudio_enabled', enabled ? 'true' : 'false');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting LM Studio enabled state:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get LM Studio models (probe local server)
+  ipcMain.handle('chat:getLmstudioModels', async () => {
+    try {
+      await ensureInitialized();
+      return await getProviders().fetchLmstudioModels();
+    } catch (error) {
+      console.error('[Chat IPC] Error fetching LM Studio models:', error);
+      return [];
+    }
+  });
+
+  // Get LM Studio model capability overrides
+  ipcMain.handle('chat:getLmstudioModelCapabilities', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getAllLmstudioModelCapabilities();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting LM Studio model capabilities:', error);
+      return {};
+    }
+  });
+
+  // Set capability overrides for a single LM Studio model
+  ipcMain.handle('chat:setLmstudioModelCapabilities', async (_, modelId: string, caps: { tools: boolean; vision: boolean }) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setLmstudioModelCapabilities(modelId, caps);
+
+      // Persist all capabilities to settings DB
+      const allCaps = reg.getAllLmstudioModelCapabilities();
+      await getChatEngine().setSetting('lmstudio_model_capabilities', JSON.stringify(allCaps));
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting LM Studio model capabilities:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Offline / Airplane Mode ============
+
+  ipcMain.handle('chat:getOfflineMode', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().isOfflineMode();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline mode:', error);
+      return false;
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineMode', async (_, enabled: boolean) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setOfflineMode(enabled);
+      await getChatEngine().setSetting('offline_mode', enabled ? 'true' : 'false');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline mode:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:getKnownLocalModels', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getKnownLocalModels();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting known local models:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('chat:getOfflineChatModel', async () => {
+    try {
+      const model = await getChatEngine().getSetting('offline_chat_model');
+      return { success: true, modelId: model || null };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline chat model:', error);
+      return { success: false, modelId: null };
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineChatModel', async (_, modelId: string | null) => {
+    try {
+      await getChatEngine().setSetting('offline_chat_model', modelId ?? '');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline chat model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:getOfflineTitleModel', async () => {
+    try {
+      const model = await getChatEngine().getSetting('offline_title_model');
+      return { success: true, modelId: model || null };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline title model:', error);
+      return { success: false, modelId: null };
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineTitleModel', async (_, modelId: string | null) => {
+    try {
+      await getChatEngine().setSetting('offline_title_model', modelId ?? '');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline title model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:getOfflineImageAnalysisModel', async () => {
+    try {
+      const model = await getChatEngine().getSetting('offline_image_analysis_model');
+      return { success: true, modelId: model || null };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline image analysis model:', error);
+      return { success: false, modelId: null };
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineImageAnalysisModel', async (_, modelId: string | null) => {
+    try {
+      await getChatEngine().setSetting('offline_image_analysis_model', modelId ?? '');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline image analysis model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // ============ Per-Purpose Model Preferences ============
 
   // Get title generation model
@@ -376,9 +593,21 @@ export function registerChatHandlers(): void {
   ipcMain.handle('chat:getAvailableModels', async () => {
     try {
       await ensureInitialized();
-      const models = await getProviders().getAvailableModels();
+      const reg = getProviders();
+      const models = await reg.getAvailableModels();
       const engine = getChatEngine();
       const selectedModel = await engine.getSelectedModel();
+
+      // Persist known local model IDs so offline mode survives restarts
+      const ollamaModels = models.filter(m => m.provider === 'ollama').map(m => m.id);
+      const lmstudioModels = models.filter(m => m.provider === 'lmstudio').map(m => m.id);
+      if (ollamaModels.length > 0) {
+        await engine.setSetting('ollama_known_model_ids', JSON.stringify(ollamaModels)).catch(() => {});
+      }
+      if (lmstudioModels.length > 0) {
+        await engine.setSetting('lmstudio_known_model_ids', JSON.stringify(lmstudioModels)).catch(() => {});
+      }
+
       return { success: true, models, selectedModel };
     } catch (error) {
       console.error('[Chat IPC] Error getting models:', error);

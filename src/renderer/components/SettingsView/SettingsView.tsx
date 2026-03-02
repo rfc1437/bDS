@@ -248,6 +248,14 @@ export const SettingsView: React.FC = () => {
   const [ollamaEnabled, setOllamaEnabled] = useState(false);
   const [ollamaCapabilities, setOllamaCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
   const [ollamaModels, setOllamaModels] = useState<{id: string; name: string}[]>([]);
+  const [lmstudioEnabled, setLmstudioEnabled] = useState(false);
+  const [lmstudioCapabilities, setLmstudioCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
+  const [lmstudioModels, setLmstudioModels] = useState<{id: string; name: string}[]>([]);
+  const [offlineModeEnabled, setOfflineModeEnabled] = useState(false);
+  const [offlineChatModel, setOfflineChatModel] = useState('');
+  const [offlineTitleModel, setOfflineTitleModel] = useState('');
+  const [offlineImageAnalysisModel, setOfflineImageAnalysisModel] = useState('');
+  const [knownLocalModels, setKnownLocalModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
   const [titleModel, setTitleModel] = useState('claude-haiku-4-5');
   const [imageAnalysisModel, setImageAnalysisModel] = useState('claude-sonnet-4-5');
   const [availableModels, setAvailableModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
@@ -432,6 +440,20 @@ export const SettingsView: React.FC = () => {
             if (models) setOllamaModels(models.map(m => ({ id: m.id, name: m.name })));
           }
 
+          // Load LM Studio enabled state
+          const lmstudioState = await window.electronAPI?.chat.getLmstudioEnabled();
+          setLmstudioEnabled(!!lmstudioState);
+
+          // Load LM Studio model capabilities and models list
+          if (lmstudioState) {
+            const [lmCaps, lmModels] = await Promise.all([
+              window.electronAPI?.chat.getLmstudioModelCapabilities(),
+              window.electronAPI?.chat.getLmstudioModels(),
+            ]);
+            if (lmCaps) setLmstudioCapabilities(lmCaps);
+            if (lmModels) setLmstudioModels(lmModels.map(m => ({ id: m.id, name: m.name })));
+          }
+
           // Load per-purpose model preferences
           const titleModelResult = await window.electronAPI?.chat.getTitleModel();
           if (titleModelResult?.success && titleModelResult.modelId) {
@@ -441,6 +463,22 @@ export const SettingsView: React.FC = () => {
           if (imageModelResult?.success && imageModelResult.modelId) {
             setImageAnalysisModel(imageModelResult.modelId);
           }
+
+          // Load offline mode preferences
+          const offlineState = await window.electronAPI?.chat.getOfflineMode();
+          setOfflineModeEnabled(!!offlineState);
+          const offlineChat = await window.electronAPI?.chat.getOfflineChatModel();
+          if (offlineChat?.success && offlineChat.modelId) setOfflineChatModel(offlineChat.modelId);
+          const offlineTitle = await window.electronAPI?.chat.getOfflineTitleModel();
+          if (offlineTitle?.success && offlineTitle.modelId) setOfflineTitleModel(offlineTitle.modelId);
+          const offlineImage = await window.electronAPI?.chat.getOfflineImageAnalysisModel();
+          if (offlineImage?.success && offlineImage.modelId) setOfflineImageAnalysisModel(offlineImage.modelId);
+
+          // Load known local models (persisted, no network needed)
+          try {
+            const locals = await window.electronAPI?.chat.getKnownLocalModels();
+            if (locals && locals.length > 0) setKnownLocalModels(locals);
+          } catch { /* ignore */ }
 
           // Load model catalog metadata
           const catalogResult = await window.electronAPI?.chat.getModelCatalog();
@@ -553,7 +591,7 @@ export const SettingsView: React.FC = () => {
   const projectKeywords = ['project', 'name', 'description', 'blog', 'site', 'url', 'public', 'path', 'folder', 'location', 'data', 'language', 'author', 'default', 'preview', 'max', 'posts', 'page', 'bookmarklet', 'blogmark'];
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
-  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode', 'ollama', 'local'];
+  const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode', 'ollama', 'lmstudio', 'lm studio', 'local'];
   const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
   const publishingKeywords = ['publishing', 'ssh', 'deploy', 'server', 'host', 'upload', 'scp', 'rsync'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
@@ -1210,6 +1248,55 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleLmstudioToggle = async (enabled: boolean) => {
+    try {
+      const result = await window.electronAPI?.chat.setLmstudioEnabled(enabled);
+      if (result?.success) {
+        setLmstudioEnabled(enabled);
+        showToast.success(t(enabled ? 'settings.toast.lmstudioEnabled' : 'settings.toast.lmstudioDisabled'));
+
+        // Refresh models after toggle
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+          setSelectedModel(modelsResult.selectedModel || '');
+        }
+
+        // Load LM Studio models and capabilities when enabling
+        if (enabled) {
+          const [caps, lmstudioModelsList] = await Promise.all([
+            window.electronAPI?.chat.getLmstudioModelCapabilities(),
+            window.electronAPI?.chat.getLmstudioModels(),
+          ]);
+          if (caps) setLmstudioCapabilities(caps);
+          if (lmstudioModelsList) setLmstudioModels(lmstudioModelsList.map(m => ({ id: m.id, name: m.name })));
+        } else {
+          setLmstudioModels([]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle LM Studio:', error);
+    }
+  };
+
+  const handleLmstudioCapabilityToggle = async (modelId: string, field: 'tools' | 'vision', value: boolean) => {
+    const current = lmstudioCapabilities[modelId] ?? { tools: false, vision: false };
+    const updated = { ...current, [field]: value };
+    try {
+      const result = await window.electronAPI?.chat.setLmstudioModelCapabilities(modelId, updated);
+      if (result?.success) {
+        setLmstudioCapabilities(prev => ({ ...prev, [modelId]: updated }));
+        // Refresh available models to reflect vision change
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update LM Studio model capabilities:', error);
+    }
+  };
+
   const handleTitleModelChange = async (modelId: string) => {
     try {
       const result = await window.electronAPI?.chat.setTitleModel(modelId);
@@ -1229,6 +1316,45 @@ export const SettingsView: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to set image analysis model:', error);
+    }
+  };
+
+  const handleOfflineToggle = async (enabled: boolean) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineMode(enabled);
+      if (result?.success) {
+        setOfflineModeEnabled(enabled);
+        showToast.success(t(enabled ? 'settings.toast.offlineEnabled' : 'settings.toast.offlineDisabled'));
+      }
+    } catch (error) {
+      console.error('Failed to toggle offline mode:', error);
+    }
+  };
+
+  const handleOfflineChatModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineChatModel(modelId);
+      if (result?.success) setOfflineChatModel(modelId);
+    } catch (error) {
+      console.error('Failed to set offline chat model:', error);
+    }
+  };
+
+  const handleOfflineTitleModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineTitleModel(modelId);
+      if (result?.success) setOfflineTitleModel(modelId);
+    } catch (error) {
+      console.error('Failed to set offline title model:', error);
+    }
+  };
+
+  const handleOfflineImageAnalysisModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineImageAnalysisModel(modelId);
+      if (result?.success) setOfflineImageAnalysisModel(modelId);
+    } catch (error) {
+      console.error('Failed to set offline image analysis model:', error);
     }
   };
 
@@ -1299,10 +1425,26 @@ export const SettingsView: React.FC = () => {
     [availableModels, groupModelsByProvider]
   );
 
+  // Local-only models (for offline / airplane mode selectors)
+  // Prefer knownLocalModels (persisted, always available) over filtering availableModels (needs network)
+  const localModelSource = useMemo(() => {
+    const fromAvailable = availableModels.filter(m => m.provider === 'ollama' || m.provider === 'lmstudio');
+    return fromAvailable.length > 0 ? fromAvailable : knownLocalModels;
+  }, [availableModels, knownLocalModels]);
+  const groupedLocalModels = useMemo(
+    () => groupModelsByProvider(localModelSource),
+    [localModelSource, groupModelsByProvider]
+  );
+  const groupedLocalVisionModels = useMemo(
+    () => groupModelsByProvider(localModelSource.filter(m => m.vision)),
+    [localModelSource, groupModelsByProvider]
+  );
+
   const providerLabel = (provider: string) => {
     if (provider === 'anthropic' || provider === 'openai' || provider === 'google' || provider === 'other') return t('settings.ai.providerOpenCode');
     if (provider === 'mistral') return t('settings.ai.providerMistral');
     if (provider === 'ollama') return t('settings.ai.providerOllama');
+    if (provider === 'lmstudio') return t('settings.ai.providerLmstudio');
     return provider;
   };
 
@@ -1473,16 +1615,119 @@ export const SettingsView: React.FC = () => {
       </SettingRow>
 
       <SettingRow
+        id="ai-lmstudio"
+        label={t('settings.ai.lmstudioLabel')}
+        description={t('settings.ai.lmstudioDescription')}
+      >
+        <div className="setting-input-group">
+          <label className="toggle-label">
+            <input
+              id="ai-lmstudio"
+              type="checkbox"
+              checked={lmstudioEnabled}
+              onChange={(e) => handleLmstudioToggle(e.target.checked)}
+            />
+            {t('settings.ai.lmstudioEnable')}
+          </label>
+          {lmstudioEnabled && (
+            <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+          )}
+        </div>
+        {lmstudioEnabled && lmstudioModels.length > 0 && (
+          <div className="lmstudio-model-capabilities">
+            <small className="setting-description">{t('settings.ai.lmstudioCapabilitiesDescription')}</small>
+            <table className="lmstudio-caps-table">
+              <thead>
+                <tr>
+                  <th>{t('settings.ai.lmstudioCapModel')}</th>
+                  <th>{t('settings.ai.lmstudioCapTools')}</th>
+                  <th>{t('settings.ai.lmstudioCapVision')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lmstudioModels.map(m => {
+                  const caps = lmstudioCapabilities[m.id] ?? { tools: false, vision: false };
+                  return (
+                    <tr key={m.id}>
+                      <td>{m.name}</td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={caps.tools}
+                          onChange={(e) => handleLmstudioCapabilityToggle(m.id, 'tools', e.target.checked)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={caps.vision}
+                          onChange={(e) => handleLmstudioCapabilityToggle(m.id, 'vision', e.target.checked)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
+        id="ai-offline"
+        label={t('settings.ai.offlineLabel')}
+        description={t('settings.ai.offlineDescription')}
+      >
+        <div className="setting-input-group">
+          <label className="toggle-label">
+            <input
+              id="ai-offline"
+              type="checkbox"
+              checked={offlineModeEnabled}
+              onChange={(e) => handleOfflineToggle(e.target.checked)}
+              disabled={!ollamaEnabled && !lmstudioEnabled}
+            />
+            {t('settings.ai.offlineEnable')}
+          </label>
+          {offlineModeEnabled && (
+            <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+          )}
+        </div>
+        {!ollamaEnabled && !lmstudioEnabled && (
+          <small className="setting-description">{t('settings.ai.offlineNoLocalProviders')}</small>
+        )}
+        {offlineModeEnabled && (ollamaEnabled || lmstudioEnabled) && (
+          <div className="offline-model-preferences">
+            <div className="setting-field">
+              <label htmlFor="ai-offline-chat-model">{t('settings.ai.offlineChatModel')}</label>
+              <small className="setting-description">{t('settings.ai.offlineChatModelDescription')}</small>
+              {renderModelSelect('ai-offline-chat-model', offlineChatModel, handleOfflineChatModelChange, false, groupedLocalModels)}
+            </div>
+            <div className="setting-field">
+              <label htmlFor="ai-offline-title-model">{t('settings.ai.offlineTitleModel')}</label>
+              <small className="setting-description">{t('settings.ai.offlineTitleModelDescription')}</small>
+              {renderModelSelect('ai-offline-title-model', offlineTitleModel, handleOfflineTitleModelChange, false, groupedLocalModels)}
+            </div>
+            <div className="setting-field">
+              <label htmlFor="ai-offline-image-model">{t('settings.ai.offlineImageAnalysisModel')}</label>
+              <small className="setting-description">{t('settings.ai.offlineImageAnalysisModelDescription')}</small>
+              {renderModelSelect('ai-offline-image-model', offlineImageAnalysisModel, handleOfflineImageAnalysisModelChange, false, groupedLocalVisionModels)}
+            </div>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
         id="ai-model"
         label={t('settings.ai.defaultModelLabel')}
         description={t('settings.ai.defaultModelDescription')}
       >
         <div className="setting-input-group">
-          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
+          {renderModelSelect('ai-model', selectedModel, handleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled)}
           <button
             className="secondary"
             onClick={handleRefreshModelCatalog}
-            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
+            disabled={refreshingCatalog || (!aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled)}
             title={t('settings.ai.refreshModelCatalog')}
           >
             {refreshingCatalog ? t('settings.ai.refreshing') : t('settings.ai.refreshModelCatalog')}
@@ -1514,7 +1759,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.titleModelLabel')}
         description={t('settings.ai.titleModelDescription')}
       >
-        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled)}
+        {renderModelSelect('ai-title-model', titleModel, handleTitleModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled)}
       </SettingRow>
 
       <SettingRow
@@ -1522,7 +1767,7 @@ export const SettingsView: React.FC = () => {
         label={t('settings.ai.imageAnalysisModelLabel')}
         description={t('settings.ai.imageAnalysisModelDescription')}
       >
-        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled, groupedVisionModels)}
+        {renderModelSelect('ai-image-analysis-model', imageAnalysisModel, handleImageAnalysisModelChange, !aiHasApiKey && !aiHasMistralKey && !ollamaEnabled && !lmstudioEnabled, groupedVisionModels)}
       </SettingRow>
 
       <SettingRow

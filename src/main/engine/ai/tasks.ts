@@ -9,6 +9,7 @@ import { generateText } from 'ai';
 import type { ChatEngine } from '../ChatEngine';
 import type { MediaEngine } from '../MediaEngine';
 import { ProviderRegistry } from './providers';
+import { resolveSupportedRenderLanguage, translateRender } from '../../shared/i18n';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,17 +29,6 @@ export interface ImageAnalysisResult {
   caption?: string;
   error?: string;
 }
-
-// ---------------------------------------------------------------------------
-// Language map for image analysis prompts
-// ---------------------------------------------------------------------------
-
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English', de: 'German', es: 'Spanish', fr: 'French', it: 'Italian',
-  pt: 'Portuguese', nl: 'Dutch', pl: 'Polish', ru: 'Russian', ja: 'Japanese',
-  zh: 'Chinese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish',
-  sv: 'Swedish', da: 'Danish', no: 'Norwegian', fi: 'Finnish', cs: 'Czech',
-};
 
 // ---------------------------------------------------------------------------
 // OneShotTasks
@@ -70,7 +60,7 @@ export class OneShotTasks {
   ): Promise<TaxonomyAnalysisResult> {
     const provider = this.providers.detectModelProvider(modelId);
     if (!this.providers.isProviderKeySet(provider)) {
-      const providerLabel = provider === 'mistral' ? 'Mistral' : provider === 'ollama' ? 'Ollama' : 'OpenCode';
+      const providerLabel = provider === 'mistral' ? 'Mistral' : provider === 'ollama' ? 'Ollama' : provider === 'lmstudio' ? 'LM Studio' : 'OpenCode';
       return { success: false, error: `${providerLabel} API key not set` };
     }
 
@@ -194,6 +184,19 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
           ? 'mistral-large-latest'
           : null;
     }
+
+    // In offline mode, swap to the configured offline image analysis model
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_image_analysis_model')
+        || this.providers.getFirstKnownLocalVisionModelId()
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline image analysis model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
     if (!modelId) {
       return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
     }
@@ -205,23 +208,40 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       return { success: false, error: `Cannot analyze this file type: ${mediaItem.mimeType}. Only images are supported.` };
     }
 
-    // Get thumbnail
-    let dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'large');
-    if (!dataUrl) dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'medium');
+    // Get AI-optimised JPEG thumbnail (512px, pre-generated).
+    // Falls back to large/medium WebP thumbnails for older media items.
+    let dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'ai');
+    let needsConversion = false;
+    if (!dataUrl) {
+      dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'large');
+      needsConversion = true;
+    }
+    if (!dataUrl) {
+      dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'medium');
+      needsConversion = true;
+    }
     if (!dataUrl) {
       return { success: false, error: 'Image thumbnail not available. Try regenerating thumbnails from Settings.' };
     }
 
     const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    const languageName = LANGUAGE_NAMES[language] || language;
 
-    const systemPrompt = `Generate title, alt text, and caption for this image in ${languageName}.
+    let jpegBase64: string;
+    if (needsConversion) {
+      // Legacy path: convert WebP thumbnail to JPEG for model compatibility.
+      const sharp = (await import('sharp')).default;
+      const jpegBuffer = await sharp(Buffer.from(base64Data, 'base64'))
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      jpegBase64 = jpegBuffer.toString('base64');
+    } else {
+      // Fast path: AI thumbnail is already JPEG — use directly.
+      jpegBase64 = base64Data;
+    }
 
-TITLE: A short, descriptive title for display in lists and search results (3-8 words). Should identify the main subject.
-ALT: Describe ONLY what is visually present in the image. Be factual, neutral, and concise (5-12 words max). No interpretations, emotions, or "Image of" prefix. Example: "Red bicycle leaning against white brick wall"
-CAPTION: Short, engaging blog caption (5-20 words).
-
-Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
+    const renderLanguage = resolveSupportedRenderLanguage(language);
+    const systemPrompt = translateRender(renderLanguage, 'ai.imageAnalysis.system');
+    const userPrompt = translateRender(renderLanguage, 'ai.imageAnalysis.user');
 
     try {
       const model = this.providers.resolveModel(modelId);
@@ -233,8 +253,8 @@ Respond with JSON only: {"title": "...", "alt": "...", "caption": "..."}`;
         messages: [{
           role: 'user',
           content: [
-            { type: 'image', image: `data:image/webp;base64,${base64Data}` },
-            { type: 'text', text: 'Analyze and respond with JSON.' },
+            { type: 'image', image: `data:image/jpeg;base64,${jpegBase64}` },
+            { type: 'text', text: userPrompt },
           ],
         }],
         maxOutputTokens: 200,

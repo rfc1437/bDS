@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../../store';
 import { ProjectSelector } from '../ProjectSelector';
 import { getRendererPicoTheme } from '../../utils/picoTheme';
@@ -27,6 +27,22 @@ export const StatusBar: React.FC = () => {
   } = useAppStore();
 
   const [selectedPostStatus, setSelectedPostStatus] = useState<string | null>(null);
+  const [offlineMode, setOfflineMode] = useState(false);
+
+  // Fetch offline mode state on mount
+  useEffect(() => {
+    window.electronAPI?.chat?.getOfflineMode().then(setOfflineMode).catch(() => {});
+  }, []);
+
+  const toggleOfflineMode = useCallback(async () => {
+    const newValue = !offlineMode;
+    try {
+      await window.electronAPI?.chat?.setOfflineMode(newValue);
+      setOfflineMode(newValue);
+    } catch {
+      // ignore
+    }
+  }, [offlineMode]);
 
   // Fetch selected post status from database
   useEffect(() => {
@@ -94,6 +110,18 @@ export const StatusBar: React.FC = () => {
 
         <div className="status-bar-item theme-badge">
           <span>{t('statusBar.theme', { theme: activeTheme })}</span>
+        </div>
+
+        <div
+          className={`status-bar-item offline-badge${offlineMode ? ' active' : ''}`}
+          role="button"
+          tabIndex={0}
+          data-testid="statusbar-offline-toggle"
+          title={t('statusBar.offlineModeTooltip')}
+          onClick={toggleOfflineMode}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOfflineMode(); } }}
+        >
+          <span>✈</span>
         </div>
 
         <div className="status-bar-item language-badge">

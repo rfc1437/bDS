@@ -29,9 +29,12 @@ export const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 export const MISTRAL_MODELS_URL = 'https://api.mistral.ai/v1/models';
 export const OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 export const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
+export const LMSTUDIO_BASE_URL = 'http://localhost:1234/v1';
+export const LMSTUDIO_MODELS_URL = 'http://localhost:1234/v1/models';
 
 const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const OLLAMA_FETCH_TIMEOUT = 3000; // 3 s — fail fast when Ollama isn't running
+const LMSTUDIO_FETCH_TIMEOUT = 3000; // 3 s — fail fast when LM Studio isn't running
 
 // ---------------------------------------------------------------------------
 // Gateway factory
@@ -108,11 +111,27 @@ export class ProviderRegistry {
   private ollamaProvider: ReturnType<typeof createOpenAI> | null = null;
   private ollamaModelIds = new Set<string>();
   private ollamaCapabilities = new Map<string, { tools: boolean; vision: boolean }>();
+  private lmstudioEnabled = false;
+  private lmstudioProvider: ReturnType<typeof createOpenAI> | null = null;
+  private lmstudioModelIds = new Set<string>();
+  private lmstudioCapabilities = new Map<string, { tools: boolean; vision: boolean }>();
   private modelCatalogEngine = new ModelCatalogEngine();
+  private _offlineMode = false;
 
   // Model cache
   private cachedModels: ChatModel[] | null = null;
   private cachedModelsAt = 0;
+
+  // ---- Offline / airplane mode ----
+
+  setOfflineMode(enabled: boolean): void {
+    this._offlineMode = enabled;
+    this.invalidateModelCache();
+  }
+
+  isOfflineMode(): boolean {
+    return this._offlineMode;
+  }
 
   // ---- Key management ----
 
@@ -203,33 +222,109 @@ export class ProviderRegistry {
     return this.ollamaCapabilities.get(modelId)?.vision ?? false;
   }
 
+  // ---- LM Studio management ----
+
+  setLmstudioEnabled(enabled: boolean): void {
+    this.lmstudioEnabled = enabled;
+    this.lmstudioProvider = null;
+    this.invalidateModelCache();
+  }
+
+  isLmstudioEnabled(): boolean {
+    return this.lmstudioEnabled;
+  }
+
+  /** Register a model ID as belonging to LM Studio. */
+  registerLmstudioModel(modelId: string): void {
+    this.lmstudioModelIds.add(modelId);
+  }
+
+  /** Check whether a model ID was registered as an LM Studio model. */
+  isLmstudioModel(modelId: string): boolean {
+    return this.lmstudioModelIds.has(modelId);
+  }
+
+  /** Remove all registered LM Studio model IDs. */
+  clearLmstudioModels(): void {
+    this.lmstudioModelIds.clear();
+  }
+
+  // ---- LM Studio model capability overrides ----
+
+  /** Get capability overrides for a specific LM Studio model (defaults to tools=false, vision=false). */
+  getLmstudioModelCapabilities(modelId: string): { tools: boolean; vision: boolean } {
+    return this.lmstudioCapabilities.get(modelId) ?? { tools: false, vision: false };
+  }
+
+  /** Set capability overrides for a specific LM Studio model. */
+  setLmstudioModelCapabilities(modelId: string, caps: { tools: boolean; vision: boolean }): void {
+    this.lmstudioCapabilities.set(modelId, caps);
+    this.invalidateModelCache();
+  }
+
+  /** Get all stored LM Studio capability overrides as a plain object. */
+  getAllLmstudioModelCapabilities(): Record<string, { tools: boolean; vision: boolean }> {
+    const result: Record<string, { tools: boolean; vision: boolean }> = {};
+    for (const [id, caps] of this.lmstudioCapabilities) {
+      result[id] = caps;
+    }
+    return result;
+  }
+
+  /** Load LM Studio capability overrides from a serialized object (e.g. from settings DB). */
+  loadLmstudioModelCapabilities(data: Record<string, { tools: boolean; vision: boolean }>): void {
+    this.lmstudioCapabilities.clear();
+    for (const [id, caps] of Object.entries(data)) {
+      this.lmstudioCapabilities.set(id, caps);
+    }
+  }
+
+  /** Check whether an LM Studio model has tools capability enabled. */
+  lmstudioModelSupportsTools(modelId: string): boolean {
+    return this.lmstudioCapabilities.get(modelId)?.tools ?? false;
+  }
+
+  /** Check whether an LM Studio model has vision capability enabled. */
+  lmstudioModelSupportsVision(modelId: string): boolean {
+    return this.lmstudioCapabilities.get(modelId)?.vision ?? false;
+  }
+
   /**
-   * Detect the effective provider for a model ID, checking Ollama
+   * Detect the effective provider for a model ID, checking Ollama and LM Studio
    * registration first, then falling back to prefix-based detection.
    */
   detectModelProvider(modelId: string): string {
     if (this.ollamaModelIds.has(modelId)) return 'ollama';
+    if (this.lmstudioModelIds.has(modelId)) return 'lmstudio';
     return detectProvider(modelId);
   }
 
   /** Check whether at least one provider key is configured. */
   isReady(): boolean {
-    return !!(this.opencodeKey || this.mistralKey || this.ollamaEnabled);
+    if (this._offlineMode) {
+      return !!(this.ollamaEnabled || this.lmstudioEnabled);
+    }
+    return !!(this.opencodeKey || this.mistralKey || this.ollamaEnabled || this.lmstudioEnabled);
   }
 
   /** Check whether the key for a specific provider is set. */
   isProviderKeySet(provider: string): boolean {
-    if (provider === 'mistral') return !!this.mistralKey;
     if (provider === 'ollama') return this.ollamaEnabled;
+    if (provider === 'lmstudio') return this.lmstudioEnabled;
+    // In offline mode, cloud providers are unavailable
+    if (this._offlineMode) return false;
+    if (provider === 'mistral') return !!this.mistralKey;
     return !!this.opencodeKey;
   }
 
   /** Returns status of all configured providers. */
-  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean } {
+  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean; offlineMode: boolean } {
     return {
       opencode: !!this.opencodeKey,
       mistral: !!this.mistralKey,
       ollama: this.ollamaEnabled,
+      lmstudio: this.lmstudioEnabled,
+      offlineMode: this._offlineMode,
     };
   }
 
@@ -237,6 +332,11 @@ export class ProviderRegistry {
 
   /** Resolve a model ID to an AI SDK LanguageModel. */
   resolveModel(modelId: string): LanguageModel {
+    // In offline mode, only local providers are allowed
+    if (this._offlineMode && !this.ollamaModelIds.has(modelId) && !this.lmstudioModelIds.has(modelId)) {
+      throw new Error(`Model '${modelId}' is not available offline. Switch to a local model or disable airplane mode.`);
+    }
+
     // Check if this is a registered Ollama model first
     if (this.ollamaModelIds.has(modelId)) {
       if (!this.ollamaEnabled) {
@@ -249,6 +349,20 @@ export class ProviderRegistry {
         });
       }
       return this.ollamaProvider.chat(modelId);
+    }
+
+    // Check if this is a registered LM Studio model
+    if (this.lmstudioModelIds.has(modelId)) {
+      if (!this.lmstudioEnabled) {
+        throw new Error(`LM Studio not configured for model '${modelId}'`);
+      }
+      if (!this.lmstudioProvider) {
+        this.lmstudioProvider = createOpenAI({
+          baseURL: LMSTUDIO_BASE_URL,
+          apiKey: 'lm-studio', // LM Studio doesn't need a real key
+        });
+      }
+      return this.lmstudioProvider.chat(modelId);
     }
 
     const provider = detectProvider(modelId);
@@ -285,18 +399,66 @@ export class ProviderRegistry {
     return this.modelCatalogEngine;
   }
 
+  /**
+   * Return the first known local model ID, or null if none registered.
+   * Used as automatic fallback when no explicit offline model is configured.
+   */
+  getFirstKnownLocalModelId(): string | null {
+    for (const id of this.ollamaModelIds) return id;
+    for (const id of this.lmstudioModelIds) return id;
+    return null;
+  }
+
+  /**
+   * Return the first known local vision-capable model ID, or null.
+   */
+  getFirstKnownLocalVisionModelId(): string | null {
+    for (const id of this.ollamaModelIds) {
+      if (this.ollamaModelSupportsVision(id)) return id;
+    }
+    for (const id of this.lmstudioModelIds) {
+      if (this.lmstudioModelSupportsVision(id)) return id;
+    }
+    return null;
+  }
+
+  /**
+   * Return models already known to belong to local providers (Ollama + LM Studio)
+   * from in-memory sets, without any network fetch.
+   */
+  getKnownLocalModels(): ChatModel[] {
+    const models: ChatModel[] = [];
+    for (const id of this.ollamaModelIds) {
+      models.push({ id, name: id, provider: 'ollama', vision: this.ollamaModelSupportsVision(id) });
+    }
+    for (const id of this.lmstudioModelIds) {
+      models.push({ id, name: id, provider: 'lmstudio', vision: this.lmstudioModelSupportsVision(id) });
+    }
+    return models;
+  }
+
   /** Get available models across all configured providers (cached 5 min). */
   async getAvailableModels(): Promise<ChatModel[]> {
     if (this.cachedModels && Date.now() - this.cachedModelsAt < MODEL_CACHE_TTL) {
       return this.cachedModels;
     }
 
+    // In offline mode, return known local models instantly — no network.
+    if (this._offlineMode) {
+      const local = this.getKnownLocalModels();
+      if (local.length > 0) {
+        this.cachedModels = local;
+        this.cachedModelsAt = Date.now();
+      }
+      return local;
+    }
+
     const allModels: ChatModel[] = [];
     let fetched = false;
     const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
 
-    // Fetch OpenCode models
-    if (this.opencodeKey) {
+    // Fetch OpenCode models (skip in offline mode)
+    if (this.opencodeKey && !this._offlineMode) {
       try {
         const models = await this.fetchModelsFromEndpoint(
           ZEN_MODELS_URL,
@@ -311,8 +473,8 @@ export class ProviderRegistry {
       }
     }
 
-    // Fetch Mistral models
-    if (this.mistralKey) {
+    // Fetch Mistral models (skip in offline mode)
+    if (this.mistralKey && !this._offlineMode) {
       try {
         const models = await this.fetchModelsFromEndpoint(
           MISTRAL_MODELS_URL,
@@ -336,6 +498,17 @@ export class ProviderRegistry {
         if (models.length > 0) fetched = true;
       } catch {
         // Ollama not running — skip silently
+      }
+    }
+
+    // Fetch LM Studio models
+    if (this.lmstudioEnabled) {
+      try {
+        const models = await this.fetchLmstudioModels();
+        allModels.push(...models);
+        if (models.length > 0) fetched = true;
+      } catch {
+        // LM Studio not running — skip silently
       }
     }
 
@@ -393,6 +566,38 @@ export class ProviderRegistry {
     }
   }
 
+  // ---- LM Studio model listing ----
+
+  /**
+   * Fetch available models from LM Studio's OpenAI-compatible /v1/models endpoint.
+   * Returns ChatModel[] and registers the model IDs internally.
+   */
+  async fetchLmstudioModels(): Promise<ChatModel[]> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), LMSTUDIO_FETCH_TIMEOUT);
+      const response = await fetch(LMSTUDIO_MODELS_URL, { method: 'GET', signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) return [];
+
+      const data = await response.json() as { data?: Array<{ id: string }> };
+      if (!data.data || !Array.isArray(data.data)) return [];
+
+      const models: ChatModel[] = data.data.map(m => ({
+        id: m.id,
+        name: m.id,
+        provider: 'lmstudio',
+        vision: this.lmstudioModelSupportsVision(m.id),
+      }));
+      // Only replace registered IDs on successful fetch
+      this.clearLmstudioModels();
+      for (const m of models) this.registerLmstudioModel(m.id);
+      return models;
+    } catch {
+      return [];
+    }
+  }
+
   // ---- Ollama model listing ----
 
   /**
@@ -410,16 +615,15 @@ export class ProviderRegistry {
       const data = await response.json() as { models?: Array<{ name: string; details?: { family?: string } }> };
       if (!data.models || !Array.isArray(data.models)) return [];
 
+      const models: ChatModel[] = data.models.map(m => ({
+        id: m.name,
+        name: m.name,
+        provider: 'ollama',
+        vision: this.ollamaModelSupportsVision(m.name),
+      }));
+      // Only replace registered IDs on successful fetch
       this.clearOllamaModels();
-      const models: ChatModel[] = data.models.map(m => {
-        this.registerOllamaModel(m.name);
-        return {
-          id: m.name,
-          name: m.name,
-          provider: 'ollama',
-          vision: this.ollamaModelSupportsVision(m.name),
-        };
-      });
+      for (const m of models) this.registerOllamaModel(m.id);
       return models;
     } catch {
       return [];

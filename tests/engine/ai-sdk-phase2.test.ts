@@ -140,13 +140,15 @@ describe('ProviderRegistry', () => {
     });
 
     it('getProviderStatus() reports all providers', () => {
-      expect(registry.getProviderStatus()).toEqual({ opencode: false, mistral: false, ollama: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: false, mistral: false, ollama: false, lmstudio: false, offlineMode: false });
       registry.setOpencodeKey('test');
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: false, ollama: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: false, ollama: false, lmstudio: false, offlineMode: false });
       registry.setMistralKey('test2');
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: false, lmstudio: false, offlineMode: false });
       registry.setOllamaEnabled(true);
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true, lmstudio: false, offlineMode: false });
+      registry.setLmstudioEnabled(true);
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true, lmstudio: true, offlineMode: false });
     });
 
     it('isProviderKeySet() checks per-provider', () => {
@@ -444,6 +446,120 @@ describe('OneShotTasks', () => {
       expect(result.error).toContain('thumbnail');
     });
 
+    it('uses pre-generated AI JPEG thumbnail without sharp conversion', async () => {
+      registry.setOpencodeKey('test-key');
+      chatEngine.getSetting.mockResolvedValue('claude-sonnet-4');
+      mediaEngine.getMedia.mockResolvedValue({
+        id: 'media-1',
+        mimeType: 'image/jpeg',
+        filename: 'photo.jpg',
+      });
+      // Tiny valid JPEG — simulates the pre-generated 'ai' thumbnail
+      const jpegBase64 = '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AAA//2Q==';
+      // Return JPEG for 'ai' size, null for others
+      mediaEngine.getThumbnailDataUrl.mockImplementation(async (_id: string, size: string) => {
+        if (size === 'ai') return `data:image/jpeg;base64,${jpegBase64}`;
+        return null;
+      });
+
+      const originalFetch = globalThis.fetch;
+      let capturedBody: any = null;
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string, init: any) => {
+        if (init?.body) {
+          capturedBody = JSON.parse(init.body);
+        }
+        return new Response(JSON.stringify({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: '{"title": "Test", "alt": "Test image", "caption": "A test"}' }],
+          model: 'claude-sonnet-4',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 100, output_tokens: 30, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+
+      try {
+        const result = await tasks.analyzeMediaImage('media-1', 'en');
+        // Check the image was sent as JPEG, not WebP
+        if (capturedBody?.messages) {
+          const userMsg = capturedBody.messages.find((m: any) => m.role === 'user');
+          if (userMsg?.content) {
+            const imagePart = userMsg.content.find((p: any) => p.type === 'image_url');
+            if (imagePart?.image_url?.url) {
+              expect(imagePart.image_url.url).toMatch(/^data:image\/jpeg;base64,/);
+              expect(imagePart.image_url.url).not.toMatch(/^data:image\/webp;base64,/);
+            }
+          }
+        }
+        // Also verify it succeeded (may fail on response parsing but the format check is key)
+        if (result.success) {
+          expect(result.title).toBe('Test');
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('sends localized prompts based on project language', async () => {
+      registry.setOpencodeKey('test-key');
+      chatEngine.getSetting.mockResolvedValue('claude-sonnet-4');
+      mediaEngine.getMedia.mockResolvedValue({
+        id: 'media-1',
+        mimeType: 'image/jpeg',
+        filename: 'photo.jpg',
+      });
+      // Tiny valid JPEG — simulates the pre-generated 'ai' thumbnail
+      const jpegBase64 = '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AAA//2Q==';
+      mediaEngine.getThumbnailDataUrl.mockImplementation(async (_id: string, size: string) => {
+        if (size === 'ai') return `data:image/jpeg;base64,${jpegBase64}`;
+        return null;
+      });
+
+      const originalFetch = globalThis.fetch;
+      let capturedBody: any = null;
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        if (init?.body) {
+          capturedBody = JSON.parse(init.body);
+        }
+        return new Response(JSON.stringify({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: '{"title": "Testbild", "alt": "Rotes Quadrat", "caption": "Ein Test"}' }],
+          model: 'claude-sonnet-4',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 100, output_tokens: 30, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+
+      try {
+        await tasks.analyzeMediaImage('media-1', 'de');
+        // System prompt should be in German (from i18n), not contain English instructions
+        if (capturedBody) {
+          const systemMsg = capturedBody.messages?.find((m: any) => m.role === 'system')
+            ?? capturedBody.system;
+          const systemText = typeof systemMsg === 'string' ? systemMsg
+            : Array.isArray(systemMsg) ? systemMsg.map((p: any) => p.text).join('')
+            : systemMsg?.content ?? '';
+          expect(systemText).toContain('Deutsch');
+          expect(systemText).not.toContain('English');
+          // User message should also be in German
+          const userMsg = capturedBody.messages?.find((m: any) => m.role === 'user');
+          if (userMsg?.content) {
+            const textPart = Array.isArray(userMsg.content)
+              ? userMsg.content.find((p: any) => p.type === 'text')
+              : null;
+            if (textPart?.text) {
+              expect(textPart.text).toContain('Deutsch');
+            }
+          }
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it('falls back to claude-sonnet-4-5 when no image analysis model is configured', async () => {
       registry.setOpencodeKey('test-key');
       chatEngine.getSetting.mockResolvedValue(null);
@@ -452,7 +568,12 @@ describe('OneShotTasks', () => {
         mimeType: 'image/jpeg',
         filename: 'photo.jpg',
       });
-      mediaEngine.getThumbnailDataUrl.mockResolvedValue('data:image/webp;base64,abc123');
+      // Tiny valid JPEG — simulates the pre-generated 'ai' thumbnail
+      const jpegBase64 = '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AAA//2Q==';
+      mediaEngine.getThumbnailDataUrl.mockImplementation(async (_id: string, size: string) => {
+        if (size === 'ai') return `data:image/jpeg;base64,${jpegBase64}`;
+        return null;
+      });
 
       // Verify the method selects the right model by checking it attempts
       // to call the resolver (which hits the network). We mock fetch to

@@ -15,9 +15,9 @@ interface ErrorModalProps {
 
 export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
   const { t: tr } = useI18n();
-  if (!error) return null;
 
   const handleCopyStack = useCallback(async () => {
+    if (!error) return;
     const textToCopy = `${error.title || tr('errorModal.error')}\n${error.message}\n\n${tr('errorModal.stackTrace')}:\n${error.stack || tr('errorModal.noStack')}`;
     try {
       await navigator.clipboard.writeText(textToCopy);
@@ -31,6 +31,8 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
       onClose();
     }
   }, [onClose]);
+
+  if (!error) return null;
 
   return (
     <div className="error-modal-backdrop" onClick={handleBackdropClick}>

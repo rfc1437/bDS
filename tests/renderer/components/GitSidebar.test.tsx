@@ -1098,4 +1098,30 @@ describe('GitSidebar', () => {
       vi.useRealTimers();
     }
   });
+
+  it.each(['fetch', 'pull', 'push'] as const)('shows error modal instead of inline error when %s returns offline code', async (action) => {
+    (window as any).electronAPI.git.getRepoState = vi.fn().mockResolvedValue({
+      isRepo: true,
+      rootPath: '/repo/path',
+      currentBranch: 'main',
+      hasRemote: true,
+    });
+    (window as any).electronAPI.git[action] = vi.fn().mockResolvedValue({ success: false, code: 'offline' });
+
+    render(<GitSidebar />);
+
+    const button = await screen.findByRole('button', { name: new RegExp(`^${action}$`, 'i') });
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    // Should set errorModal in the store
+    const store = getStore();
+    expect(store.errorModal).not.toBeNull();
+    expect(store.errorModal!.message).toBe('This action is blocked while airplane mode is active.');
+
+    // Should NOT show inline error in the sidebar
+    expect(screen.queryByText('This action is blocked while airplane mode is active.')).not.toBeInTheDocument();
+  });
 });

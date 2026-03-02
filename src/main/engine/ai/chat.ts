@@ -246,7 +246,21 @@ export class ChatService {
       const abortController = new AbortController();
       this.abortControllers.set(conversationId, abortController);
 
-      const modelId = conversation.model || 'claude-sonnet-4';
+      let modelId = conversation.model || 'claude-sonnet-4';
+
+      // In offline mode, swap to the configured offline chat model
+      if (this.providers.isOfflineMode()) {
+        if (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId)) {
+          const offlineModel = await this.chatEngine.getSetting('offline_chat_model')
+            || this.providers.getFirstKnownLocalModelId();
+          if (offlineModel) {
+            modelId = offlineModel;
+          } else {
+            return { success: false, error: 'No offline chat model configured. Set one in Settings → AI → Airplane Mode.' };
+          }
+        }
+      }
+
       const provider = this.providers.detectModelProvider(modelId);
 
       // Verify provider key is available
@@ -271,9 +285,11 @@ export class ChatService {
 
       const aiMessages = dbMessagesToAIMessages(dbMessages);
 
-      // Build tools (skip for Ollama models unless capability override is set)
+      // Build tools (skip for Ollama/LM Studio models unless capability override is set)
       const isOllama = this.providers.isOllamaModel(modelId);
-      const skipTools = isOllama && !this.providers.ollamaModelSupportsTools(modelId);
+      const isLmstudio = this.providers.isLmstudioModel(modelId);
+      const skipTools = (isOllama && !this.providers.ollamaModelSupportsTools(modelId))
+        || (isLmstudio && !this.providers.lmstudioModelSupportsTools(modelId));
       const blogTools = skipTools ? {} : createBlogTools(this.blogToolDeps);
       const a2uiToolsRaw = skipTools ? {} : createA2UITools();
       const allTools = { ...blogTools, ...a2uiToolsRaw };
@@ -447,6 +463,18 @@ export class ChatService {
             ? 'mistral-small-latest'
             : null;
       }
+
+      // In offline mode, swap to the configured offline title model
+      if (this.providers.isOfflineMode()) {
+        const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+          || this.providers.getFirstKnownLocalModelId();
+        if (offlineModel) {
+          titleModel = offlineModel;
+        } else if (!titleModel || (!this.providers.isOllamaModel(titleModel) && !this.providers.isLmstudioModel(titleModel))) {
+          return; // No offline title model — skip title generation silently
+        }
+      }
+
       if (!titleModel) return;
 
       const model = this.providers.resolveModel(titleModel);

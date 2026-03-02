@@ -17,6 +17,7 @@ import { generateBlogmarkBookmarkletSource } from '../shared/blogmark';
 import { registerMetadataDiffHandlers } from './metadataDiffHandlers';
 import { registerBlogHandlers } from './blogHandlers';
 import { registerPublishHandlers } from './publishHandlers';
+import { isOfflineModeActive } from './chatHandlers';
 import type { EngineBundle } from '../engine/EngineBundle';
 
 /**
@@ -179,16 +180,25 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   });
 
   safeHandle('git:remoteState', async (_, projectPath: string) => {
+    if (isOfflineModeActive()) {
+      return { ahead: 0, behind: 0 };
+    }
     const engine = bundle.gitEngine;
     return engine.getRemoteState(projectPath);
   });
 
   safeHandle('git:fetch', async (_, projectPath: string) => {
+    if (isOfflineModeActive()) {
+      return { success: false, code: 'offline' };
+    }
     const engine = bundle.gitEngine;
     return engine.fetch(projectPath);
   });
 
   safeHandle('git:pull', async (_, projectPath: string) => {
+    if (isOfflineModeActive()) {
+      return { success: false, code: 'offline' };
+    }
     const engine = bundle.gitEngine;
     const beforeHead = await engine.getHeadCommit(projectPath);
     const pullResult = await engine.pull(projectPath);
@@ -244,6 +254,9 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   });
 
   safeHandle('git:push', async (_, projectPath: string) => {
+    if (isOfflineModeActive()) {
+      return { success: false, code: 'offline' };
+    }
     const engine = bundle.gitEngine;
     return engine.push(projectPath);
   });

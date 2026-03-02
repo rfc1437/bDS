@@ -21,7 +21,7 @@ Requires threading `currentPostId` from `Editor.tsx` → `InsertModal` (currentl
 | Embeddings | Hugging Face Transformers.js | `@huggingface/transformers` | ONNX, local, no API key |
 | Vector index | USearch | `usearch` | HNSW, native C++ via N-API, prebuilt binaries |
 
-**Embedding model:** `Xenova/all-MiniLM-L6-v2` — 384 dimensions, ~90 MB on disk, ~150–200 MB RAM, ~100ms/post inference, handles mixed DE/EN.
+**Embedding model:** `multilingual-e5-small` — 384 dimensions, 512-token context, ~470 MB on disk, ~200–300 MB RAM, ~100ms/post inference. Natively multilingual (100+ languages incl. DE/EN) — critical for a mixed-language blog. `all-MiniLM-L6-v2` (~90 MB) was considered but is EN-trained with weak DE transfer; not suitable for nuanced cross-language similarity.
 
 **Why USearch over alternatives:**
 - `sqlite-vec` — requires `loadExtension()` on the SQLite driver; bDS uses `@libsql/client` which doesn't expose it. Eliminated.
@@ -31,9 +31,11 @@ Requires threading `currentPostId` from `Editor.tsx` → `InsertModal` (currentl
 - **USearch** — prebuilt binaries via `prebuildify` (matches `sharp`, `@libsql/client` pattern), actively maintained, HNSW with SIMD, <1ms queries, binary persistence (~6 MB for 10k×384).
 
 **USearch specifics:**
-- Keys are `BigUint64Array` — need a `Map<bigint, string>` (numeric label → post UUID) persisted alongside the index
+- Keys are `BigUint64Array` — need a `Map<bigint, string>` (numeric label → post UUID) persisted in a small Drizzle table (`embedding_keys`)
 - `index.load()` loads everything into RAM (~6 MB). `index.save()` is a full rewrite. Fine for this scale.
 - No incremental flush / WAL — acceptable since mutations are one-at-a-time post edits
+
+**Electron packaging risk:** USearch uses N-API, but verify that its `prebuildify` targets include the Electron ABI for all platforms (macOS arm64/x64, Windows x64/arm64, Linux x64) before committing. Spike this first — if binaries are missing, fall back to `vectra`.
 
 ---
 
@@ -42,10 +44,11 @@ Requires threading `currentPostId` from `Editor.tsx` → `InsertModal` (currentl
 ### Files on disk
 
 ```
-<project-dir>/.bds/
+{userData}/projects/{projectId}/
   embeddings.usearch       # USearch binary index
-  embeddings-keys.json     # { [numericLabel]: postId } mapping
 ```
+
+The `bigint → postId` key mapping lives in a Drizzle table (`embedding_keys`), not a JSON file — avoids `bigint` JSON serialization issues and stays atomic with the existing DB.
 
 ### Engine: `EmbeddingEngine` (`src/main/engine/EmbeddingEngine.ts`)
 
@@ -63,9 +66,15 @@ class EmbeddingEngine {
   async removePost(postId: string): Promise<void>
   async findSimilar(postId: string, k?: number): Promise<SimilarPost[]>
   async getIndexingProgress(): Promise<{ indexed: number; total: number }>
+  async reindexAll(): Promise<void>           // after databaseRebuilt
+  async setProjectContext(projectId: string): Promise<void>  // load/unload on switch
   async save(): Promise<void>
 }
 ```
+
+### Project switching
+
+The app supports multiple projects. On project switch (`setProjectContext`), the engine must save and unload the current index, then load (or create) the index for the new project. Each project has its own `embeddings.usearch` file and `embedding_keys` table rows.
 
 ### IPC
 
@@ -74,9 +83,25 @@ embeddings:findSimilar(postId: string, k?: number) → SimilarPost[]
 embeddings:getProgress() → { indexed: number; total: number }
 ```
 
+### Embedding content
+
+Embed the raw markdown body of each post (title + content). Markdown's lightweight markup (headers, links, emphasis) adds minimal noise and preserves semantic structure well enough for transformer models. No stripping needed.
+
+**Chunking for long posts:** The model's 512-token context (~400 words) covers most posts. For posts exceeding 512 tokens:
+1. Split into 512-token chunks with ~50 token overlap
+2. Embed each chunk independently
+3. Mean-pool the chunk vectors into a single 384-dim embedding
+4. Store the single pooled vector in the index
+
+This keeps the index simple (one vector per post, one lookup per query) while preserving semantic coverage of long-form content. The overlap prevents losing context at chunk boundaries.
+
 ### Hook into existing post lifecycle
 
-Post create/update/delete events already exist in `PostEngine`. On post content change → call `embeddingEngine.embedPost()`. On delete → call `embeddingEngine.removePost()`. Save index after each mutation.
+Post create/update/delete events already exist in `PostEngine`. On post content change → call `embeddingEngine.embedPost()`. On delete → call `embeddingEngine.removePost()`.
+
+Also listen for `databaseRebuilt` — emitted after `reconcileFromDisk()` (e.g., git sync). This replaces the entire DB, so individual post events don't fire. On `databaseRebuilt` → trigger a full reindex.
+
+Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation). During bulk indexing, batch-save every N posts (e.g., 100) instead of after each one — avoids 10k full file rewrites.
 
 ### Initial indexing (10k+ posts)
 
@@ -84,7 +109,7 @@ Post create/update/delete events already exist in `PostEngine`. On post content 
 - Must run as a low-priority background task after app startup
 - Emit progress events so UI can show "Indexing 3,421 / 10,247…"
 - On git sync to new machine, file watchers fire for all posts → triggers full reindex automatically
-- Model download (~90 MB) on first run — needs progress indicator or opt-in preference
+- Model download (~470 MB) on first run — needs progress indicator or opt-in preference
 
 ---
 
@@ -106,7 +131,7 @@ Post create/update/delete events already exist in `PostEngine`. On post content 
 ## Implementation Steps
 
 1. **Test + implement `EmbeddingEngine`** — model loading, embed, add/remove/query against USearch index, save/load persistence
-2. **SQLite key map** — persist the `bigint → postId` mapping (simple JSON file or a small Drizzle table)
+2. **Drizzle key map table** — `embedding_keys` table mapping `bigint` label → post UUID
 3. **Wire into post lifecycle** — hook create/update/delete → embedding updates
 4. **Background indexer** — on startup, diff indexed vs. existing posts, queue unindexed for background embedding with progress events
 5. **IPC endpoints** — `findSimilar`, `getProgress`
@@ -120,6 +145,6 @@ Post create/update/delete events already exist in `PostEngine`. On post content 
 
 - Feature must be opt-in (model download + 17 min indexing is not a silent default)
 - No external API calls — fully local
-- Model cached in `~/.cache/huggingface/`, index in project `.bds/` directory
-- .bds/ directory inside project directory must be added to .gitignore (cache is kept local not versioned)
-- Total added footprint: ~140 MB on disk (onnxruntime-node ~50 MB + model ~90 MB), ~200 MB RAM at runtime for model + index
+- Model cached in `~/.cache/huggingface/`, index in internal project directory
+- Total added footprint: ~520 MB on disk (onnxruntime-node ~50 MB + model ~470 MB), ~300 MB RAM at runtime for model + index
+- Graceful degradation: if USearch native module fails to load (unsupported platform), disable the feature silently — never crash the app

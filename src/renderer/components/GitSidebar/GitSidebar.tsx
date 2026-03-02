@@ -32,7 +32,7 @@ const mergeStatusFilesIncremental = (
 
 export const GitSidebar: React.FC = () => {
   const { t: tr } = useI18n();
-  const { activeProject, openTab, tabs, closeTab } = useAppStore();
+  const { activeProject, openTab, tabs, closeTab, showErrorModal } = useAppStore();
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
@@ -390,6 +390,10 @@ export const GitSidebar: React.FC = () => {
                   recentCommitsToKeep: 2,
                 });
       if (!result.success) {
+        if (result.code === 'offline') {
+          showErrorModal({ message: tr('gitSidebar.error.offlineMode') });
+          return;
+        }
         setError(result.error || tr('gitSidebar.error.actionFailed', { action }));
         setErrorGuidance('guidance' in result ? result.guidance || [] : []);
         return;
