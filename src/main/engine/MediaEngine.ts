@@ -10,11 +10,12 @@ import { media, Media, NewMedia, postMedia } from '../database/schema';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 
-// Thumbnail sizes
+// Thumbnail sizes — 'ai' is a dedicated JPEG thumbnail for vision-model input
 const THUMBNAIL_SIZES = {
-  small: { width: 150, height: 150 },
-  medium: { width: 400, height: 400 },
-  large: { width: 800, height: 800 },
+  small: { width: 150, height: 150, ext: 'webp' as const, mime: 'image/webp' as const },
+  medium: { width: 400, height: 400, ext: 'webp' as const, mime: 'image/webp' as const },
+  large: { width: 800, height: 800, ext: 'webp' as const, mime: 'image/webp' as const },
+  ai: { width: 448, height: 448, ext: 'jpg' as const, mime: 'image/jpeg' as const },
 } as const;
 
 type ThumbnailSize = keyof typeof THUMBNAIL_SIZES;
@@ -244,17 +245,26 @@ export class MediaEngine extends EventEmitter {
       // Dynamic import of sharp (it's a native module)
       const sharp = (await import('sharp')).default;
 
-      for (const [size, dimensions] of Object.entries(THUMBNAIL_SIZES) as [ThumbnailSize, { width: number; height: number }][]) {
-        const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
+      for (const [size, config] of Object.entries(THUMBNAIL_SIZES) as [ThumbnailSize, (typeof THUMBNAIL_SIZES)[ThumbnailSize]][]) {
+        const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.${config.ext}`);
 
-        await sharp(sourcePath)
-          .resize(dimensions.width, dimensions.height, {
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .webp({ quality: 80 })
-          .toFile(thumbnailPath);
+        // AI thumbnail: exact 448×448 with black letterboxing for vision models.
+        // All others: fit inside bounding box, no upscaling.
+        const isAI = size === 'ai';
+        let pipeline = sharp(sourcePath)
+          .resize(config.width, config.height, {
+            fit: isAI ? 'contain' : 'inside',
+            withoutEnlargement: !isAI,
+            background: { r: 0, g: 0, b: 0 },
+          });
 
+        if (config.ext === 'jpg') {
+          pipeline = pipeline.jpeg({ quality: 85 });
+        } else {
+          pipeline = pipeline.webp({ quality: 80 });
+        }
+
+        await pipeline.toFile(thumbnailPath);
         thumbnails[size] = thumbnailPath;
       }
 
@@ -276,10 +286,11 @@ export class MediaEngine extends EventEmitter {
       small: null,
       medium: null,
       large: null,
+      ai: null,
     };
 
     for (const size of Object.keys(THUMBNAIL_SIZES) as ThumbnailSize[]) {
-      const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
+      const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.${THUMBNAIL_SIZES[size].ext}`);
       try {
         await fs.access(thumbnailPath);
         result[size] = thumbnailPath;
@@ -296,11 +307,12 @@ export class MediaEngine extends EventEmitter {
    */
   async getThumbnailDataUrl(mediaId: string, size: ThumbnailSize = 'small'): Promise<string | null> {
     const thumbnailSubDir = this.getThumbnailSubDir(mediaId);
-    const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
+    const config = THUMBNAIL_SIZES[size];
+    const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.${config.ext}`);
 
     try {
       const data = await fs.readFile(thumbnailPath);
-      return `data:image/webp;base64,${data.toString('base64')}`;
+      return `data:${config.mime};base64,${data.toString('base64')}`;
     } catch {
       return null;
     }
@@ -313,7 +325,7 @@ export class MediaEngine extends EventEmitter {
     const thumbnailSubDir = this.getThumbnailSubDir(mediaId);
 
     for (const size of Object.keys(THUMBNAIL_SIZES) as ThumbnailSize[]) {
-      const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.webp`);
+      const thumbnailPath = path.join(thumbnailSubDir, `${mediaId}-${size}.${THUMBNAIL_SIZES[size].ext}`);
       try {
         await fs.unlink(thumbnailPath);
       } catch {
@@ -1166,7 +1178,7 @@ export class MediaEngine extends EventEmitter {
         for (const item of imageMedia) {
           const thumbnails = await this.getThumbnailPaths(item.id);
           // Consider missing if any size is missing
-          if (!thumbnails.small || !thumbnails.medium || !thumbnails.large) {
+          if (!thumbnails.small || !thumbnails.medium || !thumbnails.large || !thumbnails.ai) {
             missingThumbnails.push(item);
           }
         }

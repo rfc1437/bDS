@@ -208,22 +208,36 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       return { success: false, error: `Cannot analyze this file type: ${mediaItem.mimeType}. Only images are supported.` };
     }
 
-    // Get thumbnail
-    let dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'large');
-    if (!dataUrl) dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'medium');
+    // Get AI-optimised JPEG thumbnail (512px, pre-generated).
+    // Falls back to large/medium WebP thumbnails for older media items.
+    let dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'ai');
+    let needsConversion = false;
+    if (!dataUrl) {
+      dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'large');
+      needsConversion = true;
+    }
+    if (!dataUrl) {
+      dataUrl = await this.mediaEngine.getThumbnailDataUrl(mediaId, 'medium');
+      needsConversion = true;
+    }
     if (!dataUrl) {
       return { success: false, error: 'Image thumbnail not available. Try regenerating thumbnails from Settings.' };
     }
 
     const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
 
-    // Convert WebP thumbnail to JPEG for universal model compatibility.
-    // Local providers like LM Studio reject WebP in the data URL.
-    const sharp = (await import('sharp')).default;
-    const jpegBuffer = await sharp(Buffer.from(base64Data, 'base64'))
-      .jpeg({ quality: 85 })
-      .toBuffer();
-    const jpegBase64 = jpegBuffer.toString('base64');
+    let jpegBase64: string;
+    if (needsConversion) {
+      // Legacy path: convert WebP thumbnail to JPEG for model compatibility.
+      const sharp = (await import('sharp')).default;
+      const jpegBuffer = await sharp(Buffer.from(base64Data, 'base64'))
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      jpegBase64 = jpegBuffer.toString('base64');
+    } else {
+      // Fast path: AI thumbnail is already JPEG — use directly.
+      jpegBase64 = base64Data;
+    }
 
     const renderLanguage = resolveSupportedRenderLanguage(language);
     const systemPrompt = translateRender(renderLanguage, 'ai.imageAnalysis.system');
