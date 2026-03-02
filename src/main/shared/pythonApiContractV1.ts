@@ -188,6 +188,9 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   // expensive external API calls that require user oversight and interactive streaming.
   // This namespace can be re-added in a future version if AI-from-Python becomes a
   // supported use case with proper rate limiting and cost controls.
+  // Exception: detectPostLanguage is exposed as a lightweight one-shot task.
+
+  method('chat.detectPostLanguage', 'Detect the language of a post from its title and content.', [requiredString('title'), requiredString('content')], '{ success: boolean; language?: string; error?: string }'),
 
   method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
   method('sync.getRepoState', 'Get repository state for active project.', [], 'RepoState'),
@@ -239,6 +242,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'content', type: 'string', required: true, description: 'Markdown body content.' },
       { name: 'status', type: "'draft' | 'published' | 'archived'", required: true, description: 'Publication lifecycle state.' },
       { name: 'author', type: 'string', required: false, description: 'Optional author name.' },
+      { name: 'language', type: 'string', required: false, description: 'Optional per-post language code (e.g. en, de, fr, it, es).' },
       { name: 'createdAt', type: 'string', required: true, description: 'Creation timestamp (ISO string).' },
       { name: 'updatedAt', type: 'string', required: true, description: 'Last update timestamp (ISO string).' },
       { name: 'publishedAt', type: 'string', required: false, description: 'Publication timestamp for published posts.' },
@@ -404,7 +408,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.9.0',
+  version: '1.10.0',
   generatedAt: '2026-02-27T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

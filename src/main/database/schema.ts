@@ -34,6 +34,7 @@ export const posts = sqliteTable('posts', {
   tags: text('tags'), // JSON array stored as text
   categories: text('categories'), // JSON array stored as text
   templateSlug: text('template_slug'), // Optional user template override for this post
+  language: text('language'), // Optional per-post language override (ISO code, e.g. 'en', 'de')
   // Legacy columns (kept for migration compatibility, no longer written)
   publishedTitle: text('published_title'),
   publishedContent: text('published_content'),

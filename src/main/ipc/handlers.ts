@@ -416,6 +416,15 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
         data.author = metadata.defaultAuthor;
       }
     }
+
+    // If no language provided, default from project settings
+    if (!data.language) {
+      const metaEngine = bundle.metaEngine;
+      const metadata = await metaEngine.getProjectMetadata();
+      if (metadata?.mainLanguage) {
+        data.language = metadata.mainLanguage;
+      }
+    }
     
     return engine.createPost(data);
   });

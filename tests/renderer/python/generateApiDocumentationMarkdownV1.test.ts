@@ -37,8 +37,9 @@ describe('generateApiDocumentationMarkdownV1', () => {
     expect(markdown).toContain('## publish');
     expect(markdown).toContain('### publish.uploadSite');
     expect(markdown).toContain('- [publish](#publish)');
-    // chat namespace should not be present
-    expect(markdown).not.toContain('## chat');
+    // chat namespace now contains detectPostLanguage
+    expect(markdown).toContain('## chat');
+    expect(markdown).toContain('### chat.detectPostLanguage');
   });
 
   it('includes a dedicated Data Structures section with core object shapes', () => {

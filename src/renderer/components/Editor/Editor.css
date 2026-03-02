@@ -192,6 +192,23 @@
   gap: 12px;
 }
 
+.editor-language-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.editor-language-row select {
+  flex: 1;
+}
+
+.editor-language-row button.compact {
+  padding: 6px 8px;
+  font-size: 13px;
+  min-width: unset;
+  line-height: 1;
+}
+
 .editor-body {
   flex: 1;
   display: flex;

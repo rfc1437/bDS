@@ -881,6 +881,19 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // ============ Post Language Detection ============
+
+  // Detect the language of a post from its title and content
+  ipcMain.handle('chat:detectPostLanguage', async (_, title: string, content: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().detectPostLanguage(title, content);
+    } catch (error) {
+      console.error('[Chat IPC] Error detecting post language:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // ============ A2UI Actions ============
 
   ipcMain.handle('a2ui:dispatch', async (_, action: { surfaceId: string; componentId: string; action: string; payload?: Record<string, unknown> }) => {

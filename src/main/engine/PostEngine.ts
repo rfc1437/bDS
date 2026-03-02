@@ -24,6 +24,7 @@ export interface PostData {
   content: string;
   status: 'draft' | 'published' | 'archived';
   author?: string;
+  language?: string;
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
@@ -39,6 +40,7 @@ export interface PostMetadata {
   excerpt?: string;
   status: 'draft' | 'published' | 'archived';
   author?: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -319,6 +321,7 @@ export class PostEngine extends EventEmitter {
     // Only add optional fields if they have values (gray-matter can't serialize undefined)
     if (post.excerpt) metadata.excerpt = post.excerpt;
     if (post.author) metadata.author = post.author;
+    if (post.language) metadata.language = post.language;
     if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
 
     // Use date-based directory structure (posts/YYYY/MM/)
@@ -392,6 +395,7 @@ export class PostEngine extends EventEmitter {
       content: data.content || '',
       status: data.status || 'draft',
       author: data.author,
+      language: data.language,
       createdAt: now,
       updatedAt: now,
       publishedAt: data.publishedAt,
@@ -418,6 +422,7 @@ export class PostEngine extends EventEmitter {
       checksum,
       tags: JSON.stringify(post.tags),
       categories: JSON.stringify(post.categories),
+      language: post.language || null,
     };
 
     await db.insert(posts).values(dbPost);
@@ -484,6 +489,7 @@ export class PostEngine extends EventEmitter {
         checksum,
         tags: JSON.stringify(updated.tags),
         categories: JSON.stringify(updated.categories),
+        language: updated.language || null,
       })
       .where(eq(posts.id, id));
 
@@ -576,6 +582,7 @@ export class PostEngine extends EventEmitter {
       content: body,
       status: dbPost.status as 'draft' | 'published' | 'archived',
       author: dbPost.author || undefined,
+      language: (dbPost as { language?: string | null }).language || undefined,
       createdAt: dbPost.createdAt,
       updatedAt: dbPost.updatedAt,
       publishedAt: dbPost.publishedAt || undefined,
@@ -1331,6 +1338,7 @@ export class PostEngine extends EventEmitter {
         checksum,
         tags: JSON.stringify(published.tags),
         categories: JSON.stringify(published.categories),
+        language: published.language || null,
       })
       .where(eq(posts.id, id));
 
@@ -1550,6 +1558,7 @@ export class PostEngine extends EventEmitter {
             content: null,
             status: 'published',
             author: fileData.author,
+            language: fileData.language || null,
             createdAt: fileData.createdAt,
             updatedAt: fileData.updatedAt,
             publishedAt: nextPublishedAt,
@@ -1579,6 +1588,7 @@ export class PostEngine extends EventEmitter {
           content: fileData.content,
           status: 'published',
           author: fileData.author || undefined,
+          language: fileData.language || undefined,
           createdAt: fileData.createdAt,
           updatedAt: fileData.updatedAt,
           publishedAt: nextPublishedAt || undefined,
@@ -1630,6 +1640,7 @@ export class PostEngine extends EventEmitter {
         content: null,
         status: 'published',
         author: fileData.author,
+        language: fileData.language || null,
         createdAt: fileData.createdAt,
         updatedAt: fileData.updatedAt,
         publishedAt,
@@ -1856,6 +1867,7 @@ export class PostEngine extends EventEmitter {
               content: null,
               status: 'published',
               author: postData.author,
+              language: postData.language || null,
               createdAt: postData.createdAt,
               updatedAt: postData.updatedAt,
               publishedAt: postData.publishedAt || postData.updatedAt,

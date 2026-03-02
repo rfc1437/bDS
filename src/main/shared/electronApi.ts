@@ -94,6 +94,7 @@ export interface PostData {
   content: string;
   status: 'draft' | 'published' | 'archived';
   author?: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -893,6 +894,9 @@ export interface ElectronAPI {
 
     // Media Analysis
     analyzeMediaImage: (mediaId: string, language?: string) => Promise<{ success: boolean; title?: string; alt?: string; caption?: string; error?: string }>;
+
+    // Post Language Detection
+    detectPostLanguage: (title: string, content: string) => Promise<{ success: boolean; language?: string; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

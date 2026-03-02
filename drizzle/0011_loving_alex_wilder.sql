@@ -1,0 +1,1 @@
+ALTER TABLE `posts` ADD `language` text;

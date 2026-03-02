@@ -397,6 +397,7 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
       `      <guid isPermaLink="true">${escapeXml(permalink)}</guid>`,
       `      <pubDate>${(post.publishedAt || post.updatedAt).toUTCString()}</pubDate>`,
       post.author ? `      <author>${escapeXml(post.author)}</author>` : null,
+      (post as { language?: string }).language ? `      <dc:language>${escapeXml((post as { language?: string }).language!)}</dc:language>` : null,
       `      <description><![CDATA[${escapeCdata(excerptXhtml)}]]></description>`,
       `      <content:encoded><![CDATA[${escapeCdata(contentXhtml)}]]></content:encoded>`,
       ...categories.map((entry) => `      ${entry}`),
@@ -406,7 +407,7 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
 
   const rssXml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">',
+    '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">',
     '  <channel>',
     `    <title>${escapeXml(feedTitle)}</title>`,
     `    <link>${escapeXml(baseLink)}</link>`,
@@ -430,8 +431,10 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
       ...(post.categories || []).map((category) => `<category term="${escapeXml(category)}" />`),
     ];
 
+    const postLanguageAttr = (post as { language?: string }).language ? ` xml:lang="${escapeXml((post as { language?: string }).language!)}"` : '';
+
     return [
-      '  <entry>',
+      `  <entry${postLanguageAttr}>`,
       `    <title>${escapeXml(post.title)}</title>`,
       `    <id>${escapeXml(permalink)}</id>`,
       `    <link href="${escapeXml(permalink)}" />`,

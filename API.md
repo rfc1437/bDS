@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.9.0
+Contract version: 1.10.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -26,6 +26,7 @@ project = await bds.meta.get_project_metadata()
 - [app](#app)
 - [meta](#meta)
 - [tags](#tags)
+- [chat](#chat)
 - [sync](#sync)
 - [publish](#publish)
 - [Data Structures](#data-structures)
@@ -378,6 +379,7 @@ result = await bds.posts.create(data={})
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -421,6 +423,7 @@ None  # or
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -488,6 +491,7 @@ None  # or
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -581,6 +585,7 @@ result = await bds.posts.get_by_status(status='status')
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -624,6 +629,7 @@ None  # or
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -666,6 +672,7 @@ None  # or
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -807,6 +814,7 @@ result = await bds.posts.filter(filter={})
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -999,6 +1007,7 @@ result = await bds.posts.get_links_to(id='id-1')
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -1041,6 +1050,7 @@ result = await bds.posts.get_linked_by(id='id-1')
     'content': 'value',
     'status': 'draft',
     'author': 'value',
+    'language': 'value',
     'createdAt': 'value',
     'updatedAt': 'value',
     'publishedAt': 'value',
@@ -3448,6 +3458,40 @@ result = await bds.tags.sync_from_posts()
 
 [↑ Back to Table of contents](#table-of-contents)
 
+## chat
+
+**Module APIs**
+
+- [chat.detectPostLanguage](#chatdetectpostlanguage)
+
+### chat.detectPostLanguage
+
+Detect the language of a post from its title and content.
+
+**Parameters**
+
+- title (str, required)
+- content (str, required)
+
+**Response specification**
+
+- Return type: `{ success: boolean; language?: string; error?: string }`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.detect_post_language(title='title', content='content')
+```
+
+**Example response**
+
+```python
+{}
+```
+
+[↑ Back to Table of contents](#table-of-contents)
+
 ## sync
 
 **Module APIs**
@@ -3821,6 +3865,7 @@ Canonical post object used across editor and generation flows.
 - content (`string`, required): Markdown body content.
 - status (`'draft' | 'published' | 'archived'`, required): Publication lifecycle state.
 - author (`string`, optional): Optional author name.
+- language (`string`, optional): Optional per-post language code (e.g. en, de, fr, it, es).
 - createdAt (`string`, required): Creation timestamp (ISO string).
 - updatedAt (`string`, required): Last update timestamp (ISO string).
 - publishedAt (`string`, optional): Publication timestamp for published posts.

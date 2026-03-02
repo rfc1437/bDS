@@ -376,6 +376,9 @@ export const electronAPI: ElectronAPI = {
     // Media Analysis
     analyzeMediaImage: (mediaId: string, language?: string) => ipcRenderer.invoke('chat:analyzeMediaImage', mediaId, language),
 
+    // Post Language Detection
+    detectPostLanguage: (title: string, content: string) => ipcRenderer.invoke('chat:detectPostLanguage', title, content),
+
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {
       const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; delta: string }) => callback(data);

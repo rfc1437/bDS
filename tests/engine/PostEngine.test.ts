@@ -163,6 +163,22 @@ describe('PostEngine', () => {
     
     // Reset the mock implementations
     vi.mocked(mockLocalDb.select).mockImplementation(() => createSelectChain());
+    vi.mocked(mockLocalDb.insert).mockImplementation(() => ({
+      values: vi.fn((data: any) => {
+        if (data && data.id) {
+          mockPosts.set(data.id, data);
+        }
+        return Promise.resolve();
+      }),
+    }) as any);
+    vi.mocked(mockLocalDb.update).mockImplementation(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => Promise.resolve()),
+      })),
+    }) as any);
+    vi.mocked(mockLocalDb.delete).mockImplementation(() => ({
+      where: vi.fn(() => Promise.resolve()),
+    }) as any);
     
     // Reset fs implementations to use mockFiles map (fixes test leakage from other tests)
     vi.mocked(fs.readFile).mockImplementation(createDefaultFsReadFile(mockFiles) as any);
@@ -3299,6 +3315,108 @@ Content with [link](/posts/other-post)`);
       expect(result.updated).toBe(0);
       expect(result.deleted).toBe(0);
       expect(result.processedFiles).toBe(0);
+    });
+  });
+
+  describe('Post Language', () => {
+    it('should create a post with no language by default', async () => {
+      const post = await postEngine.createPost({ title: 'No Language' });
+      expect(post.language).toBeUndefined();
+    });
+
+    it('should create a post with explicit language', async () => {
+      const post = await postEngine.createPost({ title: 'German Post', language: 'de' });
+      expect(post.language).toBe('de');
+    });
+
+    it('should update post language', async () => {
+      const post = await postEngine.createPost({ title: 'Lang Update' });
+
+      // Mock getPost to return the created post
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.get = vi.fn().mockResolvedValue({
+          ...mockPosts.get(post.id),
+          tags: JSON.stringify([]),
+          categories: JSON.stringify([]),
+        });
+        return chain;
+      });
+
+      const updated = await postEngine.updatePost(post.id, { language: 'fr' });
+      expect(updated).not.toBeNull();
+      expect(updated!.language).toBe('fr');
+    });
+
+    it('should include language in frontmatter when publishing', async () => {
+      const post = await postEngine.createPost({ title: 'Publish Lang', language: 'es' });
+      const postId = post.id;
+
+      // Verify the post was stored in the mock DB
+      const stored = mockPosts.get(postId);
+      expect(stored).toBeDefined();
+
+      // The mock DB stores posts via insert; publishPost calls getPost internally,
+      // which needs DB select to return the post with content (draft).
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.get = vi.fn().mockImplementation(() => {
+          const s = mockPosts.get(postId);
+          if (!s) return Promise.resolve(undefined);
+          return Promise.resolve(s);
+        });
+        return chain;
+      });
+
+      const result = await postEngine.publishPost(postId);
+      expect(result).not.toBeNull();
+
+      // Check that the written file contains language in frontmatter
+      const writtenFiles = Array.from(mockFiles.entries());
+      const postFile = writtenFiles.find(([p]) => p.endsWith('.md'));
+      expect(postFile).toBeDefined();
+      expect(postFile![1]).toContain('language: es');
+    });
+
+    it('should read language from frontmatter in published posts', async () => {
+      const filePath = '/mock/data/posts/2025/01/lang-test.md';
+      mockFiles.set(filePath, [
+        '---',
+        'id: lang-test-post',
+        'title: Language Test',
+        'slug: lang-test',
+        'status: published',
+        'language: it',
+        'createdAt: 2025-01-15T10:00:00.000Z',
+        'updatedAt: 2025-01-15T10:00:00.000Z',
+        'tags: []',
+        'categories: []',
+        '---',
+        'Content here',
+      ].join('\n'));
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.get = vi.fn().mockResolvedValue({
+          id: 'lang-test-post',
+          projectId: 'default',
+          title: 'Language Test',
+          slug: 'lang-test',
+          content: null,
+          status: 'published',
+          language: 'it',
+          createdAt: new Date('2025-01-15T10:00:00.000Z'),
+          updatedAt: new Date('2025-01-15T10:00:00.000Z'),
+          filePath,
+          tags: '[]',
+          categories: '[]',
+        });
+        return chain;
+      });
+
+      const post = await postEngine.getPost('lang-test-post');
+      expect(post).not.toBeNull();
+      expect(post!.language).toBe('it');
     });
   });
 });

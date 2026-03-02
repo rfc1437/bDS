@@ -59,15 +59,15 @@ describe('pythonApiContractV1', () => {
     });
   });
 
-  it('does not include chat namespace (removed in v1.7.0)', () => {
+  it('only exposes detectPostLanguage from chat namespace', () => {
     const methodNames = listPythonApiMethodNames();
     const chatMethods = methodNames.filter((m) => m.startsWith('chat.'));
-    expect(chatMethods).toHaveLength(0);
+    expect(chatMethods).toEqual(['chat.detectPostLanguage']);
   });
 
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.9.0',
+      version: '1.10.0',
       generatedAt: expect.any(String),
     });
   });
@@ -100,7 +100,8 @@ describe('generatePythonApiModuleV1', () => {
     expect(moduleCode).toContain('async def upload_site(self, credentials):');
     expect(moduleCode).toContain('class BdsApi:');
     expect(moduleCode).toContain('bds = BdsApi(_transport)');
-    expect(moduleCode).not.toContain('class ChatApi:');
+    expect(moduleCode).toContain('class ChatApi:');
+    expect(moduleCode).toContain('async def detect_post_language(self, title, content):');
   });
 
   it('escapes python keyword method names to valid identifiers', () => {
