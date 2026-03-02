@@ -251,7 +251,8 @@ export class ChatService {
       // In offline mode, swap to the configured offline chat model
       if (this.providers.isOfflineMode()) {
         if (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId)) {
-          const offlineModel = await this.chatEngine.getSetting('offline_chat_model');
+          const offlineModel = await this.chatEngine.getSetting('offline_chat_model')
+            || this.providers.getFirstKnownLocalModelId();
           if (offlineModel) {
             modelId = offlineModel;
           } else {
@@ -465,7 +466,8 @@ export class ChatService {
 
       // In offline mode, swap to the configured offline title model
       if (this.providers.isOfflineMode()) {
-        const offlineModel = await this.chatEngine.getSetting('offline_title_model');
+        const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+          || this.providers.getFirstKnownLocalModelId();
         if (offlineModel) {
           titleModel = offlineModel;
         } else if (!titleModel || (!this.providers.isOllamaModel(titleModel) && !this.providers.isLmstudioModel(titleModel))) {

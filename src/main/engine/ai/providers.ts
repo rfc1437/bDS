@@ -400,6 +400,29 @@ export class ProviderRegistry {
   }
 
   /**
+   * Return the first known local model ID, or null if none registered.
+   * Used as automatic fallback when no explicit offline model is configured.
+   */
+  getFirstKnownLocalModelId(): string | null {
+    for (const id of this.ollamaModelIds) return id;
+    for (const id of this.lmstudioModelIds) return id;
+    return null;
+  }
+
+  /**
+   * Return the first known local vision-capable model ID, or null.
+   */
+  getFirstKnownLocalVisionModelId(): string | null {
+    for (const id of this.ollamaModelIds) {
+      if (this.ollamaModelSupportsVision(id)) return id;
+    }
+    for (const id of this.lmstudioModelIds) {
+      if (this.lmstudioModelSupportsVision(id)) return id;
+    }
+    return null;
+  }
+
+  /**
    * Return models already known to belong to local providers (Ollama + LM Studio)
    * from in-memory sets, without any network fetch.
    */

@@ -83,15 +83,33 @@ describe('OneShotTasks offline model fallback', () => {
     expect(resolveModelSpy).toHaveBeenCalledWith('llava:latest');
   });
 
-  it('analyzeMediaImage returns error when offline with no offline model configured', async () => {
+  it('analyzeMediaImage auto-falls back to first local model when no offline model configured', async () => {
     registry.setOpencodeKey('test-key');
     registry.setOfflineMode(true);
 
     const chatEngine = createMockChatEngine({
       chat_image_analysis_model: 'claude-sonnet-4-5',
-      // No offline_image_analysis_model set
+      // No offline_image_analysis_model set — should auto-pick llava:latest
     });
     const tasks = new OneShotTasks(registry, chatEngine, createMockMediaEngine());
+
+    const resolveModelSpy = vi.spyOn(registry, 'resolveModel')
+      .mockImplementation(() => { throw new Error('mock-stop'); });
+
+    await tasks.analyzeMediaImage('media-1', 'en');
+
+    expect(resolveModelSpy).toHaveBeenCalledWith('llava:latest');
+  });
+
+  it('analyzeMediaImage returns error when offline with no local models at all', async () => {
+    const emptyRegistry = new ProviderRegistry();
+    emptyRegistry.setOpencodeKey('test-key');
+    emptyRegistry.setOfflineMode(true);
+
+    const chatEngine = createMockChatEngine({
+      chat_image_analysis_model: 'claude-sonnet-4-5',
+    });
+    const tasks = new OneShotTasks(emptyRegistry, chatEngine, createMockMediaEngine());
 
     const result = await tasks.analyzeMediaImage('media-1', 'en');
 
@@ -166,12 +184,12 @@ describe('ChatService offline model fallback', () => {
     expect(result.success).toBe(false); // throws mock-stop in try/catch
   });
 
-  it('sendMessage returns error when offline with no offline_chat_model configured', async () => {
+  it('sendMessage auto-falls back to first local model when no offline_chat_model configured', async () => {
     registry.setOpencodeKey('test-key');
     registry.setOfflineMode(true);
 
     const chatEngine = createMockChatEngine({
-      // No offline_chat_model set
+      // No offline_chat_model — should auto-pick llama3:latest
     });
     chatEngine.getConversation = vi.fn(async () => ({
       id: 'conv-1',
@@ -187,11 +205,41 @@ describe('ChatService offline model fallback', () => {
       {} as never,
       () => null,
     );
+    mockModelCatalog(registry);
+
+    const resolveModelSpy = vi.spyOn(registry, 'resolveModel')
+      .mockImplementation(() => { throw new Error('mock-stop'); });
+
+    await service.sendMessage('conv-1', 'Hello', {});
+
+    expect(resolveModelSpy).toHaveBeenCalledWith('llama3:latest');
+  });
+
+  it('sendMessage returns error when offline with no local models at all', async () => {
+    const emptyRegistry = new ProviderRegistry();
+    emptyRegistry.setOpencodeKey('test-key');
+    emptyRegistry.setOfflineMode(true);
+
+    const chatEngine = createMockChatEngine({});
+    chatEngine.getConversation = vi.fn(async () => ({
+      id: 'conv-1',
+      title: 'Test',
+      model: 'claude-sonnet-4',
+      createdAt: new Date(),
+      messages: [],
+    }));
+
+    const service = new ChatService(
+      chatEngine,
+      emptyRegistry,
+      {} as never,
+      () => null,
+    );
 
     const result = await service.sendMessage('conv-1', 'Hello', {});
 
+    // With no local providers enabled, isReady() returns false
     expect(result.success).toBe(false);
-    expect(result.error).toContain('offline');
   });
 
   it('sendMessage keeps local model when conversation already uses local model and offline', async () => {

@@ -127,6 +127,25 @@ describe('ProviderRegistry offline mode', () => {
     expect(models.length).toBe(0);
   });
 
+  // ---------- getFirstKnownLocalModelId ----------
+
+  it('getFirstKnownLocalModelId returns first registered model', () => {
+    registry.setOllamaEnabled(true);
+    registry.registerOllamaModel('llama3:latest');
+    registry.registerOllamaModel('mistral:latest');
+    expect(registry.getFirstKnownLocalModelId()).toBe('llama3:latest');
+  });
+
+  it('getFirstKnownLocalModelId returns null when no models registered', () => {
+    expect(registry.getFirstKnownLocalModelId()).toBeNull();
+  });
+
+  it('getFirstKnownLocalModelId falls back to LM Studio when no Ollama models', () => {
+    registry.setLmstudioEnabled(true);
+    registry.registerLmstudioModel('gemma-3-12b-it');
+    expect(registry.getFirstKnownLocalModelId()).toBe('gemma-3-12b-it');
+  });
+
   // ---------- getProviderStatus includes offline ----------
 
   it('getProviderStatus includes offlineMode field', () => {

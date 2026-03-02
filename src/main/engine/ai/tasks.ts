@@ -187,7 +187,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
 
     // In offline mode, swap to the configured offline image analysis model
     if (this.providers.isOfflineMode()) {
-      const offlineModel = await this.chatEngine.getSetting('offline_image_analysis_model');
+      const offlineModel = await this.chatEngine.getSetting('offline_image_analysis_model')
+        || this.providers.getFirstKnownLocalVisionModelId()
+        || this.providers.getFirstKnownLocalModelId();
       if (offlineModel) {
         modelId = offlineModel;
       } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
