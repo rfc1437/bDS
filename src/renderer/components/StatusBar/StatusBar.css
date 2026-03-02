@@ -123,6 +123,18 @@
   gap: 4px;
 }
 
+.status-bar-item.offline-badge {
+  border: 1px solid var(--vscode-statusBar-border, transparent);
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.status-bar-item.offline-badge.active {
+  background-color: var(--vscode-notificationsWarningIcon-foreground);
+  opacity: 1;
+}
+
 .status-bar-language-select {
   background: transparent;
   border: none;

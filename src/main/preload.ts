@@ -328,6 +328,16 @@ export const electronAPI: ElectronAPI = {
     getLmstudioModelCapabilities: () => ipcRenderer.invoke('chat:getLmstudioModelCapabilities'),
     setLmstudioModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setLmstudioModelCapabilities', modelId, caps),
 
+    // Offline / Airplane Mode
+    getOfflineMode: () => ipcRenderer.invoke('chat:getOfflineMode'),
+    setOfflineMode: (enabled: boolean) => ipcRenderer.invoke('chat:setOfflineMode', enabled),
+    getOfflineChatModel: () => ipcRenderer.invoke('chat:getOfflineChatModel'),
+    setOfflineChatModel: (modelId: string | null) => ipcRenderer.invoke('chat:setOfflineChatModel', modelId),
+    getOfflineTitleModel: () => ipcRenderer.invoke('chat:getOfflineTitleModel'),
+    setOfflineTitleModel: (modelId: string | null) => ipcRenderer.invoke('chat:setOfflineTitleModel', modelId),
+    getOfflineImageAnalysisModel: () => ipcRenderer.invoke('chat:getOfflineImageAnalysisModel'),
+    setOfflineImageAnalysisModel: (modelId: string | null) => ipcRenderer.invoke('chat:setOfflineImageAnalysisModel', modelId),
+
     // Per-Purpose Model Preferences
     getTitleModel: () => ipcRenderer.invoke('chat:getTitleModel'),
     setTitleModel: (modelId: string | null) => ipcRenderer.invoke('chat:setTitleModel', modelId),

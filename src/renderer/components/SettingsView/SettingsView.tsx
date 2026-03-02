@@ -251,6 +251,10 @@ export const SettingsView: React.FC = () => {
   const [lmstudioEnabled, setLmstudioEnabled] = useState(false);
   const [lmstudioCapabilities, setLmstudioCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
   const [lmstudioModels, setLmstudioModels] = useState<{id: string; name: string}[]>([]);
+  const [offlineModeEnabled, setOfflineModeEnabled] = useState(false);
+  const [offlineChatModel, setOfflineChatModel] = useState('');
+  const [offlineTitleModel, setOfflineTitleModel] = useState('');
+  const [offlineImageAnalysisModel, setOfflineImageAnalysisModel] = useState('');
   const [titleModel, setTitleModel] = useState('claude-haiku-4-5');
   const [imageAnalysisModel, setImageAnalysisModel] = useState('claude-sonnet-4-5');
   const [availableModels, setAvailableModels] = useState<{id: string; name: string; provider?: string; vision?: boolean}[]>([]);
@@ -458,6 +462,16 @@ export const SettingsView: React.FC = () => {
           if (imageModelResult?.success && imageModelResult.modelId) {
             setImageAnalysisModel(imageModelResult.modelId);
           }
+
+          // Load offline mode preferences
+          const offlineState = await window.electronAPI?.chat.getOfflineMode();
+          setOfflineModeEnabled(!!offlineState);
+          const offlineChat = await window.electronAPI?.chat.getOfflineChatModel();
+          if (offlineChat?.success && offlineChat.modelId) setOfflineChatModel(offlineChat.modelId);
+          const offlineTitle = await window.electronAPI?.chat.getOfflineTitleModel();
+          if (offlineTitle?.success && offlineTitle.modelId) setOfflineTitleModel(offlineTitle.modelId);
+          const offlineImage = await window.electronAPI?.chat.getOfflineImageAnalysisModel();
+          if (offlineImage?.success && offlineImage.modelId) setOfflineImageAnalysisModel(offlineImage.modelId);
 
           // Load model catalog metadata
           const catalogResult = await window.electronAPI?.chat.getModelCatalog();
@@ -1298,6 +1312,45 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleOfflineToggle = async (enabled: boolean) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineMode(enabled);
+      if (result?.success) {
+        setOfflineModeEnabled(enabled);
+        showToast.success(t(enabled ? 'settings.toast.offlineEnabled' : 'settings.toast.offlineDisabled'));
+      }
+    } catch (error) {
+      console.error('Failed to toggle offline mode:', error);
+    }
+  };
+
+  const handleOfflineChatModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineChatModel(modelId);
+      if (result?.success) setOfflineChatModel(modelId);
+    } catch (error) {
+      console.error('Failed to set offline chat model:', error);
+    }
+  };
+
+  const handleOfflineTitleModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineTitleModel(modelId);
+      if (result?.success) setOfflineTitleModel(modelId);
+    } catch (error) {
+      console.error('Failed to set offline title model:', error);
+    }
+  };
+
+  const handleOfflineImageAnalysisModelChange = async (modelId: string) => {
+    try {
+      const result = await window.electronAPI?.chat.setOfflineImageAnalysisModel(modelId);
+      if (result?.success) setOfflineImageAnalysisModel(modelId);
+    } catch (error) {
+      console.error('Failed to set offline image analysis model:', error);
+    }
+  };
+
   const handleModelChange = async (modelId: string) => {
     try {
       const result = await window.electronAPI?.chat.setDefaultModel(modelId);
@@ -1362,6 +1415,16 @@ export const SettingsView: React.FC = () => {
   // Vision-capable models only (for image analysis model selector)
   const groupedVisionModels = useMemo(
     () => groupModelsByProvider(availableModels.filter(m => m.vision)),
+    [availableModels, groupModelsByProvider]
+  );
+
+  // Local-only models (for offline / airplane mode selectors)
+  const groupedLocalModels = useMemo(
+    () => groupModelsByProvider(availableModels.filter(m => m.provider === 'ollama' || m.provider === 'lmstudio')),
+    [availableModels, groupModelsByProvider]
+  );
+  const groupedLocalVisionModels = useMemo(
+    () => groupModelsByProvider(availableModels.filter(m => (m.provider === 'ollama' || m.provider === 'lmstudio') && m.vision)),
     [availableModels, groupModelsByProvider]
   );
 
@@ -1594,6 +1657,50 @@ export const SettingsView: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
+        id="ai-offline"
+        label={t('settings.ai.offlineLabel')}
+        description={t('settings.ai.offlineDescription')}
+      >
+        <div className="setting-input-group">
+          <label className="toggle-label">
+            <input
+              id="ai-offline"
+              type="checkbox"
+              checked={offlineModeEnabled}
+              onChange={(e) => handleOfflineToggle(e.target.checked)}
+              disabled={!ollamaEnabled && !lmstudioEnabled}
+            />
+            {t('settings.ai.offlineEnable')}
+          </label>
+          {offlineModeEnabled && (
+            <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+          )}
+        </div>
+        {!ollamaEnabled && !lmstudioEnabled && (
+          <small className="setting-description">{t('settings.ai.offlineNoLocalProviders')}</small>
+        )}
+        {offlineModeEnabled && (ollamaEnabled || lmstudioEnabled) && (
+          <div className="offline-model-preferences">
+            <div className="setting-field">
+              <label htmlFor="ai-offline-chat-model">{t('settings.ai.offlineChatModel')}</label>
+              <small className="setting-description">{t('settings.ai.offlineChatModelDescription')}</small>
+              {renderModelSelect('ai-offline-chat-model', offlineChatModel, handleOfflineChatModelChange, false, groupedLocalModels)}
+            </div>
+            <div className="setting-field">
+              <label htmlFor="ai-offline-title-model">{t('settings.ai.offlineTitleModel')}</label>
+              <small className="setting-description">{t('settings.ai.offlineTitleModelDescription')}</small>
+              {renderModelSelect('ai-offline-title-model', offlineTitleModel, handleOfflineTitleModelChange, false, groupedLocalModels)}
+            </div>
+            <div className="setting-field">
+              <label htmlFor="ai-offline-image-model">{t('settings.ai.offlineImageAnalysisModel')}</label>
+              <small className="setting-description">{t('settings.ai.offlineImageAnalysisModelDescription')}</small>
+              {renderModelSelect('ai-offline-image-model', offlineImageAnalysisModel, handleOfflineImageAnalysisModelChange, false, groupedLocalVisionModels)}
+            </div>
           </div>
         )}
       </SettingRow>

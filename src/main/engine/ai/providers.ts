@@ -116,10 +116,22 @@ export class ProviderRegistry {
   private lmstudioModelIds = new Set<string>();
   private lmstudioCapabilities = new Map<string, { tools: boolean; vision: boolean }>();
   private modelCatalogEngine = new ModelCatalogEngine();
+  private _offlineMode = false;
 
   // Model cache
   private cachedModels: ChatModel[] | null = null;
   private cachedModelsAt = 0;
+
+  // ---- Offline / airplane mode ----
+
+  setOfflineMode(enabled: boolean): void {
+    this._offlineMode = enabled;
+    this.invalidateModelCache();
+  }
+
+  isOfflineMode(): boolean {
+    return this._offlineMode;
+  }
 
   // ---- Key management ----
 
@@ -289,24 +301,30 @@ export class ProviderRegistry {
 
   /** Check whether at least one provider key is configured. */
   isReady(): boolean {
+    if (this._offlineMode) {
+      return !!(this.ollamaEnabled || this.lmstudioEnabled);
+    }
     return !!(this.opencodeKey || this.mistralKey || this.ollamaEnabled || this.lmstudioEnabled);
   }
 
   /** Check whether the key for a specific provider is set. */
   isProviderKeySet(provider: string): boolean {
-    if (provider === 'mistral') return !!this.mistralKey;
     if (provider === 'ollama') return this.ollamaEnabled;
     if (provider === 'lmstudio') return this.lmstudioEnabled;
+    // In offline mode, cloud providers are unavailable
+    if (this._offlineMode) return false;
+    if (provider === 'mistral') return !!this.mistralKey;
     return !!this.opencodeKey;
   }
 
   /** Returns status of all configured providers. */
-  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean } {
+  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean; offlineMode: boolean } {
     return {
       opencode: !!this.opencodeKey,
       mistral: !!this.mistralKey,
       ollama: this.ollamaEnabled,
       lmstudio: this.lmstudioEnabled,
+      offlineMode: this._offlineMode,
     };
   }
 
@@ -314,6 +332,11 @@ export class ProviderRegistry {
 
   /** Resolve a model ID to an AI SDK LanguageModel. */
   resolveModel(modelId: string): LanguageModel {
+    // In offline mode, only local providers are allowed
+    if (this._offlineMode && !this.ollamaModelIds.has(modelId) && !this.lmstudioModelIds.has(modelId)) {
+      throw new Error(`Model '${modelId}' is not available offline. Switch to a local model or disable airplane mode.`);
+    }
+
     // Check if this is a registered Ollama model first
     if (this.ollamaModelIds.has(modelId)) {
       if (!this.ollamaEnabled) {
@@ -386,8 +409,8 @@ export class ProviderRegistry {
     let fetched = false;
     const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
 
-    // Fetch OpenCode models
-    if (this.opencodeKey) {
+    // Fetch OpenCode models (skip in offline mode)
+    if (this.opencodeKey && !this._offlineMode) {
       try {
         const models = await this.fetchModelsFromEndpoint(
           ZEN_MODELS_URL,
@@ -402,8 +425,8 @@ export class ProviderRegistry {
       }
     }
 
-    // Fetch Mistral models
-    if (this.mistralKey) {
+    // Fetch Mistral models (skip in offline mode)
+    if (this.mistralKey && !this._offlineMode) {
       try {
         const models = await this.fetchModelsFromEndpoint(
           MISTRAL_MODELS_URL,

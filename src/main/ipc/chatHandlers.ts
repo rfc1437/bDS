@@ -4,7 +4,7 @@
  * Uses ProviderRegistry, ChatService, and OneShotTasks.
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, net } from 'electron';
 import { ChatEngine } from '../engine/ChatEngine';
 import { SecureKeyStore } from '../engine/SecureKeyStore';
 import { ProviderRegistry } from '../engine/ai/providers';
@@ -137,6 +137,21 @@ async function ensureInitialized(): Promise<void> {
         if (lmCapsJson) {
           const caps = JSON.parse(lmCapsJson) as Record<string, { tools: boolean; vision: boolean }>;
           reg.loadLmstudioModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
+
+      // Restore offline mode from settings or auto-detect via OS network status
+      try {
+        const savedOffline = await getChatEngine().getSetting('offline_mode');
+        if (savedOffline === 'true') {
+          reg.setOfflineMode(true);
+        } else if (savedOffline === null || savedOffline === undefined) {
+          // No explicit preference saved — auto-detect using Electron net API
+          const online = net.isOnline();
+          if (!online && (reg.getProviderStatus().ollama || reg.getProviderStatus().lmstudio)) {
+            reg.setOfflineMode(true);
+            await getChatEngine().setSetting('offline_mode', 'true');
+          }
         }
       } catch { /* ignore */ }
     })();
@@ -399,6 +414,91 @@ export function registerChatHandlers(): void {
       return { success: true };
     } catch (error) {
       console.error('[Chat IPC] Error setting LM Studio model capabilities:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Offline / Airplane Mode ============
+
+  ipcMain.handle('chat:getOfflineMode', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().isOfflineMode();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline mode:', error);
+      return false;
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineMode', async (_, enabled: boolean) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setOfflineMode(enabled);
+      await getChatEngine().setSetting('offline_mode', enabled ? 'true' : 'false');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline mode:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:getOfflineChatModel', async () => {
+    try {
+      const model = await getChatEngine().getSetting('offline_chat_model');
+      return { success: true, modelId: model || null };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline chat model:', error);
+      return { success: false, modelId: null };
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineChatModel', async (_, modelId: string | null) => {
+    try {
+      await getChatEngine().setSetting('offline_chat_model', modelId ?? '');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline chat model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:getOfflineTitleModel', async () => {
+    try {
+      const model = await getChatEngine().getSetting('offline_title_model');
+      return { success: true, modelId: model || null };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline title model:', error);
+      return { success: false, modelId: null };
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineTitleModel', async (_, modelId: string | null) => {
+    try {
+      await getChatEngine().setSetting('offline_title_model', modelId ?? '');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline title model:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('chat:getOfflineImageAnalysisModel', async () => {
+    try {
+      const model = await getChatEngine().getSetting('offline_image_analysis_model');
+      return { success: true, modelId: model || null };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting offline image analysis model:', error);
+      return { success: false, modelId: null };
+    }
+  });
+
+  ipcMain.handle('chat:setOfflineImageAnalysisModel', async (_, modelId: string | null) => {
+    try {
+      await getChatEngine().setSetting('offline_image_analysis_model', modelId ?? '');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting offline image analysis model:', error);
       return { success: false, error: (error as Error).message };
     }
   });

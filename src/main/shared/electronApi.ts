@@ -451,7 +451,7 @@ export interface ChatReadyStatus {
   ready: boolean;
   error?: string;
   backend?: string;
-  providers?: { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean };
+  providers?: { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean; offlineMode: boolean };
 }
 
 export interface ChatApiKeyStatus {
@@ -845,6 +845,16 @@ export interface ElectronAPI {
     getLmstudioModels: () => Promise<ChatModel[]>;
     getLmstudioModelCapabilities: () => Promise<Record<string, { tools: boolean; vision: boolean }>>;
     setLmstudioModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => Promise<{ success: boolean; error?: string }>;
+
+    // Offline / Airplane mode
+    getOfflineMode: () => Promise<boolean>;
+    setOfflineMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+    getOfflineChatModel: () => Promise<{ success: boolean; modelId?: string | null }>;
+    setOfflineChatModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
+    getOfflineTitleModel: () => Promise<{ success: boolean; modelId?: string | null }>;
+    setOfflineTitleModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
+    getOfflineImageAnalysisModel: () => Promise<{ success: boolean; modelId?: string | null }>;
+    setOfflineImageAnalysisModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
 
     // Settings
     getAvailableModels: () => Promise<{ success: boolean; models?: ChatModel[]; selectedModel?: string; error?: string }>;
