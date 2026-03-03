@@ -416,6 +416,15 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
         data.author = metadata.defaultAuthor;
       }
     }
+
+    // If no language provided, default from project settings
+    if (!data.language) {
+      const metaEngine = bundle.metaEngine;
+      const metadata = await metaEngine.getProjectMetadata();
+      if (metadata?.mainLanguage) {
+        data.language = metadata.mainLanguage;
+      }
+    }
     
     return engine.createPost(data);
   });
@@ -826,6 +835,20 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     }
     await engine.rebuildDatabaseFromFiles();
     return true;
+  });
+
+  // ============ Script Task Lifecycle (external tasks for utility scripts) ====
+
+  safeHandle('scripts:startTask', async (_, taskId: string, name: string) => {
+    bundle.taskManager.startExternalTask(taskId, name);
+  });
+
+  safeHandle('scripts:completeTask', async (_, taskId: string) => {
+    bundle.taskManager.completeExternalTask(taskId);
+  });
+
+  safeHandle('scripts:failTask', async (_, taskId: string, error: string) => {
+    bundle.taskManager.failExternalTask(taskId, error);
   });
 
   // ============ Template Handlers ============

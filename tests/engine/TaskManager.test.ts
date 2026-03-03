@@ -340,6 +340,120 @@ describe('TaskManager', () => {
   });
 });
 
+describe('TaskManager External Tasks', () => {
+  let taskManager: TaskManager;
+
+  beforeEach(() => {
+    taskManager = new TaskManager();
+    resetMockCounters();
+  });
+
+  it('should create an external task in running state', () => {
+    taskManager.startExternalTask('ext-1', 'Language detection');
+
+    const status = taskManager.getTaskStatus('ext-1');
+    expect(status).toBeDefined();
+    expect(status?.status).toBe('running');
+    expect(status?.name).toBe('Language detection');
+    expect(status?.progress).toBe(0);
+  });
+
+  it('should emit taskCreated and taskStarted for external tasks', () => {
+    const createdHandler = vi.fn();
+    const startedHandler = vi.fn();
+    taskManager.on('taskCreated', createdHandler);
+    taskManager.on('taskStarted', startedHandler);
+
+    taskManager.startExternalTask('ext-2', 'Script run');
+
+    expect(createdHandler).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'ext-2', status: 'running' }));
+    expect(startedHandler).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'ext-2', status: 'running' }));
+  });
+
+  it('should update progress on an external task', () => {
+    const progressHandler = vi.fn();
+    taskManager.on('taskProgress', progressHandler);
+
+    taskManager.startExternalTask('ext-3', 'Detect languages');
+    taskManager.updateExternalTaskProgress('ext-3', 50, 'Halfway done');
+
+    const status = taskManager.getTaskStatus('ext-3');
+    expect(status?.progress).toBe(50);
+    expect(status?.message).toBe('Halfway done');
+    expect(progressHandler).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'ext-3',
+      progress: 50,
+      message: 'Halfway done',
+    }));
+  });
+
+  it('should complete an external task', () => {
+    const completedHandler = vi.fn();
+    taskManager.on('taskCompleted', completedHandler);
+
+    taskManager.startExternalTask('ext-4', 'Run utility');
+    taskManager.completeExternalTask('ext-4');
+
+    const status = taskManager.getTaskStatus('ext-4');
+    expect(status?.status).toBe('completed');
+    expect(status?.progress).toBe(100);
+    expect(status?.endTime).toBeInstanceOf(Date);
+    expect(completedHandler).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'ext-4', status: 'completed' }));
+  });
+
+  it('should fail an external task', () => {
+    const failedHandler = vi.fn();
+    taskManager.on('taskFailed', failedHandler);
+
+    taskManager.startExternalTask('ext-5', 'Run utility');
+    taskManager.failExternalTask('ext-5', 'Script crashed');
+
+    const status = taskManager.getTaskStatus('ext-5');
+    expect(status?.status).toBe('failed');
+    expect(status?.error).toBe('Script crashed');
+    expect(status?.endTime).toBeInstanceOf(Date);
+    expect(failedHandler).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'ext-5', status: 'failed' }));
+  });
+
+  it('should ignore updates to non-existent external tasks', () => {
+    // These should not throw
+    taskManager.updateExternalTaskProgress('nope', 50, 'test');
+    taskManager.completeExternalTask('nope');
+    taskManager.failExternalTask('nope', 'error');
+  });
+
+  it('should include external tasks in getAllTasks and getRunningTasks', () => {
+    taskManager.startExternalTask('ext-6', 'Running script');
+
+    expect(taskManager.getAllTasks()).toHaveLength(1);
+    expect(taskManager.getRunningTasks()).toHaveLength(1);
+
+    taskManager.completeExternalTask('ext-6');
+
+    expect(taskManager.getAllTasks()).toHaveLength(1);
+    expect(taskManager.getRunningTasks()).toHaveLength(0);
+  });
+
+  it('should allow cancellation of external tasks', () => {
+    taskManager.startExternalTask('ext-7', 'Long script');
+
+    const cancelled = taskManager.cancelTask('ext-7');
+    expect(cancelled).toBe(true);
+
+    const status = taskManager.getTaskStatus('ext-7');
+    expect(status?.status).toBe('cancelled');
+  });
+
+  it('should be clearable like regular tasks', () => {
+    taskManager.startExternalTask('ext-8', 'Script');
+    taskManager.completeExternalTask('ext-8');
+
+    expect(taskManager.getAllTasks()).toHaveLength(1);
+    taskManager.clearCompletedTasks();
+    expect(taskManager.getAllTasks()).toHaveLength(0);
+  });
+});
+
 describe('TaskManager Concurrency', () => {
   let taskManager: TaskManager;
   const MAX_CONCURRENT = 3;

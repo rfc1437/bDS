@@ -502,4 +502,115 @@ describe('PythonRuntimeManager', () => {
     worker.emitMessage({ type: 'runResult', requestId: runRequest.requestId, result: 'done' });
     await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
   });
+
+  it('does not time out when timeoutMs is 0', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const runPromise = manager.execute('long_running()', { timeoutMs: 0 });
+    await Promise.resolve();
+
+    // Advance time well past any default timeout — script must still be pending
+    vi.advanceTimersByTime(60_000);
+    expect(worker.terminated).toBe(false);
+
+    const request = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'runResult', requestId: request.requestId, result: 'done' });
+
+    await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
+  });
+
+  it('queued inspectEntrypoints with timeoutMs 0 does not kill running execute', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    // Start a long-running execute with no timeout
+    const runPromise = manager.execute('long_running()', { timeoutMs: 0 });
+    await Promise.resolve();
+
+    // Queue inspectEntrypoints (default timeout) while execute is running
+    const inspectPromise = manager.inspectEntrypoints('def render(): pass');
+    await Promise.resolve();
+
+    // Advance past the default 5000ms timeout
+    vi.advanceTimersByTime(6000);
+
+    // Worker must still be alive — the queued inspect must not kill it
+    expect(worker.terminated).toBe(false);
+
+    // Finish the execute
+    const runRequest = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'runResult', requestId: runRequest.requestId, result: 'done' });
+    await expect(runPromise).resolves.toEqual({ result: 'done', stdout: '' });
+
+    // Now the inspect request dispatches — respond to it
+    await Promise.resolve();
+    const inspectRequest = worker.postedMessages[1] as { requestId: string };
+    worker.emitMessage({ type: 'entrypoints', requestId: inspectRequest.requestId, entrypoints: ['render'] });
+    await expect(inspectPromise).resolves.toEqual(['render']);
+  });
+
+  it('calls onStdout callback for each stdout chunk during execution', async () => {
+    const worker = new MockWorker();
+    const manager = new PythonRuntimeManager(() => worker as unknown as Worker);
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const stdoutChunks: string[] = [];
+    const runPromise = manager.execute('print("a")\nprint("b")', {
+      onStdout: (chunk) => { stdoutChunks.push(chunk); },
+    });
+    await Promise.resolve();
+
+    const request = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'stdout', requestId: request.requestId, chunk: 'a\n' });
+    worker.emitMessage({ type: 'stdout', requestId: request.requestId, chunk: 'b\n' });
+    worker.emitMessage({ type: 'runResult', requestId: request.requestId, result: '' });
+
+    const result = await runPromise;
+    expect(stdoutChunks).toEqual(['a\n', 'b\n']);
+    expect(result.stdout).toBe('a\nb\n');
+  });
+
+  it('calls onToast handler when worker sends a toast message', async () => {
+    const worker = new MockWorker();
+    const toasts: Array<{ message: string; toastType?: string }> = [];
+    const manager = new PythonRuntimeManager(
+      () => worker as unknown as Worker,
+      {
+        onToast: (message, toastType) => { toasts.push({ message, toastType }); },
+      }
+    );
+
+    const initPromise = manager.initialize();
+    worker.emitMessage({ type: 'ready' });
+    await initPromise;
+
+    const runPromise = manager.execute('toast("hello")');
+    await Promise.resolve();
+
+    const request = worker.postedMessages[0] as { requestId: string };
+    worker.emitMessage({ type: 'toast', message: 'hello', toastType: 'success' });
+    worker.emitMessage({ type: 'toast', message: 'oops', toastType: 'error' });
+    worker.emitMessage({ type: 'toast', message: 'note' });
+
+    expect(toasts).toEqual([
+      { message: 'hello', toastType: 'success' },
+      { message: 'oops', toastType: 'error' },
+      { message: 'note', toastType: undefined },
+    ]);
+
+    worker.emitMessage({ type: 'runResult', requestId: request.requestId, result: '' });
+    await expect(runPromise).resolves.toEqual({ result: '', stdout: '' });
+  });
 });

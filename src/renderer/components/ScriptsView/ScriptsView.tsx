@@ -363,11 +363,27 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
 
     setIsRunning(true);
 
+    const isUtility = kind === 'utility';
+    const taskId = isUtility ? `script-${script.id}-${Date.now()}` : undefined;
+
+    if (isUtility && taskId) {
+      await window.electronAPI?.scripts.startTask(taskId, title || script.title);
+    }
+
     try {
       const runtimeManager = getPythonRuntimeManager();
       const result = await runtimeManager.execute(scriptContent, {
         cacheKey: buildCacheKey(script, scriptContent),
         entrypoint,
+        timeoutMs: 0,
+        onStdout: (chunk: string) => {
+          appendPanelOutputEntry({
+            id: `output-${Date.now()}-stdout-stream`,
+            message: chunk,
+            createdAt: new Date().toISOString(),
+            kind: 'stdout',
+          });
+        },
       });
 
       const now = new Date().toISOString();
@@ -380,21 +396,21 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
         });
       }
 
-      if (result.stdout.trim().length > 0) {
-        appendPanelOutputEntry({
-          id: `output-${Date.now()}-stdout`,
-          message: result.stdout,
-          createdAt: now,
-          kind: 'stdout',
-        });
+      if (isUtility && taskId) {
+        await window.electronAPI?.scripts.completeTask(taskId);
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       appendPanelOutputEntry({
         id: `output-${Date.now()}-error`,
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage,
         createdAt: new Date().toISOString(),
         kind: 'error',
       });
+
+      if (isUtility && taskId) {
+        await window.electronAPI?.scripts.failTask(taskId, errorMessage);
+      }
     } finally {
       setIsRunning(false);
     }

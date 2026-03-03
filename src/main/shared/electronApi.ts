@@ -94,6 +94,7 @@ export interface PostData {
   content: string;
   status: 'draft' | 'published' | 'archived';
   author?: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -643,6 +644,12 @@ export interface ElectronAPI {
     /** Internal: editor macro plugin helper. Not exposed via Python API contract. */
     getEnabledMacroSlugs: () => Promise<string[]>;
     rebuildFromFiles: () => Promise<void>;
+    /** Create a task entry for a running utility script. */
+    startTask: (taskId: string, name: string) => Promise<void>;
+    /** Mark a utility script task as completed. */
+    completeTask: (taskId: string) => Promise<void>;
+    /** Mark a utility script task as failed. */
+    failTask: (taskId: string, error: string) => Promise<void>;
   };
   templates: {
     create: (data: {
@@ -893,6 +900,9 @@ export interface ElectronAPI {
 
     // Media Analysis
     analyzeMediaImage: (mediaId: string, language?: string) => Promise<{ success: boolean; title?: string; alt?: string; caption?: string; error?: string }>;
+
+    // Post Language Detection
+    detectPostLanguage: (title: string, content: string) => Promise<{ success: boolean; language?: string; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

@@ -30,6 +30,12 @@ export interface ImageAnalysisResult {
   error?: string;
 }
 
+export interface LanguageDetectionResult {
+  success: boolean;
+  language?: string;
+  error?: string;
+}
+
 // ---------------------------------------------------------------------------
 // OneShotTasks
 // ---------------------------------------------------------------------------
@@ -271,6 +277,72 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
         alt: result.alt || undefined,
         caption: result.caption || undefined,
       };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Detect the language of a post based on its title and content.
+   * Uses the configured title model (lightweight, text-only).
+   */
+  async detectPostLanguage(
+    title: string,
+    content: string,
+  ): Promise<LanguageDetectionResult> {
+    // Use the title model — lightweight, text-only task
+    let modelId = await this.chatEngine.getSetting('chat_title_model');
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
+      modelId = this.providers.getOpencodeKey()
+        ? 'claude-sonnet-4-5'
+        : this.providers.getMistralKey()
+          ? 'mistral-large-latest'
+          : null;
+    }
+
+    // In offline mode, swap to configured offline title model
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+
+    const snippet = content.slice(0, 500);
+    const supportedLanguages = ['en', 'de', 'fr', 'it', 'es'];
+
+    const systemPrompt = `You are a language detection assistant. Given a blog post title and a content snippet, determine the language of the text. Respond with ONLY a JSON object: { "language": "<code>" } where <code> is one of: ${supportedLanguages.join(', ')}. If the language is not in the list, pick the closest match. No other text.`;
+
+    const userPrompt = `Title: ${title}\n\nContent:\n${snippet}`;
+
+    try {
+      const model = this.providers.resolveModel(modelId);
+
+      const { text } = await generateText({
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 50,
+        maxRetries: 2,
+      });
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+
+      const result = JSON.parse(jsonMatch[0]);
+      const detected = (result.language || '').toLowerCase().trim();
+      if (!supportedLanguages.includes(detected)) {
+        return { success: false, error: `Unsupported language detected: ${detected}` };
+      }
+
+      return { success: true, language: detected };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }

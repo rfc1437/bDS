@@ -110,6 +110,9 @@ export const electronAPI: ElectronAPI = {
     getAll: () => ipcRenderer.invoke('scripts:getAll'),
     getEnabledMacroSlugs: () => ipcRenderer.invoke('scripts:getEnabledMacroSlugs'),
     rebuildFromFiles: () => ipcRenderer.invoke('scripts:rebuildFromFiles'),
+    startTask: (taskId: string, name: string) => ipcRenderer.invoke('scripts:startTask', taskId, name),
+    completeTask: (taskId: string) => ipcRenderer.invoke('scripts:completeTask', taskId),
+    failTask: (taskId: string, error: string) => ipcRenderer.invoke('scripts:failTask', taskId, error),
   },
 
   // Templates
@@ -375,6 +378,9 @@ export const electronAPI: ElectronAPI = {
 
     // Media Analysis
     analyzeMediaImage: (mediaId: string, language?: string) => ipcRenderer.invoke('chat:analyzeMediaImage', mediaId, language),
+
+    // Post Language Detection
+    detectPostLanguage: (title: string, content: string) => ipcRenderer.invoke('chat:detectPostLanguage', title, content),
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {

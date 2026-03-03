@@ -20,6 +20,7 @@ function makePost(overrides: Partial<PostData> = {}): PostData {
     content: overrides.content ?? `# ${title}\n\nBody`,
     status: overrides.status ?? 'published',
     author: overrides.author,
+    language: overrides.language,
     createdAt,
     updatedAt,
     publishedAt: overrides.publishedAt,
@@ -154,5 +155,32 @@ describe('GenerationSitemapFeedService', () => {
     expect(result.sitemapXml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     expect(result.rssXml).toBe('');
     expect(result.atomXml).toBe('');
+  });
+
+  it('includes per-post language in RSS dc:language and Atom xml:lang', () => {
+    const publishedPosts = [
+      makePost({ id: '1', slug: 'post-en', title: 'English', language: 'en' }),
+      makePost({ id: '2', slug: 'post-de', title: 'German', language: 'de' }),
+      makePost({ id: '3', slug: 'post-no-lang', title: 'Default' }),
+    ];
+
+    const result = buildSitemapAndFeeds({
+      baseUrl: 'https://example.com',
+      projectName: 'Test Blog',
+      maxPostsPerPage: 10,
+      publishedPosts,
+      publishedListPosts: publishedPosts,
+      postIndex: buildIndex(publishedPosts),
+      includeFeeds: true,
+    });
+
+    // RSS should have dc:language per item
+    expect(result.rssXml).toContain('xmlns:dc=');
+    expect(result.rssXml).toContain('<dc:language>en</dc:language>');
+    expect(result.rssXml).toContain('<dc:language>de</dc:language>');
+
+    // Atom should have xml:lang on entries with language
+    expect(result.atomXml).toContain('xml:lang="en"');
+    expect(result.atomXml).toContain('xml:lang="de"');
   });
 });

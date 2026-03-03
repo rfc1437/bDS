@@ -75,6 +75,9 @@ const autoSaveManager = new AutoSaveManager({
     if ('templateSlug' in changes) {
       (update as Record<string, unknown>).templateSlug = changes.templateSlug as string || null;
     }
+    if ('language' in changes) {
+      update.language = changes.language as string || undefined;
+    }
 
     const updated = await window.electronAPI?.posts.update(id, update);
     if (updated) {
@@ -196,8 +199,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
   const [templateSlug, setTemplateSlug] = useState('');
+  const [postLanguage, setPostLanguage] = useState('');
   const [availablePostTemplates, setAvailablePostTemplates] = useState<Array<{ slug: string; title: string }>>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
   const [hasPublishedVersion, setHasPublishedVersion] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>(preferredEditorMode);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -326,6 +331,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
       setTemplateSlug((post as PostData & { templateSlug?: string }).templateSlug || '');
+      setPostLanguage(post.language || '');
       setMetadataExpanded(post.title === '');
       markClean(postId);
       // Mark as initialized AFTER setting local state
@@ -347,7 +353,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     const titleChanged = title !== post.title;
     const authorChanged = author !== (post.author || '');
     const templateSlugChanged = templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '');
-    const hasChanges = contentChanged || titleChanged || authorChanged || templateSlugChanged ||
+    const languageChanged = postLanguage !== (post.language || '');
+    const hasChanges = contentChanged || titleChanged || authorChanged || templateSlugChanged || languageChanged ||
       JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort()) ||
       JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
 
@@ -362,11 +369,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         tags: tags.join(', '),
         categories: selectedCategories,
         templateSlug: templateSlug || undefined,
+        language: postLanguage || undefined,
       });
     } else {
       markClean(postId);
     }
-  }, [title, content, author, tags, selectedCategories, templateSlug, post, postId, isInitialized, isDirty, markDirty, markClean]);
+  }, [title, content, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -386,6 +394,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         title,
         content,
         author: author || undefined,
+        language: postLanguage || undefined,
         tags,
         categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
         templateSlug: templateSlug || null,
@@ -409,6 +418,24 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     }
   }, [postId, title, content, author, tags, selectedCategories, isDirty, isSaving, updatePost, markClean, showErrorModal]);
 
+  const handleDetectLanguage = useCallback(async () => {
+    if (isDetectingLanguage || (!title && !content)) return;
+    setIsDetectingLanguage(true);
+    try {
+      const result = await window.electronAPI?.chat.detectPostLanguage(title, content);
+      if (result?.success && result.language) {
+        setPostLanguage(result.language);
+        showToast.success(tr('editor.post.quickActions.languageDetected'));
+      } else {
+        showToast.error(result?.error || tr('editor.post.quickActions.detectLanguageFailed'));
+      }
+    } catch (error) {
+      console.error('Failed to detect post language:', error);
+      showToast.error(tr('editor.post.quickActions.detectLanguageFailed'));
+    } finally {
+      setIsDetectingLanguage(false);
+    }
+  }, [title, content, isDetectingLanguage, tr]);
   const handlePublish = async () => {
     await handleSave();
     try {
@@ -790,6 +817,30 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 onChange={(e) => setAuthor(e.target.value)}
                 placeholder={tr('editor.placeholder.author')}
               />
+            </div>
+            <div className="editor-field">
+              <label>{tr('editor.field.language')}</label>
+              <div className="editor-language-row">
+                <select
+                  value={postLanguage}
+                  onChange={(e) => setPostLanguage(e.target.value)}
+                >
+                  <option value="">{tr('editor.field.languageDefault')}</option>
+                  <option value="en">{tr('language.en')}</option>
+                  <option value="de">{tr('language.de')}</option>
+                  <option value="fr">{tr('language.fr')}</option>
+                  <option value="it">{tr('language.it')}</option>
+                  <option value="es">{tr('language.es')}</option>
+                </select>
+                <button
+                  className="secondary compact"
+                  onClick={handleDetectLanguage}
+                  disabled={isDetectingLanguage || (!title && !content)}
+                  title={tr('editor.post.quickActions.detectLanguageDescription')}
+                >
+                  {isDetectingLanguage ? tr('editor.post.quickActions.detecting') : '🤖'}
+                </button>
+              </div>
             </div>
             <div className="editor-field-row">
               <div className="editor-field">

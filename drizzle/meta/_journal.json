@@ -71,6 +71,13 @@
       "when": 1772380619098,
       "tag": "0009_model_catalog_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1772462693094,
+      "tag": "0011_loving_alex_wilder",
+      "breakpoints": true
     }
   ]
 }

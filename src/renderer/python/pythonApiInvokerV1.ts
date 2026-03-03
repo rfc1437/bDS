@@ -76,6 +76,7 @@ export async function invokePythonApiMethodV1(method: string, args: unknown): Pr
   }
 
   const normalizedArgs = asRecord(args);
+
   const electronApi = getElectronApi();
   const [namespace, member] = contract.method.split('.');
   if (!namespace || !member) {

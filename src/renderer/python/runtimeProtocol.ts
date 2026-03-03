@@ -55,4 +55,5 @@ export type PythonWorkerMessage =
   | { type: 'entrypoints'; requestId: string; entrypoints: string[] }
   | { type: 'syntaxResult'; requestId: string; errors: PythonSyntaxError[] }
   | { type: 'macroResult'; requestId: string; result: MacroResultV1 }
-  | { type: 'runError'; requestId: string; error: string };
+  | { type: 'runError'; requestId: string; error: string }
+  | { type: 'toast'; message: string; toastType?: string };

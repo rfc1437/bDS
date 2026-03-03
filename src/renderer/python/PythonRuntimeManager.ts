@@ -3,12 +3,22 @@ import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol
 import type { PythonSyntaxError } from './runtimeProtocol';
 import { parseMacroContextV1, parseMacroResultV1, type MacroContextV1, type MacroResultV1 } from './abiV1';
 import { invokePythonApiMethodV1 } from './pythonApiInvokerV1';
+import { showToast } from '../components/Toast';
 
 type WorkerFactory = () => Worker;
 type PythonApiInvoker = (method: string, args: unknown) => Promise<unknown>;
+type ToastHandler = (message: string, toastType?: string) => void;
+
+const TOAST_TYPES = new Set(['success', 'error', 'info']);
+
+function defaultToastHandler(message: string, toastType?: string): void {
+  const resolvedType = (toastType && TOAST_TYPES.has(toastType) ? toastType : 'info') as 'success' | 'error' | 'info';
+  showToast[resolvedType](message);
+}
 
 interface PythonRuntimeManagerOptions {
   invokeApiCall?: PythonApiInvoker;
+  onToast?: ToastHandler;
 }
 
 interface InitializeDeferred {
@@ -22,6 +32,8 @@ interface PendingRun {
   resolve: (value: PythonRunResult | PythonMacroV1Result | string[] | PythonSyntaxCheckResult) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout> | null;
+  timeoutMs: number;
+  onStdout?: (chunk: string) => void;
 }
 
 export interface PythonRunResult {
@@ -33,6 +45,7 @@ export interface PythonExecuteOptions {
   timeoutMs?: number;
   cacheKey?: string;
   entrypoint?: string;
+  onStdout?: (chunk: string) => void;
 }
 
 export interface PythonMacroSourceOptions {
@@ -65,12 +78,14 @@ export class PythonRuntimeManager {
   private activeRequestId: string | null = null;
   private requestCounter = 0;
   private readonly invokeApiCall: PythonApiInvoker;
+  private readonly onToast: ToastHandler;
 
   constructor(
     private readonly workerFactory: WorkerFactory = createPythonRuntimeWorker,
     options: PythonRuntimeManagerOptions = {}
   ) {
     this.invokeApiCall = options.invokeApiCall ?? invokePythonApiMethodV1;
+    this.onToast = options.onToast ?? defaultToastHandler;
   }
 
   initialize(): Promise<void> {
@@ -116,18 +131,14 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonRunResult>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'run',
         stdout: '',
         resolve: (value) => resolve(value as PythonRunResult),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
+        onStdout: options?.onStdout,
       });
 
       const message: PythonWorkerRequest = {
@@ -155,18 +166,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonMacroV1Result>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'macro-v1',
         stdout: '',
         resolve: (value) => resolve(value as PythonMacroV1Result),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
       });
 
       const message: PythonWorkerRequest = {
@@ -194,18 +200,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<string[]>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'inspect-entrypoints',
         stdout: '',
         resolve: (value) => resolve(value as string[]),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
       });
 
       const message: PythonWorkerRequest = {
@@ -230,18 +231,13 @@ export class PythonRuntimeManager {
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<PythonSyntaxCheckResult>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRuns.delete(requestId);
-        this.resetRuntime(`Python script execution timed out after ${timeoutMs}ms`);
-        reject(new Error(`Python script execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       this.pendingRuns.set(requestId, {
         kind: 'syntax-check',
         stdout: '',
         resolve: (value) => resolve(value as PythonSyntaxCheckResult),
         reject,
-        timeoutId,
+        timeoutId: null,
+        timeoutMs,
       });
 
       const message: PythonWorkerRequest = {
@@ -282,6 +278,11 @@ export class PythonRuntimeManager {
       return;
     }
 
+    if (payload.type === 'toast') {
+      this.onToast(payload.message, payload.toastType);
+      return;
+    }
+
     const pendingRun = this.pendingRuns.get(payload.requestId);
     if (!pendingRun) {
       if (this.activeRequestId === payload.requestId && payload.type !== 'stdout') {
@@ -293,6 +294,7 @@ export class PythonRuntimeManager {
 
     if (payload.type === 'stdout') {
       pendingRun.stdout += payload.chunk;
+      pendingRun.onStdout?.(payload.chunk);
       return;
     }
 
@@ -440,6 +442,7 @@ export class PythonRuntimeManager {
     }
 
     this.activeRequestId = request.requestId;
+    this.startTimeoutForRequest(request.requestId);
     this.worker.postMessage(request);
   }
 
@@ -454,7 +457,21 @@ export class PythonRuntimeManager {
     }
 
     this.activeRequestId = nextRequest.requestId;
+    this.startTimeoutForRequest(nextRequest.requestId);
     this.worker.postMessage(nextRequest);
+  }
+
+  private startTimeoutForRequest(requestId: string): void {
+    const pendingRun = this.pendingRuns.get(requestId);
+    if (!pendingRun || pendingRun.timeoutMs <= 0) {
+      return;
+    }
+
+    pendingRun.timeoutId = setTimeout(() => {
+      this.pendingRuns.delete(requestId);
+      this.resetRuntime(`Python script execution timed out after ${pendingRun.timeoutMs}ms`);
+      pendingRun.reject(new Error(`Python script execution timed out after ${pendingRun.timeoutMs}ms`));
+    }, pendingRun.timeoutMs);
   }
 
   private finishRequest(requestId: string): void {

@@ -344,10 +344,21 @@ async function bootstrapRuntime(): Promise<void> {
       },
     });
 
+    runtime.globals.set('__bds_push_toast', (message: unknown, toastType?: unknown) => {
+      postRuntimeMessage({
+        type: 'toast',
+        message: String(message ?? ''),
+        ...(typeof toastType === 'string' && toastType.length > 0 ? { toastType } : {}),
+      });
+    });
+
     runtime.globals.set('__bds_api_module_source', generatePythonApiModuleV1());
     await runtime.runPythonAsync(`
 import sys
 import types
+
+def toast(message, type="info"):
+    __bds_push_toast(str(message), str(type))
 
 __bds_api_module = types.ModuleType("bds_api")
 exec(__bds_api_module_source, __bds_api_module.__dict__)

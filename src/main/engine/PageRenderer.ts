@@ -62,6 +62,7 @@ export interface TemplatePostEntry {
   title: string;
   content: string;
   show_title: boolean;
+  language?: string;
 }
 
 export interface CategoryRenderSettings {
@@ -1485,8 +1486,12 @@ export class PageRenderer {
 
     const canonicalPostPathBySlug = mapToRecord(rewriteContext.canonicalPostPathBySlug);
 
+    // Per-post language overrides the page-level language when present
+    const postLanguage = (renderablePost as { language?: string }).language;
+
     const context: SinglePostTemplateContext = {
       ...pageContext,
+      language: postLanguage || pageContext.language,
       menu_items: pageContext.menu_items ?? [],
       post: {
         id: renderablePost.id,
@@ -1494,6 +1499,7 @@ export class PageRenderer {
         title: renderablePost.title,
         content: renderablePost.content,
         show_title: false,
+        language: postLanguage,
       },
       post_categories: postCategories,
       post_tags: postTags,
