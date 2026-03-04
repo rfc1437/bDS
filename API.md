@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.10.0
+Contract version: 1.11.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -3462,7 +3462,41 @@ result = await bds.tags.sync_from_posts()
 
 **Module APIs**
 
+- [chat.analyzeMediaImage](#chatanalyzemediaimage)
 - [chat.detectPostLanguage](#chatdetectpostlanguage)
+
+### chat.analyzeMediaImage
+
+Analyze an image and generate title, alt text, and caption using AI.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, optional)
+
+**Response specification**
+
+- Return type: `ImageAnalysisResult`
+- Data structures: `ImageAnalysisResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.analyze_media_image(media_id='media-1')
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'title': 'value',
+    'alt': 'value',
+    'caption': 'value',
+    'error': 'value'
+}
+```
 
 ### chat.detectPostLanguage
 
@@ -4062,6 +4096,20 @@ Aggregate result from uploading the rendered site.
 - thumbnailFilesUploaded (`number`, required): Number of thumbnail files uploaded.
 - mediaFilesUploaded (`number`, required): Number of media files uploaded.
 - filesSkipped (`number`, required): Total files skipped (already up-to-date).
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### ImageAnalysisResult
+
+Result from AI image analysis containing generated title, alt text, and caption.
+
+**Fields**
+
+- success (`boolean`, required): Whether the analysis succeeded.
+- title (`string`, optional): Generated image title (3-8 words).
+- alt (`string`, optional): Generated alt text (5-12 words).
+- caption (`string`, optional): Generated blog caption (5-20 words).
+- error (`string`, optional): Error message when analysis failed.
 
 [↑ Back to Table of contents](#table-of-contents)
 

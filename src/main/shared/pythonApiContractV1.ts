@@ -183,13 +183,12 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('tags.getPostsWithTag', 'Get posts using a tag.', [requiredString('tagId')], 'string[]'),
   method('tags.syncFromPosts', 'Sync tag index from posts.', [], 'SyncTagsResult'),
 
-  // NOTE: chat namespace intentionally excluded from Python API.
-  // AI/chat features (sendMessage, analyzeTaxonomy, analyzeMediaImage, etc.) are
-  // expensive external API calls that require user oversight and interactive streaming.
-  // This namespace can be re-added in a future version if AI-from-Python becomes a
-  // supported use case with proper rate limiting and cost controls.
-  // Exception: detectPostLanguage is exposed as a lightweight one-shot task.
+  // NOTE: most chat namespace methods intentionally excluded from Python API.
+  // AI/chat features (sendMessage, analyzeTaxonomy, etc.) are expensive external
+  // API calls that require user oversight and interactive streaming.
+  // Exceptions: lightweight one-shot tasks are exposed individually.
 
+  method('chat.analyzeMediaImage', 'Analyze an image and generate title, alt text, and caption using AI.', [requiredString('mediaId'), optionalString('language')], 'ImageAnalysisResult'),
   method('chat.detectPostLanguage', 'Detect the language of a post from its title and content.', [requiredString('title'), requiredString('content')], '{ success: boolean; language?: string; error?: string }'),
 
   method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
@@ -405,10 +404,21 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'filesSkipped', type: 'number', required: true, description: 'Total files skipped (already up-to-date).' },
     ],
   },
+  {
+    name: 'ImageAnalysisResult',
+    description: 'Result from AI image analysis containing generated title, alt text, and caption.',
+    fields: [
+      { name: 'success', type: 'boolean', required: true, description: 'Whether the analysis succeeded.' },
+      { name: 'title', type: 'string', required: false, description: 'Generated image title (3-8 words).' },
+      { name: 'alt', type: 'string', required: false, description: 'Generated alt text (5-12 words).' },
+      { name: 'caption', type: 'string', required: false, description: 'Generated blog caption (5-20 words).' },
+      { name: 'error', type: 'string', required: false, description: 'Error message when analysis failed.' },
+    ],
+  },
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.10.0',
+  version: '1.11.0',
   generatedAt: '2026-02-27T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
