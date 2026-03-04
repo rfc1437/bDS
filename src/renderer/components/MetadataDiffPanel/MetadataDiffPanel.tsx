@@ -129,8 +129,8 @@ export const MetadataDiffPanel: React.FC = () => {
   // Subscribe to task progress
   useEffect(() => {
     const unsubscribe = window.electronAPI?.on('task:progress', (data: unknown) => {
-      const p = data as { id: string; progress: number; message?: string };
-      if (p.id.startsWith('metadata-')) {
+      const p = data as { taskId: string; progress: number; message?: string };
+      if (p.taskId?.startsWith('metadata-')) {
         setProgress({ current: Math.round(p.progress), total: 100, message: p.message || '' });
       }
     });
@@ -356,11 +356,14 @@ export const MetadataDiffPanel: React.FC = () => {
               {currentResult.fieldSummaries.length > 0 && (
                 <div className="diff-field-summaries">
                   {currentResult.fieldSummaries.map(fs => (
-                    <button
+                    <div
                       key={fs.field}
                       className={`field-pill ${activeFieldFilter === fs.field ? 'active' : ''}`}
                       onClick={() => toggleFieldFilter(fs.field)}
                       title={tr('metadataDiff.fieldFilter.toggle', { field: fs.label })}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleFieldFilter(fs.field); }}
                     >
                       <span className="field-pill-label">{fs.label}</span>
                       <span className="field-pill-count">{fs.count}</span>
@@ -383,7 +386,7 @@ export const MetadataDiffPanel: React.FC = () => {
                           {tr('metadataDiff.sync.fileToDb.short')}
                         </button>
                       </span>
-                    </button>
+                    </div>
                   ))}
                   {activeFieldFilter && (
                     <button className="field-pill clear-filter" onClick={() => setActiveFieldFilter(null)}>
