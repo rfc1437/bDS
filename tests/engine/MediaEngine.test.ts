@@ -1148,6 +1148,56 @@ linkedPostIds: ["post-1", "post-2"]`);
       expect(writtenContent).toContain('title: "New title"');
     });
 
+    it('should preserve author from sidecar when DB has null author', async () => {
+      const fs = await import('fs/promises');
+      const filePath = '/mock/media/author-drift.jpg';
+      const sidecarPath = `${filePath}.meta`;
+
+      // Sidecar has author but DB does not (data drift)
+      mockFiles.set(normalizePath(sidecarPath), `---
+id: author-drift-id
+originalName: "author-drift.jpg"
+mimeType: image/jpeg
+size: 2048
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+author: "hugo"
+tags: []
+linkedPostIds: ["post-x"]`);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'author-drift-id',
+            projectId: 'default',
+            originalName: 'author-drift.jpg',
+            mimeType: 'image/jpeg',
+            size: 2048,
+            filePath,
+            title: 'Old title',
+            author: null, // DB has null, sidecar has "hugo"
+            tags: '[]',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        });
+        return chain;
+      });
+
+      vi.mocked(fs.writeFile).mockClear();
+      await mediaEngine.updateMedia('author-drift-id', { alt: 'New alt text' });
+
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls.find(
+        c => normalizePath(c[0] as string) === normalizePath(sidecarPath)
+      )?.[1] as string;
+
+      expect(writtenContent).toContain('author: "hugo"');
+      expect(writtenContent).toContain('alt: "New alt text"');
+      expect(writtenContent).toContain('linkedPostIds: ["post-x"]');
+    });
+
     it('should update FTS index', async () => {
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
         const chain = createSelectChain();

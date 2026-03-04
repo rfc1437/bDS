@@ -622,10 +622,17 @@ export class MediaEngine extends EventEmitter {
     const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
     if (!dbMedia) return null;
 
-    // Read existing sidecar to preserve fields not stored in DB (e.g. linkedPostIds)
+    // Read existing sidecar to preserve fields that may only exist there
+    // (e.g. linkedPostIds is sidecar-only, and author/title may have drifted)
     const existingSidecar = await this.readSidecarFile(`${dbMedia.filePath}.meta`);
-    if (existingSidecar?.linkedPostIds && !data.linkedPostIds) {
-      updated.linkedPostIds = existingSidecar.linkedPostIds;
+    if (existingSidecar) {
+      if (existingSidecar.linkedPostIds?.length && !data.linkedPostIds) {
+        updated.linkedPostIds = existingSidecar.linkedPostIds;
+      }
+      // Preserve sidecar values for fields the caller didn't explicitly set
+      if (existingSidecar.author && !updated.author && !('author' in data)) {
+        updated.author = existingSidecar.author;
+      }
     }
 
     await this.writeSidecarFile(updated, dbMedia.filePath);
