@@ -411,6 +411,8 @@
   "metadataDiff.sync.fileToDb.error": "No se pudo sincronizar a la base de datos",
   "metadataDiff.value.database": "Base de datos",
   "metadataDiff.value.file": "Archivo",
+  "metadataDiff.fileMissing": "Archivo faltante",
+  "metadataDiff.value.fileMissing": "(faltante)",
   "metadataDiff.empty": "Haz clic en \"Buscar diferencias\" para comparar metadatos de base de datos con metadatos de archivos.",
   "metadataDiff.tab.posts": "Entradas",
   "metadataDiff.tab.media": "Multimedia",

@@ -41,6 +41,7 @@ export interface PostMetadataDiff {
   slug: string;
   filePath?: string;
   hasDifferences: boolean;
+  fileMissing?: boolean;
   differences: Partial<Record<DiffField, FieldDifference>>;
 }
 
@@ -78,6 +79,7 @@ export interface MediaMetadataDiff {
   originalName: string;
   filePath?: string;
   hasDifferences: boolean;
+  fileMissing?: boolean;
   differences: Partial<Record<MediaDiffField, FieldDifference>>;
 }
 
@@ -109,6 +111,7 @@ export interface ScriptMetadataDiff {
   slug: string;
   filePath?: string;
   hasDifferences: boolean;
+  fileMissing?: boolean;
   differences: Partial<Record<ScriptDiffField, FieldDifference>>;
 }
 
@@ -141,6 +144,7 @@ export interface TemplateMetadataDiff {
   slug: string;
   filePath?: string;
   hasDifferences: boolean;
+  fileMissing?: boolean;
   differences: Partial<Record<TemplateDiffField, FieldDifference>>;
 }
 
@@ -348,14 +352,24 @@ export class MetadataDiffEngine extends EventEmitter {
     // Read file metadata
     const fileData = await readPostFile(dbPost.filePath);
     if (!fileData) {
-      // File doesn't exist or can't be read
+      // File doesn't exist or can't be read — show DB values so the UI isn't empty
+      const missingDiffs: Partial<Record<DiffField, FieldDifference>> = {};
+      const dbTags: string[] = JSON.parse(dbPost.tags || '[]');
+      const dbCategories: string[] = JSON.parse(dbPost.categories || '[]');
+      if (dbPost.title) missingDiffs.title = { dbValue: dbPost.title, fileValue: null };
+      if (dbTags.length > 0) missingDiffs.tags = { dbValue: dbTags, fileValue: null };
+      if (dbCategories.length > 0) missingDiffs.categories = { dbValue: dbCategories, fileValue: null };
+      if (dbPost.excerpt) missingDiffs.excerpt = { dbValue: dbPost.excerpt, fileValue: null };
+      if (dbPost.author) missingDiffs.author = { dbValue: dbPost.author, fileValue: null };
+      if (dbPost.language) missingDiffs.language = { dbValue: dbPost.language, fileValue: null };
       return {
         postId: dbPost.id,
         title: dbPost.title,
         slug: dbPost.slug,
         filePath: dbPost.filePath,
         hasDifferences: true,
-        differences: {}, // File missing entirely
+        fileMissing: true,
+        differences: missingDiffs,
       };
     }
 
@@ -615,12 +629,20 @@ export class MetadataDiffEngine extends EventEmitter {
     const sidecarPath = `${dbMedia.filePath}.meta`;
     const sidecar = await this.mediaEngine.readSidecarFile(sidecarPath);
     if (!sidecar) {
+      const missingDiffs: Partial<Record<MediaDiffField, FieldDifference>> = {};
+      if (dbMedia.title) missingDiffs.title = { dbValue: dbMedia.title, fileValue: null };
+      if (dbMedia.alt) missingDiffs.alt = { dbValue: dbMedia.alt, fileValue: null };
+      if (dbMedia.caption) missingDiffs.caption = { dbValue: dbMedia.caption, fileValue: null };
+      if (dbMedia.author) missingDiffs.author = { dbValue: dbMedia.author, fileValue: null };
+      const dbTags: string[] = JSON.parse(dbMedia.tags || '[]');
+      if (dbTags.length > 0) missingDiffs.tags = { dbValue: dbTags, fileValue: null };
       return {
         mediaId: dbMedia.id,
         originalName: dbMedia.originalName,
         filePath: dbMedia.filePath,
         hasDifferences: true,
-        differences: {},
+        fileMissing: true,
+        differences: missingDiffs,
       };
     }
 
@@ -814,13 +836,20 @@ export class MetadataDiffEngine extends EventEmitter {
 
     const parsed = await this.scriptEngine.readScriptFileWithMetadata(dbScript.filePath);
     if (!parsed) {
+      const missingDiffs: Partial<Record<ScriptDiffField, FieldDifference>> = {};
+      if (dbScript.title) missingDiffs.title = { dbValue: dbScript.title, fileValue: null };
+      if (dbScript.kind) missingDiffs.kind = { dbValue: dbScript.kind, fileValue: null };
+      if (dbScript.entrypoint) missingDiffs.entrypoint = { dbValue: dbScript.entrypoint, fileValue: null };
+      missingDiffs.enabled = { dbValue: !!dbScript.enabled, fileValue: null };
+      if (dbScript.version) missingDiffs.version = { dbValue: dbScript.version, fileValue: null };
       return {
         scriptId: dbScript.id,
         title: dbScript.title,
         slug: dbScript.slug,
         filePath: dbScript.filePath,
         hasDifferences: true,
-        differences: {},
+        fileMissing: true,
+        differences: missingDiffs,
       };
     }
 
@@ -1012,13 +1041,19 @@ export class MetadataDiffEngine extends EventEmitter {
 
     const parsed = await this.templateEngine.readTemplateFileWithMetadata(dbTemplate.filePath);
     if (!parsed) {
+      const missingDiffs: Partial<Record<TemplateDiffField, FieldDifference>> = {};
+      if (dbTemplate.title) missingDiffs.title = { dbValue: dbTemplate.title, fileValue: null };
+      if (dbTemplate.kind) missingDiffs.kind = { dbValue: dbTemplate.kind, fileValue: null };
+      missingDiffs.enabled = { dbValue: !!dbTemplate.enabled, fileValue: null };
+      if (dbTemplate.version) missingDiffs.version = { dbValue: dbTemplate.version, fileValue: null };
       return {
         templateId: dbTemplate.id,
         title: dbTemplate.title,
         slug: dbTemplate.slug,
         filePath: dbTemplate.filePath,
         hasDifferences: true,
-        differences: {},
+        fileMissing: true,
+        differences: missingDiffs,
       };
     }
 

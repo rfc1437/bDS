@@ -783,6 +783,7 @@ export interface ElectronAPI {
         slug: string;
         filePath?: string;
         hasDifferences: boolean;
+        fileMissing?: boolean;
         differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
       }>;
       groups: Array<{
@@ -807,6 +808,7 @@ export interface ElectronAPI {
         originalName: string;
         filePath?: string;
         hasDifferences: boolean;
+        fileMissing?: boolean;
         differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
       }>;
       groups: Array<{
@@ -826,6 +828,7 @@ export interface ElectronAPI {
         slug: string;
         filePath?: string;
         hasDifferences: boolean;
+        fileMissing?: boolean;
         differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
       }>;
       groups: Array<{
@@ -845,6 +848,7 @@ export interface ElectronAPI {
         slug: string;
         filePath?: string;
         hasDifferences: boolean;
+        fileMissing?: boolean;
         differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
       }>;
       groups: Array<{

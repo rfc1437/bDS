@@ -411,6 +411,8 @@
   "metadataDiff.sync.fileToDb.error": "Failed to sync to database",
   "metadataDiff.value.database": "Database",
   "metadataDiff.value.file": "File",
+  "metadataDiff.fileMissing": "File missing",
+  "metadataDiff.value.fileMissing": "(missing)",
   "metadataDiff.empty": "Click \"Scan for Differences\" to compare database metadata with file metadata.",
   "metadataDiff.tab.posts": "Posts",
   "metadataDiff.tab.media": "Media",

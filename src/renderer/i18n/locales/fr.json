@@ -415,6 +415,8 @@
   "metadataDiff.sync.fileToDb.error": "Échec de la synchronisation vers la base de données",
   "metadataDiff.value.database": "Base de données",
   "metadataDiff.value.file": "Fichier",
+  "metadataDiff.fileMissing": "Fichier manquant",
+  "metadataDiff.value.fileMissing": "(manquant)",
   "metadataDiff.empty": "Cliquez sur « Rechercher les différences » pour comparer les métadonnées de la base et celles des fichiers.",
   "sidebar.archive": "Archive",
   "sidebar.clearFilter": "Effacer le filtre",

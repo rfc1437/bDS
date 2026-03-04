@@ -25,6 +25,7 @@ interface FieldDiff {
 interface GenericDiffItem {
   id: string;
   label: string;
+  fileMissing?: boolean;
   fields: Record<string, FieldDiff>;
 }
 
@@ -53,6 +54,7 @@ function adaptPostScanResult(raw: Awaited<ReturnType<NonNullable<typeof window.e
     items: raw.differences.filter(d => d.hasDifferences).map(d => ({
       id: d.postId,
       label: d.title || d.slug,
+      fileMissing: d.fileMissing,
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.posts.length })),
@@ -66,6 +68,7 @@ function adaptMediaScanResult(raw: Awaited<ReturnType<NonNullable<typeof window.
     items: raw.differences.filter(d => d.hasDifferences).map(d => ({
       id: d.mediaId,
       label: d.originalName,
+      fileMissing: d.fileMissing,
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
@@ -79,6 +82,7 @@ function adaptScriptScanResult(raw: Awaited<ReturnType<NonNullable<typeof window
     items: raw.differences.filter(d => d.hasDifferences).map(d => ({
       id: d.scriptId,
       label: d.title || d.slug,
+      fileMissing: d.fileMissing,
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
@@ -92,6 +96,7 @@ function adaptTemplateScanResult(raw: Awaited<ReturnType<NonNullable<typeof wind
     items: raw.differences.filter(d => d.hasDifferences).map(d => ({
       id: d.templateId,
       label: d.title || d.slug,
+      fileMissing: d.fileMissing,
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
@@ -400,8 +405,11 @@ export const MetadataDiffPanel: React.FC = () => {
               {filteredItems.length > 0 && (
                 <div className="diff-item-list">
                   {filteredItems.map(item => (
-                    <div key={item.id} className="diff-item-card">
-                      <div className="diff-item-header">{item.label}</div>
+                    <div key={item.id} className={`diff-item-card ${item.fileMissing ? 'file-missing' : ''}`}>
+                      <div className="diff-item-header">
+                        {item.label}
+                        {item.fileMissing && <span className="file-missing-badge">{tr('metadataDiff.fileMissing')}</span>}
+                      </div>
                       <div className="diff-item-fields">
                         {Object.entries(item.fields).map(([field, diff]) => (
                           <div key={field} className="diff-field-row">
@@ -411,9 +419,9 @@ export const MetadataDiffPanel: React.FC = () => {
                                 <span className="diff-source-label">{tr('metadataDiff.value.database')}</span>
                                 {formatValue(diff.dbValue)}
                               </div>
-                              <div className="diff-field-value file-value" title={formatValue(diff.fileValue)}>
+                              <div className={`diff-field-value file-value ${item.fileMissing && diff.fileValue === null ? 'missing' : ''}`} title={item.fileMissing && diff.fileValue === null ? tr('metadataDiff.value.fileMissing') : formatValue(diff.fileValue)}>
                                 <span className="diff-source-label">{tr('metadataDiff.value.file')}</span>
-                                {formatValue(diff.fileValue)}
+                                {item.fileMissing && diff.fileValue === null ? tr('metadataDiff.value.fileMissing') : formatValue(diff.fileValue)}
                               </div>
                             </div>
                           </div>

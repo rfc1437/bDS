@@ -415,6 +415,8 @@
   "metadataDiff.sync.fileToDb.error": "Synchronisierung in die Datenbank fehlgeschlagen",
   "metadataDiff.value.database": "Datenbank",
   "metadataDiff.value.file": "Datei",
+  "metadataDiff.fileMissing": "Datei fehlt",
+  "metadataDiff.value.fileMissing": "(fehlt)",
   "metadataDiff.empty": "Klicke auf „Nach Unterschieden suchen“, um Datenbank-Metadaten mit Datei-Metadaten zu vergleichen.",
   "sidebar.archive": "Archiv",
   "sidebar.clearFilter": "Filter löschen",

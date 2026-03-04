@@ -415,6 +415,8 @@
   "metadataDiff.sync.fileToDb.error": "Impossibile sincronizzare nel database",
   "metadataDiff.value.database": "Database locale",
   "metadataDiff.value.file": "File sorgente",
+  "metadataDiff.fileMissing": "File mancante",
+  "metadataDiff.value.fileMissing": "(mancante)",
   "metadataDiff.empty": "Fai clic su \"Scansiona differenze\" per confrontare i metadati del database con quelli dei file.",
   "sidebar.archive": "Archivio",
   "sidebar.clearFilter": "Cancella filtro",

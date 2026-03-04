@@ -387,6 +387,73 @@ Content here`);
       expect(result?.differences.language?.fileValue).toBe('');
     });
 
+    it('should populate differences with DB values when file is missing', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/non-existent.md',
+        tags: '["tag1", "tag2"]',
+        categories: '["cat1"]',
+        excerpt: 'Some excerpt',
+        author: 'Author Name',
+        language: 'de',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      // File intentionally NOT added to mockFileData → readPostFile returns null
+      mockPosts.set('post-1', dbPost);
+
+      const result = await engine.comparePostMetadata('post-1');
+
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.fileMissing).toBe(true);
+      // DB values should appear in differences so the UI shows what fields exist
+      expect(result?.differences.tags).toEqual({ dbValue: ['tag1', 'tag2'], fileValue: null });
+      expect(result?.differences.categories).toEqual({ dbValue: ['cat1'], fileValue: null });
+      expect(result?.differences.title).toEqual({ dbValue: 'Published Post', fileValue: null });
+      expect(result?.differences.excerpt).toEqual({ dbValue: 'Some excerpt', fileValue: null });
+      expect(result?.differences.author).toEqual({ dbValue: 'Author Name', fileValue: null });
+      expect(result?.differences.language).toEqual({ dbValue: 'de', fileValue: null });
+    });
+
+    it('should omit empty DB fields from differences when file is missing', async () => {
+      const dbPost = {
+        id: 'post-2',
+        projectId: 'test-project',
+        title: 'Minimal Post',
+        slug: 'minimal-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/gone.md',
+        tags: '[]',
+        categories: '[]',
+        excerpt: null,
+        author: null,
+        language: null,
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-2', dbPost);
+
+      const result = await engine.comparePostMetadata('post-2');
+
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.fileMissing).toBe(true);
+      // Title always present since it's non-null
+      expect(result?.differences.title).toEqual({ dbValue: 'Minimal Post', fileValue: null });
+      // Empty arrays / nulls should be omitted
+      expect(result?.differences.tags).toBeUndefined();
+      expect(result?.differences.categories).toBeUndefined();
+      expect(result?.differences.excerpt).toBeUndefined();
+      expect(result?.differences.author).toBeUndefined();
+      expect(result?.differences.language).toBeUndefined();
+    });
+
     it('should return hasDifferences=false when metadata matches', async () => {
       const dbPost = {
         id: 'post-1',
