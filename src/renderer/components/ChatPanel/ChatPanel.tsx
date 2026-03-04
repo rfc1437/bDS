@@ -7,6 +7,7 @@ import { dispatchAssistantAction } from '../../navigation/assistantActionDispatc
 import { useA2UISurface } from '../../a2ui/useA2UISurface';
 import { useAppStore } from '../../store';
 import { ChatTranscript } from '../ChatSurface';
+import { useEntityLoader } from '../../navigation/useEntityEditor';
 import { useI18n } from '../../i18n';
 import '../../styles/chatSurface.css';
 import './ChatPanel.css';
@@ -89,31 +90,43 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
     }
   }, []);
 
-  // Load conversation and messages
-  const loadData = useCallback(async () => {
-    try {
+  // Load conversation data via shared entity loader (handles activeProject
+  // guard, cancellation on ID change, and close-tab-on-not-found).
+  const fetchChatData = useCallback(
+    async (id: string) => {
       const [conv, msgs, modelsResult] = await Promise.all([
-        window.electronAPI?.chat.getConversation(conversationId),
-        window.electronAPI?.chat.getHistory(conversationId),
-        window.electronAPI?.chat.getAvailableModels()
+        window.electronAPI?.chat.getConversation(id),
+        window.electronAPI?.chat.getHistory(id),
+        window.electronAPI?.chat.getAvailableModels(),
       ]);
+      if (!conv) return null;
 
-      if (conv) setConversation(conv);
-      if (msgs) {
-        setMessages(msgs);
-        replayFromMessages(msgs);
+      return { conversation: conv, messages: msgs, models: modelsResult?.models };
+    },
+    [],
+  );
+
+  useEntityLoader(conversationId, fetchChatData, {
+    onLoaded: (data) => {
+      setConversation(data.conversation);
+      if (data.messages) {
+        setMessages(data.messages);
+        replayFromMessages(data.messages);
       }
-      if (modelsResult?.models) setAvailableModels(modelsResult.models);
-    } catch (error) {
-      console.error('Failed to load chat data:', error);
-    }
-  }, [conversationId, replayFromMessages]);
+      if (data.models) setAvailableModels(data.models);
+    },
+    onReset: () => {
+      setConversation(null);
+    },
+  });
 
+  // Check API key readiness
   useEffect(() => {
     checkReady();
-    loadData();
+  }, [checkReady]);
 
-    // Subscribe to stream events
+  // Subscribe to stream / tool / title / token events
+  useEffect(() => {
     const unsubDelta = window.electronAPI?.chat.onStreamDelta((data) => {
       if (data.conversationId === conversationId) {
         appendStreamDelta(data.delta);
@@ -164,7 +177,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ conversationId }) => {
       unsubTitle?.();
       unsubTokenUsage?.();
     };
-  }, [conversationId, loadData, scrollToBottom, checkReady, appendStreamDelta, recordToolCall, recordToolResult]);
+  }, [conversationId, scrollToBottom, appendStreamDelta, recordToolCall, recordToolResult]);
 
   // Scroll on new messages or streaming content
   useEffect(() => {

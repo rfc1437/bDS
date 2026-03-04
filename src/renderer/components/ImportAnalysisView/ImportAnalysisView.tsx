@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChatModel } from '../../types/electron';
+import { useEntityLoader } from '../../navigation/useEntityEditor';
 import { useI18n } from '../../i18n';
 import './ImportAnalysisView.css';
 
@@ -162,7 +163,6 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
   const [wxrFilePath, setWxrFilePath] = useState<string | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingDefinition, setIsLoadingDefinition] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [progressStep, setProgressStep] = useState<string>('');
   const [progressDetail, setProgressDetail] = useState<string>('');
@@ -308,31 +308,33 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
     await persistReport(updatedReport);
   }, [report, persistReport]);
 
-  // Load definition on mount
-  useEffect(() => {
-    const load = async () => {
-      setIsLoadingDefinition(true);
-      try {
-        const def = await window.electronAPI?.importDefinitions.get(definitionId);
-        if (def) {
-          setName(def.name);
-          if (def.uploadsFolderPath) setUploadsFolder(def.uploadsFolderPath);
-          if (def.wxrFilePath) setWxrFilePath(def.wxrFilePath);
-          if (def.lastAnalysisResult) {
-            const parsed = typeof def.lastAnalysisResult === 'string'
-              ? JSON.parse(def.lastAnalysisResult)
-              : def.lastAnalysisResult;
-            setReport(parsed as AnalysisReport);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load import definition:', error);
-      } finally {
-        setIsLoadingDefinition(false);
+  // Load definition via shared entity loader (handles activeProject guard,
+  // cancellation on ID change, and close-tab-on-not-found).
+  const fetchDefinition = useCallback(
+    (id: string) => window.electronAPI?.importDefinitions.get(id) ?? Promise.resolve(null),
+    [],
+  );
+  const { isLoading: isLoadingDefinition } = useEntityLoader(definitionId, fetchDefinition, {
+    onLoaded: (def) => {
+      setName(def.name);
+      setUploadsFolder(def.uploadsFolderPath ?? null);
+      setWxrFilePath(def.wxrFilePath ?? null);
+      if (def.lastAnalysisResult) {
+        const parsed = typeof def.lastAnalysisResult === 'string'
+          ? JSON.parse(def.lastAnalysisResult)
+          : def.lastAnalysisResult;
+        setReport(parsed as AnalysisReport);
+      } else {
+        setReport(null);
       }
-    };
-    load();
-  }, [definitionId]);
+    },
+    onReset: () => {
+      setName(t('importAnalysis.untitledImport'));
+      setUploadsFolder(null);
+      setWxrFilePath(null);
+      setReport(null);
+    },
+  });
 
   const handleNameBlur = useCallback(async () => {
     const trimmed = name.trim() || t('importAnalysis.untitledImport');

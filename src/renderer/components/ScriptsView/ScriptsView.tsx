@@ -4,6 +4,7 @@ import type { ScriptData } from '../../../main/shared/electronApi';
 import { useAppStore } from '../../store';
 import { BDS_EVENT_SCRIPTS_CHANGED, dispatchWindowEvent } from '../../utils';
 import { getPythonRuntimeManager } from '../../python/runtimeManagerInstance';
+import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEditor';
 import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
 import './ScriptsView.css';
@@ -46,6 +47,12 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
   const { t, language } = useI18n();
   const appendPanelOutputEntry = useAppStore((state) => state.appendPanelOutputEntry);
   const closeTab = useAppStore((state) => state.closeTab);
+
+  const fetchScript = useCallback(
+    (id: string) => window.electronAPI?.scripts.get(id) ?? Promise.resolve(null),
+    [],
+  );
+
   const [script, setScript] = useState<ScriptData | null>(null);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -63,6 +70,65 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
   // Token incremented to signal Monaco to remount with fresh defaultValue.
   // Prevents controlled-mode cursor jumps during typing.
   const [monacoResetToken, setMonacoResetToken] = useState(0);
+  // Ref for entrypoint refresh cancellation — survives across renders
+  // without triggering the entityLoader effect.
+  const entrypointCancelRef = useRef(false);
+
+  useEntityLoader<ScriptData>(scriptId, fetchScript, {
+    onLoaded: (loadedScript) => {
+      setScript(loadedScript);
+      setTitle(loadedScript.title || '');
+      setSlug(toFunctionSlug(loadedScript.slug || loadedScript.title || ''));
+      setKind(loadedScript.kind || 'utility');
+      setEntrypoint(loadedScript.entrypoint || 'render');
+      setEnabled(loadedScript.enabled ?? true);
+      setScriptContent(loadedScript.content || '');
+      setMonacoResetToken(prev => prev + 1);
+      const normalizedExisting = toFunctionSlug(loadedScript.slug || loadedScript.title || '');
+      setIsSlugManuallyEdited(normalizedExisting !== toFunctionSlug(loadedScript.title || ''));
+
+      // Refresh entrypoints asynchronously
+      entrypointCancelRef.current = true; // cancel any pending refresh
+      const cancelToken = {};
+      entrypointCancelRef.current = false;
+      const refreshEntrypoints = async () => {
+        try {
+          const runtimeManager = getPythonRuntimeManager();
+          const discoveredEntrypoints = await runtimeManager.inspectEntrypoints(
+            loadedScript.content || '',
+            { cacheKey: buildCacheKey(loadedScript, loadedScript.content || '') },
+          );
+          const available = withMainEntrypoint(discoveredEntrypoints);
+
+          if (entrypointCancelRef.current) return;
+
+          setAvailableEntrypoints(available);
+          const preferredEntrypoint = available.includes(loadedScript.entrypoint)
+            ? loadedScript.entrypoint
+            : 'main';
+          setEntrypoint(preferredEntrypoint);
+        } catch {
+          if (entrypointCancelRef.current) return;
+          setAvailableEntrypoints(['main']);
+          setEntrypoint('main');
+        }
+      };
+      void refreshEntrypoints();
+    },
+    onReset: () => {
+      entrypointCancelRef.current = true;
+      setScript(null);
+      setTitle('');
+      setSlug('');
+      setKind('utility');
+      setEntrypoint('render');
+      setAvailableEntrypoints(['main']);
+      setEnabled(true);
+      setScriptContent('');
+      setMonacoResetToken(prev => prev + 1);
+      setIsSlugManuallyEdited(false);
+    },
+  });
 
   const buildCacheKey = (scriptMeta: Pick<ScriptData, 'id' | 'version'>, content: string): string => {
     let hash = 0;
@@ -166,86 +232,6 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
     }
   }, [appendPanelOutputEntry, applySyntaxMarkers, isCheckingSyntax, script, scriptContent, t]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshEntrypoints = async (content: string, scriptMeta: ScriptData) => {
-      try {
-        const runtimeManager = getPythonRuntimeManager();
-        const discoveredEntrypoints = await runtimeManager.inspectEntrypoints(content, {
-          cacheKey: buildCacheKey(scriptMeta, content),
-        });
-        const available = withMainEntrypoint(discoveredEntrypoints);
-
-        if (cancelled) {
-          return;
-        }
-
-        setAvailableEntrypoints(available);
-
-        const preferredEntrypoint = available.includes(scriptMeta.entrypoint)
-          ? scriptMeta.entrypoint
-          : 'main';
-        setEntrypoint(preferredEntrypoint);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setAvailableEntrypoints(['main']);
-        setEntrypoint('main');
-      }
-    };
-
-    const loadScript = async () => {
-      if (!scriptId) {
-        setScript(null);
-        setTitle('');
-        setSlug('');
-        setKind('utility');
-        setEntrypoint('render');
-        setAvailableEntrypoints(['main']);
-        setEnabled(true);
-        setScriptContent('');
-        setMonacoResetToken(prev => prev + 1);
-        setIsSlugManuallyEdited(false);
-        return;
-      }
-
-      const item = await window.electronAPI?.scripts.get(scriptId);
-      if (cancelled || !item) {
-        setScript(null);
-        setTitle('');
-        setSlug('');
-        setKind('utility');
-        setEntrypoint('render');
-        setAvailableEntrypoints(['main']);
-        setEnabled(true);
-        setScriptContent('');
-        setMonacoResetToken(prev => prev + 1);
-        setIsSlugManuallyEdited(false);
-        return;
-      }
-
-      setScript(item);
-      setTitle(item.title || '');
-      setSlug(toFunctionSlug(item.slug || item.title || ''));
-      setKind(item.kind || 'utility');
-      setEntrypoint(item.entrypoint || 'render');
-      setEnabled(item.enabled ?? true);
-      setScriptContent(item.content || '');
-      setMonacoResetToken(prev => prev + 1);
-      const normalizedExisting = toFunctionSlug(item.slug || item.title || '');
-      setIsSlugManuallyEdited(normalizedExisting !== toFunctionSlug(item.title || ''));
-      await refreshEntrypoints(item.content || '', item);
-    };
-
-    void loadScript();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [scriptId]);
-
   const hasChanges = !!script && (
     title !== script.title ||
     slug !== script.slug ||
@@ -340,21 +326,7 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
     }
   };
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault();
-        void handleSaveScript();
-      }
-    };
-
-    if (typeof window.addEventListener !== 'function' || typeof window.removeEventListener !== 'function') {
-      return;
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSaveScript]);
+  useSaveShortcut(useCallback(() => { void handleSaveScript(); }, [handleSaveScript]));
 
   const handleRunScript = async () => {
     if (!script || isRunning) {

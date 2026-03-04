@@ -3,10 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { MenuEditorView } from '../../../src/renderer/components/MenuEditorView/MenuEditorView';
+import { useAppStore } from '../../../src/renderer/store';
 
 describe('MenuEditorView entry editor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
+    });
 
     (window as any).electronAPI = {
       ...(window as any).electronAPI,

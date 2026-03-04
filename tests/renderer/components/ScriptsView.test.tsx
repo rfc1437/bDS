@@ -86,6 +86,7 @@ describe('ScriptsView', () => {
     };
 
     useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
       panelVisible: false,
       panelActiveTab: 'tasks',
       panelOutputEntries: [],
@@ -435,6 +436,32 @@ describe('ScriptsView', () => {
         timeoutMs: 0,
       }));
       expect(startTaskMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('defers loading until activeProject is set to avoid startup race condition', async () => {
+    useAppStore.setState({ activeProject: null });
+
+    const getMock = (window as any).electronAPI.scripts.get;
+    const { rerender } = render(<ScriptsView scriptId="script-1" />);
+
+    // Give the effect a chance to run
+    await vi.waitFor(() => {
+      expect(getMock).not.toHaveBeenCalled();
+    });
+
+    // Now simulate project context becoming available
+    useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
+    });
+
+    // Re-render to pick up store change
+    rerender(<ScriptsView scriptId="script-1" />);
+
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith('script-1');
+      const textarea = screen.getByLabelText('Script Content') as HTMLTextAreaElement;
+      expect(textarea.value).toContain('print("hello")');
     });
   });
 });

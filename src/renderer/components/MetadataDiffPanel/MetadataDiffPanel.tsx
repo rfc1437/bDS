@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
 import './MetadataDiffPanel.css';
@@ -42,6 +43,7 @@ type ScanPhase = 'idle' | 'loading-stats' | 'scanning' | 'complete';
 
 export const MetadataDiffPanel: React.FC = () => {
   const { t: tr } = useI18n();
+  const activeProjectId = useAppStore((s) => s.activeProject?.id ?? null);
   const [stats, setStats] = useState<TableStats | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanPhase, setScanPhase] = useState<ScanPhase>('idle');
@@ -51,6 +53,7 @@ export const MetadataDiffPanel: React.FC = () => {
 
   // Load initial stats
   useEffect(() => {
+    if (!activeProjectId) return;
     const loadStats = async () => {
       setScanPhase('loading-stats');
       try {
@@ -65,7 +68,7 @@ export const MetadataDiffPanel: React.FC = () => {
       setScanPhase('idle');
     };
     loadStats();
-  }, [tr]);
+  }, [tr, activeProjectId]);
 
   // Subscribe to task progress
   useEffect(() => {

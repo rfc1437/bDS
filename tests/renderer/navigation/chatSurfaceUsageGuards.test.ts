@@ -11,7 +11,7 @@ describe('chat surface shared usage guards', () => {
       Element.prototype.scrollIntoView = vi.fn();
     }
 
-    useAppStore.setState({ tabs: [], activeTabId: null, activeView: 'posts' });
+    useAppStore.setState({ tabs: [], activeTabId: null, activeView: 'posts', activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any });
 
     window.electronAPI.chat = {
       checkReady: vi.fn().mockResolvedValue({ ready: true }),
