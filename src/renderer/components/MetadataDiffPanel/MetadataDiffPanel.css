@@ -126,6 +126,53 @@
   cursor: not-allowed;
 }
 
+/* Entity Tabs */
+.diff-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--input-border);
+}
+
+.diff-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--descriptionForeground);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.diff-tab:hover {
+  color: var(--editor-foreground);
+}
+
+.diff-tab.active {
+  color: var(--editor-foreground);
+  border-bottom-color: var(--button-background);
+  font-weight: 600;
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--badge-background, #e5a100);
+  color: var(--badge-foreground, #fff);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 /* Results Section */
 .diff-results {
   flex: 1;

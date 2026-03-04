@@ -67,7 +67,7 @@ export interface TemplateDeleteResult {
   references?: { postIds: string[]; tagIds: string[] };
 }
 
-interface ParsedTemplateFile {
+export interface ParsedTemplateFile {
   metadata: {
     id?: string;
     projectId?: string;
@@ -889,7 +889,7 @@ export class TemplateEngine extends EventEmitter {
     return results;
   }
 
-  private async readTemplateFileWithMetadata(filePath: string): Promise<ParsedTemplateFile | null> {
+  async readTemplateFileWithMetadata(filePath: string): Promise<ParsedTemplateFile | null> {
     try {
       const rawContent = await fs.readFile(filePath, 'utf-8');
       return this.parseTemplateFile(rawContent);

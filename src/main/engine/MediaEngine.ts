@@ -382,7 +382,7 @@ export class MediaEngine extends EventEmitter {
     return sidecarPath;
   }
 
-  private async readSidecarFile(sidecarPath: string): Promise<MediaMetadata | null> {
+  async readSidecarFile(sidecarPath: string): Promise<MediaMetadata | null> {
     try {
       // Check if file exists first to avoid noisy errors
       try {
