@@ -865,6 +865,7 @@ export interface ElectronAPI {
     }>;
     syncTemplateDbToFile: (templateIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
     syncTemplateFileToDb: (templateIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
+    importOrphanFiles: (filePaths: string[]) => Promise<{ success: number; failed: number }>;
   };
   blog: {
     generateSitemap: () => Promise<{

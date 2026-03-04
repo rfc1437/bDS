@@ -456,6 +456,13 @@
   color: var(--editorInfo-foreground, var(--editor-foreground));
 }
 
+.orphan-files-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
 .orphan-files-description {
   margin: 0 0 12px 0;
   font-size: 12px;

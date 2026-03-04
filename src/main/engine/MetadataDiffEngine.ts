@@ -1486,4 +1486,56 @@ export class MetadataDiffEngine extends EventEmitter {
         return result;
       },
     });
-  }}
+  }
+
+  // ── Orphan file import ──
+
+  /**
+   * Import orphan files (on disk with no DB entry) into the database as published posts.
+   */
+  async importOrphanFiles(
+    filePaths: string[],
+    onProgress?: (current: number, total: number, message: string) => void,
+  ): Promise<{ success: number; failed: number }> {
+    const postEngine = this.postEngine;
+    if (!postEngine) throw new Error('MetadataDiffEngine: postEngine not injected');
+
+    let success = 0;
+    let failed = 0;
+    const total = filePaths.length;
+
+    for (let i = 0; i < filePaths.length; i++) {
+      try {
+        const imported = await postEngine.importOrphanFile(filePaths[i]);
+        if (imported) {
+          success++;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
+
+      if (onProgress && ((i + 1) % 5 === 0 || i === total - 1)) {
+        onProgress(i + 1, total, `Imported ${success}/${i + 1} orphan files`);
+      }
+    }
+
+    return { success, failed };
+  }
+
+  async runImportOrphanFilesTask(filePaths: string[]): Promise<{ success: number; failed: number }> {
+    return taskManager.runTask({
+      id: `metadata-import-orphans-${Date.now()}`,
+      name: `Importing ${filePaths.length} orphan files into database`,
+      execute: async (onProgress) => {
+        const result = await this.importOrphanFiles(filePaths, (current, total, message) => {
+          const percent = total > 0 ? (current / total) * 100 : 0;
+          onProgress(percent, message);
+        });
+        onProgress(100, `Completed: ${result.success} imported, ${result.failed} failed`);
+        return result;
+      },
+    });
+  }
+}

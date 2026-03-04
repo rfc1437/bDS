@@ -292,6 +292,7 @@ export const electronAPI: ElectronAPI = {
     scanTemplates: () => ipcRenderer.invoke('metadataDiff:scanTemplates'),
     syncTemplateDbToFile: (templateIds: string[], groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncTemplateDbToFile', templateIds, groupLabel),
     syncTemplateFileToDb: (templateIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncTemplateFileToDb', templateIds, field, groupLabel),
+    importOrphanFiles: (filePaths: string[]) => ipcRenderer.invoke('metadataDiff:importOrphanFiles', filePaths),
   },
 
   // Blog operations

@@ -653,6 +653,66 @@ export class PostEngine extends EventEmitter {
     return true;
   }
 
+  /**
+   * Import a single orphan file (exists on disk but not in DB) into the database
+   * as a published post. Reads frontmatter metadata and content from the file,
+   * ensures unique ID/slug, and inserts a new DB row pointing to the existing file.
+   *
+   * @returns The imported PostData, or null if the file could not be read/parsed.
+   */
+  async importOrphanFile(filePath: string): Promise<PostData | null> {
+    const db = getDatabase().getLocal();
+
+    const postData = await this.readPostFile(filePath);
+    if (!postData) return null;
+
+    // Ensure unique ID and slug within the current project
+    const { id, slug } = await this.ensureUniquePostIdentity(postData.id, postData.slug);
+
+    const checksum = this.calculateChecksum(postData.content);
+
+    await db.insert(posts).values({
+      id,
+      projectId: this.currentProjectId,
+      title: postData.title,
+      slug,
+      excerpt: postData.excerpt,
+      content: null,
+      status: 'published',
+      author: postData.author,
+      language: postData.language || null,
+      createdAt: postData.createdAt,
+      updatedAt: postData.updatedAt,
+      publishedAt: postData.publishedAt || postData.updatedAt,
+      filePath,
+      checksum,
+      tags: JSON.stringify(postData.tags),
+      categories: JSON.stringify(postData.categories),
+    });
+
+    await this.updateFTSIndex({
+      id,
+      projectId: this.currentProjectId,
+      title: postData.title,
+      content: postData.content,
+      excerpt: postData.excerpt,
+      tags: postData.tags,
+      categories: postData.categories,
+    });
+
+    const imported: PostData = {
+      ...postData,
+      id,
+      slug,
+      status: 'published',
+      publishedAt: postData.publishedAt || postData.updatedAt,
+    };
+
+    this.emit('postCreated', imported);
+    await this.notifier.notify('post', id, 'created');
+    return imported;
+  }
+
   async getAllPosts(options?: PaginationOptions): Promise<PaginatedResult<PostData>> {
     const db = getDatabase().getLocal();
     const limit = options?.limit ?? 500;

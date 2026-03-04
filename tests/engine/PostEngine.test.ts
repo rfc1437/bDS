@@ -3597,4 +3597,90 @@ Content with [link](/posts/other-post)`);
       expect(mockUpdate).toHaveBeenCalled();
     });
   });
+
+  describe('importOrphanFile', () => {
+    it('should import an orphan file into the database as published', async () => {
+      const orphanPath = '/mock/userData/posts/2024/03/orphan-post.md';
+      mockFiles.set(orphanPath, `---
+id: orphan-id-123
+title: "Orphan Post Title"
+slug: orphan-post
+createdAt: "2024-03-10T12:00:00.000Z"
+updatedAt: "2024-03-10T12:00:00.000Z"
+tags:
+  - imported
+categories:
+  - blog
+---
+This is the orphan body content.`);
+
+      // select → get returns undefined (no existing post with that id/slug)
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(undefined),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.importOrphanFile(orphanPath);
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('Orphan Post Title');
+      expect(result!.slug).toBe('orphan-post');
+      expect(result!.status).toBe('published');
+      expect(result!.tags).toEqual(['imported']);
+      expect(result!.categories).toEqual(['blog']);
+
+      // Should have inserted into DB
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should return null when the file cannot be parsed', async () => {
+      // File does not exist at all
+      const result = await postEngine.importOrphanFile('/nonexistent/path.md');
+      expect(result).toBeNull();
+    });
+
+    it('should deduplicate slug when it already exists', async () => {
+      const orphanPath = '/mock/userData/posts/2024/01/existing-slug.md';
+      mockFiles.set(orphanPath, `---
+title: "Duplicate Slug Post"
+slug: existing-slug
+createdAt: "2024-01-01T00:00:00.000Z"
+updatedAt: "2024-01-01T00:00:00.000Z"
+tags: []
+categories: []
+---
+Body.`);
+
+      // ensureUniquePostIdentity flow:
+      // 1. select → get: id check → undefined (available)
+      // 2. isSlugAvailable('existing-slug') → found (taken)
+      // 3. generateUniqueSlug → isSlugAvailable('existing-slug') again → found (taken)
+      // 4. isSlugAvailable('existing-slug-2') → undefined (available)
+      let selectCallCount = 0;
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            // id check: available
+            if (selectCallCount === 1) return Promise.resolve(undefined);
+            // slug check: taken (both the direct check and generateUniqueSlug re-check)
+            if (selectCallCount <= 3) return Promise.resolve({ id: 'other-post' });
+            // slug-2 check: available
+            return Promise.resolve(undefined);
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.importOrphanFile(orphanPath);
+      expect(result).not.toBeNull();
+      // Should have been deduplicated
+      expect(result!.slug).toBe('existing-slug-2');
+    });
+  });
 });

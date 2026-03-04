@@ -100,4 +100,11 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle, bundle: Eng
     await withProjectContext(bundle);
     return engine().runTemplateSyncFileToDbTask(templateIds, field as TemplateDiffField, groupLabel);
   });
+
+  // ── Orphan file import ──
+
+  safeHandle('metadataDiff:importOrphanFiles', async (_, filePaths: string[]) => {
+    await withProjectContext(bundle);
+    return engine().runImportOrphanFilesTask(filePaths);
+  });
 }

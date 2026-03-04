@@ -160,11 +160,13 @@ vi.mock('../../src/main/engine/TaskManager', () => ({
 
 // Track the mock function for PostEngine.syncPublishedPostFile
 const mockSyncPublishedPostFile = vi.fn(async () => true);
+const mockImportOrphanFile = vi.fn(async () => ({ id: 'imported-id', title: 'Imported' }));
 
 // Mock PostEngine
 vi.mock('../../src/main/engine/PostEngine', () => ({
   getPostEngine: vi.fn(() => ({
     syncPublishedPostFile: mockSyncPublishedPostFile,
+    importOrphanFile: mockImportOrphanFile,
   })),
 }));
 
@@ -178,8 +180,9 @@ describe('MetadataDiffEngine', () => {
     mockFileData.clear();
     mockAllPostsRows = [];
     mockSyncPublishedPostFile.mockClear();
+    mockImportOrphanFile.mockClear();
     resetMockCounters();
-    engine = new MetadataDiffEngine({ syncPublishedPostFile: mockSyncPublishedPostFile } as any);
+    engine = new MetadataDiffEngine({ syncPublishedPostFile: mockSyncPublishedPostFile, importOrphanFile: mockImportOrphanFile } as any);
     engine.setProjectContext('test-project');
   });
 
@@ -730,6 +733,50 @@ Content`);
 
       // Draft post file should NOT be flagged as orphan since it's in the DB
       expect(result.orphanFiles).toEqual([]);
+    });
+  });
+
+  describe('importOrphanFiles', () => {
+    it('should import orphan files and report success/failed counts', async () => {
+      mockImportOrphanFile
+        .mockResolvedValueOnce({ id: 'id-1', title: 'First' })
+        .mockResolvedValueOnce(null) // parse failure
+        .mockResolvedValueOnce({ id: 'id-3', title: 'Third' });
+
+      const result = await engine.importOrphanFiles([
+        '/posts/2024/01/first.md',
+        '/posts/2024/01/bad.md',
+        '/posts/2024/01/third.md',
+      ]);
+
+      expect(result.success).toBe(2);
+      expect(result.failed).toBe(1);
+      expect(mockImportOrphanFile).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle exceptions from importOrphanFile gracefully', async () => {
+      mockImportOrphanFile
+        .mockRejectedValueOnce(new Error('DB constraint error'));
+
+      const result = await engine.importOrphanFiles(['/posts/2024/01/crash.md']);
+
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(1);
+    });
+
+    it('should report progress during import', async () => {
+      mockImportOrphanFile.mockResolvedValue({ id: 'id', title: 'Post' });
+
+      const progressCalls: [number, number, string][] = [];
+      await engine.importOrphanFiles(
+        ['/a.md', '/b.md', '/c.md', '/d.md', '/e.md'],
+        (current, total, message) => progressCalls.push([current, total, message]),
+      );
+
+      // Progress should be reported at i=4 (5th item, i+1=5 is divisible by 5)
+      expect(progressCalls.length).toBe(1);
+      expect(progressCalls[0][0]).toBe(5);
+      expect(progressCalls[0][1]).toBe(5);
     });
   });
 

@@ -125,6 +125,7 @@ export const MetadataDiffPanel: React.FC = () => {
   const [progress, setProgress] = useState({ current: 0, total: 0, message: '' });
   const [activeFieldFilter, setActiveFieldFilter] = useState<string | null>(null);
   const [syncingFields, setSyncingFields] = useState<Set<string>>(new Set());
+  const [importingOrphans, setImportingOrphans] = useState(false);
 
   // Load initial stats
   useEffect(() => {
@@ -255,6 +256,25 @@ export const MetadataDiffPanel: React.FC = () => {
       setSyncingFields(prev => { const next = new Set(prev); next.delete(field); return next; });
     }
   }, [activeTab, currentResult, handleScan, tr]);
+
+  const handleImportOrphanFiles = useCallback(async () => {
+    const orphanPaths = currentResult?.orphanFiles.map(o => o.filePath) ?? [];
+    if (orphanPaths.length === 0) return;
+
+    setImportingOrphans(true);
+    try {
+      const result = await window.electronAPI?.metadataDiff.importOrphanFiles(orphanPaths);
+      if (result) {
+        showToast.success(tr('metadataDiff.orphanFiles.importSuccess', { success: result.success, failed: result.failed > 0 ? `, ${result.failed} ${tr('metadataDiff.sync.failed')}` : '' }));
+        handleScan();
+      }
+    } catch (error) {
+      console.error('Orphan import failed:', error);
+      showToast.error(tr('metadataDiff.orphanFiles.importError'));
+    } finally {
+      setImportingOrphans(false);
+    }
+  }, [currentResult, handleScan, tr]);
 
   const formatValue = (value: unknown): string => {
     if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '(empty)';
@@ -451,7 +471,17 @@ export const MetadataDiffPanel: React.FC = () => {
               {/* Orphan files — files on disk with no DB entry */}
               {currentResult.orphanFiles.length > 0 && !activeFieldFilter && (
                 <div className="orphan-files-section">
-                  <h3>{tr('metadataDiff.orphanFiles.title', { count: currentResult.orphanFiles.length })}</h3>
+                  <div className="orphan-files-header">
+                    <h3>{tr('metadataDiff.orphanFiles.title', { count: currentResult.orphanFiles.length })}</h3>
+                    <button
+                      className="pill-sync file-to-db"
+                      onClick={handleImportOrphanFiles}
+                      disabled={importingOrphans}
+                      title={tr('metadataDiff.orphanFiles.importTitle')}
+                    >
+                      {importingOrphans ? tr('metadataDiff.orphanFiles.importing') : tr('metadataDiff.orphanFiles.importButton')}
+                    </button>
+                  </div>
                   <p className="orphan-files-description">{tr('metadataDiff.orphanFiles.description')}</p>
                   <div className="diff-item-list">
                     {currentResult.orphanFiles.map(orphan => (
