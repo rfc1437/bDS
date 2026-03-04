@@ -635,19 +635,82 @@ export class PostEngine extends EventEmitter {
       return false;
     }
 
-    // Read content from the existing file
+    // Read content from the existing file, fall back to DB content if file is missing
     const fileData = await this.readPostFile(dbPost.filePath);
-    if (!fileData) {
-      return false;
+    const body = fileData?.content ?? dbPost.content ?? '';
+
+    // Build the full post data with DB metadata and content
+    const postData = this.dbRowToPostData(dbPost, body);
+
+    // Write the file (may recreate it if missing, path may change if slug changed)
+    const newFilePath = await this.writePostFile(postData);
+
+    // If the written path differs from DB (e.g. slug changed), update DB
+    if (newFilePath !== dbPost.filePath) {
+      await db.update(posts).set({ filePath: newFilePath }).where(eq(posts.id, postId));
     }
 
-    // Build the full post data with DB metadata (tags) and file content
-    const postData = this.dbRowToPostData(dbPost, fileData.content);
-
-    // Re-write the file with updated metadata
-    await this.writePostFile(postData);
-
     return true;
+  }
+
+  /**
+   * Import a single orphan file (exists on disk but not in DB) into the database
+   * as a published post. Reads frontmatter metadata and content from the file,
+   * ensures unique ID/slug, and inserts a new DB row pointing to the existing file.
+   *
+   * @returns The imported PostData, or null if the file could not be read/parsed.
+   */
+  async importOrphanFile(filePath: string): Promise<PostData | null> {
+    const db = getDatabase().getLocal();
+
+    const postData = await this.readPostFile(filePath);
+    if (!postData) return null;
+
+    // Ensure unique ID and slug within the current project
+    const { id, slug } = await this.ensureUniquePostIdentity(postData.id, postData.slug);
+
+    const checksum = this.calculateChecksum(postData.content);
+
+    await db.insert(posts).values({
+      id,
+      projectId: this.currentProjectId,
+      title: postData.title,
+      slug,
+      excerpt: postData.excerpt,
+      content: null,
+      status: 'published',
+      author: postData.author,
+      language: postData.language || null,
+      createdAt: postData.createdAt,
+      updatedAt: postData.updatedAt,
+      publishedAt: postData.publishedAt || postData.updatedAt,
+      filePath,
+      checksum,
+      tags: JSON.stringify(postData.tags),
+      categories: JSON.stringify(postData.categories),
+    });
+
+    await this.updateFTSIndex({
+      id,
+      projectId: this.currentProjectId,
+      title: postData.title,
+      content: postData.content,
+      excerpt: postData.excerpt,
+      tags: postData.tags,
+      categories: postData.categories,
+    });
+
+    const imported: PostData = {
+      ...postData,
+      id,
+      slug,
+      status: 'published',
+      publishedAt: postData.publishedAt || postData.updatedAt,
+    };
+
+    this.emit('postCreated', imported);
+    await this.notifier.notify('post', id, 'created');
+    return imported;
   }
 
   async getAllPosts(options?: PaginationOptions): Promise<PaginatedResult<PostData>> {

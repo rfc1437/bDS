@@ -6,7 +6,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { MetadataDiffEngine, PostMetadataDiff, DiffGroup, DiffField } from '../../src/main/engine/MetadataDiffEngine';
+import {
+  MetadataDiffEngine, PostMetadataDiff, DiffGroup, DiffField,
+  MediaMetadataDiff, MediaDiffField,
+  ScriptMetadataDiff, ScriptDiffField,
+  TemplateMetadataDiff, TemplateDiffField,
+  OrphanFile,
+} from '../../src/main/engine/MetadataDiffEngine';
 import { resetMockCounters } from '../utils/factories';
 
 // Mock posts data store - used for single-item .get() queries
@@ -154,11 +160,13 @@ vi.mock('../../src/main/engine/TaskManager', () => ({
 
 // Track the mock function for PostEngine.syncPublishedPostFile
 const mockSyncPublishedPostFile = vi.fn(async () => true);
+const mockImportOrphanFile = vi.fn(async () => ({ id: 'imported-id', title: 'Imported' }));
 
 // Mock PostEngine
 vi.mock('../../src/main/engine/PostEngine', () => ({
   getPostEngine: vi.fn(() => ({
     syncPublishedPostFile: mockSyncPublishedPostFile,
+    importOrphanFile: mockImportOrphanFile,
   })),
 }));
 
@@ -172,8 +180,9 @@ describe('MetadataDiffEngine', () => {
     mockFileData.clear();
     mockAllPostsRows = [];
     mockSyncPublishedPostFile.mockClear();
+    mockImportOrphanFile.mockClear();
     resetMockCounters();
-    engine = new MetadataDiffEngine({ syncPublishedPostFile: mockSyncPublishedPostFile } as any);
+    engine = new MetadataDiffEngine({ syncPublishedPostFile: mockSyncPublishedPostFile, importOrphanFile: mockImportOrphanFile } as any);
     engine.setProjectContext('test-project');
   });
 
@@ -382,6 +391,73 @@ Content here`);
       expect(result?.differences.language?.fileValue).toBe('');
     });
 
+    it('should populate differences with DB values when file is missing', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/non-existent.md',
+        tags: '["tag1", "tag2"]',
+        categories: '["cat1"]',
+        excerpt: 'Some excerpt',
+        author: 'Author Name',
+        language: 'de',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      // File intentionally NOT added to mockFileData → readPostFile returns null
+      mockPosts.set('post-1', dbPost);
+
+      const result = await engine.comparePostMetadata('post-1');
+
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.fileMissing).toBe(true);
+      // DB values should appear in differences so the UI shows what fields exist
+      expect(result?.differences.tags).toEqual({ dbValue: ['tag1', 'tag2'], fileValue: null });
+      expect(result?.differences.categories).toEqual({ dbValue: ['cat1'], fileValue: null });
+      expect(result?.differences.title).toEqual({ dbValue: 'Published Post', fileValue: null });
+      expect(result?.differences.excerpt).toEqual({ dbValue: 'Some excerpt', fileValue: null });
+      expect(result?.differences.author).toEqual({ dbValue: 'Author Name', fileValue: null });
+      expect(result?.differences.language).toEqual({ dbValue: 'de', fileValue: null });
+    });
+
+    it('should omit empty DB fields from differences when file is missing', async () => {
+      const dbPost = {
+        id: 'post-2',
+        projectId: 'test-project',
+        title: 'Minimal Post',
+        slug: 'minimal-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/gone.md',
+        tags: '[]',
+        categories: '[]',
+        excerpt: null,
+        author: null,
+        language: null,
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-2', dbPost);
+
+      const result = await engine.comparePostMetadata('post-2');
+
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.fileMissing).toBe(true);
+      // Title always present since it's non-null
+      expect(result?.differences.title).toEqual({ dbValue: 'Minimal Post', fileValue: null });
+      // Empty arrays / nulls should be omitted
+      expect(result?.differences.tags).toBeUndefined();
+      expect(result?.differences.categories).toBeUndefined();
+      expect(result?.differences.excerpt).toBeUndefined();
+      expect(result?.differences.author).toBeUndefined();
+      expect(result?.differences.language).toBeUndefined();
+    });
+
     it('should return hasDifferences=false when metadata matches', async () => {
       const dbPost = {
         id: 'post-1',
@@ -445,6 +521,14 @@ Content here`);
             excerpt: null,
             author: null,
           },
+        ],
+      });
+
+      // Mock the second query that gets ALL post file paths (for orphan detection)
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { file_path: '/mock/userData/posts/2024/01/post-1.md' },
+          { file_path: '/mock/userData/posts/2024/01/post-2.md' },
         ],
       });
 
@@ -512,6 +596,187 @@ Content`);
       expect(result.postsWithDifferences).toBe(1);
       expect(result.differences.length).toBe(1);
       expect(result.differences[0].postId).toBe('post-1');
+      expect(result.orphanFiles).toEqual([]);
+    });
+
+    it('should detect orphan files when postsBaseDir is provided', async () => {
+      const { readdir } = await import('fs/promises');
+      const mockReaddir = vi.mocked(readdir);
+
+      // Mock published posts query - one post in DB
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'post-1',
+            title: 'Post 1',
+            slug: 'post-1',
+            file_path: '/mock/posts/2024/01/post-1.md',
+            tags: '[]',
+            categories: '[]',
+            excerpt: null,
+            author: null,
+          },
+        ],
+      });
+
+      // Mock the all-posts query
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [{ file_path: '/mock/posts/2024/01/post-1.md' }],
+      });
+
+      // Queue the post for comparePostMetadata
+      mockPostsGetQueue = [
+        {
+          id: 'post-1',
+          projectId: 'test-project',
+          title: 'Post 1',
+          slug: 'post-1',
+          status: 'published',
+          filePath: '/mock/posts/2024/01/post-1.md',
+          tags: '[]',
+          categories: '[]',
+          createdAt: new Date('2024-01-15'),
+          updatedAt: new Date('2024-01-15'),
+        },
+      ];
+
+      // File matches DB (no differences)
+      mockFileData.set('/mock/posts/2024/01/post-1.md', `---
+id: post-1
+title: "Post 1"
+slug: post-1
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+---
+Content`);
+
+      // Orphan file exists on disk
+      mockFileData.set('/mock/posts/2024/01/orphan-post.md', `---
+id: orphan-1
+title: "Orphan Post"
+slug: orphan-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+---
+Content`);
+
+      // Mock readdir to return directory structure
+      mockReaddir
+        .mockResolvedValueOnce([
+          { name: '2024', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: '01', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'post-1.md', isDirectory: () => false, isFile: () => true } as any,
+          { name: 'orphan-post.md', isDirectory: () => false, isFile: () => true } as any,
+        ] as any);
+
+      const result = await engine.scanAllPublishedPosts(
+        (current, total) => {},
+        '/mock/posts',
+      );
+
+      expect(result.orphanFiles).toHaveLength(1);
+      expect(result.orphanFiles[0].slug).toBe('orphan-post');
+      expect(result.orphanFiles[0].title).toBe('Orphan Post');
+      expect(result.orphanFiles[0].id).toBe('orphan-1');
+      expect(result.orphanFiles[0].filePath).toBe('/mock/posts/2024/01/orphan-post.md');
+    });
+
+    it('should return empty orphanFiles when no postsBaseDir is provided', async () => {
+      // Mock published posts query - empty
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+      // Mock the all-posts query
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      const result = await engine.scanAllPublishedPosts((current, total) => {});
+
+      expect(result.orphanFiles).toEqual([]);
+    });
+
+    it('should not flag draft posts as orphans', async () => {
+      const { readdir } = await import('fs/promises');
+      const mockReaddir = vi.mocked(readdir);
+
+      // No published posts
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      // All posts query returns a draft that has a file
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [{ file_path: '/mock/posts/2024/01/draft-post.md' }],
+      });
+
+      // Mock readdir to find the draft file
+      mockReaddir
+        .mockResolvedValueOnce([
+          { name: '2024', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: '01', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'draft-post.md', isDirectory: () => false, isFile: () => true } as any,
+        ] as any);
+
+      const result = await engine.scanAllPublishedPosts(
+        (current, total) => {},
+        '/mock/posts',
+      );
+
+      // Draft post file should NOT be flagged as orphan since it's in the DB
+      expect(result.orphanFiles).toEqual([]);
+    });
+  });
+
+  describe('importOrphanFiles', () => {
+    it('should import orphan files and report success/failed counts', async () => {
+      mockImportOrphanFile
+        .mockResolvedValueOnce({ id: 'id-1', title: 'First' })
+        .mockResolvedValueOnce(null) // parse failure
+        .mockResolvedValueOnce({ id: 'id-3', title: 'Third' });
+
+      const result = await engine.importOrphanFiles([
+        '/posts/2024/01/first.md',
+        '/posts/2024/01/bad.md',
+        '/posts/2024/01/third.md',
+      ]);
+
+      expect(result.success).toBe(2);
+      expect(result.failed).toBe(1);
+      expect(mockImportOrphanFile).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle exceptions from importOrphanFile gracefully', async () => {
+      mockImportOrphanFile
+        .mockRejectedValueOnce(new Error('DB constraint error'));
+
+      const result = await engine.importOrphanFiles(['/posts/2024/01/crash.md']);
+
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(1);
+    });
+
+    it('should report progress during import', async () => {
+      mockImportOrphanFile.mockResolvedValue({ id: 'id', title: 'Post' });
+
+      const progressCalls: [number, number, string][] = [];
+      await engine.importOrphanFiles(
+        ['/a.md', '/b.md', '/c.md', '/d.md', '/e.md'],
+        (current, total, message) => progressCalls.push([current, total, message]),
+      );
+
+      // Progress should be reported at i=4 (5th item, i+1=5 is divisible by 5)
+      expect(progressCalls.length).toBe(1);
+      expect(progressCalls[0][0]).toBe(5);
+      expect(progressCalls[0][1]).toBe(5);
     });
   });
 
@@ -753,6 +1018,369 @@ Content here`);
 
       expect(result).toEqual({ success: 1, failed: 2 });
       expect(mockLocalDb.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── Media diff tests ──
+
+  describe('compareMediaMetadata', () => {
+    let mediaEngine: MetadataDiffEngine;
+    const mockReadSidecarFile = vi.fn();
+
+    beforeEach(() => {
+      mediaEngine = new MetadataDiffEngine(
+        undefined,
+        { readSidecarFile: mockReadSidecarFile, getMedia: vi.fn(), updateMedia: vi.fn() } as any,
+      );
+      mediaEngine.setProjectContext('test-project');
+    });
+
+    it('should return null when media not found in DB', async () => {
+      // (mock DB returns undefined for .get())
+      const result = await mediaEngine.compareMediaMetadata('nonexistent');
+      expect(result).toBeNull();
+    });
+
+    it('should detect title difference between DB and sidecar', async () => {
+      const dbMedia = {
+        id: 'media-1',
+        projectId: 'test-project',
+        originalName: 'photo.jpg',
+        filePath: '/mock/media/photo.jpg',
+        title: 'DB Title',
+        alt: 'alt text',
+        caption: '',
+        author: '',
+        tags: '[]',
+      };
+      mockPosts.set('media-1', dbMedia);
+      // The select chain's .get() will return this via mockPosts
+      // Override: media uses same mock DB, so route DB response:
+      mockPostsGetQueue = [dbMedia];
+
+      mockReadSidecarFile.mockResolvedValueOnce({
+        id: 'media-1',
+        originalName: 'photo.jpg',
+        title: 'File Title',
+        alt: 'alt text',
+        caption: '',
+        author: '',
+        tags: [],
+      });
+
+      const result = await mediaEngine.compareMediaMetadata('media-1');
+      expect(result).not.toBeNull();
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.title).toEqual({ dbValue: 'DB Title', fileValue: 'File Title' });
+    });
+
+    it('should detect tag differences between DB and sidecar', async () => {
+      const dbMedia = {
+        id: 'media-2',
+        projectId: 'test-project',
+        originalName: 'photo.jpg',
+        filePath: '/mock/media/photo.jpg',
+        title: '',
+        alt: '',
+        caption: '',
+        author: '',
+        tags: '["tag1","tag2"]',
+      };
+      mockPostsGetQueue = [dbMedia];
+
+      mockReadSidecarFile.mockResolvedValueOnce({
+        id: 'media-2',
+        originalName: 'photo.jpg',
+        title: '',
+        alt: '',
+        caption: '',
+        author: '',
+        tags: ['tag1'],
+      });
+
+      const result = await mediaEngine.compareMediaMetadata('media-2');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.tags).toEqual({ dbValue: ['tag1', 'tag2'], fileValue: ['tag1'] });
+    });
+
+    it('should return hasDifferences=false when metadata matches', async () => {
+      const dbMedia = {
+        id: 'media-3',
+        projectId: 'test-project',
+        originalName: 'photo.jpg',
+        filePath: '/mock/media/photo.jpg',
+        title: 'Same',
+        alt: 'Same alt',
+        caption: '',
+        author: '',
+        tags: '["t1"]',
+      };
+      mockPostsGetQueue = [dbMedia];
+
+      mockReadSidecarFile.mockResolvedValueOnce({
+        title: 'Same',
+        alt: 'Same alt',
+        caption: '',
+        author: '',
+        tags: ['t1'],
+      });
+
+      const result = await mediaEngine.compareMediaMetadata('media-3');
+      expect(result?.hasDifferences).toBe(false);
+    });
+
+    it('should flag when sidecar file is missing', async () => {
+      const dbMedia = {
+        id: 'media-4',
+        projectId: 'test-project',
+        originalName: 'photo.jpg',
+        filePath: '/mock/media/photo.jpg',
+        title: '',
+        alt: '',
+        caption: '',
+        author: '',
+        tags: '[]',
+      };
+      mockPostsGetQueue = [dbMedia];
+      mockReadSidecarFile.mockResolvedValueOnce(null);
+
+      const result = await mediaEngine.compareMediaMetadata('media-4');
+      expect(result?.hasDifferences).toBe(true);
+    });
+  });
+
+  // ── Script diff tests ──
+
+  describe('compareScriptMetadata', () => {
+    let scriptEngine: MetadataDiffEngine;
+    const mockReadScriptFileWithMetadata = vi.fn();
+
+    beforeEach(() => {
+      scriptEngine = new MetadataDiffEngine(
+        undefined,
+        undefined,
+        { readScriptFileWithMetadata: mockReadScriptFileWithMetadata, getScript: vi.fn(), updateScript: vi.fn() } as any,
+      );
+      scriptEngine.setProjectContext('test-project');
+    });
+
+    it('should skip draft scripts', async () => {
+      mockPostsGetQueue = [{
+        id: 'script-1',
+        projectId: 'test-project',
+        title: 'Draft Script',
+        slug: 'draft-script',
+        status: 'draft',
+        kind: 'utility',
+        entrypoint: 'render',
+        enabled: true,
+        version: 1,
+        filePath: '/mock/scripts/draft.py',
+      }];
+
+      const result = await scriptEngine.compareScriptMetadata('script-1');
+      expect(result).toBeNull();
+    });
+
+    it('should detect title difference between DB and file', async () => {
+      mockPostsGetQueue = [{
+        id: 'script-2',
+        projectId: 'test-project',
+        title: 'DB Title',
+        slug: 'my-script',
+        status: 'published',
+        kind: 'macro',
+        entrypoint: 'render',
+        enabled: true,
+        version: 3,
+        filePath: '/mock/scripts/my-script.py',
+      }];
+
+      mockReadScriptFileWithMetadata.mockResolvedValueOnce({
+        metadata: { title: 'File Title', kind: 'macro', entrypoint: 'render', enabled: true, version: 3 },
+        body: '',
+      });
+
+      const result = await scriptEngine.compareScriptMetadata('script-2');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.title).toEqual({ dbValue: 'DB Title', fileValue: 'File Title' });
+    });
+
+    it('should detect version difference', async () => {
+      mockPostsGetQueue = [{
+        id: 'script-3',
+        projectId: 'test-project',
+        title: 'Script',
+        slug: 'script',
+        status: 'published',
+        kind: 'utility',
+        entrypoint: 'render',
+        enabled: true,
+        version: 5,
+        filePath: '/mock/scripts/script.py',
+      }];
+
+      mockReadScriptFileWithMetadata.mockResolvedValueOnce({
+        metadata: { title: 'Script', kind: 'utility', entrypoint: 'render', enabled: true, version: 3 },
+        body: '',
+      });
+
+      const result = await scriptEngine.compareScriptMetadata('script-3');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.version).toEqual({ dbValue: 5, fileValue: 3 });
+    });
+
+    it('should return hasDifferences=false when metadata matches', async () => {
+      mockPostsGetQueue = [{
+        id: 'script-4',
+        projectId: 'test-project',
+        title: 'Same',
+        slug: 'same',
+        status: 'published',
+        kind: 'utility',
+        entrypoint: 'render',
+        enabled: true,
+        version: 1,
+        filePath: '/mock/scripts/same.py',
+      }];
+
+      mockReadScriptFileWithMetadata.mockResolvedValueOnce({
+        metadata: { title: 'Same', kind: 'utility', entrypoint: 'render', enabled: true, version: 1 },
+        body: '',
+      });
+
+      const result = await scriptEngine.compareScriptMetadata('script-4');
+      expect(result?.hasDifferences).toBe(false);
+    });
+  });
+
+  // ── Template diff tests ──
+
+  describe('compareTemplateMetadata', () => {
+    let templateEngine: MetadataDiffEngine;
+    const mockReadTemplateFileWithMetadata = vi.fn();
+
+    beforeEach(() => {
+      templateEngine = new MetadataDiffEngine(
+        undefined,
+        undefined,
+        undefined,
+        { readTemplateFileWithMetadata: mockReadTemplateFileWithMetadata, getTemplate: vi.fn(), updateTemplate: vi.fn() } as any,
+      );
+      templateEngine.setProjectContext('test-project');
+    });
+
+    it('should skip draft templates', async () => {
+      mockPostsGetQueue = [{
+        id: 'tpl-1',
+        projectId: 'test-project',
+        title: 'Draft Template',
+        slug: 'draft-tpl',
+        status: 'draft',
+        kind: 'post',
+        enabled: true,
+        version: 1,
+        filePath: '/mock/templates/draft.liquid',
+      }];
+
+      const result = await templateEngine.compareTemplateMetadata('tpl-1');
+      expect(result).toBeNull();
+    });
+
+    it('should detect kind difference between DB and file', async () => {
+      mockPostsGetQueue = [{
+        id: 'tpl-2',
+        projectId: 'test-project',
+        title: 'Template',
+        slug: 'template',
+        status: 'published',
+        kind: 'post',
+        enabled: true,
+        version: 1,
+        filePath: '/mock/templates/template.liquid',
+      }];
+
+      mockReadTemplateFileWithMetadata.mockResolvedValueOnce({
+        metadata: { title: 'Template', kind: 'list', enabled: true, version: 1 },
+        body: '',
+      });
+
+      const result = await templateEngine.compareTemplateMetadata('tpl-2');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.kind).toEqual({ dbValue: 'post', fileValue: 'list' });
+    });
+
+    it('should detect enabled difference', async () => {
+      mockPostsGetQueue = [{
+        id: 'tpl-3',
+        projectId: 'test-project',
+        title: 'Tpl',
+        slug: 'tpl',
+        status: 'published',
+        kind: 'post',
+        enabled: true,
+        version: 1,
+        filePath: '/mock/templates/tpl.liquid',
+      }];
+
+      mockReadTemplateFileWithMetadata.mockResolvedValueOnce({
+        metadata: { title: 'Tpl', kind: 'post', enabled: false, version: 1 },
+        body: '',
+      });
+
+      const result = await templateEngine.compareTemplateMetadata('tpl-3');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.enabled).toEqual({ dbValue: true, fileValue: false });
+    });
+
+    it('should return hasDifferences=false when metadata matches', async () => {
+      mockPostsGetQueue = [{
+        id: 'tpl-4',
+        projectId: 'test-project',
+        title: 'Same',
+        slug: 'same',
+        status: 'published',
+        kind: 'partial',
+        enabled: true,
+        version: 2,
+        filePath: '/mock/templates/same.liquid',
+      }];
+
+      mockReadTemplateFileWithMetadata.mockResolvedValueOnce({
+        metadata: { title: 'Same', kind: 'partial', enabled: true, version: 2 },
+        body: '',
+      });
+
+      const result = await templateEngine.compareTemplateMetadata('tpl-4');
+      expect(result?.hasDifferences).toBe(false);
+    });
+  });
+
+  // ── getTableStats with expanded counts ──
+
+  describe('getTableStats (expanded)', () => {
+    it('should include script and template counts', async () => {
+      mockLocalClient.execute
+        .mockResolvedValueOnce({ rows: [{ count: 10 }] })   // total posts
+        .mockResolvedValueOnce({ rows: [{ count: 8 }] })    // published posts
+        .mockResolvedValueOnce({ rows: [{ count: 2 }] })    // draft posts
+        .mockResolvedValueOnce({ rows: [{ count: 50 }] })   // total media
+        .mockResolvedValueOnce({ rows: [{ count: 5 }] })    // total scripts
+        .mockResolvedValueOnce({ rows: [{ count: 4 }] })    // published scripts
+        .mockResolvedValueOnce({ rows: [{ count: 7 }] })    // total templates
+        .mockResolvedValueOnce({ rows: [{ count: 6 }] });   // published templates
+
+      const stats = await engine.getTableStats();
+      expect(stats).toEqual({
+        totalPosts: 10,
+        publishedPosts: 8,
+        draftPosts: 2,
+        totalMedia: 50,
+        totalScripts: 5,
+        publishedScripts: 4,
+        totalTemplates: 7,
+        publishedTemplates: 6,
+      });
     });
   });
 });

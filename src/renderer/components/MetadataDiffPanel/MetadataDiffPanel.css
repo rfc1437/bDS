@@ -126,6 +126,53 @@
   cursor: not-allowed;
 }
 
+/* Entity Tabs */
+.diff-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--input-border);
+}
+
+.diff-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--descriptionForeground);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.diff-tab:hover {
+  color: var(--editor-foreground);
+}
+
+.diff-tab.active {
+  color: var(--editor-foreground);
+  border-bottom-color: var(--button-background);
+  font-weight: 600;
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--badge-background, #e5a100);
+  color: var(--badge-foreground, #fff);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 /* Results Section */
 .diff-results {
   flex: 1;
@@ -151,128 +198,177 @@
   border-color: var(--testing-iconFailed);
 }
 
-/* Collapsible Groups */
-.diff-group {
+/* Field summary pills */
+.diff-field-summaries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.field-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--input-border);
+  background: var(--sidebar-background);
+  color: var(--editor-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.field-pill:hover {
+  background: var(--list-hoverBackground);
+}
+
+.field-pill.active {
+  background: color-mix(in srgb, var(--button-background) 20%, var(--sidebar-background));
+  border-color: var(--button-background);
+  font-weight: 600;
+}
+
+.field-pill.clear-filter {
+  padding: 5px 8px;
+  border-color: var(--testing-iconFailed);
+  color: var(--testing-iconFailed);
+  font-weight: 600;
+}
+
+.field-pill-label {
+  text-transform: capitalize;
+}
+
+.field-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--badge-background, #e5a100);
+  color: var(--badge-foreground, #fff);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.field-pill-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 2px;
+}
+
+.pill-sync {
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  border: 1px solid var(--input-border);
+  border-radius: 3px;
+  background: var(--input-background);
+  color: var(--editor-foreground);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.pill-sync:hover:not(:disabled) {
+  background: var(--list-hoverBackground);
+}
+
+.pill-sync:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pill-sync.db-to-file {
+  border-color: var(--button-background);
+  color: var(--button-background);
+}
+
+.pill-sync.file-to-db {
+  border-color: var(--testing-iconQueued);
+  color: var(--testing-iconQueued);
+}
+
+/* Item cards */
+.diff-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-item-card {
   background: var(--sidebar-background);
   border: 1px solid var(--sidebar-border);
   border-radius: 6px;
   overflow: hidden;
 }
 
-.diff-group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  background: var(--list-hoverBackground);
-  cursor: pointer;
-  user-select: none;
-}
-
-.diff-group-header:hover {
-  background: var(--list-activeSelectionBackground);
-}
-
-.diff-group-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.diff-item-header {
+  padding: 8px 12px;
   font-weight: 600;
-}
-
-.diff-group-title .chevron {
-  font-size: 10px;
-  transition: transform 0.2s;
-}
-
-.diff-group-title .chevron.expanded {
-  transform: rotate(90deg);
-}
-
-.diff-group-count {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.diff-group-count .badge {
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--badge-background);
-  color: var(--badge-foreground);
-}
-
-.diff-group-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.diff-group-actions button {
-  padding: 4px 8px;
-  font-size: 11px;
-  border: 1px solid var(--input-border);
-  border-radius: 3px;
-  background: var(--input-background);
-  color: var(--editor-foreground);
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.diff-group-actions button:hover:not(:disabled) {
+  font-size: 13px;
   background: var(--list-hoverBackground);
-}
-
-.diff-group-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.diff-group-actions button.db-to-file {
-  border-color: var(--button-background);
-  color: var(--button-background);
-}
-
-.diff-group-actions button.file-to-db {
-  border-color: var(--testing-iconQueued);
-  color: var(--testing-iconQueued);
-}
-
-.diff-group-content {
-  padding: 12px;
-  border-top: 1px solid var(--sidebar-border);
-}
-
-.diff-group-content.collapsed {
-  display: none;
-}
-
-/* Post Items */
-.diff-post-item {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  padding: 8px;
-  margin-bottom: 8px;
-  background: var(--editor-background);
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.diff-post-item:last-child {
-  margin-bottom: 0;
-}
-
-.diff-post-title {
-  font-weight: 500;
-  color: var(--editor-foreground);
+  border-bottom: 1px solid var(--sidebar-border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.diff-value {
+.file-missing-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--editorWarning-foreground) 18%, transparent);
+  color: var(--editorWarning-foreground);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diff-item-card.file-missing {
+  border-color: color-mix(in srgb, var(--editorWarning-foreground) 30%, var(--sidebar-border));
+}
+
+.diff-item-fields {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diff-field-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.diff-field-name {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--descriptionForeground);
+  padding-top: 4px;
+}
+
+.diff-field-values {
+  display: flex;
+  gap: 8px;
+}
+
+.diff-field-value {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 4px 8px;
   border-radius: 3px;
   font-family: var(--editor-font-family);
@@ -282,20 +378,27 @@
   white-space: nowrap;
 }
 
-.diff-value.db-value {
-  background: color-mix(in srgb, var(--button-background) 15%, transparent);
+.diff-field-value.db-value {
+  background: color-mix(in srgb, var(--button-background) 12%, transparent);
   border: 1px solid var(--button-background);
 }
 
-.diff-value.file-value {
-  background: color-mix(in srgb, var(--testing-iconQueued) 15%, transparent);
+.diff-field-value.file-value {
+  background: color-mix(in srgb, var(--testing-iconQueued) 12%, transparent);
   border: 1px solid var(--testing-iconQueued);
 }
 
-.diff-value-label {
-  font-size: 10px;
+.diff-field-value.file-value.missing {
+  font-style: italic;
   color: var(--descriptionForeground);
-  margin-bottom: 2px;
+}
+
+.diff-source-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--descriptionForeground);
+  margin-bottom: 1px;
 }
 
 /* Loading State */
@@ -339,4 +442,50 @@
 .diff-empty .icon {
   font-size: 32px;
   opacity: 0.5;
+}
+
+/* Orphan Files */
+.orphan-files-section {
+  margin-top: 16px;
+}
+
+.orphan-files-section h3 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--editorInfo-foreground, var(--editor-foreground));
+}
+
+.orphan-files-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.orphan-files-description {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: var(--descriptionForeground);
+}
+
+.orphan-file-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--editorInfo-foreground, #3794ff) 18%, transparent);
+  color: var(--editorInfo-foreground, #3794ff);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diff-item-card.orphan-file {
+  border-color: color-mix(in srgb, var(--editorInfo-foreground, #3794ff) 30%, var(--sidebar-border));
+}
+
+.orphan-path {
+  word-break: break-all;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
 }

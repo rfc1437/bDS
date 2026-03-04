@@ -3507,4 +3507,180 @@ Content with [link](/posts/other-post)`);
       expect(post!.language).toBe('it');
     });
   });
+
+  describe('syncPublishedPostFile', () => {
+    it('should recreate the file when it is missing', async () => {
+      const filePath = '/mock/userData/projects/default/posts/2024/01/my-post.md';
+
+      // Mock: DB returns a published post, but the file does NOT exist on disk
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'post-missing-file',
+            projectId: 'default',
+            title: 'My Post',
+            slug: 'my-post',
+            content: 'Body from database',
+            status: 'published',
+            filePath,
+            tags: '["tag1"]',
+            categories: '["cat1"]',
+            createdAt: new Date('2024-01-15T10:00:00.000Z'),
+            updatedAt: new Date('2024-01-20T10:00:00.000Z'),
+          }),
+        });
+        return chain;
+      });
+
+      // File does NOT exist (not in mockFiles)
+
+      const result = await postEngine.syncPublishedPostFile('post-missing-file');
+      expect(result).toBe(true);
+
+      // Verify the file was recreated via writeFile
+      expect(fs.writeFile).toHaveBeenCalled();
+
+      // Check the file content was written with DB body
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writtenContent = writeCall[1] as string;
+      expect(writtenContent).toContain('Body from database');
+      expect(writtenContent).toContain('title: My Post');
+      expect(writtenContent).toContain('tag1');
+    });
+
+    it('should update DB filePath when slug changed causes different path', async () => {
+      const oldFilePath = '/mock/userData/projects/default/posts/2024/01/old-slug.md';
+
+      // Mock: DB post has the new slug but old filePath
+      const mockUpdate = vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => Promise.resolve()),
+        })),
+      }));
+      vi.mocked(mockLocalDb.update).mockImplementation(mockUpdate as any);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'post-slug-changed',
+            projectId: 'default',
+            title: 'New Title',
+            slug: 'new-slug',
+            content: 'Some content',
+            status: 'published',
+            filePath: oldFilePath,
+            tags: '[]',
+            categories: '[]',
+            createdAt: new Date('2024-01-15T10:00:00.000Z'),
+            updatedAt: new Date('2024-01-20T10:00:00.000Z'),
+          }),
+        });
+        return chain;
+      });
+
+      // Old file does not exist (slug changed)
+
+      const result = await postEngine.syncPublishedPostFile('post-slug-changed');
+      expect(result).toBe(true);
+
+      // writePostFile writes to new-slug.md, which differs from oldFilePath
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writtenPath = writeCall[0] as string;
+      expect(writtenPath).toContain('new-slug.md');
+      expect(writtenPath).not.toContain('old-slug.md');
+
+      // DB filePath should be updated
+      expect(mockUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('importOrphanFile', () => {
+    it('should import an orphan file into the database as published', async () => {
+      const orphanPath = '/mock/userData/posts/2024/03/orphan-post.md';
+      mockFiles.set(orphanPath, `---
+id: orphan-id-123
+title: "Orphan Post Title"
+slug: orphan-post
+createdAt: "2024-03-10T12:00:00.000Z"
+updatedAt: "2024-03-10T12:00:00.000Z"
+tags:
+  - imported
+categories:
+  - blog
+---
+This is the orphan body content.`);
+
+      // select → get returns undefined (no existing post with that id/slug)
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(undefined),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.importOrphanFile(orphanPath);
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('Orphan Post Title');
+      expect(result!.slug).toBe('orphan-post');
+      expect(result!.status).toBe('published');
+      expect(result!.tags).toEqual(['imported']);
+      expect(result!.categories).toEqual(['blog']);
+
+      // Should have inserted into DB
+      expect(mockLocalDb.insert).toHaveBeenCalled();
+    });
+
+    it('should return null when the file cannot be parsed', async () => {
+      // File does not exist at all
+      const result = await postEngine.importOrphanFile('/nonexistent/path.md');
+      expect(result).toBeNull();
+    });
+
+    it('should deduplicate slug when it already exists', async () => {
+      const orphanPath = '/mock/userData/posts/2024/01/existing-slug.md';
+      mockFiles.set(orphanPath, `---
+title: "Duplicate Slug Post"
+slug: existing-slug
+createdAt: "2024-01-01T00:00:00.000Z"
+updatedAt: "2024-01-01T00:00:00.000Z"
+tags: []
+categories: []
+---
+Body.`);
+
+      // ensureUniquePostIdentity flow:
+      // 1. select → get: id check → undefined (available)
+      // 2. isSlugAvailable('existing-slug') → found (taken)
+      // 3. generateUniqueSlug → isSlugAvailable('existing-slug') again → found (taken)
+      // 4. isSlugAvailable('existing-slug-2') → undefined (available)
+      let selectCallCount = 0;
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            // id check: available
+            if (selectCallCount === 1) return Promise.resolve(undefined);
+            // slug check: taken (both the direct check and generateUniqueSlug re-check)
+            if (selectCallCount <= 3) return Promise.resolve({ id: 'other-post' });
+            // slug-2 check: available
+            return Promise.resolve(undefined);
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.importOrphanFile(orphanPath);
+      expect(result).not.toBeNull();
+      // Should have been deduplicated
+      expect(result!.slug).toBe('existing-slug-2');
+    });
+  });
 });

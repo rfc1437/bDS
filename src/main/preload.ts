@@ -283,6 +283,16 @@ export const electronAPI: ElectronAPI = {
     scan: () => ipcRenderer.invoke('metadataDiff:scan'),
     syncDbToFile: (postIds: string[], groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncDbToFile', postIds, groupLabel),
     syncFileToDb: (postIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncFileToDb', postIds, field, groupLabel),
+    scanMedia: () => ipcRenderer.invoke('metadataDiff:scanMedia'),
+    syncMediaDbToFile: (mediaIds: string[], groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncMediaDbToFile', mediaIds, groupLabel),
+    syncMediaFileToDb: (mediaIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncMediaFileToDb', mediaIds, field, groupLabel),
+    scanScripts: () => ipcRenderer.invoke('metadataDiff:scanScripts'),
+    syncScriptDbToFile: (scriptIds: string[], groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncScriptDbToFile', scriptIds, groupLabel),
+    syncScriptFileToDb: (scriptIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncScriptFileToDb', scriptIds, field, groupLabel),
+    scanTemplates: () => ipcRenderer.invoke('metadataDiff:scanTemplates'),
+    syncTemplateDbToFile: (templateIds: string[], groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncTemplateDbToFile', templateIds, groupLabel),
+    syncTemplateFileToDb: (templateIds: string[], field: string, groupLabel: string) => ipcRenderer.invoke('metadataDiff:syncTemplateFileToDb', templateIds, field, groupLabel),
+    importOrphanFiles: (filePaths: string[]) => ipcRenderer.invoke('metadataDiff:importOrphanFiles', filePaths),
   },
 
   // Blog operations

@@ -769,6 +769,10 @@ export interface ElectronAPI {
       publishedPosts: number;
       draftPosts: number;
       totalMedia: number;
+      totalScripts: number;
+      publishedScripts: number;
+      totalTemplates: number;
+      publishedTemplates: number;
     }>;
     scan: () => Promise<{
       totalScanned: number;
@@ -779,6 +783,7 @@ export interface ElectronAPI {
         slug: string;
         filePath?: string;
         hasDifferences: boolean;
+        fileMissing?: boolean;
         differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
       }>;
       groups: Array<{
@@ -792,9 +797,75 @@ export interface ElectronAPI {
           fileValue: unknown;
         }>;
       }>;
+      orphanFiles: Array<{
+        filePath: string;
+        slug: string;
+        title?: string;
+        id?: string;
+      }>;
     }>;
     syncDbToFile: (postIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
     syncFileToDb: (postIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
+    scanMedia: () => Promise<{
+      totalScanned: number;
+      itemsWithDifferences: number;
+      differences: Array<{
+        mediaId: string;
+        originalName: string;
+        filePath?: string;
+        hasDifferences: boolean;
+        fileMissing?: boolean;
+        differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
+      }>;
+      groups: Array<{
+        field: string;
+        label: string;
+        items: Array<{ mediaId: string; originalName: string; dbValue: unknown; fileValue: unknown }>;
+      }>;
+    }>;
+    syncMediaDbToFile: (mediaIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
+    syncMediaFileToDb: (mediaIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
+    scanScripts: () => Promise<{
+      totalScanned: number;
+      itemsWithDifferences: number;
+      differences: Array<{
+        scriptId: string;
+        title: string;
+        slug: string;
+        filePath?: string;
+        hasDifferences: boolean;
+        fileMissing?: boolean;
+        differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
+      }>;
+      groups: Array<{
+        field: string;
+        label: string;
+        items: Array<{ scriptId: string; title: string; slug: string; dbValue: unknown; fileValue: unknown }>;
+      }>;
+    }>;
+    syncScriptDbToFile: (scriptIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
+    syncScriptFileToDb: (scriptIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
+    scanTemplates: () => Promise<{
+      totalScanned: number;
+      itemsWithDifferences: number;
+      differences: Array<{
+        templateId: string;
+        title: string;
+        slug: string;
+        filePath?: string;
+        hasDifferences: boolean;
+        fileMissing?: boolean;
+        differences: Record<string, { dbValue: unknown; fileValue: unknown }>;
+      }>;
+      groups: Array<{
+        field: string;
+        label: string;
+        items: Array<{ templateId: string; title: string; slug: string; dbValue: unknown; fileValue: unknown }>;
+      }>;
+    }>;
+    syncTemplateDbToFile: (templateIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
+    syncTemplateFileToDb: (templateIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;
+    importOrphanFiles: (filePaths: string[]) => Promise<{ success: number; failed: number }>;
   };
   blog: {
     generateSitemap: () => Promise<{

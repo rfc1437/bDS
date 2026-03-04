@@ -64,7 +64,7 @@ export interface ScriptValidationResult {
   errors: string[];
 }
 
-interface ParsedScriptFile {
+export interface ParsedScriptFile {
   metadata: {
     id?: string;
     projectId?: string;
@@ -789,7 +789,7 @@ export class ScriptEngine extends EventEmitter {
     return results;
   }
 
-  private async readScriptFileWithMetadata(filePath: string): Promise<ParsedScriptFile | null> {
+  async readScriptFileWithMetadata(filePath: string): Promise<ParsedScriptFile | null> {
     try {
       const rawContent = await fs.readFile(filePath, 'utf-8');
       return this.parseScriptFile(rawContent);

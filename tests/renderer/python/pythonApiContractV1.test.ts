@@ -59,15 +59,27 @@ describe('pythonApiContractV1', () => {
     });
   });
 
-  it('only exposes detectPostLanguage from chat namespace', () => {
+  it('exposes analyzeMediaImage and detectPostLanguage from chat namespace', () => {
     const methodNames = listPythonApiMethodNames();
     const chatMethods = methodNames.filter((m) => m.startsWith('chat.'));
-    expect(chatMethods).toEqual(['chat.detectPostLanguage']);
+    expect(chatMethods).toEqual(['chat.analyzeMediaImage', 'chat.detectPostLanguage']);
+  });
+
+  it('documents chat.analyzeMediaImage contract with mediaId and language params', () => {
+    expect(getPythonApiMethodContract('chat.analyzeMediaImage')).toEqual({
+      method: 'chat.analyzeMediaImage',
+      description: 'Analyze an image and generate title, alt text, and caption using AI.',
+      params: [
+        { name: 'mediaId', type: 'string', required: true },
+        { name: 'language', type: 'string', required: false },
+      ],
+      returns: 'ImageAnalysisResult',
+    });
   });
 
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.10.0',
+      version: '1.11.0',
       generatedAt: expect.any(String),
     });
   });
@@ -77,6 +89,7 @@ describe('pythonApiContractV1', () => {
       expect.objectContaining({ name: 'PostData' }),
       expect.objectContaining({ name: 'MediaData' }),
       expect.objectContaining({ name: 'ProjectData' }),
+      expect.objectContaining({ name: 'ImageAnalysisResult' }),
     ]));
   });
 });
@@ -101,6 +114,7 @@ describe('generatePythonApiModuleV1', () => {
     expect(moduleCode).toContain('class BdsApi:');
     expect(moduleCode).toContain('bds = BdsApi(_transport)');
     expect(moduleCode).toContain('class ChatApi:');
+    expect(moduleCode).toContain('async def analyze_media_image(self, media_id, language=None):');
     expect(moduleCode).toContain('async def detect_post_language(self, title, content):');
   });
 
