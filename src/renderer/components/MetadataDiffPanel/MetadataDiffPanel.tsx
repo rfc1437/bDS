@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
@@ -15,41 +15,47 @@ interface TableStats {
   publishedTemplates: number;
 }
 
-// ── Generic diff item types (shared across entity tabs) ──
+// ── Generic diff types (item-first, showing all field diffs per item) ──
 
-interface GenericDiffItem {
-  id: string;
-  label: string;
+interface FieldDiff {
   dbValue: unknown;
   fileValue: unknown;
 }
 
-interface GenericDiffGroup {
+interface GenericDiffItem {
+  id: string;
+  label: string;
+  fields: Record<string, FieldDiff>;
+}
+
+interface FieldSummary {
   field: string;
   label: string;
-  items: GenericDiffItem[];
+  count: number;
 }
 
 interface GenericScanResult {
   totalScanned: number;
   itemsWithDifferences: number;
-  groups: GenericDiffGroup[];
+  items: GenericDiffItem[];
+  fieldSummaries: FieldSummary[];
 }
 
 type EntityTab = 'posts' | 'media' | 'scripts' | 'templates';
 type ScanPhase = 'idle' | 'loading-stats' | 'scanning' | 'complete';
 
-// ── Adapters: normalise entity-specific API results → GenericScanResult ──
+// ── Adapters: use differences array (item-first) + groups for field labels ──
 
 function adaptPostScanResult(raw: Awaited<ReturnType<NonNullable<typeof window.electronAPI>['metadataDiff']['scan']>>): GenericScanResult {
   return {
     totalScanned: raw.totalScanned,
     itemsWithDifferences: raw.postsWithDifferences,
-    groups: raw.groups.map(g => ({
-      field: g.field,
-      label: g.label,
-      items: g.posts.map(p => ({ id: p.postId, label: p.title || p.slug, dbValue: p.dbValue, fileValue: p.fileValue })),
+    items: raw.differences.filter(d => d.hasDifferences).map(d => ({
+      id: d.postId,
+      label: d.title || d.slug,
+      fields: d.differences as Record<string, FieldDiff>,
     })),
+    fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.posts.length })),
   };
 }
 
@@ -57,11 +63,12 @@ function adaptMediaScanResult(raw: Awaited<ReturnType<NonNullable<typeof window.
   return {
     totalScanned: raw.totalScanned,
     itemsWithDifferences: raw.itemsWithDifferences,
-    groups: raw.groups.map(g => ({
-      field: g.field,
-      label: g.label,
-      items: g.items.map(i => ({ id: i.mediaId, label: i.originalName, dbValue: i.dbValue, fileValue: i.fileValue })),
+    items: raw.differences.filter(d => d.hasDifferences).map(d => ({
+      id: d.mediaId,
+      label: d.originalName,
+      fields: d.differences as Record<string, FieldDiff>,
     })),
+    fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
   };
 }
 
@@ -69,11 +76,12 @@ function adaptScriptScanResult(raw: Awaited<ReturnType<NonNullable<typeof window
   return {
     totalScanned: raw.totalScanned,
     itemsWithDifferences: raw.itemsWithDifferences,
-    groups: raw.groups.map(g => ({
-      field: g.field,
-      label: g.label,
-      items: g.items.map(i => ({ id: i.scriptId, label: i.title || i.slug, dbValue: i.dbValue, fileValue: i.fileValue })),
+    items: raw.differences.filter(d => d.hasDifferences).map(d => ({
+      id: d.scriptId,
+      label: d.title || d.slug,
+      fields: d.differences as Record<string, FieldDiff>,
     })),
+    fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
   };
 }
 
@@ -81,11 +89,12 @@ function adaptTemplateScanResult(raw: Awaited<ReturnType<NonNullable<typeof wind
   return {
     totalScanned: raw.totalScanned,
     itemsWithDifferences: raw.itemsWithDifferences,
-    groups: raw.groups.map(g => ({
-      field: g.field,
-      label: g.label,
-      items: g.items.map(i => ({ id: i.templateId, label: i.title || i.slug, dbValue: i.dbValue, fileValue: i.fileValue })),
+    items: raw.differences.filter(d => d.hasDifferences).map(d => ({
+      id: d.templateId,
+      label: d.title || d.slug,
+      fields: d.differences as Record<string, FieldDiff>,
     })),
+    fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
   };
 }
 
@@ -97,8 +106,8 @@ export const MetadataDiffPanel: React.FC = () => {
   const [scanResults, setScanResults] = useState<Record<EntityTab, GenericScanResult | null>>({ posts: null, media: null, scripts: null, templates: null });
   const [scanPhase, setScanPhase] = useState<ScanPhase>('idle');
   const [progress, setProgress] = useState({ current: 0, total: 0, message: '' });
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [syncingGroups, setSyncingGroups] = useState<Set<string>>(new Set());
+  const [activeFieldFilter, setActiveFieldFilter] = useState<string | null>(null);
+  const [syncingFields, setSyncingFields] = useState<Set<string>>(new Set());
 
   // Load initial stats
   useEffect(() => {
@@ -132,9 +141,9 @@ export const MetadataDiffPanel: React.FC = () => {
     setScanPhase('scanning');
     setProgress({ current: 0, total: 100, message: tr('metadataDiff.progress.starting') });
     setScanResults({ posts: null, media: null, scripts: null, templates: null });
+    setActiveFieldFilter(null);
 
     try {
-      // Scan all entity types in parallel
       const [postResult, mediaResult, scriptResult, templateResult] = await Promise.all([
         window.electronAPI?.metadataDiff.scan(),
         window.electronAPI?.metadataDiff.scanMedia(),
@@ -149,49 +158,47 @@ export const MetadataDiffPanel: React.FC = () => {
         templates: templateResult ? adaptTemplateScanResult(templateResult) : null,
       };
       setScanResults(results);
-
-      // Auto-expand groups with differences for active tab
-      const currentResult = results[activeTab];
-      if (currentResult) {
-        setExpandedGroups(new Set(currentResult.groups.map(g => g.field)));
-      }
-
       setScanPhase('complete');
     } catch (error) {
       console.error('Scan failed:', error);
       showToast.error(tr('metadataDiff.error.scan'));
       setScanPhase('idle');
     }
-  }, [tr, activeTab]);
+  }, [tr]);
 
-  const toggleGroup = (field: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      next.has(field) ? next.delete(field) : next.add(field);
-      return next;
-    });
-  };
-
-  // When switching tabs, auto-expand that tab's groups
   const handleTabChange = (tab: EntityTab) => {
     setActiveTab(tab);
-    const result = scanResults[tab];
-    if (result) {
-      setExpandedGroups(new Set(result.groups.map(g => g.field)));
-    }
+    setActiveFieldFilter(null);
   };
 
-  const handleSyncDbToFile = useCallback(async (group: GenericDiffGroup) => {
-    const ids = group.items.map(i => i.id);
-    setSyncingGroups(prev => new Set(prev).add(group.field));
+  const toggleFieldFilter = (field: string) => {
+    setActiveFieldFilter(prev => prev === field ? null : field);
+  };
 
+  // Filter items: if a field filter is active, show only items that have that field diff,
+  // but still show ALL fields for those items
+  const currentResult = scanResults[activeTab];
+  const filteredItems = useMemo(() => {
+    if (!currentResult) return [];
+    if (!activeFieldFilter) return currentResult.items;
+    return currentResult.items.filter(item => activeFieldFilter in item.fields);
+  }, [currentResult, activeFieldFilter]);
+
+  const handleSyncDbToFile = useCallback(async (field: string, fieldLabel: string) => {
+    // Get IDs of items that have this field diff (from filtered or all)
+    const ids = (currentResult?.items ?? [])
+      .filter(item => field in item.fields)
+      .map(item => item.id);
+    if (ids.length === 0) return;
+
+    setSyncingFields(prev => new Set(prev).add(field));
     try {
       let result: { success: number; failed: number } | undefined;
       switch (activeTab) {
-        case 'posts': result = await window.electronAPI?.metadataDiff.syncDbToFile(ids, group.label); break;
-        case 'media': result = await window.electronAPI?.metadataDiff.syncMediaDbToFile(ids, group.label); break;
-        case 'scripts': result = await window.electronAPI?.metadataDiff.syncScriptDbToFile(ids, group.label); break;
-        case 'templates': result = await window.electronAPI?.metadataDiff.syncTemplateDbToFile(ids, group.label); break;
+        case 'posts': result = await window.electronAPI?.metadataDiff.syncDbToFile(ids, fieldLabel); break;
+        case 'media': result = await window.electronAPI?.metadataDiff.syncMediaDbToFile(ids, fieldLabel); break;
+        case 'scripts': result = await window.electronAPI?.metadataDiff.syncScriptDbToFile(ids, fieldLabel); break;
+        case 'templates': result = await window.electronAPI?.metadataDiff.syncTemplateDbToFile(ids, fieldLabel); break;
       }
       if (result) {
         showToast.success(tr('metadataDiff.sync.dbToFile.success', { success: result.success, failed: result.failed > 0 ? `, ${result.failed} ${tr('metadataDiff.sync.failed')}` : '' }));
@@ -201,21 +208,24 @@ export const MetadataDiffPanel: React.FC = () => {
       console.error('Sync failed:', error);
       showToast.error(tr('metadataDiff.sync.dbToFile.error'));
     } finally {
-      setSyncingGroups(prev => { const next = new Set(prev); next.delete(group.field); return next; });
+      setSyncingFields(prev => { const next = new Set(prev); next.delete(field); return next; });
     }
-  }, [activeTab, handleScan, tr]);
+  }, [activeTab, currentResult, handleScan, tr]);
 
-  const handleSyncFileToDb = useCallback(async (group: GenericDiffGroup) => {
-    const ids = group.items.map(i => i.id);
-    setSyncingGroups(prev => new Set(prev).add(group.field));
+  const handleSyncFileToDb = useCallback(async (field: string, fieldLabel: string) => {
+    const ids = (currentResult?.items ?? [])
+      .filter(item => field in item.fields)
+      .map(item => item.id);
+    if (ids.length === 0) return;
 
+    setSyncingFields(prev => new Set(prev).add(field));
     try {
       let result: { success: number; failed: number } | undefined;
       switch (activeTab) {
-        case 'posts': result = await window.electronAPI?.metadataDiff.syncFileToDb(ids, group.field, group.label); break;
-        case 'media': result = await window.electronAPI?.metadataDiff.syncMediaFileToDb(ids, group.field, group.label); break;
-        case 'scripts': result = await window.electronAPI?.metadataDiff.syncScriptFileToDb(ids, group.field, group.label); break;
-        case 'templates': result = await window.electronAPI?.metadataDiff.syncTemplateFileToDb(ids, group.field, group.label); break;
+        case 'posts': result = await window.electronAPI?.metadataDiff.syncFileToDb(ids, field, fieldLabel); break;
+        case 'media': result = await window.electronAPI?.metadataDiff.syncMediaFileToDb(ids, field, fieldLabel); break;
+        case 'scripts': result = await window.electronAPI?.metadataDiff.syncScriptFileToDb(ids, field, fieldLabel); break;
+        case 'templates': result = await window.electronAPI?.metadataDiff.syncTemplateFileToDb(ids, field, fieldLabel); break;
       }
       if (result) {
         showToast.success(tr('metadataDiff.sync.fileToDb.success', { success: result.success, failed: result.failed > 0 ? `, ${result.failed} ${tr('metadataDiff.sync.failed')}` : '' }));
@@ -225,17 +235,16 @@ export const MetadataDiffPanel: React.FC = () => {
       console.error('Sync failed:', error);
       showToast.error(tr('metadataDiff.sync.fileToDb.error'));
     } finally {
-      setSyncingGroups(prev => { const next = new Set(prev); next.delete(group.field); return next; });
+      setSyncingFields(prev => { const next = new Set(prev); next.delete(field); return next; });
     }
-  }, [activeTab, handleScan, tr]);
+  }, [activeTab, currentResult, handleScan, tr]);
 
   const formatValue = (value: unknown): string => {
     if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '(empty)';
     if (value === null || value === undefined || value === '') return '(empty)';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
     return String(value);
   };
-
-  const currentResult = scanResults[activeTab];
 
   const summaryKey = (tab: EntityTab, hasDiffs: boolean): string => {
     const map: Record<EntityTab, [string, string]> = {
@@ -343,43 +352,74 @@ export const MetadataDiffPanel: React.FC = () => {
                 })}
               </div>
 
-              {/* Groups */}
-              {currentResult.groups.map(group => (
-                <div key={group.field} className="diff-group">
-                  <div className="diff-group-header" onClick={() => toggleGroup(group.field)}>
-                    <div className="diff-group-title">
-                      <span className={`chevron ${expandedGroups.has(group.field) ? 'expanded' : ''}`}>▶</span>
-                      {tr('metadataDiff.group.differences', { label: group.label })}
-                    </div>
-                    <div className="diff-group-count">
-                      <span className="badge">{tr('metadataDiff.group.itemsCount', { count: group.items.length })}</span>
-                      <div className="diff-group-actions" onClick={e => e.stopPropagation()}>
-                        <button className="db-to-file" onClick={() => handleSyncDbToFile(group)} disabled={syncingGroups.has(group.field)} title={tr('metadataDiff.sync.dbToFile.title')}>
-                          DB → File
+              {/* Field summaries — clickable pills that filter by field */}
+              {currentResult.fieldSummaries.length > 0 && (
+                <div className="diff-field-summaries">
+                  {currentResult.fieldSummaries.map(fs => (
+                    <button
+                      key={fs.field}
+                      className={`field-pill ${activeFieldFilter === fs.field ? 'active' : ''}`}
+                      onClick={() => toggleFieldFilter(fs.field)}
+                      title={tr('metadataDiff.fieldFilter.toggle', { field: fs.label })}
+                    >
+                      <span className="field-pill-label">{fs.label}</span>
+                      <span className="field-pill-count">{fs.count}</span>
+                      {/* Sync actions on field pills */}
+                      <span className="field-pill-actions" onClick={e => e.stopPropagation()}>
+                        <button
+                          className="pill-sync db-to-file"
+                          onClick={() => handleSyncDbToFile(fs.field, fs.label)}
+                          disabled={syncingFields.has(fs.field)}
+                          title={tr('metadataDiff.sync.dbToFile.title')}
+                        >
+                          {tr('metadataDiff.sync.dbToFile.short')}
                         </button>
-                        <button className="file-to-db" onClick={() => handleSyncFileToDb(group)} disabled={syncingGroups.has(group.field)} title={tr('metadataDiff.sync.fileToDb.title')}>
-                          File → DB
+                        <button
+                          className="pill-sync file-to-db"
+                          onClick={() => handleSyncFileToDb(fs.field, fs.label)}
+                          disabled={syncingFields.has(fs.field)}
+                          title={tr('metadataDiff.sync.fileToDb.title')}
+                        >
+                          {tr('metadataDiff.sync.fileToDb.short')}
                         </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className={`diff-group-content ${!expandedGroups.has(group.field) ? 'collapsed' : ''}`}>
-                    {group.items.map(item => (
-                      <div key={item.id} className="diff-post-item">
-                        <div className="diff-post-title" title={item.label}>{item.label}</div>
-                        <div>
-                          <div className="diff-value-label">{tr('metadataDiff.value.database')}</div>
-                          <div className="diff-value db-value" title={formatValue(item.dbValue)}>{formatValue(item.dbValue)}</div>
-                        </div>
-                        <div>
-                          <div className="diff-value-label">{tr('metadataDiff.value.file')}</div>
-                          <div className="diff-value file-value" title={formatValue(item.fileValue)}>{formatValue(item.fileValue)}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      </span>
+                    </button>
+                  ))}
+                  {activeFieldFilter && (
+                    <button className="field-pill clear-filter" onClick={() => setActiveFieldFilter(null)}>
+                      ✕
+                    </button>
+                  )}
                 </div>
-              ))}
+              )}
+
+              {/* Item list — each item shows all its field diffs */}
+              {filteredItems.length > 0 && (
+                <div className="diff-item-list">
+                  {filteredItems.map(item => (
+                    <div key={item.id} className="diff-item-card">
+                      <div className="diff-item-header">{item.label}</div>
+                      <div className="diff-item-fields">
+                        {Object.entries(item.fields).map(([field, diff]) => (
+                          <div key={field} className="diff-field-row">
+                            <div className="diff-field-name">{field}</div>
+                            <div className="diff-field-values">
+                              <div className="diff-field-value db-value" title={formatValue(diff.dbValue)}>
+                                <span className="diff-source-label">{tr('metadataDiff.value.database')}</span>
+                                {formatValue(diff.dbValue)}
+                              </div>
+                              <div className="diff-field-value file-value" title={formatValue(diff.fileValue)}>
+                                <span className="diff-source-label">{tr('metadataDiff.value.file')}</span>
+                                {formatValue(diff.fileValue)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>
