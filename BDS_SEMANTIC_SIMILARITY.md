@@ -2,6 +2,8 @@
 
 Surface thematically related posts as an impulse — "Have I written something similar?" — inspired by Luhmann's Zettelkasten. Cross-domain connections across 10k+ posts over 20 years are the point, not a flaw. The algorithm finds the surface. The human finds the depth.
 
+**Status: Not yet implemented.** No packages installed, no engine, no IPC, no UI integration.
+
 ---
 
 ## Integration Point
@@ -10,7 +12,23 @@ Surface thematically related posts as an impulse — "Have I written something s
 
 When the search field is empty (`query.length < 2`), instead of showing "type at least 2 characters", show 3–5 semantically similar posts to the currently edited post. These are default suggestions — "posts you might want to link to."
 
-Requires threading `currentPostId` from `Editor.tsx` → `InsertModal` (currently only passes `currentPostTags` / `currentPostCategories`).
+The InsertModal currently accepts these props:
+```ts
+interface InsertModalProps {
+  mode: InsertMode;
+  onInsertLink: (url: string, text?: string) => void;
+  onInsertImage: (url: string, alt: string, mediaId?: string) => void;
+  onClose: () => void;
+  initialText?: string;
+  currentPostTags?: string[];
+  currentPostCategories?: string[];
+  // currentPostId is NOT yet threaded through — needs to be added
+}
+```
+
+`currentPostId` must be added to this interface and threaded from `Editor.tsx`.
+
+Note: The InsertModal now also has a **"Create post" option** — when `query.length >= 2` and no exact title match exists, it shows a `+` button to create a new post with that title and inherit the current post's tags/categories. This is the only UI addition since the original spec; it doesn't conflict with the semantic similarity integration.
 
 ---
 
@@ -20,6 +38,8 @@ Requires threading `currentPostId` from `Editor.tsx` → `InsertModal` (currentl
 |---|---|---|---|
 | Embeddings | Hugging Face Transformers.js | `@huggingface/transformers` | ONNX, local, no API key |
 | Vector index | USearch | `usearch` | HNSW, native C++ via N-API, prebuilt binaries |
+
+Neither package is installed yet.
 
 **Embedding model:** `multilingual-e5-small` — 384 dimensions, 512-token context, ~470 MB on disk, ~200–300 MB RAM, ~100ms/post inference. Natively multilingual (100+ languages incl. DE/EN) — critical for a mixed-language blog. `all-MiniLM-L6-v2` (~90 MB) was considered but is EN-trained with weak DE transfer; not suitable for nuanced cross-language similarity.
 
@@ -52,6 +72,8 @@ The `bigint → postId` key mapping lives in a Drizzle table (`embedding_keys`),
 
 ### Engine: `EmbeddingEngine` (`src/main/engine/EmbeddingEngine.ts`)
 
+File does not exist yet. Create it.
+
 Responsibilities:
 - Load/save USearch index + key map on startup/shutdown
 - Embed post content via `@huggingface/transformers`
@@ -72,16 +94,46 @@ class EmbeddingEngine {
 }
 ```
 
-### Project switching
+### EngineBundle (`src/main/engine/EngineBundle.ts`)
 
-The app supports multiple projects. On project switch (`setProjectContext`), the engine must save and unload the current index, then load (or create) the index for the new project. Each project has its own `embeddings.usearch` file and `embedding_keys` table rows.
+Add `embeddingEngine: EmbeddingEngine` to the `EngineBundle` interface. The current bundle contains:
+`postEngine`, `mediaEngine`, `scriptEngine`, `templateEngine`, `metaEngine`, `menuEngine`, `tagEngine`, `postMediaEngine`, `projectEngine`, `gitEngine`, `gitApiAdapter`, `blogGenerationEngine`, `publishEngine`, `metadataDiffEngine`, `taskManager`, `blogmarkTransformService`, `mcpServer`, `blogmarkPythonWorkerRuntime`, `pythonMacroWorkerRuntime`, `publishApiAdapter`, `appApiAdapter`.
 
-### IPC
+### IPC layer (`src/main/ipc/`)
+
+The IPC layer now has five files:
+- `handlers.ts` — main handler file (posts, media, project, meta, tags, templates, scripts, blog generation, publishing, preview, site validation, import, settings, model catalog, tasks, notifications)
+- `chatHandlers.ts` — AI chat streaming & tool use
+- `blogHandlers.ts` — blog generation & publishing
+- `publishHandlers.ts` — publishing
+- `metadataDiffHandlers.ts` — metadata diff
+- `index.ts` — module exports
+
+Add the embedding IPC handlers to `handlers.ts` (they're small; no need for a new file):
 
 ```
 embeddings:findSimilar(postId: string, k?: number) → SimilarPost[]
 embeddings:getProgress() → { indexed: number; total: number }
 ```
+
+### Database: `embedding_keys` table
+
+Add to `src/main/database/schema.ts`. The current schema has: `projects`, `posts`, `media`, `settings`, `generatedFileHashes`, `postLinks`, `postMedia`, `tags`, `chatConversations`, `chatMessages`, `importDefinitions`, `scripts`, `templates`, `dbNotifications`, `modelCatalogProviders`, `modelCatalog`, `modelCatalogModalities`, `modelCatalogMeta`.
+
+New table:
+```ts
+export const embeddingKeys = sqliteTable('embedding_keys', {
+  label: integer('label', { mode: 'bigint' }).primaryKey(), // USearch bigint key
+  postId: text('post_id').notNull(),
+  projectId: text('project_id').notNull(),
+});
+```
+
+Create a Drizzle migration (`db:generate` / `db:migrate`) after adding the table.
+
+### Project switching
+
+The app supports multiple projects. On project switch (`setProjectContext`), the engine must save and unload the current index, then load (or create) the index for the new project. Each project has its own `embeddings.usearch` file and `embedding_keys` table rows (filtered by `projectId`).
 
 ### Embedding content
 
@@ -97,16 +149,21 @@ This keeps the index simple (one vector per post, one lookup per query) while pr
 
 ### Hook into existing post lifecycle
 
-Post create/update/delete events already exist in `PostEngine`. On post content change → call `embeddingEngine.embedPost()`. On delete → call `embeddingEngine.removePost()`.
+`PostEngine` emits these events (confirmed in current codebase):
+- `postCreated` — on create and on import
+- `postUpdated` — on update, publish, revert
+- `postDeleted` — on delete
+- `databaseRebuilt` — emitted after `reconcileFromDisk()` (e.g., git sync replaces entire DB)
+- `rebuildStarted` — emitted just before `databaseRebuilt`
 
-Also listen for `databaseRebuilt` — emitted after `reconcileFromDisk()` (e.g., git sync). This replaces the entire DB, so individual post events don't fire. On `databaseRebuilt` → trigger a full reindex.
+On post content change → call `embeddingEngine.embedPost()`. On delete → call `embeddingEngine.removePost()`. On `databaseRebuilt` → trigger a full reindex.
 
 Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation). During bulk indexing, batch-save every N posts (e.g., 100) instead of after each one — avoids 10k full file rewrites.
 
 ### Initial indexing (10k+ posts)
 
 - ~100ms per post × 10k = **~17 minutes** one-time background job
-- Must run as a low-priority background task after app startup
+- Must run as a low-priority background task after app startup (use `TaskManager` for queuing)
 - Emit progress events so UI can show "Indexing 3,421 / 10,247…"
 - On git sync to new machine, file watchers fire for all posts → triggers full reindex automatically
 - Model download (~470 MB) on first run — needs progress indicator or opt-in preference
@@ -122,22 +179,35 @@ Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation)
 2. Show results in the same result list format, with a subtle header like "Related posts"
 3. Clicking a suggestion works identically to a search result — inserts the link
 
-**When `query.length >= 2`:** existing search behavior, unchanged.
+**When `query.length >= 2`:** existing search behavior, unchanged. (This includes the "Create post" option for link mode.)
 
 **Fallback:** if embeddings aren't ready (indexing in progress, feature disabled), show the existing "type at least 2 characters" message.
 
 ---
 
+## Settings: Opt-In Preference
+
+The feature must be opt-in (model download + 17 min indexing is not a silent default).
+
+Store as a project-level metadata field via `meta:updateProjectMetadata`. Add `semanticSimilarityEnabled: boolean` to `ProjectMetadata`. When the user enables it in Project Settings, start the background indexer. When disabled, skip embedding hooks and hide the UI section.
+
+The model download itself (~470 MB) should show a progress indicator before the indexer starts.
+
+---
+
 ## Implementation Steps
 
-1. **Test + implement `EmbeddingEngine`** — model loading, embed, add/remove/query against USearch index, save/load persistence
-2. **Drizzle key map table** — `embedding_keys` table mapping `bigint` label → post UUID
-3. **Wire into post lifecycle** — hook create/update/delete → embedding updates
-4. **Background indexer** — on startup, diff indexed vs. existing posts, queue unindexed for background embedding with progress events
-5. **IPC endpoints** — `findSimilar`, `getProgress`
-6. **InsertModal integration** — add `currentPostId` prop, fetch similar on mount, render as default suggestions
-7. **Settings** — opt-in preference to enable semantic similarity (triggers model download + initial index)
-8. **I18n** — all new UI strings through locale files
+1. **Spike USearch packaging** — verify prebuilt binaries exist for all target Electron ABIs before committing. Fall back to `vectra` if they don't.
+2. **Test + implement `EmbeddingEngine`** — model loading, embed, add/remove/query against USearch index, save/load persistence
+3. **Drizzle key map table** — add `embedding_keys` to `schema.ts`, run `db:generate` + `db:migrate`
+4. **Add `semanticSimilarityEnabled` to project metadata** — `ProjectMetadata` type + `meta:updateProjectMetadata` handler + Project Settings UI toggle
+5. **Wire into post lifecycle** — hook `postCreated`/`postUpdated`/`postDeleted`/`databaseRebuilt` → embedding updates (guarded by opt-in flag)
+6. **Background indexer** — on startup (if enabled), diff indexed vs. existing posts, queue unindexed for background embedding via `TaskManager` with progress events
+7. **IPC endpoints** — `embeddings:findSimilar`, `embeddings:getProgress` in `handlers.ts`
+8. **Add `embeddingEngine` to `EngineBundle`** — update `EngineBundle.ts` interface and `main.ts` construction
+9. **InsertModal integration** — add `currentPostId` prop, thread from `Editor.tsx`, fetch similar on mount, render as default suggestions
+10. **I18n** — all new UI strings through locale files (no hardcoded text)
+11. **Python API** — add `posts.findRelated(postId, k)` to `bds_api`, regenerate `API.md`
 
 ---
 
@@ -148,3 +218,4 @@ Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation)
 - Model cached in `~/.cache/huggingface/`, index in internal project directory
 - Total added footprint: ~520 MB on disk (onnxruntime-node ~50 MB + model ~470 MB), ~300 MB RAM at runtime for model + index
 - Graceful degradation: if USearch native module fails to load (unsupported platform), disable the feature silently — never crash the app
+- Follow test-first mandate: write failing tests before implementing `EmbeddingEngine`
