@@ -114,6 +114,7 @@ Add the embedding IPC handlers to `handlers.ts` (they're small; no need for a ne
 ```
 embeddings:findSimilar(postId: string, k?: number) → SimilarPost[]
 embeddings:getProgress() → { indexed: number; total: number }
+embeddings:suggestTags(postId: string, excludeTags: string[]) → TagSuggestion[]
 embeddings:findDuplicates(threshold?: number) → DuplicatePair[]
 embeddings:dismissPair(postIdA: string, postIdB: string) → void
 ```
@@ -197,6 +198,46 @@ Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation)
 
 ---
 
+### TagInput (post tag editing)
+
+`TagInput` (`src/renderer/components/TagInput/TagInput.tsx`) already shows a suggestions dropdown driven by text input. Add a second suggestion source: tags inferred from semantically similar posts.
+
+Add an optional `postId?: string` prop. `PostEditor` already has `postId` and renders `TagInput`, so threading is a one-liner.
+
+**When `inputValue.length === 0` and the input is focused and `postId` is set:**
+1. Call `embeddings:suggestTags(postId, currentTags)` once on focus (cache the result for the session)
+2. Show a "Suggested" section at the top of the dropdown, above the regular tag list
+3. Clicking a suggested tag adds it identically to any other tag
+
+**When `inputValue.length > 0`:** existing text-filter behavior, suggested section hidden.
+
+**Fallback:** if embeddings aren't ready or `postId` is absent, the dropdown behaves exactly as today — no visible change.
+
+**Algorithm** (in `EmbeddingEngine.suggestTags`):
+1. Find top-10 similar posts via `findSimilar(postId, 10)`
+2. Collect tags from each neighbour, weighted by similarity score
+3. Sum weights per tag (tag appearing in 3 posts at 0.9 similarity scores higher than tag in 1 post at 0.95)
+4. Filter out tags the current post already has
+5. Return top 5 by weighted score
+
+```ts
+interface TagSuggestion {
+  name: string;
+  score: number;  // weighted frequency, for ranking only — not shown in UI
+}
+
+async suggestTags(postId: string, excludeTags: string[]): Promise<TagSuggestion[]>
+```
+
+New IPC endpoint (add to `handlers.ts`):
+```
+embeddings:suggestTags(postId: string, excludeTags: string[]) → TagSuggestion[]
+```
+
+No new DB table needed — this is a pure read from the existing index.
+
+---
+
 ## Duplication Analysis
 
 A periodic audit tool to surface posts that are so semantically similar they might be unintentional duplicates — the same topic written twice years apart, a post and its draft that both got published, a cross-post that was forgotten. The goal is human review and action, not automated deletion.
@@ -249,7 +290,14 @@ embeddings:dismissPair(postIdA: string, postIdB: string) → void
 
 ### UI placement
 
-The duplication analysis is an administrative, periodic task — not a daily workflow. Don't add it to the activity bar (already 10 entries). Surface it from **Project Settings**, under a "Content Audit" subsection, with a "Find duplicate posts" button.
+The duplication analysis is a periodic audit task — the same category as `validateSite` and `metadataDiff`, both of which already live in the **Blog menu** in `src/main/shared/menuCommands.ts`. Add `findDuplicates` there, next to `validateSite`.
+
+Required changes to `menuCommands.ts`:
+- Add `'findDuplicates'` to `AppMenuAction` union
+- Add menu item to the Blog group next to `validateSite`: `{ label: 'menu.item.findDuplicates', action: 'findDuplicates' }`
+- Add to `APP_MENU_ACTION_EVENT_MAP`: `findDuplicates: 'menu:findDuplicates'`
+
+The renderer listens for `menu:findDuplicates` and opens the duplicates tab (same pattern as `menu:validateSite` → `SiteValidationView`).
 
 Results open as a **dedicated tab** (new tab type: `duplicates`) in the main editor area, so the user can keep it open while navigating to individual posts. Tab type should be added to the `Tab` union in `appStore`.
 
@@ -306,7 +354,7 @@ The model download itself (~470 MB) should show a progress indicator before the 
 7. **IPC endpoints** — `embeddings:findSimilar`, `embeddings:getProgress`, `embeddings:findDuplicates`, `embeddings:dismissPair` in `handlers.ts`
 8. **Add `embeddingEngine` to `EngineBundle`** — update `EngineBundle.ts` interface and `main.ts` construction
 9. **InsertModal integration** — add `currentPostId` prop, thread from `Editor.tsx`, fetch similar on mount, render as default suggestions
-10. **Duplicates tab** — add `duplicates` to `Tab` union in `appStore`, implement `DuplicatesView` component, surface "Find duplicate posts" button from Project Settings
+10. **Duplicates tab** — add `'findDuplicates'` to `AppMenuAction` + Blog menu group + `APP_MENU_ACTION_EVENT_MAP` in `menuCommands.ts`; add `duplicates` to `Tab` union in `appStore`; implement `DuplicatesView` component wired to `menu:findDuplicates` event
 11. **I18n** — all new UI strings through locale files (no hardcoded text)
 12. **Python API** — add `posts.findRelated(postId, k)`, `posts.find_duplicates(threshold)`, `posts.dismiss_duplicate_pair(a, b)` to `bds_api`, regenerate `API.md`
 
