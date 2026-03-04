@@ -114,22 +114,34 @@ Add the embedding IPC handlers to `handlers.ts` (they're small; no need for a ne
 ```
 embeddings:findSimilar(postId: string, k?: number) → SimilarPost[]
 embeddings:getProgress() → { indexed: number; total: number }
+embeddings:findDuplicates(threshold?: number) → DuplicatePair[]
+embeddings:dismissPair(postIdA: string, postIdB: string) → void
 ```
 
 ### Database: `embedding_keys` table
 
 Add to `src/main/database/schema.ts`. The current schema has: `projects`, `posts`, `media`, `settings`, `generatedFileHashes`, `postLinks`, `postMedia`, `tags`, `chatConversations`, `chatMessages`, `importDefinitions`, `scripts`, `templates`, `dbNotifications`, `modelCatalogProviders`, `modelCatalog`, `modelCatalogModalities`, `modelCatalogMeta`.
 
-New table:
+New tables:
 ```ts
 export const embeddingKeys = sqliteTable('embedding_keys', {
   label: integer('label', { mode: 'bigint' }).primaryKey(), // USearch bigint key
   postId: text('post_id').notNull(),
   projectId: text('project_id').notNull(),
 });
+
+export const dismissedDuplicatePairs = sqliteTable('dismissed_duplicate_pairs', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  postIdA: text('post_id_a').notNull(),
+  postIdB: text('post_id_b').notNull(),
+  dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  pairIdx: uniqueIndex('dismissed_pairs_idx').on(table.projectId, table.postIdA, table.postIdB),
+}));
 ```
 
-Create a Drizzle migration (`db:generate` / `db:migrate`) after adding the table.
+Create a Drizzle migration (`db:generate` / `db:migrate`) after adding the tables.
 
 ### Project switching
 
@@ -185,6 +197,94 @@ Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation)
 
 ---
 
+## Duplication Analysis
+
+A periodic audit tool to surface posts that are so semantically similar they might be unintentional duplicates — the same topic written twice years apart, a post and its draft that both got published, a cross-post that was forgotten. The goal is human review and action, not automated deletion.
+
+### Algorithm
+
+For each indexed post, query the index for its top-k nearest neighbours (k=20). Filter pairs where cosine similarity exceeds a threshold (default: 0.92). Deduplicate symmetric pairs (A→B = B→A). Sort descending by similarity.
+
+This is O(n) queries against the HNSW index — fast even at 10k posts (~20ms total). Run on demand, not continuously.
+
+```ts
+interface DuplicatePair {
+  postA: { id: string; title: string; slug: string; publishedAt?: Date };
+  postB: { id: string; title: string; slug: string; publishedAt?: Date };
+  similarity: number; // cosine similarity, 0–1
+}
+```
+
+New engine method:
+```ts
+async findDuplicates(threshold?: number): Promise<DuplicatePair[]>
+// threshold default: 0.92. Lower = more results, more noise. Higher = only near-identical posts.
+```
+
+### Dismissed pairs
+
+When the user reviews a pair and decides it's intentional (e.g., two posts on the same topic that are meaningfully different), they can dismiss it. Store dismissed pairs in a new DB table so they don't reappear:
+
+```ts
+export const dismissedDuplicatePairs = sqliteTable('dismissed_duplicate_pairs', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  postIdA: text('post_id_a').notNull(),
+  postIdB: text('post_id_b').notNull(),
+  dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  pairIdx: uniqueIndex('dismissed_pairs_idx').on(table.projectId, table.postIdA, table.postIdB),
+}));
+```
+
+`findDuplicates` filters out any pair where both (A, B) and (B, A) appear in `dismissed_duplicate_pairs`.
+
+### New IPC endpoints
+
+Add to `handlers.ts`:
+```
+embeddings:findDuplicates(threshold?: number) → DuplicatePair[]
+embeddings:dismissPair(postIdA: string, postIdB: string) → void
+```
+
+### UI placement
+
+The duplication analysis is an administrative, periodic task — not a daily workflow. Don't add it to the activity bar (already 10 entries). Surface it from **Project Settings**, under a "Content Audit" subsection, with a "Find duplicate posts" button.
+
+Results open as a **dedicated tab** (new tab type: `duplicates`) in the main editor area, so the user can keep it open while navigating to individual posts. Tab type should be added to the `Tab` union in `appStore`.
+
+**Duplicates tab layout:**
+```
+┌─────────────────────────────────────────────────────────┐
+│ Potential Duplicates   [Threshold: ▼ 92%]  [Re-run]    │
+├─────────────────────────────────────────────────────────┤
+│ 97%  "My trip to Berlin" (2019-03)                      │
+│      "Berlin travel notes" (2023-08)       [Open both]  │
+│                                            [Dismiss]    │
+├─────────────────────────────────────────────────────────┤
+│ 94%  "Bullet journaling setup" (2018-11)               │
+│      "How I use a bullet journal" (2021-02)[Open both]  │
+│                                            [Dismiss]    │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Threshold slider** — adjustable 80–99%, results update on re-run
+- **"Open both"** — opens both posts as sequential editor tabs
+- **"Dismiss"** — calls `embeddings:dismissPair`, removes the row from the list
+- Results show similarity %, both post titles, and published dates
+- If no duplicates found at the current threshold: "No duplicates found above X% similarity"
+- If index not ready: "Semantic index is still building…" with progress
+
+### Python API
+
+Add to `bds_api` and `API.md`:
+```python
+posts.find_duplicates(threshold=0.92)  # → list of DuplicatePair
+posts.dismiss_duplicate_pair(post_id_a, post_id_b)  # → None
+```
+
+---
+
 ## Settings: Opt-In Preference
 
 The feature must be opt-in (model download + 17 min indexing is not a silent default).
@@ -203,11 +303,12 @@ The model download itself (~470 MB) should show a progress indicator before the 
 4. **Add `semanticSimilarityEnabled` to project metadata** — `ProjectMetadata` type + `meta:updateProjectMetadata` handler + Project Settings UI toggle
 5. **Wire into post lifecycle** — hook `postCreated`/`postUpdated`/`postDeleted`/`databaseRebuilt` → embedding updates (guarded by opt-in flag)
 6. **Background indexer** — on startup (if enabled), diff indexed vs. existing posts, queue unindexed for background embedding via `TaskManager` with progress events
-7. **IPC endpoints** — `embeddings:findSimilar`, `embeddings:getProgress` in `handlers.ts`
+7. **IPC endpoints** — `embeddings:findSimilar`, `embeddings:getProgress`, `embeddings:findDuplicates`, `embeddings:dismissPair` in `handlers.ts`
 8. **Add `embeddingEngine` to `EngineBundle`** — update `EngineBundle.ts` interface and `main.ts` construction
 9. **InsertModal integration** — add `currentPostId` prop, thread from `Editor.tsx`, fetch similar on mount, render as default suggestions
-10. **I18n** — all new UI strings through locale files (no hardcoded text)
-11. **Python API** — add `posts.findRelated(postId, k)` to `bds_api`, regenerate `API.md`
+10. **Duplicates tab** — add `duplicates` to `Tab` union in `appStore`, implement `DuplicatesView` component, surface "Find duplicate posts" button from Project Settings
+11. **I18n** — all new UI strings through locale files (no hardcoded text)
+12. **Python API** — add `posts.findRelated(postId, k)`, `posts.find_duplicates(threshold)`, `posts.dismiss_duplicate_pair(a, b)` to `bds_api`, regenerate `API.md`
 
 ---
 
