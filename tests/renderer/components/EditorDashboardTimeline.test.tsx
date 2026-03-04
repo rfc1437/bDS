@@ -62,6 +62,7 @@ describe('Editor dashboard timeline', () => {
     (window as any).electronAPI.app.setPreviewPostTarget = vi.fn().mockResolvedValue(undefined);
 
     useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
       tabs: [],
       activeTabId: null,
       posts: [],

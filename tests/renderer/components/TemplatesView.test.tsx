@@ -42,6 +42,10 @@ describe('TemplatesView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
+    });
+
     (window as any).electronAPI = {
       ...(window as any).electronAPI,
       templates: {
@@ -206,6 +210,29 @@ describe('TemplatesView', () => {
     await vi.waitFor(() => {
       const saveButton = screen.getByRole('button', { name: 'Save Template' });
       expect(saveButton).toBeDisabled();
+    });
+  });
+
+  it('defers loading until activeProject is set to avoid startup race condition', async () => {
+    useAppStore.setState({ activeProject: null });
+
+    const getMock = (window as any).electronAPI.templates.get;
+    const { rerender } = render(<TemplatesView templateId="template-1" />);
+
+    await vi.waitFor(() => {
+      expect(getMock).not.toHaveBeenCalled();
+    });
+
+    useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
+    });
+
+    rerender(<TemplatesView templateId="template-1" />);
+
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith('template-1');
+      const titleInput = screen.getByLabelText('Title') as HTMLInputElement;
+      expect(titleInput.value).toBe('Custom Post');
     });
   });
 });

@@ -26,6 +26,7 @@ import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { EditorRoute, resolveEditorRoute } from '../../navigation/editorRouting';
+import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEditor';
 import { useI18n } from '../../i18n';
 import documentationContent from '../../../../DOCUMENTATION.md?raw';
 import apiDocumentationContent from '../../../../API.md?raw';
@@ -169,29 +170,25 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   } = useAppStore();
   
   // Fetch full post data from backend
+  const fetchPost = useCallback(
+    (id: string) => window.electronAPI?.posts.get(id).then((p) => (p as PostData) || null) ?? Promise.resolve(null),
+    [],
+  );
+
   const [post, setPost] = useState<PostData | null>(null);
-  const [isLoadingPost, setIsLoadingPost] = useState(true);
   // Track whether form state has been initialized from post data
   const [isInitialized, setIsInitialized] = useState(false);
-  
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoadingPost(true);
-    setIsInitialized(false);
-    window.electronAPI?.posts.get(postId).then((fetchedPost) => {
-      if (cancelled) return;
-      if (fetchedPost) {
-        setPost(fetchedPost as PostData);
-        // Also update the store so other components have the full data
-        useAppStore.getState().updatePost(postId, fetchedPost as Partial<PostData>);
-      } else {
-        // Post doesn't exist, close the tab
-        closeTab(postId);
-      }
-      setIsLoadingPost(false);
-    });
-    return () => { cancelled = true; };
-  }, [postId, closeTab]);
+
+  const { isLoading: isLoadingPost } = useEntityLoader<PostData>(postId, fetchPost, {
+    onLoaded: (loadedPost) => {
+      setPost(loadedPost);
+      useAppStore.getState().updatePost(postId, loadedPost as Partial<PostData>);
+    },
+    onReset: () => {
+      setPost(null);
+      setIsInitialized(false);
+    },
+  });
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -705,17 +702,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   };
 
   // Save on Ctrl+S
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSave]);
+  useSaveShortcut(handleSave);
 
   // Listen for menu events
   useEffect(() => {
@@ -1055,6 +1042,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const { t: tr } = useI18n();
   const { media, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
+  const activeProjectId = useAppStore((s) => s.activeProject?.id ?? null);
   const item = media.find(m => m.id === mediaId);
   
   const [title, setTitle] = useState(item?.title || '');
@@ -1081,12 +1069,13 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
 
   // Load project language setting
   useEffect(() => {
+    if (!activeProjectId) return;
     window.electronAPI?.meta.getProjectMetadata().then(metadata => {
       if (metadata?.mainLanguage) {
         setProjectLanguage(metadata.mainLanguage);
       }
     });
-  }, []);
+  }, [activeProjectId]);
 
   // Close quick actions menu when clicking outside
   useEffect(() => {
@@ -1152,7 +1141,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // Load linked posts for this media and fetch their titles
   useEffect(() => {
     const loadLinkedPosts = async () => {
-      if (!mediaId) return;
+      if (!mediaId || !activeProjectId) return;
       try {
         const links = await window.electronAPI?.postMedia.getForMedia(mediaId);
         if (links) {
@@ -1172,7 +1161,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       }
     };
     loadLinkedPosts();
-  }, [mediaId]);
+  }, [mediaId, activeProjectId]);
 
   // Fetch posts for the picker when it opens
   useEffect(() => {

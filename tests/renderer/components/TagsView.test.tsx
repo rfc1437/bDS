@@ -2,10 +2,15 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act, screen, fireEvent } from '@testing-library/react';
 import { TagsView } from '../../../src/renderer/components/TagsView/TagsView';
+import { useAppStore } from '../../../src/renderer/store';
 
 describe('TagsView subscriptions', () => {
   beforeEach(() => {
     const onMock = vi.fn((_channel: string, _callback: (...args: unknown[]) => void) => vi.fn());
+
+    useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
+    });
 
     (window as any).electronAPI = {
       ...(window as any).electronAPI,
@@ -65,6 +70,10 @@ describe('TagsView subscriptions', () => {
 describe('TagsView template dropdown', () => {
   beforeEach(() => {
     const onMock = vi.fn((_channel: string, _callback: (...args: unknown[]) => void) => vi.fn());
+
+    useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
+    });
 
     (window as any).electronAPI = {
       ...(window as any).electronAPI,

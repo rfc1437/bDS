@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type { TemplateData, TemplateKind } from '../../../main/shared/electronApi';
 import { useAppStore } from '../../store';
 import { BDS_EVENT_TEMPLATES_CHANGED, dispatchWindowEvent } from '../../utils';
+import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEditor';
 import { useI18n } from '../../i18n';
 import { showToast } from '../Toast';
 import './TemplatesView.css';
@@ -30,6 +31,12 @@ interface TemplatesViewProps {
 export const TemplatesView: React.FC<TemplatesViewProps> = ({ templateId }) => {
   const { t, language } = useI18n();
   const closeTab = useAppStore((state) => state.closeTab);
+
+  const fetchTemplate = useCallback(
+    (id: string) => window.electronAPI?.templates.get(id) ?? Promise.resolve(null),
+    [],
+  );
+
   const [template, setTemplate] = useState<TemplateData | null>(null);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -41,52 +48,29 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ templateId }) => {
   const [isValidating, setIsValidating] = useState(false);
   const [monacoResetToken, setMonacoResetToken] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadTemplate = async () => {
-      if (!templateId) {
-        setTemplate(null);
-        setTitle('');
-        setSlug('');
-        setKind('post');
-        setEnabled(true);
-        setTemplateContent('');
-        setMonacoResetToken((prev) => prev + 1);
-        setIsSlugManuallyEdited(false);
-        return;
-      }
-
-      const item = await window.electronAPI?.templates.get(templateId);
-      if (cancelled || !item) {
-        setTemplate(null);
-        setTitle('');
-        setSlug('');
-        setKind('post');
-        setEnabled(true);
-        setTemplateContent('');
-        setMonacoResetToken((prev) => prev + 1);
-        setIsSlugManuallyEdited(false);
-        return;
-      }
-
-      setTemplate(item);
-      setTitle(item.title || '');
-      setSlug(item.slug || toTemplateSlug(item.title || ''));
-      setKind(item.kind || 'post');
-      setEnabled(item.enabled ?? true);
-      setTemplateContent(item.content || '');
+  useEntityLoader<TemplateData>(templateId, fetchTemplate, {
+    onLoaded: (loadedTemplate) => {
+      setTemplate(loadedTemplate);
+      setTitle(loadedTemplate.title || '');
+      setSlug(loadedTemplate.slug || toTemplateSlug(loadedTemplate.title || ''));
+      setKind(loadedTemplate.kind || 'post');
+      setEnabled(loadedTemplate.enabled ?? true);
+      setTemplateContent(loadedTemplate.content || '');
       setMonacoResetToken((prev) => prev + 1);
-      const normalizedExisting = toTemplateSlug(item.slug || item.title || '');
-      setIsSlugManuallyEdited(normalizedExisting !== toTemplateSlug(item.title || ''));
-    };
-
-    void loadTemplate();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [templateId]);
+      const normalizedExisting = toTemplateSlug(loadedTemplate.slug || loadedTemplate.title || '');
+      setIsSlugManuallyEdited(normalizedExisting !== toTemplateSlug(loadedTemplate.title || ''));
+    },
+    onReset: () => {
+      setTemplate(null);
+      setTitle('');
+      setSlug('');
+      setKind('post');
+      setEnabled(true);
+      setTemplateContent('');
+      setMonacoResetToken((prev) => prev + 1);
+      setIsSlugManuallyEdited(false);
+    },
+  });
 
   const hasChanges =
     !!template &&
@@ -214,21 +198,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ templateId }) => {
     }
   };
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault();
-        void handleSaveTemplate();
-      }
-    };
-
-    if (typeof window.addEventListener !== 'function' || typeof window.removeEventListener !== 'function') {
-      return;
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSaveTemplate]);
+  useSaveShortcut(useCallback(() => { void handleSaveTemplate(); }, [handleSaveTemplate]));
 
   return (
     <div className="templates-view-shell">

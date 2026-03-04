@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tree } from 'react-arborist';
 import { useI18n } from '../../i18n';
+import { useAppStore } from '../../store';
 import { showToast } from '../Toast';
 import type { MenuDocument, MenuItemData, PostData } from '../../../main/shared/electronApi';
 import { PageInput } from '../PageInput';
@@ -185,6 +186,7 @@ function renderMenuKindIcon(kind: MenuItemData['kind']): React.ReactNode {
 
 export const MenuEditorView: React.FC = () => {
   const { t: tr } = useI18n();
+  const activeProjectId = useAppStore((s) => s.activeProject?.id ?? null);
   const [items, setItems] = useState<MenuItemData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -217,6 +219,7 @@ export const MenuEditorView: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!activeProjectId) return;
     const load = async () => {
       setIsLoading(true);
       try {
@@ -258,7 +261,7 @@ export const MenuEditorView: React.FC = () => {
     };
 
     void load();
-  }, [tr]);
+  }, [tr, activeProjectId]);
 
   useEffect(() => {
     return () => {

@@ -155,6 +155,7 @@ describe('Editor metadata collapse', () => {
     (window as any).electronAPI.meta.getCategories = vi.fn().mockReturnValue(neverSettles);
 
     useAppStore.setState({
+      activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
       preferredEditorMode: 'wysiwyg',
       posts: [],
       media: [],

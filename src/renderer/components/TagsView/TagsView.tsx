@@ -133,6 +133,7 @@ const SectionHeader: React.FC<{
 export const TagsView: React.FC = () => {
   const { t } = useI18n();
   const { showErrorModal } = useAppStore();
+  const activeProjectId = useAppStore((s) => s.activeProject?.id ?? null);
   
   // State
   const [tagsWithCounts, setTagsWithCounts] = useState<TagWithCount[]>([]);
@@ -181,22 +182,25 @@ export const TagsView: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!activeProjectId) return;
     loadTags();
-  }, [loadTags]);
+  }, [loadTags, activeProjectId]);
 
   // Listen for tag events
   useEffect(() => {
+    if (!activeProjectId) return;
     return subscribeToTagEvents(window.electronAPI?.on, loadTags, {
       includeUpdated: true,
     });
-  }, [loadTags]);
+  }, [loadTags, activeProjectId]);
 
   // Load post templates on mount
   useEffect(() => {
+    if (!activeProjectId) return;
     window.electronAPI?.templates.getEnabledByKind('post').then((templates) => {
       setPostTemplates(templates.map((t) => ({ slug: t.slug, title: t.title })));
     });
-  }, []);
+  }, [activeProjectId]);
 
   // Handle tag selection
   const handleTagSelect = (name: string) => {
