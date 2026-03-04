@@ -7,6 +7,8 @@
  */
 
 import { EventEmitter } from 'events';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { eq, and } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, media, scripts, templates } from '../database/schema';
@@ -61,6 +63,16 @@ export interface DiffGroup {
 }
 
 /**
+ * A file on disk that has no matching database entry
+ */
+export interface OrphanFile {
+  filePath: string;
+  slug: string;
+  title?: string;
+  id?: string;
+}
+
+/**
  * Result of scanning all published posts
  */
 export interface ScanResult {
@@ -68,6 +80,7 @@ export interface ScanResult {
   postsWithDifferences: number;
   differences: PostMetadataDiff[];
   groups: DiffGroup[];
+  orphanFiles: OrphanFile[];
 }
 
 // ── Media diff types ──
@@ -433,10 +446,13 @@ export class MetadataDiffEngine extends EventEmitter {
   }
 
   /**
-   * Scan all published posts and find metadata differences
+   * Scan all published posts and find metadata differences.
+   * When postsBaseDir is provided, also scans the filesystem to detect
+   * orphan files that exist on disk but have no matching database entry.
    */
   async scanAllPublishedPosts(
-    onProgress: (current: number, total: number, message: string) => void
+    onProgress: (current: number, total: number, message: string) => void,
+    postsBaseDir?: string,
   ): Promise<ScanResult> {
     const client = this.getClient();
     if (!client) throw new Error('Database not initialized');
@@ -458,9 +474,14 @@ export class MetadataDiffEngine extends EventEmitter {
 
     onProgress(0, total, `Scanning ${total} published posts...`);
 
+    // Collect known DB file paths for orphan detection
+    const knownFilePaths = new Set<string>();
+
     for (let i = 0; i < publishedPosts.length; i++) {
       const row = publishedPosts[i];
       const postId = row.id as string;
+      const filePath = row.file_path as string;
+      if (filePath) knownFilePaths.add(filePath);
 
       const diff = await this.comparePostMetadata(postId);
       if (diff && diff.hasDifferences) {
@@ -472,6 +493,18 @@ export class MetadataDiffEngine extends EventEmitter {
       }
     }
 
+    // Also include file_paths from non-published posts so we don't flag them as orphans
+    const allPostsResult = await client.execute({
+      sql: `SELECT file_path FROM posts WHERE project_id = ? AND file_path IS NOT NULL AND file_path != ''`,
+      args: [this.currentProjectId],
+    });
+    for (const row of allPostsResult.rows) {
+      knownFilePaths.add(row.file_path as string);
+    }
+
+    // Scan filesystem for orphan files
+    const orphanFiles = await this.findOrphanFiles(postsBaseDir, knownFilePaths, onProgress, total);
+
     // Group the differences
     const groups = this.groupDifferencesByField(differences);
 
@@ -480,7 +513,78 @@ export class MetadataDiffEngine extends EventEmitter {
       postsWithDifferences: differences.length,
       differences,
       groups,
+      orphanFiles,
     };
+  }
+
+  /**
+   * Recursively scan the posts directory for markdown files not present in the database.
+   */
+  private async findOrphanFiles(
+    postsBaseDir: string | undefined,
+    knownFilePaths: Set<string>,
+    onProgress: (current: number, total: number, message: string) => void,
+    scannedSoFar: number,
+  ): Promise<OrphanFile[]> {
+    if (!postsBaseDir) return [];
+
+    const markdownExtensions = new Set(['.md', '.markdown', '.mdx']);
+    const allFiles: string[] = [];
+
+    const scanDir = async (dir: string) => {
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await scanDir(fullPath);
+          } else {
+            const extension = path.extname(entry.name).toLowerCase();
+            if (markdownExtensions.has(extension)) {
+              allFiles.push(fullPath);
+            }
+          }
+        }
+      } catch {
+        // Directory might not exist
+      }
+    };
+
+    onProgress(scannedSoFar, scannedSoFar + 1, 'Scanning filesystem for orphan files...');
+    await scanDir(postsBaseDir);
+
+    // Filter to files not in the known DB set
+    const orphanPaths = allFiles.filter(f => !knownFilePaths.has(f));
+
+    if (orphanPaths.length === 0) return [];
+
+    const orphanFiles: OrphanFile[] = [];
+    for (let i = 0; i < orphanPaths.length; i++) {
+      const filePath = orphanPaths[i];
+      const slug = path.basename(filePath, path.extname(filePath));
+      let title: string | undefined;
+      let id: string | undefined;
+
+      // Try to read frontmatter for metadata
+      try {
+        const fileData = await readPostFile(filePath);
+        if (fileData) {
+          title = fileData.title;
+          id = fileData.id;
+        }
+      } catch {
+        // Couldn't parse file, still report it as orphan
+      }
+
+      orphanFiles.push({ filePath, slug, title, id });
+
+      if ((i + 1) % 10 === 0 || i === orphanPaths.length - 1) {
+        onProgress(scannedSoFar + i + 1, scannedSoFar + orphanPaths.length,
+          `Found ${orphanFiles.length} orphan files (${i + 1}/${orphanPaths.length})`);
+      }
+    }
+
+    return orphanFiles;
   }
 
   /**
@@ -1224,7 +1328,7 @@ export class MetadataDiffEngine extends EventEmitter {
   /**
    * Run a full scan as a background task
    */
-  async runScanTask(): Promise<ScanResult> {
+  async runScanTask(postsBaseDir?: string): Promise<ScanResult> {
     return taskManager.runTask({
       id: `metadata-diff-scan-${Date.now()}`,
       name: 'Scanning for metadata differences',
@@ -1232,7 +1336,7 @@ export class MetadataDiffEngine extends EventEmitter {
         return this.scanAllPublishedPosts((current, total, message) => {
           const percent = total > 0 ? (current / total) * 100 : 0;
           onProgress(percent, message);
-        });
+        }, postsBaseDir);
       },
     });
   }

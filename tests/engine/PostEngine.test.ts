@@ -3507,4 +3507,94 @@ Content with [link](/posts/other-post)`);
       expect(post!.language).toBe('it');
     });
   });
+
+  describe('syncPublishedPostFile', () => {
+    it('should recreate the file when it is missing', async () => {
+      const filePath = '/mock/userData/projects/default/posts/2024/01/my-post.md';
+
+      // Mock: DB returns a published post, but the file does NOT exist on disk
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'post-missing-file',
+            projectId: 'default',
+            title: 'My Post',
+            slug: 'my-post',
+            content: 'Body from database',
+            status: 'published',
+            filePath,
+            tags: '["tag1"]',
+            categories: '["cat1"]',
+            createdAt: new Date('2024-01-15T10:00:00.000Z'),
+            updatedAt: new Date('2024-01-20T10:00:00.000Z'),
+          }),
+        });
+        return chain;
+      });
+
+      // File does NOT exist (not in mockFiles)
+
+      const result = await postEngine.syncPublishedPostFile('post-missing-file');
+      expect(result).toBe(true);
+
+      // Verify the file was recreated via writeFile
+      expect(fs.writeFile).toHaveBeenCalled();
+
+      // Check the file content was written with DB body
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writtenContent = writeCall[1] as string;
+      expect(writtenContent).toContain('Body from database');
+      expect(writtenContent).toContain('title: My Post');
+      expect(writtenContent).toContain('tag1');
+    });
+
+    it('should update DB filePath when slug changed causes different path', async () => {
+      const oldFilePath = '/mock/userData/projects/default/posts/2024/01/old-slug.md';
+
+      // Mock: DB post has the new slug but old filePath
+      const mockUpdate = vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => Promise.resolve()),
+        })),
+      }));
+      vi.mocked(mockLocalDb.update).mockImplementation(mockUpdate as any);
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: 'post-slug-changed',
+            projectId: 'default',
+            title: 'New Title',
+            slug: 'new-slug',
+            content: 'Some content',
+            status: 'published',
+            filePath: oldFilePath,
+            tags: '[]',
+            categories: '[]',
+            createdAt: new Date('2024-01-15T10:00:00.000Z'),
+            updatedAt: new Date('2024-01-20T10:00:00.000Z'),
+          }),
+        });
+        return chain;
+      });
+
+      // Old file does not exist (slug changed)
+
+      const result = await postEngine.syncPublishedPostFile('post-slug-changed');
+      expect(result).toBe(true);
+
+      // writePostFile writes to new-slug.md, which differs from oldFilePath
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writtenPath = writeCall[0] as string;
+      expect(writtenPath).toContain('new-slug.md');
+      expect(writtenPath).not.toContain('old-slug.md');
+
+      // DB filePath should be updated
+      expect(mockUpdate).toHaveBeenCalled();
+    });
+  });
 });

@@ -11,6 +11,7 @@ import {
   MediaMetadataDiff, MediaDiffField,
   ScriptMetadataDiff, ScriptDiffField,
   TemplateMetadataDiff, TemplateDiffField,
+  OrphanFile,
 } from '../../src/main/engine/MetadataDiffEngine';
 import { resetMockCounters } from '../utils/factories';
 
@@ -520,6 +521,14 @@ Content here`);
         ],
       });
 
+      // Mock the second query that gets ALL post file paths (for orphan detection)
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          { file_path: '/mock/userData/posts/2024/01/post-1.md' },
+          { file_path: '/mock/userData/posts/2024/01/post-2.md' },
+        ],
+      });
+
       // Queue the posts for sequential .get() calls in comparePostMetadata
       mockPostsGetQueue = [
         {
@@ -584,6 +593,143 @@ Content`);
       expect(result.postsWithDifferences).toBe(1);
       expect(result.differences.length).toBe(1);
       expect(result.differences[0].postId).toBe('post-1');
+      expect(result.orphanFiles).toEqual([]);
+    });
+
+    it('should detect orphan files when postsBaseDir is provided', async () => {
+      const { readdir } = await import('fs/promises');
+      const mockReaddir = vi.mocked(readdir);
+
+      // Mock published posts query - one post in DB
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'post-1',
+            title: 'Post 1',
+            slug: 'post-1',
+            file_path: '/mock/posts/2024/01/post-1.md',
+            tags: '[]',
+            categories: '[]',
+            excerpt: null,
+            author: null,
+          },
+        ],
+      });
+
+      // Mock the all-posts query
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [{ file_path: '/mock/posts/2024/01/post-1.md' }],
+      });
+
+      // Queue the post for comparePostMetadata
+      mockPostsGetQueue = [
+        {
+          id: 'post-1',
+          projectId: 'test-project',
+          title: 'Post 1',
+          slug: 'post-1',
+          status: 'published',
+          filePath: '/mock/posts/2024/01/post-1.md',
+          tags: '[]',
+          categories: '[]',
+          createdAt: new Date('2024-01-15'),
+          updatedAt: new Date('2024-01-15'),
+        },
+      ];
+
+      // File matches DB (no differences)
+      mockFileData.set('/mock/posts/2024/01/post-1.md', `---
+id: post-1
+title: "Post 1"
+slug: post-1
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+---
+Content`);
+
+      // Orphan file exists on disk
+      mockFileData.set('/mock/posts/2024/01/orphan-post.md', `---
+id: orphan-1
+title: "Orphan Post"
+slug: orphan-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+---
+Content`);
+
+      // Mock readdir to return directory structure
+      mockReaddir
+        .mockResolvedValueOnce([
+          { name: '2024', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: '01', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'post-1.md', isDirectory: () => false, isFile: () => true } as any,
+          { name: 'orphan-post.md', isDirectory: () => false, isFile: () => true } as any,
+        ] as any);
+
+      const result = await engine.scanAllPublishedPosts(
+        (current, total) => {},
+        '/mock/posts',
+      );
+
+      expect(result.orphanFiles).toHaveLength(1);
+      expect(result.orphanFiles[0].slug).toBe('orphan-post');
+      expect(result.orphanFiles[0].title).toBe('Orphan Post');
+      expect(result.orphanFiles[0].id).toBe('orphan-1');
+      expect(result.orphanFiles[0].filePath).toBe('/mock/posts/2024/01/orphan-post.md');
+    });
+
+    it('should return empty orphanFiles when no postsBaseDir is provided', async () => {
+      // Mock published posts query - empty
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+      // Mock the all-posts query
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      const result = await engine.scanAllPublishedPosts((current, total) => {});
+
+      expect(result.orphanFiles).toEqual([]);
+    });
+
+    it('should not flag draft posts as orphans', async () => {
+      const { readdir } = await import('fs/promises');
+      const mockReaddir = vi.mocked(readdir);
+
+      // No published posts
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [] });
+
+      // All posts query returns a draft that has a file
+      mockLocalClient.execute.mockResolvedValueOnce({
+        rows: [{ file_path: '/mock/posts/2024/01/draft-post.md' }],
+      });
+
+      // Mock readdir to find the draft file
+      mockReaddir
+        .mockResolvedValueOnce([
+          { name: '2024', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: '01', isDirectory: () => true, isFile: () => false } as any,
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'draft-post.md', isDirectory: () => false, isFile: () => true } as any,
+        ] as any);
+
+      const result = await engine.scanAllPublishedPosts(
+        (current, total) => {},
+        '/mock/posts',
+      );
+
+      // Draft post file should NOT be flagged as orphan since it's in the DB
+      expect(result.orphanFiles).toEqual([]);
     });
   });
 

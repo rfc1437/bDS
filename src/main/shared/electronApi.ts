@@ -797,6 +797,12 @@ export interface ElectronAPI {
           fileValue: unknown;
         }>;
       }>;
+      orphanFiles: Array<{
+        filePath: string;
+        slug: string;
+        title?: string;
+        id?: string;
+      }>;
     }>;
     syncDbToFile: (postIds: string[], groupLabel: string) => Promise<{ success: number; failed: number }>;
     syncFileToDb: (postIds: string[], field: string, groupLabel: string) => Promise<{ success: number; failed: number }>;

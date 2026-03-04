@@ -29,6 +29,13 @@ interface GenericDiffItem {
   fields: Record<string, FieldDiff>;
 }
 
+interface GenericOrphanFile {
+  filePath: string;
+  slug: string;
+  title?: string;
+  id?: string;
+}
+
 interface FieldSummary {
   field: string;
   label: string;
@@ -40,6 +47,7 @@ interface GenericScanResult {
   itemsWithDifferences: number;
   items: GenericDiffItem[];
   fieldSummaries: FieldSummary[];
+  orphanFiles: GenericOrphanFile[];
 }
 
 type EntityTab = 'posts' | 'media' | 'scripts' | 'templates';
@@ -58,6 +66,7 @@ function adaptPostScanResult(raw: Awaited<ReturnType<NonNullable<typeof window.e
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.posts.length })),
+    orphanFiles: raw.orphanFiles ?? [],
   };
 }
 
@@ -72,6 +81,7 @@ function adaptMediaScanResult(raw: Awaited<ReturnType<NonNullable<typeof window.
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
+    orphanFiles: [],
   };
 }
 
@@ -86,6 +96,7 @@ function adaptScriptScanResult(raw: Awaited<ReturnType<NonNullable<typeof window
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
+    orphanFiles: [],
   };
 }
 
@@ -100,6 +111,7 @@ function adaptTemplateScanResult(raw: Awaited<ReturnType<NonNullable<typeof wind
       fields: d.differences as Record<string, FieldDiff>,
     })),
     fieldSummaries: raw.groups.map(g => ({ field: g.field, label: g.label, count: g.items.length })),
+    orphanFiles: [],
   };
 }
 
@@ -261,7 +273,11 @@ export const MetadataDiffPanel: React.FC = () => {
     return hasDiffs ? map[tab][1] : map[tab][0];
   };
 
-  const tabBadge = (tab: EntityTab): number => scanResults[tab]?.itemsWithDifferences ?? 0;
+  const tabBadge = (tab: EntityTab): number => {
+    const result = scanResults[tab];
+    if (!result) return 0;
+    return result.itemsWithDifferences + result.orphanFiles.length;
+  };
 
   return (
     <div className="metadata-diff-panel">
@@ -429,6 +445,46 @@ export const MetadataDiffPanel: React.FC = () => {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Orphan files — files on disk with no DB entry */}
+              {currentResult.orphanFiles.length > 0 && !activeFieldFilter && (
+                <div className="orphan-files-section">
+                  <h3>{tr('metadataDiff.orphanFiles.title', { count: currentResult.orphanFiles.length })}</h3>
+                  <p className="orphan-files-description">{tr('metadataDiff.orphanFiles.description')}</p>
+                  <div className="diff-item-list">
+                    {currentResult.orphanFiles.map(orphan => (
+                      <div key={orphan.filePath} className="diff-item-card orphan-file">
+                        <div className="diff-item-header">
+                          {orphan.title || orphan.slug}
+                          <span className="orphan-file-badge">{tr('metadataDiff.orphanFiles.badge')}</span>
+                        </div>
+                        <div className="diff-item-fields">
+                          <div className="diff-field-row">
+                            <div className="diff-field-name">{tr('metadataDiff.orphanFiles.slug')}</div>
+                            <div className="diff-field-values">
+                              <div className="diff-field-value file-value">{orphan.slug}</div>
+                            </div>
+                          </div>
+                          <div className="diff-field-row">
+                            <div className="diff-field-name">{tr('metadataDiff.orphanFiles.path')}</div>
+                            <div className="diff-field-values">
+                              <div className="diff-field-value file-value orphan-path" title={orphan.filePath}>{orphan.filePath}</div>
+                            </div>
+                          </div>
+                          {orphan.id && (
+                            <div className="diff-field-row">
+                              <div className="diff-field-name">ID</div>
+                              <div className="diff-field-values">
+                                <div className="diff-field-value file-value">{orphan.id}</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

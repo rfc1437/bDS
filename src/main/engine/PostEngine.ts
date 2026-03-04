@@ -635,17 +635,20 @@ export class PostEngine extends EventEmitter {
       return false;
     }
 
-    // Read content from the existing file
+    // Read content from the existing file, fall back to DB content if file is missing
     const fileData = await this.readPostFile(dbPost.filePath);
-    if (!fileData) {
-      return false;
+    const body = fileData?.content ?? dbPost.content ?? '';
+
+    // Build the full post data with DB metadata and content
+    const postData = this.dbRowToPostData(dbPost, body);
+
+    // Write the file (may recreate it if missing, path may change if slug changed)
+    const newFilePath = await this.writePostFile(postData);
+
+    // If the written path differs from DB (e.g. slug changed), update DB
+    if (newFilePath !== dbPost.filePath) {
+      await db.update(posts).set({ filePath: newFilePath }).where(eq(posts.id, postId));
     }
-
-    // Build the full post data with DB metadata (tags) and file content
-    const postData = this.dbRowToPostData(dbPost, fileData.content);
-
-    // Re-write the file with updated metadata
-    await this.writePostFile(postData);
 
     return true;
   }

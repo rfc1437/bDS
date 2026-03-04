@@ -443,3 +443,42 @@
   font-size: 32px;
   opacity: 0.5;
 }
+
+/* Orphan Files */
+.orphan-files-section {
+  margin-top: 16px;
+}
+
+.orphan-files-section h3 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--editorInfo-foreground, var(--editor-foreground));
+}
+
+.orphan-files-description {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: var(--descriptionForeground);
+}
+
+.orphan-file-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--editorInfo-foreground, #3794ff) 18%, transparent);
+  color: var(--editorInfo-foreground, #3794ff);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diff-item-card.orphan-file {
+  border-color: color-mix(in srgb, var(--editorInfo-foreground, #3794ff) 30%, var(--sidebar-border));
+}
+
+.orphan-path {
+  word-break: break-all;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+}

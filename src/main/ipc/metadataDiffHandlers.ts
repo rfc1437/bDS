@@ -24,6 +24,10 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle, bundle: Eng
   safeHandle('metadataDiff:scan', async () => {
     await withProjectContext(bundle);
     const taskId = `metadata-diff-scan-${Date.now()}`;
+    // Resolve the posts directory so the scanner can detect orphan files
+    const activeProject = await bundle.projectEngine.getActiveProject();
+    const projectId = activeProject?.id || 'default';
+    const paths = bundle.projectEngine.getProjectPaths(projectId, activeProject?.dataPath);
     return bundle.taskManager.runTask({
       id: taskId,
       name: 'Scanning for metadata differences',
@@ -31,7 +35,7 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle, bundle: Eng
         return engine().scanAllPublishedPosts((current, total, message) => {
           const percent = total > 0 ? (current / total) * 100 : 0;
           onProgress(percent, message);
-        });
+        }, paths.posts);
       },
     });
   });
