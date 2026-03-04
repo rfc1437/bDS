@@ -17,6 +17,7 @@
 - [Importing from WordPress (WXR)](#importing-from-wordpress-wxr)
 - [Using Git (Source Control)](#using-git-source-control)
 - [Configuring settings](#configuring-settings)
+- [Checking and repairing metadata](#checking-and-repairing-metadata)
 - [Managing templates](#managing-templates)
 - [Generating and publishing](#generating-and-publishing)
 - [Typical editorial workflows](#typical-editorial-workflows)
@@ -458,6 +459,65 @@ Data maintenance actions are repair tools for specific situations, such as exter
 
 ---
 
+## Checking and repairing metadata
+
+Over time, metadata stored in the database and metadata stored in post files on disk can drift apart. This happens when files are edited outside bDS, when slugs change, or when manual file operations move or rename content. The Metadata Diff tool detects these inconsistencies and lets you resolve them without rebuilding the entire posts table.
+
+### Opening the tool
+
+Open **Settings**, then click **Metadata Diff** under the data maintenance section. The tool shows summary statistics for your project (total posts, published, drafts, media, scripts, templates) and a **Scan** button.
+
+### Running a scan
+
+Click **Scan** to compare every published entity against its corresponding file on disk. The scan covers four entity types — posts, media, scripts, and templates — and runs them in parallel. Results appear in four tabs, each showing a badge with the number of items that have differences.
+
+For each item with differences, the tool shows every mismatched field side by side: the database value and the file value. Typical fields include title, tags, categories, excerpt, author, and language.
+
+### Understanding field pills
+
+Above the item list, clickable field pills summarize how many items have a particular type of difference (for example, "Tags: 12" or "Title: 3"). Clicking a pill filters the list to show only items with that specific field difference, which helps when resolving one type of issue at a time.
+
+### Repairing differences
+
+Each field pill has two sync buttons:
+
+- **DB→D** updates the files on disk to match the database values. Use this when you trust the database as the source of truth — for example, after correcting metadata in the editor.
+- **D→DB** (called F→DB for some entity types) updates the database to match the file values. Use this when you trust the files — for example, after editing frontmatter by hand or importing corrected files from a collaborator.
+
+Both operations process all affected items for that field at once. After syncing, the tool automatically rescans to confirm the differences are resolved.
+
+### File-missing posts
+
+If a post exists in the database but its file is missing from disk, the item appears with a **File missing** badge. All fields show the database value against "(file missing)" on the file side. Using **DB→D** on these items recreates the file from the database content and metadata. If the post's slug changed since the file was originally written, the recreated file uses the current slug and the database file path is updated to match.
+
+### Orphan files
+
+If markdown files exist in the posts directory but have no matching database entry, they appear in the **Orphan Files** section below the item list. These typically result from slug changes, manual file copies, or partial imports.
+
+Each orphan card shows the file's slug, path, and any frontmatter ID found in the file. To bring all orphan files back into the database, click the **D→DB** button in the orphan section header. This reads each file's frontmatter and content, creates a new database entry as a published post, and assigns a unique slug if the original slug conflicts with an existing post. The tool rescans automatically afterward.
+
+### When to use this tool
+
+- After editing post files outside bDS (text editor, script, Git merge)
+- After a Git pull that changed post files from another contributor
+- When the sidebar shows unexpected titles, tags, or categories
+- When you suspect slug changes left behind stale files
+- As a preflight check before generating or publishing the site
+
+This tool is not needed during normal editing workflows inside bDS, where database and file state are kept in sync automatically.
+
+### Key takeaways
+
+- Metadata Diff compares database records against files on disk for posts, media, scripts, and templates.
+- Field pills let you filter and bulk-repair one type of difference at a time.
+- DB→D rewrites files from the database; D→DB updates the database from files.
+- File-missing posts can be recreated; orphan files can be imported.
+- Use this tool after external changes, not as part of routine editing.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
 ## Managing templates
 
 Templates control the Liquid layout used when bDS generates your blog's HTML pages. bDS ships with built-in templates, but you can create and manage your own through the Templates view in the Activity Bar.
@@ -483,20 +543,48 @@ Templates follow the same draft/published workflow as scripts. You can iterate o
 
 Publishing in bDS is a two-stage process: first you generate the static site locally, then you optionally deploy it to a remote server.
 
-**Generation** produces a complete static blog from your published content. This includes individual post pages, paginated category, tag, and date archive routes, standalone pages, plus `sitemap.xml`, `rss.xml`, `atom.xml`, and `calendar.json`. Generation uses content-hash-based incremental writes, so only changed pages are rewritten. Before generating, ensure the Public Base URL is configured in project settings — sitemap and feed URLs depend on it.
+### Full generation
 
-After generation, you can run **site validation** to compare the sitemap against generated HTML files. Validation detects missing, extra, or stale pages and can auto-repair by re-rendering only the affected routes.
+**Generation** produces a complete static blog from your published content. This includes individual post pages, paginated category, tag, and date archive routes, standalone pages, plus `sitemap.xml`, `rss.xml`, `atom.xml`, and `calendar.json`. Generation uses content-hash-based incremental writes, so only pages whose content actually changed are rewritten on disk. Before generating, ensure the Public Base URL is configured in project settings — sitemap and feed URLs depend on it.
+
+Full generation is appropriate when you first set up your site, after major template changes, or when you want a clean rebuild. For day-to-day content additions, site validation offers a faster alternative.
+
+### Site validation and incremental publishing
+
+After generating a site at least once, you can use **site validation** to detect what changed and re-render only the affected routes — without regenerating the entire site.
+
+Click **Validate Site** to run a comparison between the sitemap and the generated HTML directory. Validation detects three types of issues:
+
+- **Missing pages** — URLs listed in the sitemap that have no corresponding HTML file. This happens when you publish new posts or add new tags/categories since the last generation.
+- **Extra pages** — HTML files that exist on disk but are no longer in the sitemap. This happens when you unpublish, delete, or recategorize posts.
+- **Updated posts** — Posts whose source file on disk has been modified since its HTML page was last generated. This catches content edits, tag changes, or metadata updates that require the page to be re-rendered.
+
+After validation completes, click **Apply** to let bDS resolve all detected issues automatically. Missing and updated pages are re-rendered using the current templates, and extra pages are deleted along with any empty parent directories. The apply step uses targeted rendering — it identifies exactly which individual posts, archive pages, category routes, tag routes, and date routes are affected, and re-renders only those. If the affected routes span too many sections, it falls back to a section-by-section render which is still faster than a full generation.
+
+This makes site validation the practical tool for incremental publishing. The typical workflow after creating or editing a few posts is:
+
+1. Publish the posts (mark as published in the editor)
+2. Click **Validate Site** to see what needs updating
+3. Click **Apply** to re-render only the affected pages
+4. Commit the changes in Source Control
+5. Deploy via SSH when ready
+
+This is significantly faster than full generation, especially for large blogs with hundreds or thousands of posts.
+
+### SSH publishing
 
 **SSH publishing** uploads generated files to a remote server via `scp` or `rsync`. Configure your SSH connection details in project settings, then publish from the application. bDS uploads HTML, thumbnails, and media in parallel for efficiency.
 
-The recommended lifecycle is: publish content locally (mark as published), generate the site, validate, commit the generated output, and then deploy via SSH when ready.
+The recommended lifecycle is: publish content locally (mark as published), generate or validate+apply, commit the generated output, and then deploy via SSH when ready.
 
 ### Key takeaways
 
-- Generation produces a full static site with incremental writes.
-- Public Base URL must be set before generation.
-- Site validation catches inconsistencies between sitemap and generated files.
+- Full generation produces a complete static site; use it for initial builds or major changes.
+- Site validation detects missing, extra, and updated pages by comparing the sitemap to generated HTML.
+- Apply resolves all validation issues by targeted re-rendering — much faster than full generation.
+- Use validate+apply as the standard incremental publishing workflow after creating or editing posts.
 - SSH publishing deploys via `scp` or `rsync` with parallel uploads.
+- Public Base URL must be set before generation.
 - Commit generated output before deploying for recoverability.
 
 [↑ Back to In this article](#in-this-article)
@@ -543,7 +631,7 @@ When network access returns, synchronize in a controlled order: pull if needed, 
 
 If content appears published locally but not visible to collaborators, the most common cause is that changes were published but not committed and pushed. In this case, confirm repository status, create a commit, and then push to the expected remote branch.
 
-If content lists or references seem inconsistent after manual file operations outside bDS, run the rebuild tools in Settings to re-align database/index state with filesystem reality. After each rebuild, verify a small set of representative posts and media items rather than assuming full correctness immediately.
+If content lists or references seem inconsistent after manual file operations outside bDS, start with a **Metadata Diff scan** in Settings to identify specific differences between database and file state. Repair individual fields or bulk-sync as needed. If broader inconsistency remains, use the full rebuild tools to re-align database and index state with filesystem reality. After any repair action, verify a small set of representative posts and media items rather than assuming full correctness immediately.
 
 If you are concerned about losing work, increase commit frequency at meaningful milestones, especially after publish actions. Frequent, focused commits are the most reliable and practical recovery strategy for editorial teams.
 
