@@ -340,6 +340,38 @@ export class EmbeddingEngine extends EventEmitter {
     return results.sort((a, b) => b.similarity - a.similarity).slice(0, k);
   }
 
+  /**
+   * Compute cosine similarity between a source post and a list of target posts.
+   * Returns a map of targetPostId → similarity (0-1). Posts without embeddings are omitted.
+   */
+  async computeSimilarities(sourcePostId: string, targetPostIds: string[]): Promise<Record<string, number>> {
+    await this.ensureIndexLoaded();
+    if (!this.index || !this.currentProjectId || targetPostIds.length === 0) return {};
+
+    const sourceVec = await this.getOrComputeVector(sourcePostId);
+    if (!sourceVec) return {};
+
+    const result: Record<string, number> = {};
+    for (const targetId of targetPostIds) {
+      if (targetId === sourcePostId) continue;
+      const targetVec = await this.getOrComputeVector(targetId);
+      if (!targetVec) continue;
+      result[targetId] = this.cosineSimilarity(sourceVec, targetVec);
+    }
+    return result;
+  }
+
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i]! * b[i]!;
+      normA += a[i]! * a[i]!;
+      normB += b[i]! * b[i]!;
+    }
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    return denom === 0 ? 0 : Math.max(0, dot / denom);
+  }
+
   // Derived features
 
   async suggestTags(postId: string, excludeTags: string[]): Promise<TagSuggestion[]> {

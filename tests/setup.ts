@@ -156,6 +156,10 @@ Object.defineProperty(globalThis, 'window', {
         validate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
         rebuildFromFiles: vi.fn().mockResolvedValue(undefined),
       },
+      embeddings: {
+        findSimilar: vi.fn().mockResolvedValue([]),
+        computeSimilarities: vi.fn().mockResolvedValue({}),
+      },
       on: vi.fn(() => () => {}),
     },
   },

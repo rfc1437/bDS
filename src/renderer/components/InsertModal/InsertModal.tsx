@@ -78,6 +78,7 @@ export const InsertModal: React.FC<InsertModalProps> = ({
   const externalUrlRef = useRef<HTMLInputElement>(null);
   const [relatedPosts, setRelatedPosts] = useState<PostSearchResult[]>([]);
   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  const [similarityMap, setSimilarityMap] = useState<Record<string, number>>({});
 
   // Load related posts via semantic similarity when idle (query < 2 chars)
   useEffect(() => {
@@ -93,6 +94,10 @@ export const InsertModal: React.FC<InsertModalProps> = ({
         if (cancelled || similar.length === 0) { setRelatedPosts([]); return; }
         const posts = await Promise.all(similar.map(s => window.electronAPI.posts.get(s.postId)));
         if (!cancelled) {
+          // Store similarity scores
+          const simMap: Record<string, number> = {};
+          for (const s of similar) { simMap[s.postId] = s.similarity; }
+          setSimilarityMap(simMap);
           setRelatedPosts(
             posts.filter((p): p is NonNullable<typeof p> => p != null).map(p => ({
               id: p.id, title: p.title, slug: p.slug, excerpt: p.excerpt,
@@ -156,6 +161,22 @@ export const InsertModal: React.FC<InsertModalProps> = ({
 
     return () => clearTimeout(timeoutId);
   }, [query, mode, activeTab]);
+
+  // Fetch similarity scores for search results relative to current post
+  useEffect(() => {
+    if (mode !== 'link' || !currentPostId || results.length === 0) return;
+    const postResults = results.filter(isPostResult);
+    if (postResults.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const targetIds = postResults.map(r => r.id);
+        const sims = await window.electronAPI.embeddings.computeSimilarities(currentPostId, targetIds);
+        if (!cancelled) setSimilarityMap(prev => ({ ...prev, ...sims }));
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [results, currentPostId, mode]);
 
   // Handle creating a new post from the search query
   const handleCreatePost = useCallback(async () => {
@@ -337,7 +358,12 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                       onClick={() => handleSelectResult(result)}
                       onMouseEnter={() => setSelectedIndex(index)}
                     >
-                      <div className="insert-modal-result-title">{result.title}</div>
+                      <div className="insert-modal-result-title">
+                        {result.title}
+                        {similarityMap[result.id] != null && (
+                          <span className="insert-modal-similarity-badge">{Math.round(similarityMap[result.id]! * 100)}%</span>
+                        )}
+                      </div>
                       {result.excerpt && (
                         <div className="insert-modal-result-excerpt">
                           {result.excerpt.length > 120 ? result.excerpt.substring(0, 120) + '...' : result.excerpt}
@@ -364,7 +390,12 @@ export const InsertModal: React.FC<InsertModalProps> = ({
                 >
                   {isPostResult(result) ? (
                     <>
-                      <div className="insert-modal-result-title">{result.title}</div>
+                      <div className="insert-modal-result-title">
+                        {result.title}
+                        {currentPostId && similarityMap[result.id] != null && (
+                          <span className="insert-modal-similarity-badge">{Math.round(similarityMap[result.id]! * 100)}%</span>
+                        )}
+                      </div>
                       {result.excerpt && (
                         <div className="insert-modal-result-excerpt">
                           {result.excerpt.length > 120

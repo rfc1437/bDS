@@ -253,6 +253,47 @@ describe('EmbeddingEngine', () => {
     });
   });
 
+  describe('computeSimilarities', () => {
+    it('returns empty object for non-indexed source post', async () => {
+      const result = await engine.computeSimilarities('not-indexed', ['post-1']);
+      expect(result).toEqual({});
+    });
+
+    it('returns empty object for empty target list', async () => {
+      await engine.embedPost('post-1', 'Title', 'Content');
+      const result = await engine.computeSimilarities('post-1', []);
+      expect(result).toEqual({});
+    });
+
+    it('returns similarity scores for indexed target posts', async () => {
+      await engine.embedPost('post-1', 'Machine learning basics', 'Intro to ML');
+      await engine.embedPost('post-2', 'Deep learning tutorial', 'Advanced ML');
+      await engine.embedPost('post-3', 'Cooking recipes', 'How to make pasta');
+
+      const result = await engine.computeSimilarities('post-1', ['post-2', 'post-3']);
+
+      expect(Object.keys(result)).toHaveLength(2);
+      expect(result['post-2']).toBeGreaterThanOrEqual(0);
+      expect(result['post-2']).toBeLessThanOrEqual(1);
+      expect(result['post-3']).toBeGreaterThanOrEqual(0);
+      expect(result['post-3']).toBeLessThanOrEqual(1);
+    });
+
+    it('omits targets without embeddings', async () => {
+      await engine.embedPost('post-1', 'Title', 'Content');
+
+      const result = await engine.computeSimilarities('post-1', ['not-indexed']);
+      expect(result).toEqual({});
+    });
+
+    it('excludes self from results', async () => {
+      await engine.embedPost('post-1', 'Title', 'Content');
+
+      const result = await engine.computeSimilarities('post-1', ['post-1']);
+      expect(result).toEqual({});
+    });
+  });
+
   describe('getIndexingProgress', () => {
     it('returns zero indexed and total when no posts', async () => {
       postRowsStore = [];

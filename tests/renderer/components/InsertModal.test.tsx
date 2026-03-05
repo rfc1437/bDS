@@ -4,6 +4,61 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { InsertModal } from '../../../src/renderer/components/InsertModal/InsertModal';
 import { useAppStore } from '../../../src/renderer/store/appStore';
 
+describe('InsertModal related posts confidence', () => {
+  it('shows similarity confidence percentage for each related post', async () => {
+    (window.electronAPI.embeddings.findSimilar as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { postId: 'p1', similarity: 0.92 },
+      { postId: 'p2', similarity: 0.67 },
+    ]);
+    (window.electronAPI.posts.get as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ id: 'p1', title: 'Close Match', slug: 'close-match', excerpt: '' })
+      .mockResolvedValueOnce({ id: 'p2', title: 'Loose Match', slug: 'loose-match', excerpt: '' });
+
+    render(
+      <InsertModal
+        mode="link"
+        onInsertLink={vi.fn()}
+        onInsertImage={vi.fn()}
+        onClose={vi.fn()}
+        currentPostId="current"
+      />
+    );
+
+    // Wait for related posts to render
+    expect(await screen.findByText('Close Match')).toBeInTheDocument();
+    expect(screen.getByText('Loose Match')).toBeInTheDocument();
+
+    // Confidence percentages should be displayed
+    expect(screen.getByText('92%')).toBeInTheDocument();
+    expect(screen.getByText('67%')).toBeInTheDocument();
+  });
+
+  it('shows similarity confidence for search results', async () => {
+    (window.electronAPI.posts.search as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'p1', title: 'Found Post', slug: 'found-post', excerpt: 'Some text' },
+    ]);
+    (window.electronAPI.embeddings.computeSimilarities as ReturnType<typeof vi.fn>).mockResolvedValue({
+      'p1': 0.85,
+    });
+
+    render(
+      <InsertModal
+        mode="link"
+        onInsertLink={vi.fn()}
+        onInsertImage={vi.fn()}
+        onClose={vi.fn()}
+        currentPostId="current"
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Search posts by title or content...');
+    fireEvent.input(input, { target: { value: 'Found Post' } });
+
+    expect(await screen.findByText('Found Post')).toBeInTheDocument();
+    expect(await screen.findByText('85%')).toBeInTheDocument();
+  });
+});
+
 describe('InsertModal format hints', () => {
   it('shows canonical post link format hint in internal link mode', () => {
     render(

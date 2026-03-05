@@ -18,6 +18,10 @@ export function registerEmbeddingHandlers(safeHandle: SafeHandle, bundle: Engine
     return engine().findSimilar(postId, k);
   });
 
+  safeHandle('embeddings:computeSimilarities', async (_, sourcePostId: string, targetPostIds: string[]) => {
+    return engine().computeSimilarities(sourcePostId, targetPostIds);
+  });
+
   safeHandle('embeddings:getProgress', async () => {
     return engine().getIndexingProgress();
   });

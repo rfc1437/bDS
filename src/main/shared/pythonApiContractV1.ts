@@ -205,6 +205,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('publish.uploadSite', 'Upload rendered site to remote server via SSH.', [requiredObject('credentials')], 'PublishSiteResult'),
 
   method('embeddings.findSimilar', 'Find posts semantically similar to the given post. Requires semantic similarity to be enabled in project settings.', [requiredString('postId'), optionalNumber('k')], 'SimilarPost[]'),
+  method('embeddings.computeSimilarities', 'Compute cosine similarity between a source post and a list of target posts. Returns a mapping of target post IDs to similarity scores (0.0-1.0). Posts without embeddings are omitted.', [requiredString('sourcePostId'), requiredArray('targetPostIds')], 'Record<string, number>'),
   method('embeddings.getProgress', 'Get the embedding indexing progress for the active project.', [], '{ indexed: number; total: number }'),
   method('embeddings.suggestTags', 'Suggest tags for a post based on tags used by semantically similar posts.', [requiredString('postId'), requiredArray('excludeTags')], 'TagSuggestion[]'),
   method('embeddings.findDuplicates', 'Find post pairs with high content similarity (potential duplicates). Threshold is a similarity value from 0.0 to 1.0 (default 0.85).', [optionalNumber('threshold')], 'DuplicatePair[]'),

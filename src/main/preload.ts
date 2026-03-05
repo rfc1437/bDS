@@ -457,6 +457,7 @@ export const electronAPI: ElectronAPI = {
   // Semantic similarity / embeddings
   embeddings: {
     findSimilar: (postId: string, k?: number) => ipcRenderer.invoke('embeddings:findSimilar', postId, k),
+    computeSimilarities: (sourcePostId: string, targetPostIds: string[]) => ipcRenderer.invoke('embeddings:computeSimilarities', sourcePostId, targetPostIds),
     getProgress: () => ipcRenderer.invoke('embeddings:getProgress'),
     suggestTags: (postId: string, excludeTags: string[]) => ipcRenderer.invoke('embeddings:suggestTags', postId, excludeTags),
     findDuplicates: (threshold?: number) => ipcRenderer.invoke('embeddings:findDuplicates', threshold),

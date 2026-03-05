@@ -3905,6 +3905,7 @@ result = await bds.publish.upload_site(credentials={})
 **Module APIs**
 
 - [embeddings.findSimilar](#embeddingsfindsimilar)
+- [embeddings.computeSimilarities](#embeddingscomputesimilarities)
 - [embeddings.getProgress](#embeddingsgetprogress)
 - [embeddings.suggestTags](#embeddingssuggesttags)
 - [embeddings.findDuplicates](#embeddingsfindduplicates)
@@ -3941,6 +3942,32 @@ result = await bds.embeddings.find_similar(post_id='post-1')
     'similarity': 0
 }
 ]
+```
+
+### embeddings.computeSimilarities
+
+Compute cosine similarity between a source post and a list of target posts. Returns a mapping of target post IDs to similarity scores (0.0-1.0). Posts without embeddings are omitted.
+
+**Parameters**
+
+- sourcePostId (str, required)
+- targetPostIds (list, required)
+
+**Response specification**
+
+- Return type: `Record<string, number>`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.compute_similarities(source_post_id='source_post-1', target_post_ids=[])
+```
+
+**Example response**
+
+```python
+{}
 ```
 
 ### embeddings.getProgress

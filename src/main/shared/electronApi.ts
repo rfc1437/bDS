@@ -1007,6 +1007,7 @@ export interface ElectronAPI {
   };
   embeddings: {
     findSimilar: (postId: string, k?: number) => Promise<SimilarPost[]>;
+    computeSimilarities: (sourcePostId: string, targetPostIds: string[]) => Promise<Record<string, number>>;
     getProgress: () => Promise<{ indexed: number; total: number }>;
     suggestTags: (postId: string, excludeTags: string[]) => Promise<TagSuggestion[]>;
     findDuplicates: (threshold?: number) => Promise<DuplicatePair[]>;
