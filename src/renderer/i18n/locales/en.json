@@ -1109,5 +1109,7 @@
   "duplicatesView.dismiss": "Dismiss",
   "duplicatesView.similarity": "{value}% similar",
   "duplicatesView.openPost": "Open post",
+  "duplicatesView.count": "{count} pairs found",
+  "duplicatesView.showMore": "Show more",
   "duplicatesView.notEnabled": "Semantic similarity is not enabled. Enable it in Settings → Technology."
 }

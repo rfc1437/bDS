@@ -134,3 +134,24 @@
   text-align: center;
   color: var(--vscode-descriptionForeground);
 }
+
+.duplicates-view-count {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--vscode-descriptionForeground);
+}
+
+.duplicates-view-show-more {
+  align-self: center;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  padding: 6px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.duplicates-view-show-more:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}

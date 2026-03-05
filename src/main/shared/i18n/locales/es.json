@@ -84,5 +84,7 @@
   "ai.imageAnalysis.user": "Analiza esta imagen. Responde con JSON en español.",
   "task.embeddingIndex.name": "Indexar entradas para similitud semántica",
   "task.embeddingIndex.loading": "Cargando modelo…",
-  "task.embeddingIndex.indexing": "Indexando: {indexed}/{total}"
+  "task.embeddingIndex.indexing": "Indexando: {indexed}/{total}",
+  "task.duplicateSearch.name": "Buscar entradas duplicadas",
+  "task.duplicateSearch.searching": "Comprobando: {checked}/{total}"
 }

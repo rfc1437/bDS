@@ -1,54 +1,90 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppStore } from '../../store';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
+import { getPersistedDuplicatesResult, removeDismissedPair } from '../../navigation/duplicatesPersistence';
 import type { DuplicatePair } from '../../../main/shared/electronApi';
 import './DuplicatesView.css';
 
+const PAGE_SIZE = 500;
+
 export const DuplicatesView: React.FC = () => {
   const { t } = useI18n();
-  const { openTab } = useAppStore();
+  const { openTab, activeProject } = useAppStore();
   const [pairs, setPairs] = useState<DuplicatePair[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [notEnabled, setNotEnabled] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const loadDuplicates = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const projectId = activeProject?.id;
+
+  // Load persisted results (or check if feature is enabled)
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    (async () => {
       const metadata = await window.electronAPI?.meta.getProjectMetadata();
+      if (cancelled) return;
       if (!metadata?.semanticSimilarityEnabled) {
         setNotEnabled(true);
         setPairs([]);
+        setChecked(true);
         return;
       }
       setNotEnabled(false);
-      const result = await window.electronAPI?.embeddings.findDuplicates(0.85);
-      setPairs(result ?? []);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      const persisted = getPersistedDuplicatesResult(projectId);
+      if (persisted) {
+        setPairs(persisted);
+      }
+      setChecked(true);
+    })();
+    return () => { cancelled = true; };
+  }, [projectId]);
 
+  // Listen for search result updates from the background task
   useEffect(() => {
-    void loadDuplicates();
-  }, [loadDuplicates]);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail;
+      if (!projectId || detail?.projectId !== projectId) return;
+      const persisted = getPersistedDuplicatesResult(projectId);
+      setPairs(persisted ?? []);
+      setIsSearching(false);
+      setVisibleCount(PAGE_SIZE);
+    };
+    window.addEventListener('bds:duplicates-updated', handler);
+    return () => window.removeEventListener('bds:duplicates-updated', handler);
+  }, [projectId]);
+
+  const visiblePairs = useMemo(() => pairs.slice(0, visibleCount), [pairs, visibleCount]);
+  const hasMore = visibleCount < pairs.length;
+
+  const handleRunSearch = useCallback(() => {
+    setIsSearching(true);
+    window.electronAPI?.embeddings.runDuplicateSearch(0.92);
+  }, []);
 
   const handleDismiss = useCallback(async (postIdA: string, postIdB: string) => {
     try {
       await window.electronAPI?.embeddings.dismissPair(postIdA, postIdB);
       setPairs(prev => prev.filter(p => !(p.postA.id === postIdA && p.postB.id === postIdB)));
+      if (projectId) {
+        removeDismissedPair(projectId, postIdA, postIdB);
+      }
     } catch (err) {
       console.error('Failed to dismiss duplicate pair:', err);
     }
-  }, []);
+  }, [projectId]);
 
   const handleOpenPost = useCallback((postId: string) => {
     openEntityTab(openTab, 'post', postId, 'pin');
   }, [openTab]);
+
+  const handleShowMore = useCallback(() => {
+    setVisibleCount(prev => prev + PAGE_SIZE);
+  }, []);
+
+  const hasCachedResults = pairs.length > 0 || (checked && getPersistedDuplicatesResult(projectId ?? '') !== null);
 
   return (
     <div className="duplicates-view">
@@ -57,38 +93,37 @@ export const DuplicatesView: React.FC = () => {
         <p>{t('duplicatesView.description')}</p>
       </div>
 
-      {!notEnabled && (
+      {notEnabled && (
+        <p className="duplicates-view-not-enabled">{t('duplicatesView.notEnabled')}</p>
+      )}
+
+      {!notEnabled && checked && (
         <div className="duplicates-view-actions">
           <button
             type="button"
             className="duplicates-view-refresh"
-            onClick={() => void loadDuplicates()}
-            disabled={isLoading}
+            onClick={handleRunSearch}
+            disabled={isSearching}
           >
             {t('duplicatesView.refresh')}
           </button>
         </div>
       )}
 
-      {notEnabled && (
-        <p className="duplicates-view-not-enabled">{t('duplicatesView.notEnabled')}</p>
-      )}
-
-      {!notEnabled && isLoading && (
+      {!notEnabled && isSearching && (
         <p className="duplicates-view-status">{t('duplicatesView.loading')}</p>
       )}
 
-      {!notEnabled && error && (
-        <p className="duplicates-view-status">{t('duplicatesView.error')}: {error}</p>
-      )}
-
-      {!notEnabled && !isLoading && !error && pairs.length === 0 && (
+      {!notEnabled && !isSearching && checked && !hasCachedResults && (
         <p className="duplicates-view-status">{t('duplicatesView.empty')}</p>
       )}
 
-      {!notEnabled && pairs.length > 0 && (
+      {!notEnabled && !isSearching && pairs.length > 0 && (
         <div className="duplicates-view-list">
-          {pairs.map(pair => (
+          <p className="duplicates-view-count">
+            {t('duplicatesView.count', { count: pairs.length })}
+          </p>
+          {visiblePairs.map(pair => (
             <div key={`${pair.postA.id}-${pair.postB.id}`} className="duplicate-pair">
               <div className="duplicate-pair-posts">
                 <button
@@ -123,6 +158,15 @@ export const DuplicatesView: React.FC = () => {
               </div>
             </div>
           ))}
+          {hasMore && (
+            <button
+              type="button"
+              className="duplicates-view-show-more"
+              onClick={handleShowMore}
+            >
+              {t('duplicatesView.showMore')}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -459,6 +459,7 @@ export const electronAPI: ElectronAPI = {
     getProgress: () => ipcRenderer.invoke('embeddings:getProgress'),
     suggestTags: (postId: string, excludeTags: string[]) => ipcRenderer.invoke('embeddings:suggestTags', postId, excludeTags),
     findDuplicates: (threshold?: number) => ipcRenderer.invoke('embeddings:findDuplicates', threshold),
+    runDuplicateSearch: (threshold?: number) => ipcRenderer.invoke('embeddings:runDuplicateSearch', threshold),
     dismissPair: (postIdA: string, postIdB: string) => ipcRenderer.invoke('embeddings:dismissPair', postIdA, postIdB),
     indexUnindexedPosts: () => ipcRenderer.invoke('embeddings:indexUnindexedPosts'),
   },

@@ -1,6 +1,15 @@
 import type { EngineBundle } from '../engine/EngineBundle';
+import { startDuplicateSearchTask } from './handlers';
+import { resolveUiLanguageFromSystemLocale, translateMenu } from '../shared/i18n';
+import { app } from 'electron';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
+
+function tr(key: string): string {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  return translateMenu(lang, key);
+}
 
 export function registerEmbeddingHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   const engine = () => bundle.embeddingEngine;
@@ -25,15 +34,21 @@ export function registerEmbeddingHandlers(safeHandle: SafeHandle, bundle: Engine
     return engine().dismissPair(postIdA, postIdB);
   });
 
+  safeHandle('embeddings:runDuplicateSearch', async (_, threshold?: number) => {
+    startDuplicateSearchTask(bundle, threshold ?? 0.92);
+  });
+
   safeHandle('embeddings:indexUnindexedPosts', async () => {
     const taskId = `embedding-index-${Date.now()}`;
     return bundle.taskManager.runTask({
       id: taskId,
-      name: 'Indexing posts for semantic search',
+      name: tr('task.embeddingIndex.name'),
       execute: async (onProgress) => {
         await engine().indexUnindexedPosts((indexed, total) => {
           const pct = total > 0 ? (indexed / total) * 100 : 0;
-          onProgress(pct, `Indexed ${indexed}/${total} posts`);
+          onProgress(pct, tr('task.embeddingIndex.indexing')
+            .replace('{indexed}', String(indexed))
+            .replace('{total}', String(total)));
         });
         return engine().getIndexingProgress();
       },

@@ -1109,5 +1109,7 @@
   "duplicatesView.dismiss": "Descartar",
   "duplicatesView.similarity": "{value}% similar",
   "duplicatesView.openPost": "Abrir entrada",
+  "duplicatesView.count": "{count} pares encontrados",
+  "duplicatesView.showMore": "Mostrar más",
   "duplicatesView.notEnabled": "La similitud semántica no está activada. Actívela en Configuración → Tecnología."
 }

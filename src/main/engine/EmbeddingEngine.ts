@@ -371,7 +371,7 @@ export class EmbeddingEngine extends EventEmitter {
       .slice(0, 5);
   }
 
-  async findDuplicates(threshold = 0.92): Promise<DuplicatePair[]> {
+  async findDuplicates(threshold = 0.92, onProgress?: (checked: number, total: number) => void): Promise<DuplicatePair[]> {
     await this.ensureIndexLoaded();
     if (!this.index || !this.currentProjectId) return [];
 
@@ -408,7 +408,9 @@ export class EmbeddingEngine extends EventEmitter {
     const pairs: DuplicatePair[] = [];
     const seenPairs = new Set<string>();
 
-    for (const postId of allPostIds) {
+    for (let idx = 0; idx < allPostIds.length; idx++) {
+      const postId = allPostIds[idx]!;
+      onProgress?.(idx + 1, allPostIds.length);
       const vector = await this.getOrComputeVector(postId);
       if (!vector) continue;
 

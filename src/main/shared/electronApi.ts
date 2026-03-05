@@ -1008,6 +1008,7 @@ export interface ElectronAPI {
     getProgress: () => Promise<{ indexed: number; total: number }>;
     suggestTags: (postId: string, excludeTags: string[]) => Promise<TagSuggestion[]>;
     findDuplicates: (threshold?: number) => Promise<DuplicatePair[]>;
+    runDuplicateSearch: (threshold?: number) => Promise<void>;
     dismissPair: (postIdA: string, postIdB: string) => Promise<void>;
     indexUnindexedPosts: () => Promise<void>;
   };

@@ -84,5 +84,7 @@
   "ai.imageAnalysis.user": "Analyse cette image. Réponds en JSON en français.",
   "task.embeddingIndex.name": "Indexer les articles pour la similarité sémantique",
   "task.embeddingIndex.loading": "Chargement du modèle…",
-  "task.embeddingIndex.indexing": "Indexation : {indexed}/{total}"
+  "task.embeddingIndex.indexing": "Indexation : {indexed}/{total}",
+  "task.duplicateSearch.name": "Trouver les articles en double",
+  "task.duplicateSearch.searching": "Vérification : {checked}/{total}"
 }

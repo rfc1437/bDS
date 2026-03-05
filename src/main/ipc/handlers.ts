@@ -162,6 +162,34 @@ export function startEmbeddingIndexTask(bundle: EngineBundle): void {
   }).catch(() => {});
 }
 
+/**
+ * Start a background task that searches for duplicate posts using semantic similarity.
+ * Once complete, the results are forwarded to the renderer via 'embeddings:duplicateSearchResult'.
+ */
+export function startDuplicateSearchTask(bundle: EngineBundle, threshold = 0.92): void {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  const tr = (key: string) => translateMenu(lang, key);
+
+  bundle.taskManager.runTask({
+    id: `duplicate-search-${Date.now()}`,
+    name: tr('task.duplicateSearch.name'),
+    execute: async (onProgress) => {
+      onProgress(0, tr('task.duplicateSearch.searching').replace('{checked}', '0').replace('{total}', '…'));
+      const pairs = await bundle.embeddingEngine.findDuplicates(threshold, (checked, total) => {
+        const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
+        onProgress(pct, tr('task.duplicateSearch.searching')
+          .replace('{checked}', String(checked))
+          .replace('{total}', String(total)));
+      });
+      onProgress(100, tr('task.duplicateSearch.name'));
+      return pairs;
+    },
+  }).then((pairs) => {
+    ipcMain.emit('forward-to-renderer', 'embeddings:duplicateSearchResult', pairs);
+  }).catch(() => {});
+}
+
 export function registerIpcHandlers(bundle: EngineBundle): void {
   // ============ Git Handlers ============
 

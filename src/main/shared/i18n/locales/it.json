@@ -84,5 +84,7 @@
   "ai.imageAnalysis.user": "Analizza questa immagine. Rispondi con JSON in italiano.",
   "task.embeddingIndex.name": "Indicizza i post per la similarità semantica",
   "task.embeddingIndex.loading": "Caricamento modello…",
-  "task.embeddingIndex.indexing": "Indicizzazione: {indexed}/{total}"
+  "task.embeddingIndex.indexing": "Indicizzazione: {indexed}/{total}",
+  "task.duplicateSearch.name": "Trova post duplicati",
+  "task.duplicateSearch.searching": "Controllo: {checked}/{total}"
 }

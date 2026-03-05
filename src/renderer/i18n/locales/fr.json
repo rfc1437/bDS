@@ -1107,5 +1107,7 @@
   "duplicatesView.dismiss": "Ignorer",
   "duplicatesView.similarity": "{value}% similaire",
   "duplicatesView.openPost": "Ouvrir l'article",
+  "duplicatesView.count": "{count} paires trouvées",
+  "duplicatesView.showMore": "Afficher plus",
   "duplicatesView.notEnabled": "La similarité sémantique n'est pas activée. Activez-la dans Paramètres → Technologie."
 }
