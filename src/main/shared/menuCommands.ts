@@ -31,6 +31,7 @@ export type AppMenuAction =
   | 'previewPost'
   | 'rebuildDatabase'
   | 'reindexText'
+  | 'rebuildEmbeddingIndex'
   | 'metadataDiff'
   | 'editMenu'
   | 'generateSitemap'
@@ -128,6 +129,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: '', action: 'blog-separator-2', separator: true },
       { label: 'menu.item.rebuildDatabase', action: 'rebuildDatabase' },
       { label: 'menu.item.reindexText', action: 'reindexText' },
+      { label: 'menu.item.rebuildEmbeddingIndex', action: 'rebuildEmbeddingIndex' },
       { label: '', action: 'blog-separator-3', separator: true },
       { label: 'menu.item.metadataDiff', action: 'metadataDiff' },
       { label: 'menu.item.editMenu', action: 'editMenu' },
@@ -169,6 +171,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   publishSelected: 'menu:publishSelected',
   rebuildDatabase: 'menu:rebuildDatabase',
   reindexText: 'menu:reindexText',
+  rebuildEmbeddingIndex: 'menu:rebuildEmbeddingIndex',
   metadataDiff: 'menu:metadataDiff',
   editMenu: 'menu:editMenu',
   generateSitemap: 'menu:generateSitemap',

@@ -461,6 +461,7 @@ export const electronAPI: ElectronAPI = {
     findDuplicates: (threshold?: number) => ipcRenderer.invoke('embeddings:findDuplicates', threshold),
     runDuplicateSearch: (threshold?: number) => ipcRenderer.invoke('embeddings:runDuplicateSearch', threshold),
     dismissPair: (postIdA: string, postIdB: string) => ipcRenderer.invoke('embeddings:dismissPair', postIdA, postIdB),
+    dismissPairs: (pairIds: Array<[string, string]>) => ipcRenderer.invoke('embeddings:dismissPairs', pairIds),
     indexUnindexedPosts: () => ipcRenderer.invoke('embeddings:indexUnindexedPosts'),
   },
 };

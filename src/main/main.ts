@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase, initDatabase } from './database';
-import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers, startEmbeddingIndexTask } from './ipc';
+import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers, startEmbeddingIndexTask, startRebuildEmbeddingIndexTask } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { MediaEngine } from './engine/MediaEngine';
@@ -646,6 +646,11 @@ function createApplicationMenu(): Menu {
 
     if (action === 'reportIssue') {
       void shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
+    if (action === 'rebuildEmbeddingIndex') {
+      startRebuildEmbeddingIndexTask(bundle!);
       return;
     }
 

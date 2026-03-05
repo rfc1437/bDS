@@ -1106,8 +1106,12 @@
   "duplicatesView.refresh": "Aggiorna",
   "duplicatesView.dismiss": "Ignora",
   "duplicatesView.similarity": "{value}% simile",
+  "duplicatesView.exactMatch": "Duplicato esatto",
   "duplicatesView.openPost": "Apri post",
   "duplicatesView.count": "{count} coppie trovate",
   "duplicatesView.showMore": "Mostra altri",
+  "duplicatesView.checkAll": "Seleziona tutto",
+  "duplicatesView.uncheckAll": "Deseleziona tutto",
+  "duplicatesView.dismissChecked": "Ignora selezionati ({count})",
   "duplicatesView.notEnabled": "La similarità semantica non è abilitata. Abilitala in Impostazioni → Tecnologia."
 }

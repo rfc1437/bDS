@@ -113,6 +113,14 @@
   white-space: nowrap;
 }
 
+.duplicate-pair-score--exact {
+  color: var(--vscode-errorForeground, #f44747);
+}
+
+.duplicate-pair--exact {
+  border-color: var(--vscode-errorForeground, #f44747);
+}
+
 .duplicate-pair-dismiss {
   background: none;
   border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
@@ -154,4 +162,29 @@
 
 .duplicates-view-show-more:hover {
   background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.duplicates-view-dismiss-checked {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.duplicates-view-dismiss-checked:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.duplicates-view-dismiss-checked:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.duplicate-pair-checkbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--vscode-focusBorder);
 }

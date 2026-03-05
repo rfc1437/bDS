@@ -36,6 +36,7 @@
   "menu.item.previewPost": "Aperçu de l’article",
   "menu.item.rebuildDatabase": "Reconstruire Database from Files",
   "menu.item.reindexText": "Reindex Recherche Text",
+  "menu.item.rebuildEmbeddingIndex": "Reconstruire l'index d'embeddings",
   "menu.item.metadataDiff": "Outil de diff des métadonnées",
   "menu.item.editMenu": "Modifier le menu du blog",
   "menu.item.generateSitemap": "Rendre le site",
@@ -85,6 +86,8 @@
   "task.embeddingIndex.name": "Indexer les articles pour la similarité sémantique",
   "task.embeddingIndex.loading": "Chargement du modèle…",
   "task.embeddingIndex.indexing": "Indexation : {indexed}/{total}",
+  "task.rebuildEmbeddingIndex.name": "Reconstruire l'index d'embeddings",
+  "task.rebuildEmbeddingIndex.clearing": "Vidage de l'index…",
   "task.duplicateSearch.name": "Trouver les articles en double",
   "task.duplicateSearch.searching": "Vérification : {checked}/{total}"
 }

@@ -36,6 +36,7 @@
   "menu.item.previewPost": "Preview Post",
   "menu.item.rebuildDatabase": "Rebuild Database from Files",
   "menu.item.reindexText": "Reindex Search Text",
+  "menu.item.rebuildEmbeddingIndex": "Rebuild Embedding Index",
   "menu.item.metadataDiff": "Metadata Diff Tool",
   "menu.item.editMenu": "Edit Blog Menu",
   "menu.item.generateSitemap": "Render Site",
@@ -85,6 +86,8 @@
   "task.embeddingIndex.name": "Index posts for Semantic Similarity",
   "task.embeddingIndex.loading": "Loading model…",
   "task.embeddingIndex.indexing": "Indexing: {indexed}/{total}",
+  "task.rebuildEmbeddingIndex.name": "Rebuild Embedding Index",
+  "task.rebuildEmbeddingIndex.clearing": "Clearing index…",
   "task.duplicateSearch.name": "Find Duplicate Posts",
   "task.duplicateSearch.searching": "Checking: {checked}/{total}"
 }

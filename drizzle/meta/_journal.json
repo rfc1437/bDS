@@ -85,6 +85,13 @@
       "when": 1772711489237,
       "tag": "0011_embedding_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1772738580546,
+      "tag": "0012_flimsy_meteorite",
+      "breakpoints": true
     }
   ]
 }

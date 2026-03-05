@@ -18,3 +18,13 @@ export function removeDismissedPair(projectId: string, postIdA: string, postIdB:
     pairs.filter(p => !(p.postA.id === postIdA && p.postB.id === postIdB)),
   );
 }
+
+export function removeDismissedPairs(projectId: string, pairIds: Array<[string, string]>): void {
+  const pairs = store.get(projectId);
+  if (!pairs) return;
+  const keySet = new Set(pairIds.map(([a, b]) => `${a}::${b}`));
+  store.set(
+    projectId,
+    pairs.filter(p => !keySet.has(`${p.postA.id}::${p.postB.id}`)),
+  );
+}

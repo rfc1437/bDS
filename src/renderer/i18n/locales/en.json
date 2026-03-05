@@ -1108,8 +1108,12 @@
   "duplicatesView.refresh": "Refresh",
   "duplicatesView.dismiss": "Dismiss",
   "duplicatesView.similarity": "{value}% similar",
+  "duplicatesView.exactMatch": "Exact duplicate",
   "duplicatesView.openPost": "Open post",
   "duplicatesView.count": "{count} pairs found",
   "duplicatesView.showMore": "Show more",
+  "duplicatesView.checkAll": "Check All",
+  "duplicatesView.uncheckAll": "Uncheck All",
+  "duplicatesView.dismissChecked": "Dismiss Checked ({count})",
   "duplicatesView.notEnabled": "Semantic similarity is not enabled. Enable it in Settings → Technology."
 }

@@ -520,6 +520,7 @@ export interface DuplicatePair {
   postA: { id: string; title: string; slug: string; publishedAt?: Date };
   postB: { id: string; title: string; slug: string; publishedAt?: Date };
   similarity: number;
+  exactMatch?: boolean;
 }
 
 export interface SiteValidationReport {
@@ -1010,6 +1011,7 @@ export interface ElectronAPI {
     findDuplicates: (threshold?: number) => Promise<DuplicatePair[]>;
     runDuplicateSearch: (threshold?: number) => Promise<void>;
     dismissPair: (postIdA: string, postIdB: string) => Promise<void>;
+    dismissPairs: (pairIds: Array<[string, string]>) => Promise<void>;
     indexUnindexedPosts: () => Promise<void>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;

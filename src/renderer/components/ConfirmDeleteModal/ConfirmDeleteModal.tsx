@@ -22,10 +22,9 @@ interface ConfirmDeleteModalProps {
 
 export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details, onClose }) => {
   const { t: tr } = useI18n();
-  if (!details) return null;
 
   const handleConfirm = useCallback(async () => {
-    await details.onConfirm();
+    await details?.onConfirm();
     onClose();
   }, [details, onClose]);
 
@@ -34,6 +33,8 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ details,
       onClose();
     }
   }, [onClose]);
+
+  if (!details) return null;
 
   const hasReferences = details.references.length > 0;
 

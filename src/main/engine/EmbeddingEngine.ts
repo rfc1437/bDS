@@ -13,7 +13,7 @@
  * - Model stays loaded across project switches (one model, multiple indexes)
  * - USearch index file per project: {userData}/projects/{projectId}/embeddings.usearch
  * - Label→postId mapping in `embedding_keys` DB table (avoids bigint JSON issues)
- * - Vector cache keyed by postId (in-memory only; re-computed after restart from post content)
+ * - Vector cache persisted in `embedding_keys.vector` DB column as BLOB for instant reload
  */
 
 import { EventEmitter } from 'events';
@@ -39,6 +39,7 @@ export interface DuplicatePair {
   postA: { id: string; title: string; slug: string; publishedAt?: Date };
   postB: { id: string; title: string; slug: string; publishedAt?: Date };
   similarity: number;
+  exactMatch?: boolean;
 }
 
 // Injected dependencies for testability
@@ -67,8 +68,7 @@ export class EmbeddingEngine extends EventEmitter {
   private postIdToLabel: Map<string, bigint> = new Map();
   private nextLabel: bigint = 1n;
 
-  // In-memory vector cache -- populated when posts are embedded this session.
-  // After restart, vectors must be re-computed on demand from post content.
+  // In-memory vector cache -- loaded from DB on startup, updated during embedding.
   private vectorCache: Map<string, Float32Array> = new Map(); // postId -> vector
 
   // Debounced save timer
@@ -182,7 +182,7 @@ export class EmbeddingEngine extends EventEmitter {
       // No index file yet -- start fresh
     }
 
-    // Load key mapping from DB
+    // Load key mapping and vectors from DB
     await this.loadKeyMapFromDb(this.currentProjectId);
   }
 
@@ -195,6 +195,7 @@ export class EmbeddingEngine extends EventEmitter {
 
     this.labelToPostId.clear();
     this.postIdToLabel.clear();
+    this.vectorCache.clear();
     this.nextLabel = 1n;
 
     for (const row of rows) {
@@ -203,6 +204,10 @@ export class EmbeddingEngine extends EventEmitter {
       this.postIdToLabel.set(row.postId, label);
       if (label >= this.nextLabel) {
         this.nextLabel = label + 1n;
+      }
+      if (row.vector) {
+        const buf = row.vector as Buffer;
+        this.vectorCache.set(row.postId, new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
       }
     }
   }
@@ -264,12 +269,13 @@ export class EmbeddingEngine extends EventEmitter {
     this.postIdToLabel.set(postId, label);
     this.vectorCache.set(postId, vector);
 
-    // Persist key mapping (label is bigint in-memory, stored as number in SQLite)
+    // Persist key mapping + vector (label is bigint in-memory, stored as number in SQLite)
     await db.insert(embeddingKeys).values({
       label: Number(label),
       postId,
       projectId: this.currentProjectId,
       contentHash: hash,
+      vector: Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength),
     });
 
     this.scheduleSave();
@@ -398,12 +404,42 @@ export class EmbeddingEngine extends EventEmitter {
         id: posts.id,
         title: posts.title,
         slug: posts.slug,
+        content: posts.content,
+        status: posts.status,
+        filePath: posts.filePath,
         publishedAt: posts.publishedAt,
       })
       .from(posts)
       .where(inArray(posts.id, allPostIds));
 
     const postMap = new Map(postRows.map((p) => [p.id, p]));
+
+    // Cache for lazily-loaded post bodies (needed for exact-match detection)
+    const bodyCache = new Map<string, string>();
+    const getBody = async (postId: string): Promise<string> => {
+      const cached = bodyCache.get(postId);
+      if (cached !== undefined) return cached;
+      const post = postMap.get(postId);
+      if (!post) { bodyCache.set(postId, ''); return ''; }
+      // Draft content is in the DB; published content is on the filesystem
+      if (post.content) {
+        bodyCache.set(postId, post.content);
+        return post.content;
+      }
+      if (post.filePath) {
+        try {
+          const raw = await fs.readFile(post.filePath, 'utf-8');
+          const { content: body } = (await import('gray-matter')).default(raw);
+          bodyCache.set(postId, body);
+          return body;
+        } catch {
+          bodyCache.set(postId, '');
+          return '';
+        }
+      }
+      bodyCache.set(postId, '');
+      return '';
+    };
 
     const pairs: DuplicatePair[] = [];
     const seenPairs = new Set<string>();
@@ -452,7 +488,24 @@ export class EmbeddingEngine extends EventEmitter {
       }
     }
 
-    return pairs.sort((a, b) => b.similarity - a.similarity);
+    // For pairs at 100% embedding similarity, compare actual bodies to find true exact duplicates
+    for (const pair of pairs) {
+      if (Math.round(pair.similarity * 100) >= 100) {
+        const bodyA = await getBody(pair.postA.id);
+        const bodyB = await getBody(pair.postB.id);
+        const postA = postMap.get(pair.postA.id);
+        const postB = postMap.get(pair.postB.id);
+        if (postA && postB && postA.title === postB.title && bodyA === bodyB) {
+          pair.exactMatch = true;
+        }
+      }
+    }
+
+    return pairs.sort((a, b) => {
+      if (a.exactMatch && !b.exactMatch) return -1;
+      if (!a.exactMatch && b.exactMatch) return 1;
+      return b.similarity - a.similarity;
+    });
   }
 
   async dismissPair(postIdA: string, postIdB: string): Promise<void> {
@@ -466,6 +519,20 @@ export class EmbeddingEngine extends EventEmitter {
       postIdB: b,
       dismissedAt: new Date(),
     }).onConflictDoNothing();
+  }
+
+  async dismissPairs(pairIds: Array<[string, string]>): Promise<void> {
+    if (!this.currentProjectId) return;
+    const db = getDatabase().getLocal();
+    const now = new Date();
+    const rows = pairIds.map(([idA, idB]) => {
+      const [a, b] = this.sortedPairIds(idA, idB);
+      return { id: uuidv4(), projectId: this.currentProjectId!, postIdA: a, postIdB: b, dismissedAt: now };
+    });
+    // Insert in batches of 100 to avoid SQLite variable limits
+    for (let i = 0; i < rows.length; i += 100) {
+      await db.insert(dismissedDuplicatePairs).values(rows.slice(i, i + 100)).onConflictDoNothing();
+    }
   }
 
   // Indexing management
@@ -485,7 +552,7 @@ export class EmbeddingEngine extends EventEmitter {
     return { indexed, total: allPosts.length };
   }
 
-  async reindexAll(): Promise<void> {
+  async reindexAll(onProgress?: (indexed: number, total: number) => void): Promise<void> {
     await this.ensureIndexLoaded();
     if (!this.currentProjectId) return;
 
@@ -508,7 +575,7 @@ export class EmbeddingEngine extends EventEmitter {
     this.vectorCache.clear();
     this.nextLabel = 1n;
 
-    await this.indexUnindexedPosts();
+    await this.indexUnindexedPosts(onProgress);
   }
 
   async indexUnindexedPosts(onProgress?: (indexed: number, total: number) => void): Promise<void> {
@@ -522,9 +589,27 @@ export class EmbeddingEngine extends EventEmitter {
         id: posts.id,
         title: posts.title,
         content: posts.content,
+        filePath: posts.filePath,
       })
       .from(posts)
       .where(eq(posts.projectId, this.currentProjectId));
+
+    // Resolve actual content for each post (read from file for published posts)
+    const resolvedPosts: Array<{ id: string; title: string; content: string }> = [];
+    for (const p of allPosts) {
+      let body = p.content || '';
+      if (!p.content && p.filePath) {
+        try {
+          const raw = await fs.readFile(p.filePath, 'utf-8');
+          const matter = (await import('gray-matter')).default;
+          const { content: fileBody } = matter(raw);
+          body = fileBody;
+        } catch {
+          // File not found — use empty
+        }
+      }
+      resolvedPosts.push({ id: p.id, title: p.title, content: body });
+    }
 
     // Get current hashes from DB for change detection
     const keyRows = await db
@@ -534,8 +619,8 @@ export class EmbeddingEngine extends EventEmitter {
 
     const hashMap = new Map(keyRows.map((r) => [r.postId, r.contentHash]));
 
-    const toIndex = allPosts.filter((p) => {
-      const raw = `${p.title}\n\n${p.content || ''}`;
+    const toIndex = resolvedPosts.filter((p) => {
+      const raw = `${p.title}\n\n${p.content}`;
       const hash = this.computeHash(raw);
       return hashMap.get(p.id) !== hash;
     });
@@ -545,8 +630,7 @@ export class EmbeddingEngine extends EventEmitter {
     const BATCH_SAVE_INTERVAL = 100;
 
     for (const post of toIndex) {
-      const content = post.content || '';
-      await this.embedPost(post.id, post.title, content);
+      await this.embedPost(post.id, post.title, post.content);
       count++;
       batchCount++;
       onProgress?.(count, toIndex.length);
@@ -587,8 +671,8 @@ export class EmbeddingEngine extends EventEmitter {
   // Helpers
 
   /**
-   * Get vector for a postId from session cache, or re-compute it from post content.
-   * After a restart, vectors must be re-computed since USearch has no get-by-label API.
+   * Get vector for a postId from in-memory cache (loaded from DB at startup).
+   * Falls back to re-computing from post content only if not in cache.
    */
   private async getOrComputeVector(postId: string): Promise<Float32Array | null> {
     const cached = this.vectorCache.get(postId);
@@ -598,16 +682,10 @@ export class EmbeddingEngine extends EventEmitter {
     await this.initialize();
     if (!this.pipeline || !this.currentProjectId) return null;
 
-    const db = getDatabase().getLocal();
-    const postRows = await db
-      .select({ title: posts.title, content: posts.content })
-      .from(posts)
-      .where(and(eq(posts.id, postId), eq(posts.projectId, this.currentProjectId)));
+    const resolved = await this.resolvePostContent(postId);
+    if (!resolved) return null;
 
-    if (postRows.length === 0) return null;
-
-    const post = postRows[0]!;
-    const rawText = `${post.title}\n\n${post.content || ''}`;
+    const rawText = `${resolved.title}\n\n${resolved.content}`;
     const text = `query: ${rawText}`;
     const vector = await this.embedText(text);
     this.vectorCache.set(postId, vector);
@@ -617,6 +695,33 @@ export class EmbeddingEngine extends EventEmitter {
   private async embedText(text: string): Promise<Float32Array> {
     if (!this.pipeline) throw new Error('EmbeddingEngine not initialized');
     return this.pipeline.embed(text);
+  }
+
+  /**
+   * Resolve the actual body text for a post.
+   * Draft posts have content in the DB; published posts have it on the filesystem.
+   */
+  private async resolvePostContent(postId: string): Promise<{ title: string; content: string } | null> {
+    if (!this.currentProjectId) return null;
+    const db = getDatabase().getLocal();
+    const rows = await db
+      .select({ title: posts.title, content: posts.content, filePath: posts.filePath })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.projectId, this.currentProjectId)));
+    if (rows.length === 0) return null;
+    const post = rows[0]!;
+    if (post.content) return { title: post.title, content: post.content };
+    if (post.filePath) {
+      try {
+        const raw = await fs.readFile(post.filePath, 'utf-8');
+        const matter = (await import('gray-matter')).default;
+        const { content: body } = matter(raw);
+        return { title: post.title, content: body };
+      } catch {
+        // File not found or unreadable — fall back to empty
+      }
+    }
+    return { title: post.title, content: '' };
   }
 
   private computeHash(text: string): string {

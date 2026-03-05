@@ -34,6 +34,10 @@ export function registerEmbeddingHandlers(safeHandle: SafeHandle, bundle: Engine
     return engine().dismissPair(postIdA, postIdB);
   });
 
+  safeHandle('embeddings:dismissPairs', async (_, pairIds: Array<[string, string]>) => {
+    return engine().dismissPairs(pairIds);
+  });
+
   safeHandle('embeddings:runDuplicateSearch', async (_, threshold?: number) => {
     startDuplicateSearchTask(bundle, threshold ?? 0.92);
   });

@@ -36,6 +36,7 @@
   "menu.item.previewPost": "Anteprima post",
   "menu.item.rebuildDatabase": "Ricostruisci Database from Files",
   "menu.item.reindexText": "Reindex Ricerca Text",
+  "menu.item.rebuildEmbeddingIndex": "Ricostruisci indice embeddings",
   "menu.item.metadataDiff": "Strumento diff metadati",
   "menu.item.editMenu": "Modifica menu blog",
   "menu.item.generateSitemap": "Renderizza sito",
@@ -85,6 +86,8 @@
   "task.embeddingIndex.name": "Indicizza i post per la similarità semantica",
   "task.embeddingIndex.loading": "Caricamento modello…",
   "task.embeddingIndex.indexing": "Indicizzazione: {indexed}/{total}",
+  "task.rebuildEmbeddingIndex.name": "Ricostruisci indice embeddings",
+  "task.rebuildEmbeddingIndex.clearing": "Svuotamento indice…",
   "task.duplicateSearch.name": "Trova post duplicati",
   "task.duplicateSearch.searching": "Controllo: {checked}/{total}"
 }

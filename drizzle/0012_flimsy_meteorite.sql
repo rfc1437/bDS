@@ -1,0 +1,1 @@
+ALTER TABLE `embedding_keys` ADD `vector` blob;

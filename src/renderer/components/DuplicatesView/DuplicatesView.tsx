@@ -2,17 +2,23 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppStore } from '../../store';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
-import { getPersistedDuplicatesResult, removeDismissedPair } from '../../navigation/duplicatesPersistence';
+import { getPersistedDuplicatesResult, removeDismissedPair, removeDismissedPairs } from '../../navigation/duplicatesPersistence';
 import type { DuplicatePair } from '../../../main/shared/electronApi';
 import './DuplicatesView.css';
 
 const PAGE_SIZE = 500;
+
+function pairKey(pair: DuplicatePair): string {
+  return `${pair.postA.id}::${pair.postB.id}`;
+}
 
 export const DuplicatesView: React.FC = () => {
   const { t } = useI18n();
   const { openTab, activeProject } = useAppStore();
   const [pairs, setPairs] = useState<DuplicatePair[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
+  const [isDismissing, setIsDismissing] = useState(false);
   const [notEnabled, setNotEnabled] = useState(false);
   const [checked, setChecked] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -51,6 +57,7 @@ export const DuplicatesView: React.FC = () => {
       setPairs(persisted ?? []);
       setIsSearching(false);
       setVisibleCount(PAGE_SIZE);
+      setCheckedKeys(new Set());
     };
     window.addEventListener('bds:duplicates-updated', handler);
     return () => window.removeEventListener('bds:duplicates-updated', handler);
@@ -68,6 +75,7 @@ export const DuplicatesView: React.FC = () => {
     try {
       await window.electronAPI?.embeddings.dismissPair(postIdA, postIdB);
       setPairs(prev => prev.filter(p => !(p.postA.id === postIdA && p.postB.id === postIdB)));
+      setCheckedKeys(prev => { const next = new Set(prev); next.delete(`${postIdA}::${postIdB}`); return next; });
       if (projectId) {
         removeDismissedPair(projectId, postIdA, postIdB);
       }
@@ -75,6 +83,44 @@ export const DuplicatesView: React.FC = () => {
       console.error('Failed to dismiss duplicate pair:', err);
     }
   }, [projectId]);
+
+  const handleDismissChecked = useCallback(async () => {
+    if (checkedKeys.size === 0) return;
+    setIsDismissing(true);
+    const pairIds: Array<[string, string]> = [];
+    for (const key of checkedKeys) {
+      const [a, b] = key.split('::') as [string, string];
+      pairIds.push([a, b]);
+    }
+    try {
+      await window.electronAPI?.embeddings.dismissPairs(pairIds);
+      setPairs(prev => prev.filter(p => !checkedKeys.has(pairKey(p))));
+      if (projectId) {
+        removeDismissedPairs(projectId, pairIds);
+      }
+      setCheckedKeys(new Set());
+    } catch (err) {
+      console.error('Failed to dismiss pairs:', err);
+    } finally {
+      setIsDismissing(false);
+    }
+  }, [checkedKeys, projectId]);
+
+  const handleToggleCheck = useCallback((key: string) => {
+    setCheckedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const handleCheckAll = useCallback(() => {
+    setCheckedKeys(new Set(visiblePairs.map(pairKey)));
+  }, [visiblePairs]);
+
+  const handleUncheckAll = useCallback(() => {
+    setCheckedKeys(new Set());
+  }, []);
 
   const handleOpenPost = useCallback((postId: string) => {
     openEntityTab(openTab, 'post', postId, 'pin');
@@ -107,6 +153,24 @@ export const DuplicatesView: React.FC = () => {
           >
             {t('duplicatesView.refresh')}
           </button>
+          {pairs.length > 0 && (
+            <>
+              <button type="button" className="duplicates-view-refresh" onClick={handleCheckAll}>
+                {t('duplicatesView.checkAll')}
+              </button>
+              <button type="button" className="duplicates-view-refresh" onClick={handleUncheckAll} disabled={checkedKeys.size === 0}>
+                {t('duplicatesView.uncheckAll')}
+              </button>
+              <button
+                type="button"
+                className="duplicates-view-dismiss-checked"
+                onClick={handleDismissChecked}
+                disabled={checkedKeys.size === 0 || isDismissing}
+              >
+                {t('duplicatesView.dismissChecked', { count: checkedKeys.size })}
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -123,8 +187,16 @@ export const DuplicatesView: React.FC = () => {
           <p className="duplicates-view-count">
             {t('duplicatesView.count', { count: pairs.length })}
           </p>
-          {visiblePairs.map(pair => (
-            <div key={`${pair.postA.id}-${pair.postB.id}`} className="duplicate-pair">
+          {visiblePairs.map(pair => {
+            const key = pairKey(pair);
+            return (
+            <div key={key} className={`duplicate-pair${pair.exactMatch ? ' duplicate-pair--exact' : ''}`}>
+              <input
+                type="checkbox"
+                className="duplicate-pair-checkbox"
+                checked={checkedKeys.has(key)}
+                onChange={() => handleToggleCheck(key)}
+              />
               <div className="duplicate-pair-posts">
                 <button
                   type="button"
@@ -145,8 +217,10 @@ export const DuplicatesView: React.FC = () => {
                 </button>
               </div>
               <div className="duplicate-pair-meta">
-                <span className="duplicate-pair-score">
-                  {t('duplicatesView.similarity', { value: Math.round(pair.similarity * 100) })}
+                <span className={`duplicate-pair-score${pair.exactMatch ? ' duplicate-pair-score--exact' : ''}`}>
+                  {pair.exactMatch
+                    ? t('duplicatesView.exactMatch')
+                    : t('duplicatesView.similarity', { value: Math.round(pair.similarity * 100) })}
                 </span>
                 <button
                   type="button"
@@ -157,7 +231,8 @@ export const DuplicatesView: React.FC = () => {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
           {hasMore && (
             <button
               type="button"

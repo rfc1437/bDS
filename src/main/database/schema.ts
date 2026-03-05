@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, blob, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 
 // Projects table - stores blog projects/websites
 export const projects = sqliteTable('projects', {
@@ -275,6 +275,7 @@ export const embeddingKeys = sqliteTable('embedding_keys', {
   postId: text('post_id').notNull(),
   projectId: text('project_id').notNull(),
   contentHash: text('content_hash').notNull(), // SHA-256 of title+content, for change detection
+  vector: blob('vector', { mode: 'buffer' }), // Raw Float32Array bytes (384 × 4 = 1536 bytes)
 });
 
 // Dismissed duplicate pairs - user has reviewed and dismissed these near-duplicates

@@ -371,6 +371,7 @@ describe('IPC Handlers', () => {
     gitEngine: mockGitEngine,
     gitApiAdapter: {},
     taskManager: mockTaskManager,
+    embeddingEngine: { reindexAll: vi.fn(), indexUnindexedPosts: vi.fn(), setProjectContext: vi.fn(), embedPost: vi.fn(), removePost: vi.fn() },
     blogGenerationEngine: null, // set in beforeEach
     publishEngine: { setProjectContext: vi.fn(), uploadHtml: vi.fn(), uploadThumbnails: vi.fn(), uploadMedia: vi.fn() },
     metadataDiffEngine: { setProjectContext: vi.fn(), comparePostMetadata: vi.fn(), scanAllPublishedPosts: vi.fn(), syncDbToFile: vi.fn(), syncFileToDb: vi.fn(), groupDifferencesByField: vi.fn() },
@@ -1938,6 +1939,21 @@ describe('IPC Handlers', () => {
 
         expect(BrowserWindow.fromWebContents).toHaveBeenCalledWith(sender);
         expect(ownerWindow.setFullScreen).toHaveBeenCalledWith(true);
+      });
+
+      it('should start rebuild embedding index task when action is rebuildEmbeddingIndex', async () => {
+        const send = vi.fn();
+        const event = { sender: { send } };
+        mockTaskManager.runTask.mockResolvedValue(undefined);
+
+        await invokeHandlerWithEvent(event, 'app:triggerMenuAction', 'rebuildEmbeddingIndex');
+
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: expect.stringContaining('rebuild-embedding-index-'),
+          })
+        );
+        expect(send).not.toHaveBeenCalled();
       });
     });
   });

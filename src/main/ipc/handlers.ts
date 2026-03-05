@@ -163,6 +163,30 @@ export function startEmbeddingIndexTask(bundle: EngineBundle): void {
 }
 
 /**
+ * Start a background task that fully rebuilds the embedding index.
+ * Clears existing embeddings and re-indexes all posts with progress reporting.
+ */
+export function startRebuildEmbeddingIndexTask(bundle: EngineBundle): void {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  const tr = (key: string) => translateMenu(lang, key);
+
+  bundle.taskManager.runTask({
+    id: `rebuild-embedding-index-${Date.now()}`,
+    name: tr('task.rebuildEmbeddingIndex.name'),
+    execute: async (onProgress) => {
+      onProgress(0, tr('task.rebuildEmbeddingIndex.clearing'));
+      await bundle.embeddingEngine.reindexAll((indexed, total) => {
+        const pct = total > 0 ? Math.round((indexed / total) * 100) : 0;
+        onProgress(pct, tr('task.embeddingIndex.indexing')
+          .replace('{indexed}', String(indexed))
+          .replace('{total}', String(total)));
+      });
+    },
+  }).catch(() => {});
+}
+
+/**
  * Start a background task that searches for duplicate posts using semantic similarity.
  * Once complete, the results are forwarded to the renderer via 'embeddings:duplicateSearchResult'.
  */
@@ -1116,6 +1140,11 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
 
     if (typedAction === 'reportIssue') {
       await shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
+    if (typedAction === 'rebuildEmbeddingIndex') {
+      startRebuildEmbeddingIndexTask(bundle);
       return;
     }
 
