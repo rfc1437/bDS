@@ -4,6 +4,7 @@ import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
 import { openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
+import { persistDuplicatesResult } from './navigation/duplicatesPersistence';
 import { executeActivityClick } from './navigation/activityExecution';
 import { handleBlogmarkCreatedEvent } from './navigation/blogmarkHandling';
 import {
@@ -441,6 +442,25 @@ const App: React.FC = () => {
     unsubscribers.push(
       window.electronAPI?.on('menu:metadataDiff', () => {
         openSingletonToolTab(openTab, 'metadata-diff');
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('menu:findDuplicates', () => {
+        openSingletonToolTab(openTab, 'find-duplicates');
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('embeddings:duplicateSearchResult', (...args: unknown[]) => {
+        const pairs = args[0] as import('../main/shared/electronApi').DuplicatePair[];
+        const projectId = useAppStore.getState().activeProject?.id;
+        if (projectId && pairs) {
+          persistDuplicatesResult(projectId, pairs);
+          window.dispatchEvent(new CustomEvent('bds:duplicates-updated', {
+            detail: { projectId },
+          }));
+        }
       }) || (() => {})
     );
 

@@ -14,6 +14,7 @@ function createMockDeps(): BlogToolDeps {
   return {
     postEngine: {
       getPost: vi.fn(),
+      getPostBySlug: vi.fn(),
       getAllPosts: vi.fn(),
       getPostsFiltered: vi.fn(),
       searchPostsFiltered: vi.fn(),
@@ -72,12 +73,13 @@ describe('Blog Tools — createBlogTools', () => {
     tools = createBlogTools(deps);
   });
 
-  it('returns all 17 tools', () => {
+  it('returns all 18 tools', () => {
     const names = Object.keys(tools);
-    expect(names).toHaveLength(17);
+    expect(names).toHaveLength(18);
     expect(names).toContain('check_term');
     expect(names).toContain('search_posts');
     expect(names).toContain('read_post');
+    expect(names).toContain('read_post_by_slug');
     expect(names).toContain('list_posts');
     expect(names).toContain('get_media');
     expect(names).toContain('list_media');
@@ -237,6 +239,52 @@ describe('Blog Tools — read_post', () => {
     vi.mocked(deps.postEngine.getPost).mockResolvedValueOnce(null);
     const result = await tools.read_post.execute!(
       { postId: 'nope' },
+      { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
+    );
+    expect(result).toMatchObject({ success: false, error: 'Post not found' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// read_post_by_slug
+// ---------------------------------------------------------------------------
+
+describe('Blog Tools — read_post_by_slug', () => {
+  let deps: BlogToolDeps;
+  let tools: ReturnType<typeof createBlogTools>;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    tools = createBlogTools(deps);
+  });
+
+  it('returns post with backlinks and outlinks when found by slug', async () => {
+    vi.mocked(deps.postEngine.getPostBySlug).mockResolvedValueOnce(samplePost);
+    vi.mocked(deps.postEngine.getLinkedBy).mockResolvedValueOnce([
+      { id: 'post-2', title: 'Related', slug: 'related' },
+    ]);
+
+    const result = await tools.read_post_by_slug.execute!(
+      { slug: 'hello-world' },
+      { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
+    );
+    expect(result).toMatchObject({
+      success: true,
+      post: {
+        id: 'post-1',
+        title: 'Hello World',
+        slug: 'hello-world',
+        content: '# Hello\n\nWorld',
+        backlinks: [{ id: 'post-2', title: 'Related' }],
+      },
+    });
+    expect(deps.postEngine.getPostBySlug).toHaveBeenCalledWith('hello-world');
+  });
+
+  it('returns error for nonexistent slug', async () => {
+    vi.mocked(deps.postEngine.getPostBySlug).mockResolvedValueOnce(null);
+    const result = await tools.read_post_by_slug.execute!(
+      { slug: 'nope' },
       { toolCallId: 'tc1', messages: [], abortSignal: new AbortController().signal },
     );
     expect(result).toMatchObject({ success: false, error: 'Post not found' });

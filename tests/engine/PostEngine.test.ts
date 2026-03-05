@@ -619,6 +619,45 @@ Content for retrieval test`);
     });
   });
 
+  describe('getPostBySlug', () => {
+    it('should return null for non-existent slug', async () => {
+      const result = await postEngine.getPostBySlug('no-such-slug');
+      expect(result).toBeNull();
+    });
+
+    it('should retrieve post by slug', async () => {
+      const created = await postEngine.createPost({
+        title: 'Slug Lookup Post',
+        content: 'Content for slug test',
+      });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: created.status,
+            content: 'Content for slug test',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.getPostBySlug(created.slug);
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('Slug Lookup Post');
+      expect(result?.content).toBe('Content for slug test');
+    });
+  });
+
   describe('updatePost', () => {
     it('should return null when updating non-existent post', async () => {
       const result = await postEngine.updatePost('non-existent-id', { title: 'New Title' });

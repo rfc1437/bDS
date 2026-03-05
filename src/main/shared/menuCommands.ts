@@ -31,6 +31,7 @@ export type AppMenuAction =
   | 'previewPost'
   | 'rebuildDatabase'
   | 'reindexText'
+  | 'rebuildEmbeddingIndex'
   | 'metadataDiff'
   | 'editMenu'
   | 'generateSitemap'
@@ -39,6 +40,7 @@ export type AppMenuAction =
   | 'uploadSite'
   | 'openDocumentation'
   | 'openApiDocumentation'
+  | 'findDuplicates'
   | 'about'
   | 'viewOnGitHub'
   | 'reportIssue';
@@ -127,12 +129,14 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: '', action: 'blog-separator-2', separator: true },
       { label: 'menu.item.rebuildDatabase', action: 'rebuildDatabase' },
       { label: 'menu.item.reindexText', action: 'reindexText' },
+      { label: 'menu.item.rebuildEmbeddingIndex', action: 'rebuildEmbeddingIndex' },
       { label: '', action: 'blog-separator-3', separator: true },
       { label: 'menu.item.metadataDiff', action: 'metadataDiff' },
       { label: 'menu.item.editMenu', action: 'editMenu' },
       { label: 'menu.item.generateSitemap', action: 'generateSitemap', accelerator: 'CmdOrCtrl+R' },
       { label: 'menu.item.regenerateCalendar', action: 'regenerateCalendar' },
       { label: 'menu.item.validateSite', action: 'validateSite', accelerator: 'CmdOrCtrl+Shift+L' },
+      { label: 'menu.item.findDuplicates', action: 'findDuplicates' },
       { label: '', action: 'blog-separator-4', separator: true },
       { label: 'menu.item.uploadSite', action: 'uploadSite', accelerator: 'CmdOrCtrl+Shift+U' },
     ],
@@ -167,11 +171,13 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   publishSelected: 'menu:publishSelected',
   rebuildDatabase: 'menu:rebuildDatabase',
   reindexText: 'menu:reindexText',
+  rebuildEmbeddingIndex: 'menu:rebuildEmbeddingIndex',
   metadataDiff: 'menu:metadataDiff',
   editMenu: 'menu:editMenu',
   generateSitemap: 'menu:generateSitemap',
   regenerateCalendar: 'menu:regenerateCalendar',
   validateSite: 'menu:validateSite',
+  findDuplicates: 'menu:findDuplicates',
   uploadSite: 'menu:uploadSite',
   openDocumentation: 'menu:openDocumentation',
   openApiDocumentation: 'menu:openApiDocumentation',

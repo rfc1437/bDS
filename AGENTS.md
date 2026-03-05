@@ -13,6 +13,15 @@ This document provides context and best practices for GitHub Copilot when workin
 - commit messages are short - one sentence. do not write long articles.
 - pull requests are more verbose and especially give reasoning for changes
 
+## Important facts
+
+- published posts don't have body in the database, the body content is only in the file
+- functionality you implement have to be tied to UI
+- UI you implement has to be tied to functionality
+- you must use drizzle to generate migrations and snapshots
+- we use an sqlite database. use sqlite semantics in snapshots and other artifacts
+- oh MacOS we use native menus and you have to hook them into the intercept for new menu items
+
 ---
 
 ## ⚠️ MANDATORY: Test-First Development

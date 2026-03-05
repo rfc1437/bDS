@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, blob, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 
 // Projects table - stores blog projects/websites
 export const projects = sqliteTable('projects', {
@@ -269,6 +269,26 @@ export const modelCatalogMeta = sqliteTable('ai_catalog_meta', {
   value: text('value').notNull(),
 });
 
+// Embedding keys table - maps USearch bigint labels to post IDs for semantic similarity
+export const embeddingKeys = sqliteTable('embedding_keys', {
+  label: integer('label').primaryKey(), // USearch bigint key (stored as number, cast to bigint at runtime)
+  postId: text('post_id').notNull(),
+  projectId: text('project_id').notNull(),
+  contentHash: text('content_hash').notNull(), // SHA-256 of title+content, for change detection
+  vector: blob('vector', { mode: 'buffer' }), // Raw Float32Array bytes (384 × 4 = 1536 bytes)
+});
+
+// Dismissed duplicate pairs - user has reviewed and dismissed these near-duplicates
+export const dismissedDuplicatePairs = sqliteTable('dismissed_duplicate_pairs', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  postIdA: text('post_id_a').notNull(),
+  postIdB: text('post_id_b').notNull(),
+  dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  pairIdx: uniqueIndex('dismissed_pairs_idx').on(table.projectId, table.postIdA, table.postIdB),
+}));
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -306,3 +326,7 @@ export type ModelCatalogModalityEntry = typeof modelCatalogModalities.$inferSele
 export type NewModelCatalogModalityEntry = typeof modelCatalogModalities.$inferInsert;
 export type ModelCatalogMetaEntry = typeof modelCatalogMeta.$inferSelect;
 export type NewModelCatalogMetaEntry = typeof modelCatalogMeta.$inferInsert;
+export type EmbeddingKey = typeof embeddingKeys.$inferSelect;
+export type NewEmbeddingKey = typeof embeddingKeys.$inferInsert;
+export type DismissedDuplicatePair = typeof dismissedDuplicatePairs.$inferSelect;
+export type NewDismissedDuplicatePair = typeof dismissedDuplicatePairs.$inferInsert;

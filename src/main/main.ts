@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, protocol
 import * as path from 'path';
 import * as fs from 'fs';
 import { getDatabase, initDatabase } from './database';
-import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './ipc';
+import { registerIpcHandlers, registerEventForwarding, registerChatHandlers, initializeChatHandlers, cleanupChatHandlers, startEmbeddingIndexTask, startRebuildEmbeddingIndexTask } from './ipc';
 import { media } from './database/schema';
 import { eq } from 'drizzle-orm';
 import { MediaEngine } from './engine/MediaEngine';
@@ -26,6 +26,7 @@ import { BlogmarkPythonWorkerRuntime } from './engine/BlogmarkPythonWorkerRuntim
 import { PythonMacroWorkerRuntime } from './engine/PythonMacroWorkerRuntime';
 import { AppApiAdapter } from './engine/AppApiAdapter';
 import { PublishApiAdapter } from './engine/PublishApiAdapter';
+import { EmbeddingEngine } from './engine/EmbeddingEngine';
 import { NoopNotifier } from './engine/CliNotifier';
 import { NotificationWatcher } from './engine/NotificationWatcher';
 import { setEngineBundle } from './engine/mainProcessPythonApiInvoker';
@@ -536,6 +537,9 @@ async function initializeActiveProjectContext(): Promise<void> {
     mediaEngine.setProjectContext?.(project.id, dataDir, dataDir);
     metaEngine.setProjectContext?.(project.id, dataDir);
 
+    const embeddingEngineInstance = bundle!.embeddingEngine;
+    await embeddingEngineInstance.setProjectContext(project.id);
+
     const templateEngine = bundle!.templateEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
     };
@@ -642,6 +646,11 @@ function createApplicationMenu(): Menu {
 
     if (action === 'reportIssue') {
       void shell.openExternal('https://github.com/rfc1437/bDS/issues');
+      return;
+    }
+
+    if (action === 'rebuildEmbeddingIndex') {
+      startRebuildEmbeddingIndexTask(bundle!);
       return;
     }
 
@@ -928,6 +937,10 @@ app.whenReady().then(async () => {
   const blogmarkPythonWorkerRuntime = new BlogmarkPythonWorkerRuntime();
   const pythonMacroWorkerRuntime = new PythonMacroWorkerRuntime();
   const blogmarkTransformService = new BlogmarkTransformService({ scriptEngine, metaEngine, blogmarkWorkerRuntime: blogmarkPythonWorkerRuntime });
+  const embeddingEngine = new EmbeddingEngine({
+    getIndexPath: (projectId: string) =>
+      path.join(userData, 'projects', projectId, 'embeddings.usearch'),
+  });
   const appApiAdapter = new AppApiAdapter(projectEngine);
   const publishApiAdapter = new PublishApiAdapter(projectEngine, publishEngine, taskManager);
   const mcpServer = new MCPServer({
@@ -961,6 +974,7 @@ app.whenReady().then(async () => {
     pythonMacroWorkerRuntime,
     publishApiAdapter,
     appApiAdapter,
+    embeddingEngine,
   };
   setEngineBundle(bundle);
 
@@ -1000,6 +1014,16 @@ app.whenReady().then(async () => {
   await activeProjectContextReady;
   appInitialized = true;
 
+  // If semantic similarity was already enabled when the app started, kick off indexing.
+  if (bundle) {
+    const startupBundle = bundle;
+    startupBundle.metaEngine.getProjectMetadata().then((metadata) => {
+      if (metadata?.semanticSimilarityEnabled === true) {
+        startEmbeddingIndexTask(startupBundle);
+      }
+    }).catch(() => {});
+  }
+
   const startupDeepLinks = extractBlogmarkDeepLinks(process.argv);
   for (const deepLink of startupDeepLinks) {
     enqueueBlogmarkDeepLink(deepLink);
@@ -1036,6 +1060,12 @@ app.on('before-quit', async () => {
     await bundle?.mcpServer.cleanup();
   } catch (error) {
     console.error('Failed to cleanup MCP server:', error);
+  }
+
+  try {
+    await bundle?.embeddingEngine.shutdown();
+  } catch (error) {
+    console.error('Failed to shutdown embedding engine:', error);
   }
 
   const db = getDatabase();

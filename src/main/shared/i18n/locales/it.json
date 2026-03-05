@@ -36,11 +36,13 @@
   "menu.item.previewPost": "Anteprima post",
   "menu.item.rebuildDatabase": "Ricostruisci Database from Files",
   "menu.item.reindexText": "Reindex Ricerca Text",
+  "menu.item.rebuildEmbeddingIndex": "Ricostruisci indice embeddings",
   "menu.item.metadataDiff": "Strumento diff metadati",
   "menu.item.editMenu": "Modifica menu blog",
   "menu.item.generateSitemap": "Renderizza sito",
   "menu.item.regenerateCalendar": "Rigenera calendario",
   "menu.item.validateSite": "Valida sito",
+  "menu.item.findDuplicates": "Trova post duplicati",
   "menu.item.uploadSite": "Carica sito",
   "menu.item.about": "Informazioni su Blogging Desktop Server",
   "menu.item.openDocumentation": "Apri documentazione",
@@ -80,5 +82,12 @@
   "render.month.11": "novembre",
   "render.month.12": "dicembre",
   "ai.imageAnalysis.system": "Generi metadati per immagini. Scrivi tutti i valori in italiano.\n\nRegole:\n- \"title\": titolo descrittivo breve (3-8 parole)\n- \"alt\": descrizione fattuale di ciò che è visibile (5-12 parole). Nessuna interpretazione. Nessun prefisso \"Immagine di\".\n- \"caption\": didascalia blog coinvolgente (5-20 parole)\n\nRispondi solo con JSON: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
-  "ai.imageAnalysis.user": "Analizza questa immagine. Rispondi con JSON in italiano."
+  "ai.imageAnalysis.user": "Analizza questa immagine. Rispondi con JSON in italiano.",
+  "task.embeddingIndex.name": "Indicizza i post per la similarità semantica",
+  "task.embeddingIndex.loading": "Caricamento modello…",
+  "task.embeddingIndex.indexing": "Indicizzazione: {indexed}/{total}",
+  "task.rebuildEmbeddingIndex.name": "Ricostruisci indice embeddings",
+  "task.rebuildEmbeddingIndex.clearing": "Svuotamento indice…",
+  "task.duplicateSearch.name": "Trova post duplicati",
+  "task.duplicateSearch.searching": "Controllo: {checked}/{total}"
 }

@@ -17,8 +17,10 @@ import { generateBlogmarkBookmarkletSource } from '../shared/blogmark';
 import { registerMetadataDiffHandlers } from './metadataDiffHandlers';
 import { registerBlogHandlers } from './blogHandlers';
 import { registerPublishHandlers } from './publishHandlers';
+import { registerEmbeddingHandlers } from './embeddingHandlers';
 import { isOfflineModeActive } from './chatHandlers';
 import type { EngineBundle } from '../engine/EngineBundle';
+import { resolveUiLanguageFromSystemLocale, translateMenu } from '../shared/i18n';
 
 /**
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
@@ -134,6 +136,82 @@ function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCP
     execPath: process.execPath,
     scriptPath,
   };
+}
+
+/**
+ * Start a background task that indexes all unindexed posts for semantic similarity.
+ * Shows progress in the TaskPopup so the user can see model loading and indexing progress.
+ */
+export function startEmbeddingIndexTask(bundle: EngineBundle): void {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  const tr = (key: string) => translateMenu(lang, key);
+
+  bundle.taskManager.runTask({
+    id: `embedding-index-${Date.now()}`,
+    name: tr('task.embeddingIndex.name'),
+    execute: async (onProgress) => {
+      onProgress(0, tr('task.embeddingIndex.loading'));
+      await bundle.embeddingEngine.indexUnindexedPosts((indexed, total) => {
+        const pct = total > 0 ? Math.round((indexed / total) * 100) : 0;
+        onProgress(pct, tr('task.embeddingIndex.indexing')
+          .replace('{indexed}', String(indexed))
+          .replace('{total}', String(total)));
+      });
+    },
+  }).catch(() => {});
+}
+
+/**
+ * Start a background task that fully rebuilds the embedding index.
+ * Clears existing embeddings and re-indexes all posts with progress reporting.
+ */
+export function startRebuildEmbeddingIndexTask(bundle: EngineBundle): void {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  const tr = (key: string) => translateMenu(lang, key);
+
+  bundle.taskManager.runTask({
+    id: `rebuild-embedding-index-${Date.now()}`,
+    name: tr('task.rebuildEmbeddingIndex.name'),
+    execute: async (onProgress) => {
+      onProgress(0, tr('task.rebuildEmbeddingIndex.clearing'));
+      await bundle.embeddingEngine.reindexAll((indexed, total) => {
+        const pct = total > 0 ? Math.round((indexed / total) * 100) : 0;
+        onProgress(pct, tr('task.embeddingIndex.indexing')
+          .replace('{indexed}', String(indexed))
+          .replace('{total}', String(total)));
+      });
+    },
+  }).catch(() => {});
+}
+
+/**
+ * Start a background task that searches for duplicate posts using semantic similarity.
+ * Once complete, the results are forwarded to the renderer via 'embeddings:duplicateSearchResult'.
+ */
+export function startDuplicateSearchTask(bundle: EngineBundle, threshold = 0.92): void {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  const tr = (key: string) => translateMenu(lang, key);
+
+  bundle.taskManager.runTask({
+    id: `duplicate-search-${Date.now()}`,
+    name: tr('task.duplicateSearch.name'),
+    execute: async (onProgress) => {
+      onProgress(0, tr('task.duplicateSearch.searching').replace('{checked}', '0').replace('{total}', '…'));
+      const pairs = await bundle.embeddingEngine.findDuplicates(threshold, (checked, total) => {
+        const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
+        onProgress(pct, tr('task.duplicateSearch.searching')
+          .replace('{checked}', String(checked))
+          .replace('{total}', String(total)));
+      });
+      onProgress(100, tr('task.duplicateSearch.name'));
+      return pairs;
+    },
+  }).then((pairs) => {
+    ipcMain.emit('forward-to-renderer', 'embeddings:duplicateSearchResult', pairs);
+  }).catch(() => {});
 }
 
 export function registerIpcHandlers(bundle: EngineBundle): void {
@@ -452,6 +530,11 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   safeHandle('posts:get', async (_, id: string) => {
     const engine = bundle.postEngine;
     return engine.getPost(id);
+  });
+
+  safeHandle('posts:getBySlug', async (_, slug: string) => {
+    const engine = bundle.postEngine;
+    return engine.getPostBySlug(slug);
   });
 
   safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean }) => {
@@ -1065,6 +1148,11 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
       return;
     }
 
+    if (typedAction === 'rebuildEmbeddingIndex') {
+      startRebuildEmbeddingIndexTask(bundle);
+      return;
+    }
+
     const handledByWebContents = runWebContentsMenuAction((event as any)?.sender, typedAction);
     if (handledByWebContents) {
       return;
@@ -1189,10 +1277,15 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }>; semanticSimilarityEnabled?: boolean }) => {
     const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
+    const previousMetadata = await engine.getProjectMetadata();
+    const wasEnabled = previousMetadata?.semanticSimilarityEnabled === true;
     await engine.updateProjectMetadata(updates);
+    if (updates.semanticSimilarityEnabled === true && !wasEnabled) {
+      startEmbeddingIndexTask(bundle);
+    }
     return engine.getProjectMetadata();
   });
 
@@ -1612,6 +1705,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   registerMetadataDiffHandlers(safeHandle, bundle);
   registerBlogHandlers(safeHandle, bundle);
   registerPublishHandlers(safeHandle, bundle);
+  registerEmbeddingHandlers(safeHandle, bundle);
 
   // ============ MCP Config Handlers ============
 
@@ -1661,6 +1755,37 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   const metaEngine = bundle.metaEngine;
   const tagEngine = bundle.tagEngine;
   const postMediaEngine = bundle.postMediaEngine;
+  const embeddingEngine = bundle.embeddingEngine;
+
+  // Wire PostEngine events → EmbeddingEngine (opt-in via semanticSimilarityEnabled)
+  const ifSemanticEnabled = (fn: () => void): void => {
+    metaEngine.getProjectMetadata().then((metadata) => {
+      if (metadata?.semanticSimilarityEnabled === true) {
+        fn();
+      }
+    }).catch(() => {});
+  };
+
+  postEngine.on('postCreated', (post: { id: string; title: string; content: string }) => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.embedPost(post.id, post.title, post.content ?? '').catch(() => {});
+    });
+  });
+  postEngine.on('postUpdated', (post: { id: string; title: string; content: string }) => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.embedPost(post.id, post.title, post.content ?? '').catch(() => {});
+    });
+  });
+  postEngine.on('postDeleted', (id: string) => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.removePost(id).catch(() => {});
+    });
+  });
+  postEngine.on('databaseRebuilt', () => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.reindexAll().catch(() => {});
+    });
+  });
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -1673,6 +1798,11 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   projectEngine.on('projectUpdated', forwardEvent('project:updated'));
   projectEngine.on('projectDeleted', forwardEvent('project:deleted'));
   projectEngine.on('activeProjectChanged', forwardEvent('project:activeChanged'));
+  projectEngine.on('activeProjectChanged', (project: { id: string } | null) => {
+    if (project?.id) {
+      embeddingEngine.setProjectContext(project.id).catch(() => {});
+    }
+  });
 
   postEngine.on('postCreated', forwardEvent('post:created'));
   postEngine.on('postUpdated', forwardEvent('post:updated'));

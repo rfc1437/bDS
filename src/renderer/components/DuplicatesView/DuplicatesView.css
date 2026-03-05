@@ -1,0 +1,190 @@
+.duplicates-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  height: 100%;
+  overflow: auto;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+.duplicates-view-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+}
+
+.duplicates-view-header p {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.875rem;
+}
+
+.duplicates-view-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.duplicates-view-refresh {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.duplicates-view-refresh:hover:not(:disabled) {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.duplicates-view-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.duplicates-view-status {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.875rem;
+}
+
+.duplicates-view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.duplicate-pair {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+}
+
+.duplicate-pair-posts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.duplicate-pair-post {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--vscode-textLink-foreground);
+  font-size: 0.875rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.duplicate-pair-post:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.duplicate-pair-separator {
+  font-size: 0.75rem;
+  color: var(--vscode-descriptionForeground);
+  padding-left: 2px;
+}
+
+.duplicate-pair-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.duplicate-pair-score {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--vscode-charts-orange, #f8ae4a);
+  white-space: nowrap;
+}
+
+.duplicate-pair-score--exact {
+  color: var(--vscode-errorForeground, #f44747);
+}
+
+.duplicate-pair--exact {
+  border-color: var(--vscode-errorForeground, #f44747);
+}
+
+.duplicate-pair-dismiss {
+  background: none;
+  border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+.duplicate-pair-dismiss:hover {
+  background-color: var(--vscode-list-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.duplicates-view-not-enabled {
+  padding: 32px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+}
+
+.duplicates-view-count {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--vscode-descriptionForeground);
+}
+
+.duplicates-view-show-more {
+  align-self: center;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  padding: 6px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.duplicates-view-show-more:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.duplicates-view-dismiss-checked {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.duplicates-view-dismiss-checked:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.duplicates-view-dismiss-checked:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.duplicate-pair-checkbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--vscode-focusBorder);
+}

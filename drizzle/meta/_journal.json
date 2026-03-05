@@ -76,7 +76,21 @@
       "idx": 10,
       "version": "6",
       "when": 1772462693094,
-      "tag": "0011_loving_alex_wilder",
+      "tag": "0010_loving_alex_wilder",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1772711489237,
+      "tag": "0011_embedding_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1772738580546,
+      "tag": "0012_flimsy_meteorite",
       "breakpoints": true
     }
   ]

@@ -36,11 +36,13 @@
   "menu.item.previewPost": "Beitragsvorschau",
   "menu.item.rebuildDatabase": "Datenbank aus Dateien neu aufbauen",
   "menu.item.reindexText": "Suchtext neu indizieren",
+  "menu.item.rebuildEmbeddingIndex": "Embedding-Index neu aufbauen",
   "menu.item.metadataDiff": "Metadaten-Diff-Werkzeug",
   "menu.item.editMenu": "Blog-Menü bearbeiten",
   "menu.item.generateSitemap": "Site rendern",
   "menu.item.regenerateCalendar": "Kalender neu erzeugen",
   "menu.item.validateSite": "Website validieren",
+  "menu.item.findDuplicates": "Doppelte Beiträge finden",
   "menu.item.uploadSite": "Website hochladen",
   "menu.item.about": "Über Blogging Desktop Server",
   "menu.item.openDocumentation": "Dokumentation öffnen",
@@ -80,5 +82,12 @@
   "render.month.11": "Nov.",
   "render.month.12": "Dezember",
   "ai.imageAnalysis.system": "Du erzeugst Bild-Metadaten. Schreibe alle Werte auf Deutsch.\n\nRegeln:\n- \"title\": kurzer beschreibender Titel (3-8 Wörter)\n- \"alt\": sachliche Beschreibung des Sichtbaren (5-12 Wörter). Keine Interpretationen. Kein Präfix \"Bild von\".\n- \"caption\": ansprechende Blog-Bildunterschrift (5-20 Wörter)\n\nAntworte ausschließlich mit JSON: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
-  "ai.imageAnalysis.user": "Analysiere dieses Bild. Antworte mit JSON auf Deutsch."
+  "ai.imageAnalysis.user": "Analysiere dieses Bild. Antworte mit JSON auf Deutsch.",
+  "task.embeddingIndex.name": "Beiträge für semantische Ähnlichkeit indexieren",
+  "task.embeddingIndex.loading": "Modell wird geladen…",
+  "task.embeddingIndex.indexing": "Indexierung: {indexed}/{total}",
+  "task.rebuildEmbeddingIndex.name": "Embedding-Index neu aufbauen",
+  "task.rebuildEmbeddingIndex.clearing": "Index wird geleert…",
+  "task.duplicateSearch.name": "Doppelte Beiträge finden",
+  "task.duplicateSearch.searching": "Prüfe: {checked}/{total}"
 }

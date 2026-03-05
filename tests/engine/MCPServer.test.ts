@@ -7,6 +7,7 @@ function createMockPostEngine() {
   return {
     getAllPosts: vi.fn().mockResolvedValue({ items: [], hasMore: false, total: 0 }),
     getPost: vi.fn().mockResolvedValue(null),
+    getPostBySlug: vi.fn().mockResolvedValue(null),
     searchPosts: vi.fn().mockResolvedValue([]),
     searchPostsFiltered: vi.fn().mockResolvedValue({ posts: [], total: 0 }),
     createPost: vi.fn().mockResolvedValue({
@@ -204,6 +205,11 @@ describe('MCPServer', () => {
     it('registers discard_proposal tool', () => {
       const mcpServer = server.createMcpServer();
       expect(hasRegistered(mcpServer, '_registeredTools', 'discard_proposal')).toBe(true);
+    });
+
+    it('registers read_post_by_slug tool', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredTools', 'read_post_by_slug')).toBe(true);
     });
   });
 
@@ -1164,6 +1170,33 @@ describe('MCPServer', () => {
       const tool = getTool(mcpServer, 'search_posts');
       const result = await tool.handler({ category: 'tech' }, {}) as { content: Array<{ text: string }> };
       expect(result.content).toHaveLength(1);
+    });
+
+    // ── read_post_by_slug tool ───────────────────────────────────────
+
+    it('read_post_by_slug returns post with backlinks when found', async () => {
+      const post = { id: 'p1', title: 'Found', slug: 'found-post', content: 'body', status: 'published', tags: [], categories: [], createdAt: new Date(), updatedAt: new Date() };
+      mockPostEngine.getPostBySlug.mockResolvedValue(post);
+      mockPostEngine.getLinkedBy.mockResolvedValue([{ id: 'px', title: 'Ref', slug: 'ref' }]);
+      mockPostEngine.getLinksTo.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'read_post_by_slug');
+      const result = await tool.handler({ slug: 'found-post' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.post.id).toBe('p1');
+      expect(parsed.post.slug).toBe('found-post');
+      expect(parsed.post.backlinks).toEqual([{ id: 'px', title: 'Ref', slug: 'ref' }]);
+      expect(mockPostEngine.getPostBySlug).toHaveBeenCalledWith('found-post');
+    });
+
+    it('read_post_by_slug returns error for nonexistent slug', async () => {
+      mockPostEngine.getPostBySlug.mockResolvedValue(null);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'read_post_by_slug');
+      const result = await tool.handler({ slug: 'no-such-slug' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('not found');
     });
   });
 

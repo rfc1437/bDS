@@ -98,6 +98,7 @@ export const ENGINE_MAP: Record<string, EngineGetter> = {
 // Map API method names to engine method names where they differ
 const METHOD_NAME_MAP: Record<string, string> = {
   'posts.get': 'getPost',
+  'posts.getBySlug': 'getPostBySlug',
   'posts.create': 'createPost',
   'posts.update': 'updatePost',
   'posts.delete': 'deletePost',
