@@ -39,6 +39,7 @@ export type AppMenuAction =
   | 'uploadSite'
   | 'openDocumentation'
   | 'openApiDocumentation'
+  | 'findDuplicates'
   | 'about'
   | 'viewOnGitHub'
   | 'reportIssue';
@@ -133,6 +134,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'menu.item.generateSitemap', action: 'generateSitemap', accelerator: 'CmdOrCtrl+R' },
       { label: 'menu.item.regenerateCalendar', action: 'regenerateCalendar' },
       { label: 'menu.item.validateSite', action: 'validateSite', accelerator: 'CmdOrCtrl+Shift+L' },
+      { label: 'menu.item.findDuplicates', action: 'findDuplicates' },
       { label: '', action: 'blog-separator-4', separator: true },
       { label: 'menu.item.uploadSite', action: 'uploadSite', accelerator: 'CmdOrCtrl+Shift+U' },
     ],
@@ -172,6 +174,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   generateSitemap: 'menu:generateSitemap',
   regenerateCalendar: 'menu:regenerateCalendar',
   validateSite: 'menu:validateSite',
+  findDuplicates: 'menu:findDuplicates',
   uploadSite: 'menu:uploadSite',
   openDocumentation: 'menu:openDocumentation',
   openApiDocumentation: 'menu:openApiDocumentation',

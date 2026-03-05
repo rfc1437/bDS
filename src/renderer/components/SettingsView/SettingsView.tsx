@@ -226,6 +226,7 @@ export const SettingsView: React.FC = () => {
   const [projectMaxPostsPerPage, setProjectMaxPostsPerPage] = useState(50);
   const [projectBlogmarkCategory, setProjectBlogmarkCategory] = useState('article');
   const [projectPythonRuntimeMode, setProjectPythonRuntimeMode] = useState<'webworker' | 'main-thread'>('webworker');
+  const [semanticSimilarityEnabled, setSemanticSimilarityEnabled] = useState(false);
 
   // Post categories management
   const [postCategories, setPostCategories] = useState<string[]>(DEFAULT_POST_CATEGORIES);
@@ -313,6 +314,9 @@ export const SettingsView: React.FC = () => {
 
         const incomingPythonRuntimeMode = (metadata as { pythonRuntimeMode?: unknown } | null)?.pythonRuntimeMode;
         setProjectPythonRuntimeMode(incomingPythonRuntimeMode === 'main-thread' ? 'main-thread' : 'webworker');
+
+        const incomingSemanticSimilarity = (metadata as { semanticSimilarityEnabled?: unknown } | null)?.semanticSimilarityEnabled;
+        setSemanticSimilarityEnabled(incomingSemanticSimilarity === true);
 
         const incomingCategoryMetadata = (metadata as any)?.categoryMetadata as Record<string, CategoryMetadata> | undefined;
         const incomingLegacyCategorySettings = (metadata as any)?.categorySettings as Record<string, { renderInLists: boolean; showTitle: boolean }> | undefined;
@@ -545,6 +549,7 @@ export const SettingsView: React.FC = () => {
           maxPostsPerPage: Math.min(500, Math.max(1, Math.floor(projectMaxPostsPerPage || 50))),
           blogmarkCategory: normalizeBlogmarkCategory(projectBlogmarkCategory) || undefined,
           pythonRuntimeMode: projectPythonRuntimeMode,
+          semanticSimilarityEnabled,
           categoryMetadata,
         });
       }
@@ -592,7 +597,7 @@ export const SettingsView: React.FC = () => {
   const editorKeywords = ['editor', 'mode', 'wysiwyg', 'markdown', 'preview', 'visual'];
   const contentKeywords = ['content', 'categories', 'post', 'article', 'picture', 'aside', 'page'];
   const aiKeywords = ['ai', 'assistant', 'chat', 'model', 'prompt', 'system', 'api', 'key', 'claude', 'gpt', 'opencode', 'ollama', 'lmstudio', 'lm studio', 'local'];
-  const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution'];
+  const technologyKeywords = ['technology', 'python', 'runtime', 'worker', 'webworker', 'main thread', 'execution', 'semantic', 'similarity', 'embedding', 'ai', 'search', 'duplicate'];
   const publishingKeywords = ['publishing', 'ssh', 'deploy', 'server', 'host', 'upload', 'scp', 'rsync'];
   const dataKeywords = ['data', 'database', 'rebuild', 'maintenance', 'posts', 'media', 'scripts', 'links', 'folder', 'filesystem'];
   const mcpKeywords = ['mcp', 'server', 'agent', 'claude', 'copilot', 'gemini', 'opencode', 'model context protocol', 'coding', 'configuration'];
@@ -1822,6 +1827,23 @@ export const SettingsView: React.FC = () => {
           <option value="webworker">{t('settings.technology.pythonRuntimeMode.webworker')}</option>
           <option value="main-thread">{t('settings.technology.pythonRuntimeMode.mainThread')}</option>
         </select>
+      </SettingRow>
+
+      <SettingRow
+        id="semantic-similarity-enabled"
+        label={t('settings.technology.semanticSimilarityLabel')}
+        description={t('settings.technology.semanticSimilarityDescription')}
+      >
+        <input
+          id="semantic-similarity-enabled"
+          type="checkbox"
+          checked={semanticSimilarityEnabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setSemanticSimilarityEnabled(checked);
+            window.electronAPI?.meta.updateProjectMetadata({ semanticSimilarityEnabled: checked }).catch(() => {});
+          }}
+        />
       </SettingRow>
     </SettingSection>
   );

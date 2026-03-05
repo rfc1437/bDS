@@ -1,2 +1,2 @@
-export { registerIpcHandlers, registerEventForwarding } from './handlers';
+export { registerIpcHandlers, registerEventForwarding, startEmbeddingIndexTask } from './handlers';
 export { registerChatHandlers, initializeChatHandlers, cleanupChatHandlers } from './chatHandlers';

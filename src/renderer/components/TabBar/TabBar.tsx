@@ -87,6 +87,10 @@ const getTabTitle = (
     return tr('siteValidation.tabTitle');
   }
 
+  if (tab.type === 'find-duplicates') {
+    return tr('duplicatesView.tabTitle');
+  }
+
   if (tab.type === 'scripts') {
     return scriptTitles.get(tab.id) || tr('tabBar.scripts');
   }
@@ -178,6 +182,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 8 1.5zm0 1a5.5 5.5 0 0 1 4.39 8.82l-.88-.88a.5.5 0 0 0-.7.7l.8.8A5.5 5.5 0 1 1 8 2.5zm2.35 3.15L7 9 5.65 7.65a.5.5 0 1 0-.7.7l1.7 1.7a.5.5 0 0 0 .7 0l3.7-3.7a.5.5 0 1 0-.7-.7z"/>
+        </svg>
+      );
+    case 'find-duplicates':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5V5H9V2.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7H11v2h2.5A1.5 1.5 0 0 1 15 10.5v3A1.5 1.5 0 0 1 13.5 15h-3A1.5 1.5 0 0 1 9 13.5V11H7v2.5A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3A1.5 1.5 0 0 1 2.5 9H5V7H2.5A1.5 1.5 0 0 1 1 5.5v-3zM2 2.5v3a.5.5 0 0 0 .5.5H5V2H2.5a.5.5 0 0 0-.5.5zm8 0V6h2.5a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5zM2 10.5v3a.5.5 0 0 0 .5.5H5v-4H2.5a.5.5 0 0 0-.5.5zm8 3v-4h-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5H13.5a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5H11z"/>
         </svg>
       );
     case 'scripts':

@@ -450,6 +450,36 @@ describe('MetaEngine', () => {
       }));
     });
 
+    it('should preserve semanticSimilarityEnabled when updating from null metadata', async () => {
+      // projectMetadata is null (fresh engine, no syncOnStartup called)
+      // Simulates the case where setProjectContext was just called (e.g., dataPath change)
+      expect(await metaEngine.getProjectMetadata()).toBeNull();
+
+      await metaEngine.updateProjectMetadata({ name: 'Blog', semanticSimilarityEnabled: true });
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.semanticSimilarityEnabled).toBe(true);
+    });
+
+    it('should preserve semanticSimilarityEnabled when merging into existing metadata', async () => {
+      await metaEngine.setProjectMetadata({ name: 'Blog', semanticSimilarityEnabled: true });
+
+      // Update an unrelated field — should not lose semanticSimilarityEnabled
+      await metaEngine.updateProjectMetadata({ name: 'Renamed Blog' });
+
+      const metadata = await metaEngine.getProjectMetadata();
+      expect(metadata?.semanticSimilarityEnabled).toBe(true);
+    });
+
+    it('should persist semanticSimilarityEnabled to project.json', async () => {
+      await metaEngine.updateProjectMetadata({ name: 'Blog', semanticSimilarityEnabled: true });
+
+      const metaDir = metaEngine.getMetaDir();
+      const projectPath = normalizePath(`${metaDir}/project.json`);
+      const parsed = JSON.parse(mockFiles.get(projectPath)!);
+      expect(parsed.semanticSimilarityEnabled).toBe(true);
+    });
+
     it('should update project name only', async () => {
       await metaEngine.setProjectMetadata({
         name: 'Original Name',

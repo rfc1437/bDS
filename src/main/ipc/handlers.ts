@@ -17,8 +17,10 @@ import { generateBlogmarkBookmarkletSource } from '../shared/blogmark';
 import { registerMetadataDiffHandlers } from './metadataDiffHandlers';
 import { registerBlogHandlers } from './blogHandlers';
 import { registerPublishHandlers } from './publishHandlers';
+import { registerEmbeddingHandlers } from './embeddingHandlers';
 import { isOfflineModeActive } from './chatHandlers';
 import type { EngineBundle } from '../engine/EngineBundle';
+import { resolveUiLanguageFromSystemLocale, translateMenu } from '../shared/i18n';
 
 /**
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
@@ -134,6 +136,30 @@ function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCP
     execPath: process.execPath,
     scriptPath,
   };
+}
+
+/**
+ * Start a background task that indexes all unindexed posts for semantic similarity.
+ * Shows progress in the TaskPopup so the user can see model loading and indexing progress.
+ */
+export function startEmbeddingIndexTask(bundle: EngineBundle): void {
+  const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';
+  const lang = resolveUiLanguageFromSystemLocale(systemLocale);
+  const tr = (key: string) => translateMenu(lang, key);
+
+  bundle.taskManager.runTask({
+    id: `embedding-index-${Date.now()}`,
+    name: tr('task.embeddingIndex.name'),
+    execute: async (onProgress) => {
+      onProgress(0, tr('task.embeddingIndex.loading'));
+      await bundle.embeddingEngine.indexUnindexedPosts((indexed, total) => {
+        const pct = total > 0 ? Math.round((indexed / total) * 100) : 0;
+        onProgress(pct, tr('task.embeddingIndex.indexing')
+          .replace('{indexed}', String(indexed))
+          .replace('{total}', String(total)));
+      });
+    },
+  }).catch(() => {});
 }
 
 export function registerIpcHandlers(bundle: EngineBundle): void {
@@ -1189,10 +1215,15 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }> }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }>; semanticSimilarityEnabled?: boolean }) => {
     const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
+    const previousMetadata = await engine.getProjectMetadata();
+    const wasEnabled = previousMetadata?.semanticSimilarityEnabled === true;
     await engine.updateProjectMetadata(updates);
+    if (updates.semanticSimilarityEnabled === true && !wasEnabled) {
+      startEmbeddingIndexTask(bundle);
+    }
     return engine.getProjectMetadata();
   });
 
@@ -1612,6 +1643,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   registerMetadataDiffHandlers(safeHandle, bundle);
   registerBlogHandlers(safeHandle, bundle);
   registerPublishHandlers(safeHandle, bundle);
+  registerEmbeddingHandlers(safeHandle, bundle);
 
   // ============ MCP Config Handlers ============
 
@@ -1661,6 +1693,37 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   const metaEngine = bundle.metaEngine;
   const tagEngine = bundle.tagEngine;
   const postMediaEngine = bundle.postMediaEngine;
+  const embeddingEngine = bundle.embeddingEngine;
+
+  // Wire PostEngine events → EmbeddingEngine (opt-in via semanticSimilarityEnabled)
+  const ifSemanticEnabled = (fn: () => void): void => {
+    metaEngine.getProjectMetadata().then((metadata) => {
+      if (metadata?.semanticSimilarityEnabled === true) {
+        fn();
+      }
+    }).catch(() => {});
+  };
+
+  postEngine.on('postCreated', (post: { id: string; title: string; content: string }) => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.embedPost(post.id, post.title, post.content ?? '').catch(() => {});
+    });
+  });
+  postEngine.on('postUpdated', (post: { id: string; title: string; content: string }) => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.embedPost(post.id, post.title, post.content ?? '').catch(() => {});
+    });
+  });
+  postEngine.on('postDeleted', (id: string) => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.removePost(id).catch(() => {});
+    });
+  });
+  postEngine.on('databaseRebuilt', () => {
+    ifSemanticEnabled(() => {
+      embeddingEngine.reindexAll().catch(() => {});
+    });
+  });
 
   const forwardEvent = (eventName: string) => {
     return (...args: unknown[]) => {
@@ -1673,6 +1736,11 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   projectEngine.on('projectUpdated', forwardEvent('project:updated'));
   projectEngine.on('projectDeleted', forwardEvent('project:deleted'));
   projectEngine.on('activeProjectChanged', forwardEvent('project:activeChanged'));
+  projectEngine.on('activeProjectChanged', (project: { id: string } | null) => {
+    if (project?.id) {
+      embeddingEngine.setProjectContext(project.id).catch(() => {});
+    }
+  });
 
   postEngine.on('postCreated', forwardEvent('post:created'));
   postEngine.on('postUpdated', forwardEvent('post:updated'));

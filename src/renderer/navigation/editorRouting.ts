@@ -17,7 +17,8 @@ export type EditorRoute =
   | 'api-documentation'
   | 'site-validation'
   | 'scripts'
-  | 'templates';
+  | 'templates'
+  | 'find-duplicates';
 
 export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'dashboard'>> = {
   post: 'post',
@@ -35,6 +36,7 @@ export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'da
   'site-validation': 'site-validation',
   scripts: 'scripts',
   templates: 'templates',
+  'find-duplicates': 'find-duplicates',
 };
 
 export interface EditorRouteResolution {

@@ -23,6 +23,7 @@ describe('editorRouting', () => {
       'site-validation': 'site-validation',
       scripts: 'scripts',
       templates: 'templates',
+      'find-duplicates': 'find-duplicates',
     });
   });
 

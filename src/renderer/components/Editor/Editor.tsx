@@ -21,6 +21,7 @@ import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { SiteValidationView } from '../SiteValidationView';
 import { ScriptsView } from '../ScriptsView/ScriptsView';
 import { TemplatesView } from '../TemplatesView/TemplatesView';
+import { DuplicatesView } from '../DuplicatesView/DuplicatesView';
 import { AutoSaveManager, getContrastColor, loadTagColorMap } from '../../utils';
 import { InsertModal } from '../InsertModal';
 import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
@@ -794,6 +795,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 value={tags}
                 onChange={setTags}
                 placeholder={tr('editor.placeholder.tags')}
+                postId={postId}
               />
             </div>
             <div className="editor-field">
@@ -1024,6 +1026,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           onClose={() => setShowPostSearch(false)}
           currentPostTags={tags}
           currentPostCategories={selectedCategories}
+          currentPostId={postId}
         />
       )}
       
@@ -1903,6 +1906,7 @@ export const Editor: React.FC = () => {
       />
     ),
     'site-validation': () => <SiteValidationView />,
+    'find-duplicates': () => <DuplicatesView />,
     scripts: () => <ScriptsView scriptId={editorRoute.tabId} />,
     templates: () => <TemplatesView templateId={editorRoute.tabId} />,
     post: () => (editorRoute.tabId ? <PostEditor key={editorRoute.tabId} postId={editorRoute.tabId} /> : <Dashboard />),

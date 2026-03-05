@@ -22,6 +22,8 @@ interface TagInputProps {
   disabled?: boolean;
   /** Input mode (tags or categories) */
   mode?: 'tag' | 'category';
+  /** Post ID for AI-based tag suggestions (semantic similarity) */
+  postId?: string;
 }
 
 export const TagInput: React.FC<TagInputProps> = ({
@@ -30,6 +32,7 @@ export const TagInput: React.FC<TagInputProps> = ({
   placeholder = 'Add tags...',
   disabled = false,
   mode = 'tag',
+  postId,
 }) => {
   const { t } = useI18n();
   const [inputValue, setInputValue] = useState('');
@@ -38,7 +41,8 @@ export const TagInput: React.FC<TagInputProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isCreating, setIsCreating] = useState(false);
-  
+  const [aiSuggestedTags, setAiSuggestedTags] = useState<string[]>([]);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -91,6 +95,26 @@ export const TagInput: React.FC<TagInputProps> = ({
     setSuggestions(filtered);
     setSelectedIndex(-1);
   }, [inputValue, allTags, value]);
+
+  // Load AI tag suggestions when focused on an empty input (mode=tag only)
+  useEffect(() => {
+    if (mode !== 'tag' || !postId || inputValue.trim()) {
+      setAiSuggestedTags([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const suggestions = await window.electronAPI.embeddings.suggestTags(postId, value);
+        if (!cancelled) {
+          setAiSuggestedTags(suggestions.map(s => s.name));
+        }
+      } catch {
+        if (!cancelled) setAiSuggestedTags([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [postId, mode, value, inputValue]);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -273,8 +297,25 @@ export const TagInput: React.FC<TagInputProps> = ({
       </div>
 
       {/* Suggestions dropdown */}
-      {showSuggestions && (suggestions.length > 0 || showCreateOption) && (
+      {showSuggestions && (suggestions.length > 0 || showCreateOption || aiSuggestedTags.length > 0) && (
         <div className="tag-suggestions">
+          {/* AI-suggested tags shown when input is empty */}
+          {!inputValue.trim() && aiSuggestedTags.length > 0 && (
+            <>
+              <div className="tag-suggestion-section-label">{t('tagInput.aiSuggestedLabel')}</div>
+              {aiSuggestedTags.map((tagName) => (
+                <button
+                  key={`ai-${tagName}`}
+                  type="button"
+                  className="tag-suggestion ai-suggested"
+                  onClick={() => addTag(tagName)}
+                >
+                  <span className="tag-suggestion-name">{tagName}</span>
+                </button>
+              ))}
+              {suggestions.length > 0 && <div className="tag-suggestion-section-label">{t('tagInput.allTagsLabel')}</div>}
+            </>
+          )}
           {suggestions.map((tag, index) => {
             const hasColor = !!tag.color;
             const style: React.CSSProperties = hasColor

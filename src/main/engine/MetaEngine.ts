@@ -28,6 +28,7 @@ export interface ProjectMetadata {
   picoTheme?: PicoThemeName; // Selected Pico CSS theme for preview/rendering
   categoryMetadata?: Record<string, CategoryMetadata>; // Per-category metadata for UI/rendering
   categorySettings?: Record<string, CategoryRenderSettings>; // Per-category list rendering preferences
+  semanticSimilarityEnabled?: boolean; // Enable local ONNX embedding-based semantic similarity
 }
 
 export interface CategoryRenderSettings {
@@ -347,6 +348,7 @@ export class MetaEngine extends EventEmitter {
         pythonRuntimeMode: normalizedUpdates.pythonRuntimeMode,
         picoTheme: normalizedUpdates.picoTheme,
         categoryMetadata: normalizedUpdates.categoryMetadata,
+        semanticSimilarityEnabled: normalizedUpdates.semanticSimilarityEnabled,
       });
     } else {
       this.projectMetadata = normalizeProjectMetadata({

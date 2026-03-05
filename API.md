@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.11.0
+Contract version: 1.12.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -29,6 +29,7 @@ project = await bds.meta.get_project_metadata()
 - [chat](#chat)
 - [sync](#sync)
 - [publish](#publish)
+- [embeddings](#embeddings)
 - [Data Structures](#data-structures)
 
 ## projects
@@ -2946,7 +2947,8 @@ result = await bds.meta.sync_on_startup()
     'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
-    'categorySettings': {}
+    'categorySettings': {},
+    'semanticSimilarityEnabled': False
 }
 ]
 ```
@@ -2988,7 +2990,8 @@ None  # or
     'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
-    'categorySettings': {}
+    'categorySettings': {},
+    'semanticSimilarityEnabled': False
 }
 ```
 
@@ -3029,7 +3032,8 @@ None  # or
     'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
-    'categorySettings': {}
+    'categorySettings': {},
+    'semanticSimilarityEnabled': False
 }
 ```
 
@@ -3070,7 +3074,8 @@ None  # or
     'pythonRuntimeMode': 'webworker',
     'picoTheme': 'value',
     'categoryMetadata': {},
-    'categorySettings': {}
+    'categorySettings': {},
+    'semanticSimilarityEnabled': False
 }
 ```
 
@@ -3851,6 +3856,191 @@ result = await bds.publish.upload_site(credentials={})
 
 [↑ Back to Table of contents](#table-of-contents)
 
+## embeddings
+
+**Module APIs**
+
+- [embeddings.findSimilar](#embeddingsfindsimilar)
+- [embeddings.getProgress](#embeddingsgetprogress)
+- [embeddings.suggestTags](#embeddingssuggesttags)
+- [embeddings.findDuplicates](#embeddingsfindduplicates)
+- [embeddings.dismissPair](#embeddingsdismisspair)
+- [embeddings.indexUnindexedPosts](#embeddingsindexunindexedposts)
+
+### embeddings.findSimilar
+
+Find posts semantically similar to the given post. Requires semantic similarity to be enabled in project settings.
+
+**Parameters**
+
+- postId (str, required)
+- k (int | float, optional)
+
+**Response specification**
+
+- Return type: `SimilarPost[]`
+- Data structures: `SimilarPost`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.find_similar(post_id='post-1')
+```
+
+**Example response**
+
+```python
+[
+{
+    'postId': 'value',
+    'similarity': 0
+}
+]
+```
+
+### embeddings.getProgress
+
+Get the embedding indexing progress for the active project.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `{ indexed: number; total: number }`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.get_progress()
+```
+
+**Example response**
+
+```python
+{}
+```
+
+### embeddings.suggestTags
+
+Suggest tags for a post based on tags used by semantically similar posts.
+
+**Parameters**
+
+- postId (str, required)
+- excludeTags (list, required)
+
+**Response specification**
+
+- Return type: `TagSuggestion[]`
+- Data structures: `TagSuggestion`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.suggest_tags(post_id='post-1', exclude_tags=[])
+```
+
+**Example response**
+
+```python
+[
+{
+    'name': 'value',
+    'score': 0
+}
+]
+```
+
+### embeddings.findDuplicates
+
+Find post pairs with high content similarity (potential duplicates). Threshold is a similarity value from 0.0 to 1.0 (default 0.85).
+
+**Parameters**
+
+- threshold (int | float, optional)
+
+**Response specification**
+
+- Return type: `DuplicatePair[]`
+- Data structures: `DuplicatePair`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.find_duplicates()
+```
+
+**Example response**
+
+```python
+[
+{
+    'postA': 'value',
+    'postB': 'value',
+    'similarity': 0
+}
+]
+```
+
+### embeddings.dismissPair
+
+Dismiss a duplicate pair so it no longer appears in results.
+
+**Parameters**
+
+- postIdA (str, required)
+- postIdB (str, required)
+
+**Response specification**
+
+- Return type: `void`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.dismiss_pair(post_id_a='post_id_a-1', post_id_b='post_id_b-1')
+```
+
+**Example response**
+
+```python
+None
+```
+
+### embeddings.indexUnindexedPosts
+
+Trigger background indexing of all posts not yet embedded.
+
+**Parameters**
+
+- None
+
+**Response specification**
+
+- Return type: `void`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.embeddings.index_unindexed_posts()
+```
+
+**Example response**
+
+```python
+None
+```
+
+[↑ Back to Table of contents](#table-of-contents)
+
 ## Data Structures
 
 Shared structures referenced by response types are defined once here.
@@ -4021,6 +4211,7 @@ Extended project metadata from project settings.
 - picoTheme (`string`, optional): Preferred Pico theme token.
 - categoryMetadata (`object`, optional): Category metadata keyed by category slug.
 - categorySettings (`object`, optional): Category render settings keyed by category slug.
+- semanticSimilarityEnabled (`boolean`, optional): Enable local ONNX embedding-based semantic similarity features.
 
 [↑ Back to Table of contents](#table-of-contents)
 
@@ -4113,6 +4304,40 @@ Result from AI image analysis containing generated title, alt text, and caption.
 
 [↑ Back to Table of contents](#table-of-contents)
 
+### SimilarPost
+
+A post with its semantic similarity score relative to a reference post.
+
+**Fields**
+
+- postId (`string`, required): Post identifier.
+- similarity (`number`, required): Cosine similarity score from 0.0 to 1.0.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### TagSuggestion
+
+A tag suggested based on semantic similarity to similar posts.
+
+**Fields**
+
+- name (`string`, required): Tag name.
+- score (`number`, required): Aggregated suggestion score.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### DuplicatePair
+
+A pair of posts with high content similarity that may be duplicates.
+
+**Fields**
+
+- postA (`{ id: string; title: string; slug: string; publishedAt?: string }`, required): First post in the pair.
+- postB (`{ id: string; title: string; slug: string; publishedAt?: string }`, required): Second post in the pair.
+- similarity (`number`, required): Cosine similarity score from 0.0 to 1.0.
+
+[↑ Back to Table of contents](#table-of-contents)
+
 ---
 
-Generated from contract at 2026-02-27T00:00:00.000Z.
+Generated from contract at 2026-03-05T00:00:00.000Z.

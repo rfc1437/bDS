@@ -41,6 +41,7 @@
   "menu.item.generateSitemap": "Renderizar sitio",
   "menu.item.regenerateCalendar": "Regenerar calendario",
   "menu.item.validateSite": "Validar sitio",
+  "menu.item.findDuplicates": "Buscar entradas duplicadas",
   "menu.item.uploadSite": "Subir sitio",
   "menu.item.about": "Acerca de Blogging Desktop Server",
   "menu.item.openDocumentation": "Abrir documentación",
@@ -80,5 +81,8 @@
   "render.month.11": "noviembre",
   "render.month.12": "diciembre",
   "ai.imageAnalysis.system": "Generas metadatos de imagen. Escribe todos los valores en español.\n\nReglas:\n- \"title\": título descriptivo corto (3-8 palabras)\n- \"alt\": descripción factual de lo visible (5-12 palabras). Sin interpretaciones. Sin prefijo \"Imagen de\".\n- \"caption\": pie de foto atractivo para blog (5-20 palabras)\n\nResponde solo con JSON: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
-  "ai.imageAnalysis.user": "Analiza esta imagen. Responde con JSON en español."
+  "ai.imageAnalysis.user": "Analiza esta imagen. Responde con JSON en español.",
+  "task.embeddingIndex.name": "Indexar entradas para similitud semántica",
+  "task.embeddingIndex.loading": "Cargando modelo…",
+  "task.embeddingIndex.indexing": "Indexando: {indexed}/{total}"
 }

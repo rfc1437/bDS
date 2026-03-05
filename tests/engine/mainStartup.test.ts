@@ -1295,6 +1295,26 @@ describe('main bootstrap preview behavior', () => {
       }; }),
     }));
 
+    vi.doMock('../../src/main/engine/EmbeddingEngine', () => ({
+      EmbeddingEngine: vi.fn().mockImplementation(function() { return {
+        setProjectContext: vi.fn().mockResolvedValue(undefined),
+        initialize: vi.fn().mockResolvedValue(undefined),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+        indexUnindexedPosts: vi.fn().mockResolvedValue(undefined),
+      }; }),
+    }));
+
+    vi.doMock('../../src/main/engine/BlogmarkTransformService', () => ({
+      BlogmarkTransformService: vi.fn().mockImplementation(function() { return {
+        applyTransforms: vi.fn(async (input: { post: { title: string; content: string; categories: string[]; tags: string[] } }) => ({
+          post: input.post,
+          appliedScriptIds: [],
+          errors: [],
+          toasts: [],
+        })),
+      }; }),
+    }));
+
     await import('../../src/main/main');
     await new Promise((resolve) => setTimeout(resolve, 0));
 

@@ -29,6 +29,7 @@ import type { BlogmarkPythonWorkerRuntime } from './BlogmarkPythonWorkerRuntime'
 import type { PythonMacroWorkerRuntime } from './PythonMacroWorkerRuntime';
 import type { PublishApiAdapter } from './PublishApiAdapter';
 import type { AppApiAdapter } from './AppApiAdapter';
+import type { EmbeddingEngine } from './EmbeddingEngine';
 
 export interface EngineBundle {
   postEngine: PostEngine;
@@ -52,4 +53,5 @@ export interface EngineBundle {
   pythonMacroWorkerRuntime: PythonMacroWorkerRuntime;
   publishApiAdapter: PublishApiAdapter;
   appApiAdapter: AppApiAdapter;
+  embeddingEngine: EmbeddingEngine;
 }

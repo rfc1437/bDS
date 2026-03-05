@@ -41,6 +41,7 @@
   "menu.item.generateSitemap": "Render Site",
   "menu.item.regenerateCalendar": "Regenerate Calendar",
   "menu.item.validateSite": "Validate Site",
+  "menu.item.findDuplicates": "Find Duplicate Posts",
   "menu.item.uploadSite": "Upload Site",
   "menu.item.about": "About Blogging Desktop Server",
   "menu.item.openDocumentation": "Open Documentation",
@@ -80,5 +81,8 @@
   "render.month.11": "November",
   "render.month.12": "December",
   "ai.imageAnalysis.system": "You generate image metadata. Write all values in English.\n\nRules:\n- \"title\": short descriptive title (3-8 words)\n- \"alt\": factual description of what is visible (5-12 words). No interpretations. No \"Image of\" prefix.\n- \"caption\": engaging blog caption (5-20 words)\n\nRespond with JSON only: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
-  "ai.imageAnalysis.user": "Analyze this image. Respond with JSON in English."
+  "ai.imageAnalysis.user": "Analyze this image. Respond with JSON in English.",
+  "task.embeddingIndex.name": "Index posts for Semantic Similarity",
+  "task.embeddingIndex.loading": "Loading model…",
+  "task.embeddingIndex.indexing": "Indexing: {indexed}/{total}"
 }

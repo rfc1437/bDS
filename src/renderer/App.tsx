@@ -445,6 +445,12 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:findDuplicates', () => {
+        openSingletonToolTab(openTab, 'find-duplicates');
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:generateSitemap', async () => {
         try {
           await window.electronAPI?.blog.generateSitemap();

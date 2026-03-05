@@ -54,6 +54,7 @@ export interface ProjectMetadata {
   picoTheme?: import('./picoThemes').PicoThemeName;
   categoryMetadata?: Record<string, CategoryMetadata>;
   categorySettings?: Record<string, CategoryRenderSettings>;
+  semanticSimilarityEnabled?: boolean;
 }
 
 export interface CategoryRenderSettings {
@@ -505,6 +506,22 @@ export interface ChatSendMetadata {
 import type { A2UIServerMessage, A2UIClientAction } from '../a2ui/types';
 export type { A2UIServerMessage, A2UIClientAction };
 
+export interface SimilarPost {
+  postId: string;
+  similarity: number;
+}
+
+export interface TagSuggestion {
+  name: string;
+  score: number;
+}
+
+export interface DuplicatePair {
+  postA: { id: string; title: string; slug: string; publishedAt?: Date };
+  postB: { id: string; title: string; slug: string; publishedAt?: Date };
+  similarity: number;
+}
+
 export interface SiteValidationReport {
   sitemapPath: string;
   sitemapChanged: boolean;
@@ -728,7 +745,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings> }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings>; semanticSimilarityEnabled?: boolean }) => Promise<ProjectMetadata | null>;
     getPublishingPreferences: () => Promise<PublishingPreferences | null>;
     setPublishingPreferences: (prefs: PublishingPreferences) => Promise<void>;
     clearPublishingPreferences: () => Promise<void>;
@@ -985,6 +1002,14 @@ export interface ElectronAPI {
     // A2UI streaming
     onA2UIMessage: (callback: (data: { conversationId: string; message: A2UIServerMessage }) => void) => () => void;
     dispatchA2UIAction: (action: A2UIClientAction) => Promise<{ success: boolean; error?: string }>;
+  };
+  embeddings: {
+    findSimilar: (postId: string, k?: number) => Promise<SimilarPost[]>;
+    getProgress: () => Promise<{ indexed: number; total: number }>;
+    suggestTags: (postId: string, excludeTags: string[]) => Promise<TagSuggestion[]>;
+    findDuplicates: (threshold?: number) => Promise<DuplicatePair[]>;
+    dismissPair: (postIdA: string, postIdB: string) => Promise<void>;
+    indexUnindexedPosts: () => Promise<void>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;

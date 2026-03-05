@@ -41,6 +41,7 @@
   "menu.item.generateSitemap": "Rendre le site",
   "menu.item.regenerateCalendar": "Régénérer le calendrier",
   "menu.item.validateSite": "Valider le site",
+  "menu.item.findDuplicates": "Trouver les articles en double",
   "menu.item.uploadSite": "Publier le site",
   "menu.item.about": "À propos de Blogging Desktop Server",
   "menu.item.openDocumentation": "Ouvrir la documentation",
@@ -80,5 +81,8 @@
   "render.month.11": "novembre",
   "render.month.12": "décembre",
   "ai.imageAnalysis.system": "Tu génères des métadonnées d'image. Écris toutes les valeurs en français.\n\nRègles :\n- \"title\" : titre descriptif court (3-8 mots)\n- \"alt\" : description factuelle de ce qui est visible (5-12 mots). Pas d'interprétations. Pas de préfixe \"Image de\".\n- \"caption\" : légende de blog engageante (5-20 mots)\n\nRéponds uniquement en JSON : {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
-  "ai.imageAnalysis.user": "Analyse cette image. Réponds en JSON en français."
+  "ai.imageAnalysis.user": "Analyse cette image. Réponds en JSON en français.",
+  "task.embeddingIndex.name": "Indexer les articles pour la similarité sémantique",
+  "task.embeddingIndex.loading": "Chargement du modèle…",
+  "task.embeddingIndex.indexing": "Indexation : {indexed}/{total}"
 }

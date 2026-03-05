@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3312ee41-2b01-4579-aa9b-7fd4f0f3c7a4",
-  "prevId": "b3e7e63c-d906-48af-98a0-e3d0741ff13a",
+  "id": "ac24604e-89e5-4def-95a4-1d175c4126f8",
+  "prevId": "3312ee41-2b01-4579-aa9b-7fd4f0f3c7a4",
   "tables": {
     "chat_conversations": {
       "name": "chat_conversations",
@@ -971,13 +971,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "language": {
-          "name": "language",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "published_title": {
           "name": "published_title",
           "type": "text",
@@ -1008,6 +1001,13 @@
         },
         "published_excerpt": {
           "name": "published_excerpt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "language": {
+          "name": "language",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1418,6 +1418,103 @@
             "slug"
           ],
           "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "embedding_keys": {
+      "name": "embedding_keys",
+      "schema": "",
+      "columns": {
+        "label": {
+          "name": "label",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "dismissed_duplicate_pairs": {
+      "name": "dismissed_duplicate_pairs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id_a": {
+          "name": "post_id_a",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id_b": {
+          "name": "post_id_b",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dismissed_at": {
+          "name": "dismissed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "dismissed_pairs_idx": {
+          "name": "dismissed_pairs_idx",
+          "columns": [
+            "project_id",
+            "post_id_a",
+            "post_id_b"
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree"
         }
       },
       "foreignKeys": {},

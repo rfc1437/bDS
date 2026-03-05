@@ -370,4 +370,28 @@ describe('SettingsView Diff Preferences', () => {
       })
     );
   });
+
+  it('auto-saves semanticSimilarityEnabled immediately when toggled without requiring a Save click', async () => {
+    (window as any).electronAPI.meta.getProjectMetadata = vi.fn().mockResolvedValue({
+      maxPostsPerPage: 50,
+      semanticSimilarityEnabled: false,
+      categorySettings: {
+        article: { renderInLists: true, showTitle: true },
+      },
+    });
+    (window as any).electronAPI.meta.updateProjectMetadata = vi.fn().mockResolvedValue({});
+
+    render(<SettingsView />);
+
+    const checkbox = await screen.findByLabelText(/semantic similarity/i);
+    expect((checkbox as HTMLInputElement).checked).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(checkbox);
+    });
+
+    expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ semanticSimilarityEnabled: true })
+    );
+  });
 });

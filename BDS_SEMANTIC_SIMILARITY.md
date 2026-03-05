@@ -6,29 +6,28 @@ Surface thematically related posts as an impulse — "Have I written something s
 
 ---
 
-## Integration Point
+## Feasibility Assessment
 
-**InsertModal** (`src/renderer/components/InsertModal/InsertModal.tsx`), link mode.
+### What's solid
+- **Codebase hooks verified**: `PostEngine` emits all 5 expected events (`postCreated`, `postUpdated`, `postDeleted`, `rebuildStarted`, `databaseRebuilt`). `TaskManager` exists with progress/cancellation support. `EngineBundle` pattern is established (21 members). Tab system supports adding new types (currently 14).
+- **Architecture fits the codebase**: engine → IPC → renderer separation is consistent with existing patterns (e.g., `MetadataDiffEngine` → `metadataDiffHandlers.ts` → `MetadataDiffView`). Menu-triggered tabs follow `validateSite` → `SiteValidationView` precedent.
+- **`@huggingface/transformers`**: Viable for Electron main process. Supports `onnxruntime-node` (N-API) with WASM fallback (`onnxruntime-web`) if native binaries fail. Widely used, Electron-compatible.
+- **Multilingual model choice**: `multilingual-e5-small` is correct for mixed DE/EN content. `all-MiniLM-L6-v2` would fail on German.
 
-When the search field is empty (`query.length < 2`), instead of showing "type at least 2 characters", show 3–5 semantically similar posts to the currently edited post. These are default suggestions — "posts you might want to link to."
+### Risks and mitigations
 
-The InsertModal currently accepts these props:
-```ts
-interface InsertModalProps {
-  mode: InsertMode;
-  onInsertLink: (url: string, text?: string) => void;
-  onInsertImage: (url: string, alt: string, mediaId?: string) => void;
-  onClose: () => void;
-  initialText?: string;
-  currentPostTags?: string[];
-  currentPostCategories?: string[];
-  // currentPostId is NOT yet threaded through — needs to be added
-}
-```
+| Risk | Severity | Mitigation |
+|---|---|---|
+| **USearch N-API binaries missing for Electron ABI** | High | Spike first (Phase 0). If prebuildify targets don't cover Electron ABI: fall back to `vectra` (pure JS, JSON storage, zero build issues). |
+| **`onnxruntime-node` N-API mismatch with Electron** | Medium | `onnxruntime-node` has broad N-API support including Electron. Fallback: use `onnxruntime-web` (WASM) — slower (~3x) but zero native dependencies. |
+| **470 MB model download on first enable** | Medium | Must show download progress. Consider: allow user to cancel, resume on next enable. |
+| **~300 MB RAM for model at runtime** | Low | Model loads once, shared across projects. Only the index swaps on project switch. Acceptable for a desktop app. Document in settings UI. |
+| **17 min initial indexing (10k posts)** | Low | Background task with progress via `TaskManager`. Incremental — only unindexed posts processed on subsequent launches. |
 
-`currentPostId` must be added to this interface and threaded from `Editor.tsx`.
+### Decisions to make before implementation
 
-Note: The InsertModal now also has a **"Create post" option** — when `query.length >= 2` and no exact title match exists, it shows a `+` button to create a new post with that title and inherit the current post's tags/categories. This is the only UI addition since the original spec; it doesn't conflict with the semantic similarity integration.
+1. **USearch Electron ABI**: Must spike in Phase 0 to confirm prebuilt binaries ship for Electron's N-API version on all target platforms (macOS arm64/x64, Windows x64/arm64, Linux x64). If they don't, fallback to `vectra`.
+2. **Model size vs. quality**: `multilingual-e5-small` (470 MB) is the right choice for multilingual. No smaller alternative with adequate DE/EN quality exists. Accept the download size.
 
 ---
 
@@ -36,26 +35,26 @@ Note: The InsertModal now also has a **"Create post" option** — when `query.le
 
 | Purpose | Library | npm | Notes |
 |---|---|---|---|
-| Embeddings | Hugging Face Transformers.js | `@huggingface/transformers` | ONNX, local, no API key |
-| Vector index | USearch | `usearch` | HNSW, native C++ via N-API, prebuilt binaries |
+| Embeddings | Hugging Face Transformers.js v3 | `@huggingface/transformers` | ONNX, local, no API key |
+| Vector index | USearch | `usearch` | HNSW, native C++ via N-API, prebuilt binaries, SIMD, <1ms queries |
 
 Neither package is installed yet.
 
-**Embedding model:** `multilingual-e5-small` — 384 dimensions, 512-token context, ~470 MB on disk, ~200–300 MB RAM, ~100ms/post inference. Natively multilingual (100+ languages incl. DE/EN) — critical for a mixed-language blog. `all-MiniLM-L6-v2` (~90 MB) was considered but is EN-trained with weak DE transfer; not suitable for nuanced cross-language similarity.
+**Embedding model:** `multilingual-e5-small` — 384 dimensions, 512-token context, ~470 MB on disk, ~200–300 MB RAM, ~100ms/post inference. Natively multilingual (100+ languages incl. DE/EN) — critical for a mixed-language blog. The model downloads to `~/.cache/huggingface/` on first use.
 
-**Why USearch over alternatives:**
+### Why USearch
+
 - `sqlite-vec` — requires `loadExtension()` on the SQLite driver; bDS uses `@libsql/client` which doesn't expose it. Eliminated.
 - `hnswlib-node` — no prebuilt binaries, requires `node-gyp` compile. Last published 2 years ago. Risk with Electron packaging.
-- `vectra` — pure JS, zero build issues, but JSON storage (~30 MB for 10k posts). Acceptable fallback.
-- Brute-force in JS — works at 10k (~15ms for the math) but requires loading all embeddings from DB first. DB read overhead with `@libsql/client` FFI is unknown and potentially dominant.
+- `vectra` — pure JS, zero build issues, but JSON storage (~30 MB for 10k posts). Acceptable fallback if USearch fails.
 - **USearch** — prebuilt binaries via `prebuildify` (matches `sharp`, `@libsql/client` pattern), actively maintained, HNSW with SIMD, <1ms queries, binary persistence (~6 MB for 10k×384).
 
 **USearch specifics:**
-- Keys are `BigUint64Array` — need a `Map<bigint, string>` (numeric label → post UUID) persisted in a small Drizzle table (`embedding_keys`)
+- Keys are `BigUint64Array` — need a `Map<bigint, string>` (numeric label → post UUID) persisted in a Drizzle table (`embedding_keys`)
 - `index.load()` loads everything into RAM (~6 MB). `index.save()` is a full rewrite. Fine for this scale.
 - No incremental flush / WAL — acceptable since mutations are one-at-a-time post edits
 
-**Electron packaging risk:** USearch uses N-API, but verify that its `prebuildify` targets include the Electron ABI for all platforms (macOS arm64/x64, Windows x64/arm64, Linux x64) before committing. Spike this first — if binaries are missing, fall back to `vectra`.
+**Electron packaging risk:** Must be spiked in Phase 0 — verify that USearch `prebuildify` targets include the Electron ABI for all platforms (macOS arm64/x64, Windows x64/arm64, Linux x64). If binaries are missing, fall back to `vectra`.
 
 ---
 
@@ -65,70 +64,21 @@ Neither package is installed yet.
 
 ```
 {userData}/projects/{projectId}/
-  embeddings.usearch       # USearch binary index
+  embeddings.usearch       # USearch binary index (~6 MB for 10k posts)
 ```
 
 The `bigint → postId` key mapping lives in a Drizzle table (`embedding_keys`), not a JSON file — avoids `bigint` JSON serialization issues and stays atomic with the existing DB.
 
-### Engine: `EmbeddingEngine` (`src/main/engine/EmbeddingEngine.ts`)
+### Database tables
 
-File does not exist yet. Create it.
+Add to `src/main/database/schema.ts`:
 
-Responsibilities:
-- Load/save USearch index + key map on startup/shutdown
-- Embed post content via `@huggingface/transformers`
-- Add/update/remove embeddings when posts change
-- Query: given a post ID, return top-k similar post IDs with distances
-
-Key interface:
-```ts
-class EmbeddingEngine {
-  async initialize(): Promise<void>           // load index + model
-  async embedPost(postId: string, content: string): Promise<void>
-  async removePost(postId: string): Promise<void>
-  async findSimilar(postId: string, k?: number): Promise<SimilarPost[]>
-  async getIndexingProgress(): Promise<{ indexed: number; total: number }>
-  async reindexAll(): Promise<void>           // after databaseRebuilt
-  async setProjectContext(projectId: string): Promise<void>  // load/unload on switch
-  async save(): Promise<void>
-}
-```
-
-### EngineBundle (`src/main/engine/EngineBundle.ts`)
-
-Add `embeddingEngine: EmbeddingEngine` to the `EngineBundle` interface. The current bundle contains:
-`postEngine`, `mediaEngine`, `scriptEngine`, `templateEngine`, `metaEngine`, `menuEngine`, `tagEngine`, `postMediaEngine`, `projectEngine`, `gitEngine`, `gitApiAdapter`, `blogGenerationEngine`, `publishEngine`, `metadataDiffEngine`, `taskManager`, `blogmarkTransformService`, `mcpServer`, `blogmarkPythonWorkerRuntime`, `pythonMacroWorkerRuntime`, `publishApiAdapter`, `appApiAdapter`.
-
-### IPC layer (`src/main/ipc/`)
-
-The IPC layer now has five files:
-- `handlers.ts` — main handler file (posts, media, project, meta, tags, templates, scripts, blog generation, publishing, preview, site validation, import, settings, model catalog, tasks, notifications)
-- `chatHandlers.ts` — AI chat streaming & tool use
-- `blogHandlers.ts` — blog generation & publishing
-- `publishHandlers.ts` — publishing
-- `metadataDiffHandlers.ts` — metadata diff
-- `index.ts` — module exports
-
-Add the embedding IPC handlers to `handlers.ts` (they're small; no need for a new file):
-
-```
-embeddings:findSimilar(postId: string, k?: number) → SimilarPost[]
-embeddings:getProgress() → { indexed: number; total: number }
-embeddings:suggestTags(postId: string, excludeTags: string[]) → TagSuggestion[]
-embeddings:findDuplicates(threshold?: number) → DuplicatePair[]
-embeddings:dismissPair(postIdA: string, postIdB: string) → void
-```
-
-### Database: `embedding_keys` table
-
-Add to `src/main/database/schema.ts`. The current schema has: `projects`, `posts`, `media`, `settings`, `generatedFileHashes`, `postLinks`, `postMedia`, `tags`, `chatConversations`, `chatMessages`, `importDefinitions`, `scripts`, `templates`, `dbNotifications`, `modelCatalogProviders`, `modelCatalog`, `modelCatalogModalities`, `modelCatalogMeta`.
-
-New tables:
 ```ts
 export const embeddingKeys = sqliteTable('embedding_keys', {
   label: integer('label', { mode: 'bigint' }).primaryKey(), // USearch bigint key
   postId: text('post_id').notNull(),
   projectId: text('project_id').notNull(),
+  contentHash: text('content_hash').notNull(), // SHA-256 of title+content, for change detection
 });
 
 export const dismissedDuplicatePairs = sqliteTable('dismissed_duplicate_pairs', {
@@ -142,229 +92,307 @@ export const dismissedDuplicatePairs = sqliteTable('dismissed_duplicate_pairs', 
 }));
 ```
 
-Create a Drizzle migration (`db:generate` / `db:migrate`) after adding the tables.
+Run `npm run db:generate` after adding.
 
-### Project switching
+The `contentHash` column enables efficient change detection: on startup, compare each post's hash against its stored hash to identify what needs re-embedding, without loading all content.
 
-The app supports multiple projects. On project switch (`setProjectContext`), the engine must save and unload the current index, then load (or create) the index for the new project. Each project has its own `embeddings.usearch` file and `embedding_keys` table rows (filtered by `projectId`).
+### Engine: `EmbeddingEngine` (`src/main/engine/EmbeddingEngine.ts`)
 
-### Embedding content
-
-Embed the raw markdown body of each post (title + content). Markdown's lightweight markup (headers, links, emphasis) adds minimal noise and preserves semantic structure well enough for transformer models. No stripping needed.
-
-**Chunking for long posts:** The model's 512-token context (~400 words) covers most posts. For posts exceeding 512 tokens:
-1. Split into 512-token chunks with ~50 token overlap
-2. Embed each chunk independently
-3. Mean-pool the chunk vectors into a single 384-dim embedding
-4. Store the single pooled vector in the index
-
-This keeps the index simple (one vector per post, one lookup per query) while preserving semantic coverage of long-form content. The overlap prevents losing context at chunk boundaries.
-
-### Hook into existing post lifecycle
-
-`PostEngine` emits these events (confirmed in current codebase):
-- `postCreated` — on create and on import
-- `postUpdated` — on update, publish, revert
-- `postDeleted` — on delete
-- `databaseRebuilt` — emitted after `reconcileFromDisk()` (e.g., git sync replaces entire DB)
-- `rebuildStarted` — emitted just before `databaseRebuilt`
-
-On post content change → call `embeddingEngine.embedPost()`. On delete → call `embeddingEngine.removePost()`. On `databaseRebuilt` → trigger a full reindex.
-
-Save strategy: debounce `index.save()` on a timer (e.g., 5s after last mutation). During bulk indexing, batch-save every N posts (e.g., 100) instead of after each one — avoids 10k full file rewrites.
-
-### Initial indexing (10k+ posts)
-
-- ~100ms per post × 10k = **~17 minutes** one-time background job
-- Must run as a low-priority background task after app startup (use `TaskManager` for queuing)
-- Emit progress events so UI can show "Indexing 3,421 / 10,247…"
-- On git sync to new machine, file watchers fire for all posts → triggers full reindex automatically
-- Model download (~470 MB) on first run — needs progress indicator or opt-in preference
-
----
-
-## UI Changes
-
-### InsertModal (link mode, internal tab)
-
-**When `query.length < 2` and `currentPostId` is set:**
-1. Call `embeddings:findSimilar(currentPostId, 5)` on mount
-2. Show results in the same result list format, with a subtle header like "Related posts"
-3. Clicking a suggestion works identically to a search result — inserts the link
-
-**When `query.length >= 2`:** existing search behavior, unchanged. (This includes the "Create post" option for link mode.)
-
-**Fallback:** if embeddings aren't ready (indexing in progress, feature disabled), show the existing "type at least 2 characters" message.
-
----
-
-### TagInput (post tag editing)
-
-`TagInput` (`src/renderer/components/TagInput/TagInput.tsx`) already shows a suggestions dropdown driven by text input. Add a second suggestion source: tags inferred from semantically similar posts.
-
-Add an optional `postId?: string` prop. `PostEditor` already has `postId` and renders `TagInput`, so threading is a one-liner.
-
-**When `inputValue.length === 0` and the input is focused and `postId` is set:**
-1. Call `embeddings:suggestTags(postId, currentTags)` once on focus (cache the result for the session)
-2. Show a "Suggested" section at the top of the dropdown, above the regular tag list
-3. Clicking a suggested tag adds it identically to any other tag
-
-**When `inputValue.length > 0`:** existing text-filter behavior, suggested section hidden.
-
-**Fallback:** if embeddings aren't ready or `postId` is absent, the dropdown behaves exactly as today — no visible change.
-
-**Algorithm** (in `EmbeddingEngine.suggestTags`):
-1. Find top-10 similar posts via `findSimilar(postId, 10)`
-2. Collect tags from each neighbour, weighted by similarity score
-3. Sum weights per tag (tag appearing in 3 posts at 0.9 similarity scores higher than tag in 1 post at 0.95)
-4. Filter out tags the current post already has
-5. Return top 5 by weighted score
+Create new file.
 
 ```ts
-interface TagSuggestion {
-  name: string;
-  score: number;  // weighted frequency, for ranking only — not shown in UI
+interface SimilarPost {
+  postId: string;
+  similarity: number; // cosine similarity 0–1
 }
 
-async suggestTags(postId: string, excludeTags: string[]): Promise<TagSuggestion[]>
-```
+interface TagSuggestion {
+  name: string;
+  score: number; // weighted frequency, not shown in UI
+}
 
-New IPC endpoint (add to `handlers.ts`):
-```
-embeddings:suggestTags(postId: string, excludeTags: string[]) → TagSuggestion[]
-```
-
-No new DB table needed — this is a pure read from the existing index.
-
----
-
-## Duplication Analysis
-
-A periodic audit tool to surface posts that are so semantically similar they might be unintentional duplicates — the same topic written twice years apart, a post and its draft that both got published, a cross-post that was forgotten. The goal is human review and action, not automated deletion.
-
-### Algorithm
-
-For each indexed post, query the index for its top-k nearest neighbours (k=20). Filter pairs where cosine similarity exceeds a threshold (default: 0.92). Deduplicate symmetric pairs (A→B = B→A). Sort descending by similarity.
-
-This is O(n) queries against the HNSW index — fast even at 10k posts (~20ms total). Run on demand, not continuously.
-
-```ts
 interface DuplicatePair {
   postA: { id: string; title: string; slug: string; publishedAt?: Date };
   postB: { id: string; title: string; slug: string; publishedAt?: Date };
-  similarity: number; // cosine similarity, 0–1
+  similarity: number;
+}
+
+class EmbeddingEngine extends EventEmitter {
+  // Lifecycle
+  async initialize(): Promise<void>             // Load model (lazy — only when feature enabled)
+  async shutdown(): Promise<void>               // Release model from memory
+
+  // Core operations
+  async embedPost(postId: string, title: string, content: string): Promise<void>
+  async removePost(postId: string): Promise<void>
+  async findSimilar(postId: string, k?: number): Promise<SimilarPost[]>  // default k=5
+
+  // Derived features
+  async suggestTags(postId: string, excludeTags: string[]): Promise<TagSuggestion[]>
+  async findDuplicates(threshold?: number): Promise<DuplicatePair[]>     // default 0.92
+
+  // Indexing management
+  async getIndexingProgress(): Promise<{ indexed: number; total: number }>
+  async reindexAll(): Promise<void>
+  async indexUnindexedPosts(): Promise<void>     // Differential — only missing/changed posts
+
+  // Project switching
+  async setProjectContext(projectId: string): Promise<void>  // save + unload index, load new project's index
+
+  // Persistence
+  async save(): Promise<void>                   // Write USearch index to disk
 }
 ```
 
-New engine method:
-```ts
-async findDuplicates(threshold?: number): Promise<DuplicatePair[]>
-// threshold default: 0.92. Lower = more results, more noise. Higher = only near-identical posts.
-```
+**Key implementation details:**
 
-### Dismissed pairs
+- `findSimilar`: Query USearch index for k nearest neighbours of the given post's vector. <1ms at 10k scale with HNSW.
+- `embedPost`: Prepend `"query: "` to input text (required by E5 models). For posts exceeding 512 tokens: split into 512-token chunks with 50-token overlap, embed each, mean-pool into single 384-dim vector. Add vector to USearch index with a bigint label, persist label→postId mapping in `embedding_keys` table with SHA-256 content hash.
+- `removePost`: Look up bigint label from `embedding_keys`, remove from USearch index, delete DB row.
+- `suggestTags`: Find top-10 similar posts → collect their tags → weight by similarity score → sum per tag → exclude already-applied tags → return top 5.
+- `findDuplicates`: For each post, query index for top-20 neighbours. Filter pairs above threshold. Deduplicate symmetric pairs. Filter dismissed pairs from DB. Sort by similarity descending.
+- **Save strategy**: Debounce `index.save()` on a timer (5s after last mutation). During bulk indexing, batch-save every 100 posts instead of after each — avoids 10k full file rewrites.
+- **Key mapping**: Maintain a `Map<bigint, string>` (USearch label → postId) in memory, backed by `embedding_keys` table. Auto-increment bigint counter for new labels.
 
-When the user reviews a pair and decides it's intentional (e.g., two posts on the same topic that are meaningfully different), they can dismiss it. Store dismissed pairs in a new DB table so they don't reappear:
+### EngineBundle
 
-```ts
-export const dismissedDuplicatePairs = sqliteTable('dismissed_duplicate_pairs', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id').notNull(),
-  postIdA: text('post_id_a').notNull(),
-  postIdB: text('post_id_b').notNull(),
-  dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).notNull(),
-}, (table) => ({
-  pairIdx: uniqueIndex('dismissed_pairs_idx').on(table.projectId, table.postIdA, table.postIdB),
-}));
-```
+Add `embeddingEngine: EmbeddingEngine` to interface in `src/main/engine/EngineBundle.ts`. Instantiate in `main.ts`.
 
-`findDuplicates` filters out any pair where both (A, B) and (B, A) appear in `dismissed_duplicate_pairs`.
+### IPC endpoints
 
-### New IPC endpoints
+Add to `src/main/ipc/handlers.ts` (small enough to keep in main file):
 
-Add to `handlers.ts`:
-```
-embeddings:findDuplicates(threshold?: number) → DuplicatePair[]
-embeddings:dismissPair(postIdA: string, postIdB: string) → void
-```
+| Channel | Params | Returns |
+|---|---|---|
+| `embeddings:findSimilar` | `postId: string, k?: number` | `SimilarPost[]` |
+| `embeddings:getProgress` | — | `{ indexed: number, total: number }` |
+| `embeddings:suggestTags` | `postId: string, excludeTags: string[]` | `TagSuggestion[]` |
+| `embeddings:findDuplicates` | `threshold?: number` | `DuplicatePair[]` |
+| `embeddings:dismissPair` | `postIdA: string, postIdB: string` | `void` |
 
-### UI placement
+### Post lifecycle hooks
 
-The duplication analysis is a periodic audit task — the same category as `validateSite` and `metadataDiff`, both of which already live in the **Blog menu** in `src/main/shared/menuCommands.ts`. Add `findDuplicates` there, next to `validateSite`.
+In `main.ts` (or wherever PostEngine listeners are wired), guarded by `semanticSimilarityEnabled`:
 
-Required changes to `menuCommands.ts`:
-- Add `'findDuplicates'` to `AppMenuAction` union
-- Add menu item to the Blog group next to `validateSite`: `{ label: 'menu.item.findDuplicates', action: 'findDuplicates' }`
-- Add to `APP_MENU_ACTION_EVENT_MAP`: `findDuplicates: 'menu:findDuplicates'`
+- `postCreated` → `embeddingEngine.embedPost(id, title, content)`
+- `postUpdated` → `embeddingEngine.embedPost(id, title, content)` (re-embed; hash check skips if unchanged)
+- `postDeleted` → `embeddingEngine.removePost(id)`
+- `databaseRebuilt` → `embeddingEngine.reindexAll()`
 
-The renderer listens for `menu:findDuplicates` and opens the duplicates tab (same pattern as `menu:validateSite` → `SiteValidationView`).
+### Project switching
 
-Results open as a **dedicated tab** (new tab type: `duplicates`) in the main editor area, so the user can keep it open while navigating to individual posts. Tab type should be added to the `Tab` union in `appStore`.
+On `setProjectContext(projectId)`: save current USearch index to disk, unload it. Load (or create) the USearch index for the new project from `{userData}/projects/{projectId}/embeddings.usearch`. Reload `embedding_keys` rows for the new `projectId` into the in-memory key map. The model stays loaded — only the index and key map swap.
 
-**Duplicates tab layout:**
-```
-┌─────────────────────────────────────────────────────────┐
-│ Potential Duplicates   [Threshold: ▼ 92%]  [Re-run]    │
-├─────────────────────────────────────────────────────────┤
-│ 97%  "My trip to Berlin" (2019-03)                      │
-│      "Berlin travel notes" (2023-08)       [Open both]  │
-│                                            [Dismiss]    │
-├─────────────────────────────────────────────────────────┤
-│ 94%  "Bullet journaling setup" (2018-11)               │
-│      "How I use a bullet journal" (2021-02)[Open both]  │
-│                                            [Dismiss]    │
-└─────────────────────────────────────────────────────────┘
-```
+### Embedding content
 
-- **Threshold slider** — adjustable 80–99%, results update on re-run
-- **"Open both"** — opens both posts as sequential editor tabs
-- **"Dismiss"** — calls `embeddings:dismissPair`, removes the row from the list
-- Results show similarity %, both post titles, and published dates
-- If no duplicates found at the current threshold: "No duplicates found above X% similarity"
-- If index not ready: "Semantic index is still building…" with progress
+Embed raw markdown: `"query: " + title + "\n\n" + content`. The `"query: "` prefix is required by E5 models for proper similarity computation.
 
-### Python API
+**Chunking** (posts > 512 tokens): Split into overlapping chunks → embed each → mean-pool → store single vector. This keeps queries simple (one vector per post).
 
-Add to `bds_api` and `API.md`:
-```python
-posts.find_duplicates(threshold=0.92)  # → list of DuplicatePair
-posts.dismiss_duplicate_pair(post_id_a, post_id_b)  # → None
-```
+### Background indexing
+
+On app startup (if feature enabled):
+1. Load USearch index + `embedding_keys` for current project
+2. Query all posts, compare against `embedding_keys` (by postId + contentHash)
+3. Queue unindexed/changed posts as a `TaskManager` task
+4. Embed each post, add to USearch index + `embedding_keys`
+5. Emit progress: `taskProgress` events → forwarded to renderer
+6. Batch `index.save()` every 100 posts (not after each one)
+
+First-run indexes everything (~17 min for 10k posts). Subsequent launches only process new/changed posts.
 
 ---
 
 ## Settings: Opt-In Preference
 
-The feature must be opt-in (model download + 17 min indexing is not a silent default).
+Add `semanticSimilarityEnabled: boolean` to `ProjectMetadata` in `MetaEngine.ts`.
 
-Store as a project-level metadata field via `meta:updateProjectMetadata`. Add `semanticSimilarityEnabled: boolean` to `ProjectMetadata`. When the user enables it in Project Settings, start the background indexer. When disabled, skip embedding hooks and hide the UI section.
-
-The model download itself (~470 MB) should show a progress indicator before the indexer starts.
+Project Settings UI toggle:
+- Label: "Enable semantic similarity" (i18n key)
+- Description: explains model download size and indexing time
+- When toggled on → trigger model download (with progress) → start background indexing
+- When toggled off → skip lifecycle hooks, hide similarity UI, keep embeddings in DB (resume without re-indexing if re-enabled)
 
 ---
 
-## Implementation Steps
+## UI Changes
 
-1. **Spike USearch packaging** — verify prebuilt binaries exist for all target Electron ABIs before committing. Fall back to `vectra` if they don't.
-2. **Test + implement `EmbeddingEngine`** — model loading, embed, add/remove/query against USearch index, save/load persistence
-3. **Drizzle key map table** — add `embedding_keys` to `schema.ts`, run `db:generate` + `db:migrate`
-4. **Add `semanticSimilarityEnabled` to project metadata** — `ProjectMetadata` type + `meta:updateProjectMetadata` handler + Project Settings UI toggle
-5. **Wire into post lifecycle** — hook `postCreated`/`postUpdated`/`postDeleted`/`databaseRebuilt` → embedding updates (guarded by opt-in flag)
-6. **Background indexer** — on startup (if enabled), diff indexed vs. existing posts, queue unindexed for background embedding via `TaskManager` with progress events
-7. **IPC endpoints** — `embeddings:findSimilar`, `embeddings:getProgress`, `embeddings:findDuplicates`, `embeddings:dismissPair` in `handlers.ts`
-8. **Add `embeddingEngine` to `EngineBundle`** — update `EngineBundle.ts` interface and `main.ts` construction
-9. **InsertModal integration** — add `currentPostId` prop, thread from `Editor.tsx`, fetch similar on mount, render as default suggestions
-10. **Duplicates tab** — add `'findDuplicates'` to `AppMenuAction` + Blog menu group + `APP_MENU_ACTION_EVENT_MAP` in `menuCommands.ts`; add `duplicates` to `Tab` union in `appStore`; implement `DuplicatesView` component wired to `menu:findDuplicates` event
-11. **I18n** — all new UI strings through locale files (no hardcoded text)
-12. **Python API** — add `posts.findRelated(postId, k)`, `posts.find_duplicates(threshold)`, `posts.dismiss_duplicate_pair(a, b)` to `bds_api`, regenerate `API.md`
+### 1. InsertModal (link mode)
+
+**File:** `src/renderer/components/InsertModal/InsertModal.tsx`
+
+Add `currentPostId?: string` to `InsertModalProps`. Thread from `Editor.tsx` (the post editor already has the post ID).
+
+**Behavior when `query.length < 2` and `currentPostId` is set:**
+1. Call `embeddings:findSimilar(currentPostId, 5)` on mount (one-time, cached in component state)
+2. Render results in same list format as search results, with header "Related posts" (i18n)
+3. Clicking a suggestion inserts the link, same as a search result
+
+**When `query.length >= 2`:** existing search behavior, unchanged.
+
+**Fallback (embeddings unavailable):** show current "type at least 2 characters" message. No visible change.
+
+### 2. TagInput
+
+**File:** `src/renderer/components/TagInput/TagInput.tsx`
+
+Add `postId?: string` prop. Thread from whatever renders TagInput for post editing.
+
+**When input is focused, `inputValue` is empty, and `postId` is set:**
+1. Call `embeddings:suggestTags(postId, currentTags)` once on focus (cache result)
+2. Show "Suggested" section above regular tag list in dropdown
+3. Click adds tag identically to any other
+
+**When `inputValue.length > 0`:** existing filter behavior only. Suggested section hidden.
+
+**Fallback:** dropdown behaves exactly as today.
+
+### 3. Duplicates tab
+
+**Menu integration (same pattern as `validateSite`):**
+- Add `'findDuplicates'` to `AppMenuAction` in `menuCommands.ts`
+- Add menu item in Blog group: `{ label: 'menu.item.findDuplicates', action: 'findDuplicates' }`
+- Add event mapping: `findDuplicates: 'menu:findDuplicates'`
+
+**Tab system:**
+- Add `'duplicates'` to `TabType` in `appStore.ts`
+- Create `DuplicatesView.tsx` component
+
+**DuplicatesView layout:**
+- Header with threshold slider (80–99%, default 92%) and "Re-run" button
+- List of pairs: similarity %, both titles with dates
+- Per-pair actions: "Open both" (opens two editor tabs), "Dismiss" (calls `embeddings:dismissPair`)
+- Empty state: "No duplicates found above X% similarity"
+- Loading state: "Semantic index is still building…" with progress
+
+### 4. I18n
+
+All new UI strings through locale files. Required keys (add to all locale files):
+- `insertModal.relatedPosts` — "Related posts"
+- `tagInput.suggested` — "Suggested"
+- `menu.item.findDuplicates` — "Find Duplicate Posts"
+- `duplicatesView.title` — "Potential Duplicates"
+- `duplicatesView.threshold` — "Threshold"
+- `duplicatesView.rerun` — "Re-run"
+- `duplicatesView.openBoth` — "Open both"
+- `duplicatesView.dismiss` — "Dismiss"
+- `duplicatesView.empty` — "No duplicates found above {threshold}% similarity"
+- `duplicatesView.indexing` — "Semantic index is still building…"
+- `settings.semanticSimilarity.label` — "Enable semantic similarity"
+- `settings.semanticSimilarity.description` — (explains download/indexing)
+
+### 5. Python API
+
+Add to `bds_api` and regenerate `API.md`:
+```python
+posts.find_similar(post_id, k=5)                          # → list[SimilarPost]
+posts.suggest_tags(post_id, exclude_tags=[])               # → list[TagSuggestion]
+posts.find_duplicates(threshold=0.92)                      # → list[DuplicatePair]
+posts.dismiss_duplicate_pair(post_id_a, post_id_b)         # → None
+```
+
+---
+
+## Implementation Phases
+
+### Phase 0: Validate native dependencies
+> Goal: Confirm both `@huggingface/transformers` and `usearch` work in Electron main process.
+
+- [ ] Install `@huggingface/transformers` and `usearch`
+- [ ] Write a throwaway script in Electron main process that:
+  - Loads `multilingual-e5-small` and embeds a test string → verify 384-dim output
+  - Creates a USearch index, adds a vector, queries it → verify results
+- [ ] Verify both packages' N-API binaries load in Electron (check ABI compatibility for macOS arm64 at minimum)
+- [ ] If `onnxruntime-node` fails: test with `onnxruntime-web` (WASM backend) — note perf difference
+- [ ] If USearch fails: test `vectra` as fallback (pure JS, no N-API)
+- [ ] **Decision gate**: proceed with confirmed stack. If neither embedding runtime works in Electron, stop and reassess.
+
+### Phase 1: Core engine + database (test-first)
+> Goal: `EmbeddingEngine` can embed posts, store/query via USearch, and find similar posts. No UI, no IPC yet.
+
+- [ ] Add `embeddingKeys` and `dismissedDuplicatePairs` tables to `schema.ts`
+- [ ] Run `npm run db:generate`
+- [ ] Write tests for `EmbeddingEngine`:
+  - Embed a post → verify vector in USearch index + key row in `embedding_keys` with correct hash
+  - Embed multiple posts → `findSimilar` returns correct ranking
+  - Update post content → old vector removed, new vector added, hash updated
+  - Remove post → vector removed from index, key row deleted
+  - `findSimilar` for non-existent post → empty result
+  - Content hash prevents re-embedding unchanged posts
+  - `save()` + reload → index and key map survive restart
+  - `setProjectContext()` switches index correctly
+- [ ] Implement `EmbeddingEngine` to pass tests (mock the transformer model in tests; test the real model in Phase 0 spike)
+- [ ] Add `embeddingEngine` to `EngineBundle` interface and `main.ts` construction
+
+### Phase 2: Settings + lifecycle integration
+> Goal: Feature is opt-in, embeddings update automatically when posts change.
+
+- [ ] Add `semanticSimilarityEnabled: boolean` to `ProjectMetadata`
+- [ ] Add toggle to Project Settings UI (i18n)
+- [ ] Wire PostEngine lifecycle events → `EmbeddingEngine` (guarded by enabled flag)
+- [ ] Implement background indexer via `TaskManager`:
+  - On enable / startup: diff indexed vs. existing posts, queue unindexed
+  - Emit progress events
+  - Batch DB writes (every 50 posts)
+  - Handle model download progress on first enable
+- [ ] Add `embeddings:getProgress` IPC endpoint
+- [ ] Test: create post while enabled → embedding created. Disable → no embedding on create.
+
+### Phase 3: InsertModal integration
+> Goal: Related posts appear as suggestions when opening the link insert modal.
+
+- [ ] Add `currentPostId?: string` to `InsertModalProps`
+- [ ] Thread `currentPostId` from `Editor.tsx` (post ID is available in the editor component)
+- [ ] Add `embeddings:findSimilar` IPC endpoint
+- [ ] In InsertModal: when `query.length < 2` and `currentPostId` set, fetch and display similar posts
+- [ ] Fallback: if embeddings unavailable, show existing empty-state message
+- [ ] Add i18n keys for "Related posts" header
+- [ ] Test: InsertModal renders similar posts. Clicking inserts link. Fallback works.
+
+### Phase 4: Tag suggestions
+> Goal: Tags inferred from similar posts appear as suggestions when editing tags.
+
+- [ ] Implement `suggestTags` method in `EmbeddingEngine`
+- [ ] Add `embeddings:suggestTags` IPC endpoint
+- [ ] Add `postId?: string` prop to `TagInput`
+- [ ] Thread from post editor
+- [ ] Show "Suggested" section in tag dropdown when input is empty and focused
+- [ ] Add i18n key
+- [ ] Test: tag suggestion algorithm returns weighted tags, excludes existing tags
+
+### Phase 5: Duplicate detection
+> Goal: Audit tool to surface near-duplicate posts for human review.
+
+- [ ] Implement `findDuplicates` method in `EmbeddingEngine`
+- [ ] Implement `dismissPair` (insert into `dismissedDuplicatePairs` table)
+- [ ] Add `embeddings:findDuplicates` and `embeddings:dismissPair` IPC endpoints
+- [ ] Add `'findDuplicates'` to `AppMenuAction`, Blog menu, event map in `menuCommands.ts`
+- [ ] Add `'duplicates'` to `TabType` in `appStore.ts`
+- [ ] Create `DuplicatesView.tsx` component with threshold slider, pair list, Open both / Dismiss actions
+- [ ] Wire `menu:findDuplicates` event to open duplicates tab
+- [ ] Add all i18n keys for duplicates UI
+- [ ] Test: findDuplicates returns pairs above threshold. Dismissed pairs excluded. Menu opens tab.
+
+### Phase 6: Python API + docs
+> Goal: Embeddings features accessible from Python macros.
+
+- [ ] Add `posts.find_similar`, `posts.suggest_tags`, `posts.find_duplicates`, `posts.dismiss_duplicate_pair` to `bds_api`
+- [ ] Regenerate `API.md` — verify all params, return types, and sample calls documented
+- [ ] Test: API docs match implementation
+
+### Final: Build + full test pass
+- [ ] `npm test` — zero failures
+- [ ] `npm run build` — successful build
+- [ ] Manual smoke test: enable feature → model downloads → indexing completes → InsertModal shows related posts → tag suggestions work → duplicates view works
 
 ---
 
 ## Constraints
 
-- Feature must be opt-in (model download + 17 min indexing is not a silent default)
-- No external API calls — fully local
-- Model cached in `~/.cache/huggingface/`, index in internal project directory
-- Total added footprint: ~520 MB on disk (onnxruntime-node ~50 MB + model ~470 MB), ~300 MB RAM at runtime for model + index
-- Graceful degradation: if USearch native module fails to load (unsupported platform), disable the feature silently — never crash the app
-- Follow test-first mandate: write failing tests before implementing `EmbeddingEngine`
+- **Opt-in only** — model download (~470 MB) and initial indexing are not silent defaults
+- **Fully local** — no external API calls, no telemetry
+- **Model cache**: `~/.cache/huggingface/`. Embeddings in existing SQLite DB.
+- **Footprint**: ~520 MB disk (model + onnxruntime), ~300 MB RAM (model loaded), ~6 MB per project USearch index (10k posts).
+- **Graceful degradation**: if model fails to load or feature is disabled, all embedding UI elements are hidden — never crash the app
+- **Test-first**: write failing tests before implementing each engine method
+- **No hardcoded strings**: all UI text through i18n locale files

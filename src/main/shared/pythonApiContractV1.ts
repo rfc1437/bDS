@@ -202,6 +202,13 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('sync.commitAll', 'Stage all changes and commit for active project.', [requiredString('message')], 'GitActionResult'),
 
   method('publish.uploadSite', 'Upload rendered site to remote server via SSH.', [requiredObject('credentials')], 'PublishSiteResult'),
+
+  method('embeddings.findSimilar', 'Find posts semantically similar to the given post. Requires semantic similarity to be enabled in project settings.', [requiredString('postId'), optionalNumber('k')], 'SimilarPost[]'),
+  method('embeddings.getProgress', 'Get the embedding indexing progress for the active project.', [], '{ indexed: number; total: number }'),
+  method('embeddings.suggestTags', 'Suggest tags for a post based on tags used by semantically similar posts.', [requiredString('postId'), requiredArray('excludeTags')], 'TagSuggestion[]'),
+  method('embeddings.findDuplicates', 'Find post pairs with high content similarity (potential duplicates). Threshold is a similarity value from 0.0 to 1.0 (default 0.85).', [optionalNumber('threshold')], 'DuplicatePair[]'),
+  method('embeddings.dismissPair', 'Dismiss a duplicate pair so it no longer appears in results.', [requiredString('postIdA'), requiredString('postIdB')], 'void'),
+  method('embeddings.indexUnindexedPosts', 'Trigger background indexing of all posts not yet embedded.', [], 'void'),
 ];
 
 const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
@@ -345,6 +352,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'picoTheme', type: 'string', required: false, description: 'Preferred Pico theme token.' },
       { name: 'categoryMetadata', type: 'object', required: false, description: 'Category metadata keyed by category slug.' },
       { name: 'categorySettings', type: 'object', required: false, description: 'Category render settings keyed by category slug.' },
+      { name: 'semanticSimilarityEnabled', type: 'boolean', required: false, description: 'Enable local ONNX embedding-based semantic similarity features.' },
     ],
   },
   {
@@ -415,11 +423,36 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'error', type: 'string', required: false, description: 'Error message when analysis failed.' },
     ],
   },
+  {
+    name: 'SimilarPost',
+    description: 'A post with its semantic similarity score relative to a reference post.',
+    fields: [
+      { name: 'postId', type: 'string', required: true, description: 'Post identifier.' },
+      { name: 'similarity', type: 'number', required: true, description: 'Cosine similarity score from 0.0 to 1.0.' },
+    ],
+  },
+  {
+    name: 'TagSuggestion',
+    description: 'A tag suggested based on semantic similarity to similar posts.',
+    fields: [
+      { name: 'name', type: 'string', required: true, description: 'Tag name.' },
+      { name: 'score', type: 'number', required: true, description: 'Aggregated suggestion score.' },
+    ],
+  },
+  {
+    name: 'DuplicatePair',
+    description: 'A pair of posts with high content similarity that may be duplicates.',
+    fields: [
+      { name: 'postA', type: '{ id: string; title: string; slug: string; publishedAt?: string }', required: true, description: 'First post in the pair.' },
+      { name: 'postB', type: '{ id: string; title: string; slug: string; publishedAt?: string }', required: true, description: 'Second post in the pair.' },
+      { name: 'similarity', type: 'number', required: true, description: 'Cosine similarity score from 0.0 to 1.0.' },
+    ],
+  },
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.11.0',
-  generatedAt: '2026-02-27T00:00:00.000Z',
+  version: '1.12.0',
+  generatedAt: '2026-03-05T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
 };
