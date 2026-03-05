@@ -532,6 +532,11 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.getPost(id);
   });
 
+  safeHandle('posts:getBySlug', async (_, slug: string) => {
+    const engine = bundle.postEngine;
+    return engine.getPostBySlug(slug);
+  });
+
   safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean }) => {
     const engine = bundle.postEngine;
     const post = await engine.getPost(id);

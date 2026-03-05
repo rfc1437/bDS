@@ -326,6 +326,7 @@ None  # or
 - [posts.update](#postsupdate)
 - [posts.delete](#postsdelete)
 - [posts.get](#postsget)
+- [posts.getBySlug](#postsgetbyslug)
 - [posts.getPreviewUrl](#postsgetpreviewurl)
 - [posts.getAll](#postsgetall)
 - [posts.getByStatus](#postsgetbystatus)
@@ -477,6 +478,49 @@ Fetch one post by id.
 ```python
 from bds_api import bds
 result = await bds.posts.get(post_id='post-1')
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'title': 'value',
+    'slug': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'author': 'value',
+    'language': 'value',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'tags': 'value',
+    'categories': 'value'
+}
+```
+
+### posts.getBySlug
+
+Fetch one post by slug.
+
+**Parameters**
+
+- slug (str, required)
+
+**Response specification**
+
+- Return type: `PostData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `PostData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.get_by_slug(slug='slug')
 ```
 
 **Example response**

@@ -81,6 +81,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('posts.update', 'Update a post by id.', [requiredString('id'), requiredObject('data')], 'PostData | null'),
   method('posts.delete', 'Delete a post by id.', [requiredString('id')], 'boolean'),
   method('posts.get', 'Fetch one post by id.', [requiredString('postId')], 'PostData | null'),
+  method('posts.getBySlug', 'Fetch one post by slug.', [requiredString('slug')], 'PostData | null'),
   method('posts.getPreviewUrl', 'Get preview URL for post.', [requiredString('id'), optionalObject('options')], 'string | null'),
   method('posts.getAll', 'Fetch posts with pagination.', [optionalObject('options')], 'PaginatedPostsResult'),
   method('posts.getByStatus', 'Fetch posts by status.', [requiredString('status')], 'PostData[]'),

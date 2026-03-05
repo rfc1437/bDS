@@ -596,7 +596,23 @@ export class PostEngine extends EventEmitter {
   async getPost(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
     const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
-    
+    return this.resolvePostData(dbPost);
+  }
+
+  async getPostBySlug(slug: string): Promise<PostData | null> {
+    const db = getDatabase().getLocal();
+    const dbPost = await db
+      .select()
+      .from(posts)
+      .where(and(
+        eq(posts.slug, slug),
+        eq(posts.projectId, this.currentProjectId)
+      ))
+      .get();
+    return this.resolvePostData(dbPost);
+  }
+
+  private async resolvePostData(dbPost: typeof posts.$inferSelect | undefined): Promise<PostData | null> {
     if (!dbPost) {
       return null;
     }

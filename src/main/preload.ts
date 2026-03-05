@@ -54,6 +54,7 @@ export const electronAPI: ElectronAPI = {
     update: (id: string, data: unknown) => ipcRenderer.invoke('posts:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('posts:delete', id),
     get: (id: string) => ipcRenderer.invoke('posts:get', id),
+    getBySlug: (slug: string) => ipcRenderer.invoke('posts:getBySlug', slug),
     getPreviewUrl: (id: string, options?: { draft?: boolean }) => ipcRenderer.invoke('posts:getPreviewUrl', id, options),
     getAll: (options?: { limit?: number; offset?: number }) => ipcRenderer.invoke('posts:getAll', options),
     getByStatus: (status: string) => ipcRenderer.invoke('posts:getByStatus', status),

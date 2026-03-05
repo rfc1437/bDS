@@ -19,6 +19,7 @@ import type { PostMediaLinkData } from '../PostMediaEngine';
 export interface BlogToolDeps {
   postEngine: {
     getPost: (id: string) => Promise<PostData | null>;
+    getPostBySlug: (slug: string) => Promise<PostData | null>;
     getAllPosts: (options?: PaginationOptions) => Promise<{ items: PostData[]; total: number }>;
     getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
     searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<{ posts: PostData[]; total: number }>;
@@ -219,6 +220,34 @@ export function createBlogTools(deps: BlogToolDeps) {
       }),
       execute: async ({ postId }) => {
         const post = await postEngine.getPost(postId);
+        if (!post) return { success: false, error: 'Post not found' };
+        const [backlinks, linksTo] = await Promise.all([
+          postEngine.getLinkedBy(post.id),
+          postEngine.getLinksTo(post.id),
+        ]);
+        return {
+          success: true,
+          post: {
+            id: post.id, title: post.title, slug: post.slug,
+            content: post.content, excerpt: post.excerpt,
+            status: post.status, author: post.author,
+            categories: post.categories, tags: post.tags,
+            createdAt: post.createdAt, updatedAt: post.updatedAt,
+            publishedAt: post.publishedAt,
+            backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+            linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
+          },
+        };
+      },
+    }),
+
+    read_post_by_slug: tool({
+      description: 'Read the full content and metadata of a specific blog post by its slug. Includes backlinks (posts linking to this post). Useful when you know the slug but not the ID.',
+      inputSchema: z.object({
+        slug: z.string().describe('The slug of the post to read'),
+      }),
+      execute: async ({ slug }) => {
+        const post = await postEngine.getPostBySlug(slug);
         if (!post) return { success: false, error: 'Post not found' };
         const [backlinks, linksTo] = await Promise.all([
           postEngine.getLinkedBy(post.id),

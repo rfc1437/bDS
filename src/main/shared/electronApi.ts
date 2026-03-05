@@ -595,6 +595,7 @@ export interface ElectronAPI {
     update: (id: string, data: Partial<PostData>) => Promise<PostData | null>;
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<PostData | null>;
+    getBySlug: (slug: string) => Promise<PostData | null>;
     getPreviewUrl: (id: string, options?: { draft?: boolean }) => Promise<string | null>;
     getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;

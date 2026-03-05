@@ -52,6 +52,7 @@ export function decodeCursor(cursor: string): number {
 interface PostEngineContract {
   getAllPosts: (options?: PaginationOptions) => Promise<PaginatedResult<PostData>>;
   getPost: (id: string) => Promise<PostData | null>;
+  getPostBySlug: (slug: string) => Promise<PostData | null>;
   searchPosts: (query: string) => Promise<SearchResult[]>;
   searchPostsFiltered: (query: string, filter: PostFilter, pagination?: PaginationOptions) => Promise<{ posts: PostData[]; total: number }>;
   createPost: (data: Partial<PostData>) => Promise<PostData>;
@@ -604,6 +605,42 @@ export class MCPServer {
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    });
+
+    // ── read_post_by_slug ──
+    server.registerTool('read_post_by_slug', {
+      title: 'Read Post by Slug',
+      description: 'Read the full content and metadata of a specific blog post by its slug. Includes backlinks and outlinks. Useful when you know the slug but not the ID.',
+      inputSchema: {
+        slug: z.string().describe('The slug of the post to read'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    }, async (args) => {
+      const post = await this.deps.postEngine.getPostBySlug(args.slug);
+      if (!post) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Post with slug "${args.slug}" not found` }) }],
+          isError: true,
+        };
+      }
+      const [backlinks, linksTo] = await Promise.all([
+        this.deps.postEngine.getLinkedBy(post.id),
+        this.deps.postEngine.getLinksTo(post.id),
+      ]);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          post: {
+            id: post.id, title: post.title, slug: post.slug,
+            content: post.content, excerpt: post.excerpt,
+            status: post.status, author: post.author,
+            categories: post.categories, tags: post.tags,
+            createdAt: post.createdAt, updatedAt: post.updatedAt,
+            publishedAt: post.publishedAt,
+            backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+            linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
+          },
+        }) }],
       };
     });
   }
