@@ -91,7 +91,7 @@ function getChatService(): ChatService {
  */
 function getOneShotTasks(): OneShotTasks {
   if (!oneShotTasks) {
-    oneShotTasks = new OneShotTasks(getProviders(), getChatEngine(), engineBundle!.mediaEngine);
+    oneShotTasks = new OneShotTasks(getProviders(), getChatEngine(), engineBundle!.mediaEngine, engineBundle!.postEngine);
   }
   return oneShotTasks;
 }
@@ -890,6 +890,19 @@ export function registerChatHandlers(): void {
       return await getOneShotTasks().detectPostLanguage(title, content);
     } catch (error) {
       console.error('[Chat IPC] Error detecting post language:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Post Analysis ============
+
+  // Analyze a post and suggest title, excerpt, and slug using AI
+  ipcMain.handle('chat:analyzePost', async (_, postId: string, language?: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().analyzePost(postId, language || 'en');
+    } catch (error) {
+      console.error('[Chat IPC] Error analyzing post:', error);
       return { success: false, error: (error as Error).message };
     }
   });

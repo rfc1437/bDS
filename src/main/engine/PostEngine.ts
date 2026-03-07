@@ -448,6 +448,7 @@ export class PostEngine extends EventEmitter {
     // automatically transition to draft status (content moves from file to DB)
     const isContentOrMetadataChange = data.content !== undefined ||
                                        data.title !== undefined ||
+                                       data.slug !== undefined ||
                                        data.tags !== undefined ||
                                        data.categories !== undefined ||
                                        data.excerpt !== undefined ||
@@ -465,6 +466,21 @@ export class PostEngine extends EventEmitter {
       newSlug = await this.generateUniqueSlug(data.title || 'untitled', id);
     }
 
+    // If slug changed and the post has a file on disk, rename the file
+    let newFilePath: string | undefined;
+    if (newSlug !== existing.slug) {
+      const dbRow = await db.select().from(posts).where(eq(posts.id, id)).get();
+      if (dbRow?.filePath) {
+        const dir = path.dirname(dbRow.filePath);
+        newFilePath = path.join(dir, `${newSlug}.md`);
+        try {
+          await fs.rename(dbRow.filePath, newFilePath);
+        } catch {
+          // Old file may not exist
+        }
+      }
+    }
+
     const updated: PostData = {
       ...existing,
       ...data,
@@ -478,21 +494,25 @@ export class PostEngine extends EventEmitter {
     const checksum = this.calculateChecksum(updated.content);
 
     // All updates go to DB only — no file writes
+    const dbSet: Record<string, unknown> = {
+      title: updated.title,
+      slug: updated.slug,
+      excerpt: updated.excerpt,
+      content: updated.content,
+      status: updated.status,
+      author: updated.author,
+      updatedAt: updated.updatedAt,
+      publishedAt: updated.publishedAt,
+      checksum,
+      tags: JSON.stringify(updated.tags),
+      categories: JSON.stringify(updated.categories),
+      language: updated.language || null,
+    };
+    if (newFilePath !== undefined) {
+      dbSet.filePath = newFilePath;
+    }
     await db.update(posts)
-      .set({
-        title: updated.title,
-        slug: updated.slug,
-        excerpt: updated.excerpt,
-        content: updated.content,
-        status: updated.status,
-        author: updated.author,
-        updatedAt: updated.updatedAt,
-        publishedAt: updated.publishedAt,
-        checksum,
-        tags: JSON.stringify(updated.tags),
-        categories: JSON.stringify(updated.categories),
-        language: updated.language || null,
-      })
+      .set(dbSet)
       .where(eq(posts.id, id));
 
     // Update FTS index

@@ -994,6 +994,9 @@ export interface ElectronAPI {
     // Post Language Detection
     detectPostLanguage: (title: string, content: string) => Promise<{ success: boolean; language?: string; error?: string }>;
 
+    // Post Analysis (title, excerpt, slug suggestions)
+    analyzePost: (postId: string, language?: string) => Promise<{ success: boolean; title?: string; excerpt?: string; slug?: string; error?: string }>;
+
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;
     onToolCall: (callback: (data: ChatToolCall) => void) => () => void;

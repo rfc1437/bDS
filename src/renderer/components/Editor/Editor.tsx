@@ -24,7 +24,8 @@ import { TemplatesView } from '../TemplatesView/TemplatesView';
 import { DuplicatesView } from '../DuplicatesView/DuplicatesView';
 import { AutoSaveManager, getContrastColor, loadTagColorMap } from '../../utils';
 import { InsertModal } from '../InsertModal';
-import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
+import { AISuggestionsModal } from '../AISuggestionsModal/AISuggestionsModal';
+import type { SuggestionField } from '../AISuggestionsModal/AISuggestionsModal';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { EditorRoute, resolveEditorRoute } from '../../navigation/editorRouting';
 import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEditor';
@@ -213,6 +214,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   // Token incremented to signal Monaco that it should re-read its defaultValue.
   // This is used instead of controlled `value` to avoid cursor-reset races.
   const [monacoResetToken, setMonacoResetToken] = useState(0);
+
+  // Quick actions state for AI post analysis
+  const [showPostQuickActions, setShowPostQuickActions] = useState(false);
+  const [projectLanguage, setProjectLanguage] = useState('en');
+  const postQuickActionsRef = useRef<HTMLDivElement>(null);
+  const [showPostAISuggestionsModal, setShowPostAISuggestionsModal] = useState(false);
+  const [isAnalyzingPost, setIsAnalyzingPost] = useState(false);
+  const [postAISuggestionFields, setPostAISuggestionFields] = useState<SuggestionField[]>([]);
+  const [postAIError, setPostAIError] = useState<string | undefined>(undefined);
 
   const isDirty = checkIsDirty(postId);
 
@@ -434,6 +444,91 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setIsDetectingLanguage(false);
     }
   }, [title, content, isDetectingLanguage, tr]);
+
+  // Load project language for AI post analysis
+  useEffect(() => {
+    window.electronAPI?.meta?.getProjectMetadata?.()?.then(metadata => {
+      if (metadata?.mainLanguage) {
+        setProjectLanguage(metadata.mainLanguage);
+      }
+    });
+  }, []);
+
+  // Close quick actions menu when clicking outside
+  useEffect(() => {
+    if (!showPostQuickActions) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (postQuickActionsRef.current && !postQuickActionsRef.current.contains(e.target as Node)) {
+        setShowPostQuickActions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPostQuickActions]);
+
+  // Handle AI post analysis (title, excerpt, slug suggestions)
+  const handlePostAIAnalysis = useCallback(async () => {
+    if (!post || isAnalyzingPost) return;
+
+    setShowPostQuickActions(false);
+    setShowPostAISuggestionsModal(true);
+    setIsAnalyzingPost(true);
+    setPostAISuggestionFields([]);
+    setPostAIError(undefined);
+
+    try {
+      const result = await window.electronAPI?.chat.analyzePost(postId, projectLanguage);
+
+      if (result?.success) {
+        setPostAISuggestionFields([
+          { key: 'title', label: tr('aiSuggestions.titleField'), currentValue: title, suggestedValue: result.title },
+          { key: 'excerpt', label: tr('aiSuggestions.excerptField'), currentValue: post.excerpt || '', suggestedValue: result.excerpt },
+          { key: 'slug', label: tr('aiSuggestions.slugField'), currentValue: post.slug, suggestedValue: result.slug },
+        ]);
+      } else {
+        setPostAIError(result?.error || tr('editor.post.error.analyzePost'));
+      }
+    } catch (error) {
+      console.error('Failed to analyze post:', error);
+      setPostAIError((error as Error).message || tr('editor.post.error.analyzePost'));
+    } finally {
+      setIsAnalyzingPost(false);
+    }
+  }, [post, postId, projectLanguage, isAnalyzingPost, title, tr]);
+
+  // Handle applying AI post suggestions
+  const handleApplyPostAISuggestions = useCallback(async (values: Record<string, string>) => {
+    setShowPostAISuggestionsModal(false);
+    if (Object.keys(values).length === 0) return;
+
+    try {
+      const updatePayload: Record<string, unknown> = {};
+      if (values.title) updatePayload.title = values.title;
+      if (values.excerpt) updatePayload.excerpt = values.excerpt;
+      if (values.slug) updatePayload.slug = values.slug;
+
+      const updated = await window.electronAPI?.posts.update(postId, updatePayload as Parameters<typeof window.electronAPI.posts.update>[1]);
+      if (updated) {
+        updatePost(postId, updated as Partial<PostData>);
+        setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
+        // Update local state for fields that changed
+        if (values.title) setTitle(values.title);
+        markDirty(postId);
+        showToast.success(tr('editor.post.toast.aiApplied'));
+      }
+    } catch (error) {
+      console.error('Failed to apply AI suggestions:', error);
+      showToast.error(tr('editor.post.error.applyFailed'));
+    }
+  }, [postId, updatePost, markDirty, tr]);
+
+  // Close AI post suggestions modal
+  const handleClosePostAISuggestionsModal = useCallback(() => {
+    setShowPostAISuggestionsModal(false);
+    setPostAISuggestionFields([]);
+    setPostAIError(undefined);
+  }, []);
+
   const handlePublish = async () => {
     await handleSave();
     try {
@@ -743,9 +838,34 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             {post.status}
           </span>
           {isSaving && <span className="auto-save-indicator">{tr('editor.saving')}</span>}
+          <div className="quick-actions-wrapper" ref={postQuickActionsRef}>
+            <button
+              className="secondary quick-actions-btn"
+              onClick={() => setShowPostQuickActions(!showPostQuickActions)}
+              disabled={isAnalyzingPost}
+              title={tr('editor.post.quickActions.title')}
+            >
+              {isAnalyzingPost ? tr('editor.post.quickActions.analyzing') : tr('editor.post.quickActions.button')}
+            </button>
+            {showPostQuickActions && (
+              <div className="quick-actions-menu">
+                <button
+                  className="quick-action-item"
+                  onClick={handlePostAIAnalysis}
+                  disabled={isAnalyzingPost || !content}
+                >
+                  <span className="quick-action-icon">🤖</span>
+                  <span className="quick-action-text">
+                    <strong>{tr('editor.post.quickActions.aiTitle')}</strong>
+                    <small>{tr('editor.post.quickActions.aiDescription')}</small>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
           {post.status === 'draft' && (
-            <button 
-              onClick={handlePublish} 
+            <button
+              onClick={handlePublish}
               className="success"
               title={tr('editor.publishTitle')}
             >
@@ -1038,6 +1158,19 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           onClose={() => setShowMediaSearch(false)}
         />
       )}
+
+      {/* AI Post Suggestions Modal */}
+      <AISuggestionsModal
+        isOpen={showPostAISuggestionsModal}
+        isLoading={isAnalyzingPost}
+        fields={postAISuggestionFields}
+        modalTitle={tr('aiSuggestions.postTitle')}
+        loadingText={tr('aiSuggestions.analyzingPost')}
+        emptyText={tr('aiSuggestions.postEmpty')}
+        error={postAIError}
+        onConfirm={handleApplyPostAISuggestions}
+        onClose={handleClosePostAISuggestionsModal}
+      />
     </div>
   );
 };
@@ -1067,7 +1200,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // AI suggestions modal state
   const [showAISuggestionsModal, setShowAISuggestionsModal] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiSuggestions, setAISuggestions] = useState<AISuggestions | null>(null);
+  const [aiSuggestionFields, setAISuggestionFields] = useState<Array<{ key: string; label: string; currentValue: string; suggestedValue?: string }>>([]);
   const [aiError, setAIError] = useState<string | undefined>(undefined);
 
   // Load project language setting
@@ -1096,22 +1229,22 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // Handle AI image analysis for alt text and caption
   const handleAIAnalysis = async () => {
     if (!item || isAnalyzing) return;
-    
+
     setShowQuickActions(false);
     setShowAISuggestionsModal(true);
     setIsAnalyzing(true);
-    setAISuggestions(null);
+    setAISuggestionFields([]);
     setAIError(undefined);
-    
+
     try {
       const result = await window.electronAPI?.chat.analyzeMediaImage(item.id, projectLanguage);
-      
+
       if (result?.success) {
-        setAISuggestions({
-          title: result.title,
-          alt: result.alt,
-          caption: result.caption,
-        });
+        setAISuggestionFields([
+          { key: 'title', label: tr('aiSuggestions.titleField'), currentValue: title, suggestedValue: result.title },
+          { key: 'alt', label: tr('aiSuggestions.altField'), currentValue: alt, suggestedValue: result.alt },
+          { key: 'caption', label: tr('aiSuggestions.captionField'), currentValue: caption, suggestedValue: result.caption },
+        ]);
       } else {
         setAIError(result?.error || tr('editor.media.error.analyzeImage'));
       }
@@ -1124,7 +1257,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   };
 
   // Handle applying AI suggestions
-  const handleApplyAISuggestions = (values: Partial<AISuggestions>) => {
+  const handleApplyAISuggestions = (values: Record<string, string>) => {
     if (values.title) setTitle(values.title);
     if (values.alt) setAlt(values.alt);
     if (values.caption) setCaption(values.caption);
@@ -1551,8 +1684,10 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       <AISuggestionsModal
         isOpen={showAISuggestionsModal}
         isLoading={isAnalyzing}
-        suggestions={aiSuggestions}
-        currentValues={{ title, alt, caption }}
+        fields={aiSuggestionFields}
+        modalTitle={tr('aiSuggestions.title')}
+        loadingText={tr('aiSuggestions.analyzing')}
+        emptyText={tr('aiSuggestions.empty')}
         error={aiError}
         onConfirm={handleApplyAISuggestions}
         onClose={handleCloseAISuggestionsModal}

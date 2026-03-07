@@ -191,6 +191,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
 
   method('chat.analyzeMediaImage', 'Analyze an image and generate title, alt text, and caption using AI.', [requiredString('mediaId'), optionalString('language')], 'ImageAnalysisResult'),
   method('chat.detectPostLanguage', 'Detect the language of a post from its title and content.', [requiredString('title'), requiredString('content')], '{ success: boolean; language?: string; error?: string }'),
+  method('chat.analyzePost', 'Analyze a post and generate suggested title, excerpt, and slug using AI.', [requiredString('postId'), optionalString('language')], 'PostAnalysisResult'),
 
   method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
   method('sync.getRepoState', 'Get repository state for active project.', [], 'RepoState'),
@@ -426,6 +427,17 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
+    name: 'PostAnalysisResult',
+    description: 'Result from AI post analysis containing suggested title, excerpt, and slug.',
+    fields: [
+      { name: 'success', type: 'boolean', required: true, description: 'Whether the analysis succeeded.' },
+      { name: 'title', type: 'string', required: false, description: 'Suggested post title.' },
+      { name: 'excerpt', type: 'string', required: false, description: 'Suggested plain-text excerpt summarizing the post.' },
+      { name: 'slug', type: 'string', required: false, description: 'Suggested URL-friendly slug.' },
+      { name: 'error', type: 'string', required: false, description: 'Error message when analysis failed.' },
+    ],
+  },
+  {
     name: 'SimilarPost',
     description: 'A post with its semantic similarity score relative to a reference post.',
     fields: [
@@ -453,8 +465,8 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.12.0',
-  generatedAt: '2026-03-05T00:00:00.000Z',
+  version: '1.13.0',
+  generatedAt: '2026-03-07T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
 };
