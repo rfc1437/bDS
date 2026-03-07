@@ -52,6 +52,20 @@ export interface PostTranslationResult {
   error?: string;
 }
 
+function normalizeTranslatedMarkdownBody(content: string, sourceContent: string): string {
+  const normalizedContent = content.trim();
+  if (!normalizedContent) {
+    return '';
+  }
+
+  const leadingLabelPattern = /^(content|inhalt):\s*\n\s*\n/i;
+  if (!leadingLabelPattern.test(normalizedContent) || leadingLabelPattern.test(sourceContent.trim())) {
+    return normalizedContent;
+  }
+
+  return normalizedContent.replace(leadingLabelPattern, '');
+}
+
 // ---------------------------------------------------------------------------
 // OneShotTasks
 // ---------------------------------------------------------------------------
@@ -492,10 +506,7 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       `Excerpt: ${post.excerpt || ''}`,
     ].join('\n\n');
     const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Translate from ${sourceLanguage} to ${targetLanguage}.`;
-    const contentUserPrompt = [
-      'Content:',
-      post.content,
-    ].join('\n\n');
+    const contentUserPrompt = post.content;
 
     try {
       const model = this.providers.resolveModel(modelId);
@@ -525,10 +536,12 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
         }
       }
 
+      const normalizedTranslatedContent = normalizeTranslatedMarkdownBody(translatedContent || '', post.content);
+
       const translation = await this.postEngine.upsertPostTranslation(postId, targetLanguage, {
         title: parsed?.title || post.title,
         excerpt: parsed?.excerpt || post.excerpt || undefined,
-        content: translatedContent || '',
+        content: normalizedTranslatedContent,
       });
 
       return {

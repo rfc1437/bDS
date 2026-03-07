@@ -268,6 +268,72 @@ describe('OneShotTasks.translatePost', () => {
     });
   });
 
+  it('passes the raw markdown body without a leading content label', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Heading\n\nBody text',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: '# Titre\n\nTexte',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"Mon Post","excerpt":"Resume"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: '# Titre\n\nTexte',
+      } as any);
+
+    await tasks.translatePost('post-1', 'fr');
+
+    expect(mockGenerateText).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      prompt: '# Heading\n\nBody text',
+    }));
+  });
+
+  it('strips an accidental leading content label from translated markdown', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'Mein Beitrag',
+      excerpt: 'Zusammenfassung',
+      content: '# Uberschrift\n\nText',
+      language: 'de',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'en',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Heading\n\nText',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"My Post","excerpt":"Summary"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'content:\n\n# Heading\n\nText',
+      } as any);
+
+    await tasks.translatePost('post-1', 'en');
+
+    expect(deps.postEngine.upsertPostTranslation).toHaveBeenCalledWith('post-1', 'en', {
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Heading\n\nText',
+    });
+  });
+
   it('falls back to source title and excerpt when metadata JSON is invalid', async () => {
     deps.postEngine.getPost.mockResolvedValue({
       id: 'post-1',
