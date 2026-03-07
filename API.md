@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.13.0
+Contract version: 1.14.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -3524,6 +3524,7 @@ result = await bds.tags.sync_from_posts()
 - [chat.analyzeMediaImage](#chatanalyzemediaimage)
 - [chat.detectPostLanguage](#chatdetectpostlanguage)
 - [chat.analyzePost](#chatanalyzepost)
+- [chat.translatePost](#chattranslatepost)
 
 ### chat.analyzeMediaImage
 
@@ -3613,6 +3614,37 @@ result = await bds.chat.analyze_post(post_id='post-1')
     'title': 'value',
     'excerpt': 'value',
     'slug': 'value',
+    'error': 'value'
+}
+```
+
+### chat.translatePost
+
+Translate a post into a target language and save it as a translation draft.
+
+**Parameters**
+
+- postId (str, required)
+- targetLanguage (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationResult`
+- Data structures: `PostTranslationResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.translate_post(post_id='post-1', target_language='target_language')
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'translation': None,
     'error': 'value'
 }
 ```
@@ -4431,6 +4463,39 @@ Result from AI post analysis containing suggested title, excerpt, and slug.
 - excerpt (`string`, optional): Suggested plain-text excerpt summarizing the post.
 - slug (`string`, optional): Suggested URL-friendly slug.
 - error (`string`, optional): Error message when analysis failed.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### PostTranslationData
+
+Stored translation draft or published translation for a post.
+
+**Fields**
+
+- id (`string`, required): Translation identifier.
+- projectId (`string`, required): Owning project identifier.
+- translationFor (`string`, required): Source post identifier this translation belongs to.
+- language (`string`, required): Target language code for the translation.
+- title (`string`, required): Translated title.
+- excerpt (`string`, optional): Translated excerpt.
+- content (`string`, required): Translated Markdown content.
+- status (`'draft' | 'published' | 'archived'`, required): Translation lifecycle state.
+- createdAt (`string`, required): Creation timestamp.
+- updatedAt (`string`, required): Last update timestamp.
+- publishedAt (`string`, optional): Publish timestamp when the translation is published.
+- filePath (`string`, required): Translation file path on disk.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### PostTranslationResult
+
+Result from AI post translation containing the saved translation draft.
+
+**Fields**
+
+- success (`boolean`, required): Whether the translation succeeded.
+- translation (`PostTranslationData`, optional): Saved translation draft when successful.
+- error (`string`, optional): Error message when translation failed.
 
 [↑ Back to Table of contents](#table-of-contents)
 

@@ -192,6 +192,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('chat.analyzeMediaImage', 'Analyze an image and generate title, alt text, and caption using AI.', [requiredString('mediaId'), optionalString('language')], 'ImageAnalysisResult'),
   method('chat.detectPostLanguage', 'Detect the language of a post from its title and content.', [requiredString('title'), requiredString('content')], '{ success: boolean; language?: string; error?: string }'),
   method('chat.analyzePost', 'Analyze a post and generate suggested title, excerpt, and slug using AI.', [requiredString('postId'), optionalString('language')], 'PostAnalysisResult'),
+  method('chat.translatePost', 'Translate a post into a target language and save it as a translation draft.', [requiredString('postId'), requiredString('targetLanguage')], 'PostTranslationResult'),
 
   method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
   method('sync.getRepoState', 'Get repository state for active project.', [], 'RepoState'),
@@ -439,6 +440,33 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
+    name: 'PostTranslationData',
+    description: 'Stored translation draft or published translation for a post.',
+    fields: [
+      { name: 'id', type: 'string', required: true, description: 'Translation identifier.' },
+      { name: 'projectId', type: 'string', required: true, description: 'Owning project identifier.' },
+      { name: 'translationFor', type: 'string', required: true, description: 'Source post identifier this translation belongs to.' },
+      { name: 'language', type: 'string', required: true, description: 'Target language code for the translation.' },
+      { name: 'title', type: 'string', required: true, description: 'Translated title.' },
+      { name: 'excerpt', type: 'string', required: false, description: 'Translated excerpt.' },
+      { name: 'content', type: 'string', required: true, description: 'Translated Markdown content.' },
+      { name: 'status', type: "'draft' | 'published' | 'archived'", required: true, description: 'Translation lifecycle state.' },
+      { name: 'createdAt', type: 'string', required: true, description: 'Creation timestamp.' },
+      { name: 'updatedAt', type: 'string', required: true, description: 'Last update timestamp.' },
+      { name: 'publishedAt', type: 'string', required: false, description: 'Publish timestamp when the translation is published.' },
+      { name: 'filePath', type: 'string', required: true, description: 'Translation file path on disk.' },
+    ],
+  },
+  {
+    name: 'PostTranslationResult',
+    description: 'Result from AI post translation containing the saved translation draft.',
+    fields: [
+      { name: 'success', type: 'boolean', required: true, description: 'Whether the translation succeeded.' },
+      { name: 'translation', type: 'PostTranslationData', required: false, description: 'Saved translation draft when successful.' },
+      { name: 'error', type: 'string', required: false, description: 'Error message when translation failed.' },
+    ],
+  },
+  {
     name: 'SimilarPost',
     description: 'A post with its semantic similarity score relative to a reference post.',
     fields: [
@@ -466,7 +494,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.13.0',
+  version: '1.14.0',
   generatedAt: '2026-03-07T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,
