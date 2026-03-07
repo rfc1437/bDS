@@ -11,6 +11,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as path from 'path';
+import { withCapturedConsole } from '../utils';
 
 // Mock data stores
 const mockFiles = new Map<string, string>();
@@ -561,22 +562,19 @@ describe('MetaEngine', () => {
     });
 
     it('should throw non-ENOENT errors when loading project metadata', async () => {
-      // Spy on console.error to suppress expected error output
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
-      // Mock readFile to throw a non-ENOENT error
-      const originalReadFile = vi.mocked(fs.readFile);
-      originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Permission denied'), { code: 'EACCES' }));
-      
-      await expect(metaEngine.loadProjectMetadata()).rejects.toThrow('Permission denied');
-      
-      // Verify error was logged before rethrowing
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[MetaEngine] Failed to load project metadata:',
-        expect.any(Error)
-      );
-      
-      consoleErrorSpy.mockRestore();
+      await withCapturedConsole('error', async ({ spy, text }) => {
+        const originalReadFile = vi.mocked(fs.readFile);
+        originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Permission denied'), { code: 'EACCES' }));
+
+        await expect(metaEngine.loadProjectMetadata()).rejects.toThrow('Permission denied');
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          '[MetaEngine] Failed to load project metadata:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('Permission denied');
+      });
     });
 
     it('should set and get defaultAuthor in project metadata', async () => {
@@ -854,22 +852,19 @@ describe('MetaEngine', () => {
     });
 
     it('should throw non-ENOENT errors when loading categories', async () => {
-      // Spy on console.error to suppress expected error output
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
-      // Mock readFile to throw a non-ENOENT error
-      const originalReadFile = vi.mocked(fs.readFile);
-      originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Disk full'), { code: 'ENOSPC' }));
-      
-      await expect(metaEngine.loadCategories()).rejects.toThrow('Disk full');
-      
-      // Verify error was logged before rethrowing
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[MetaEngine] Failed to load categories:',
-        expect.any(Error)
-      );
-      
-      consoleErrorSpy.mockRestore();
+      await withCapturedConsole('error', async ({ spy, text }) => {
+        const originalReadFile = vi.mocked(fs.readFile);
+        originalReadFile.mockRejectedValueOnce(Object.assign(new Error('Disk full'), { code: 'ENOSPC' }));
+
+        await expect(metaEngine.loadCategories()).rejects.toThrow('Disk full');
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          '[MetaEngine] Failed to load categories:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('Disk full');
+      });
     });
 
     it('should emit projectMetadataChanged event when metadata is modified', async () => {
@@ -971,7 +966,16 @@ describe('MetaEngine', () => {
         { categories: JSON.stringify(['db-cat']) },
       ];
 
-      await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+      await withCapturedConsole('warn', async ({ spy, text }) => {
+        await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          '[MetaEngine] Failed to parse categories JSON, treating as empty and rebuilding from DB/defaults:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('Unexpected end of JSON input');
+      });
 
       const categories = await metaEngine.getCategories();
       expect(categories).toContain('db-cat');
@@ -988,7 +992,16 @@ describe('MetaEngine', () => {
       mockFiles.set(normalizePath(`${metaDir}/categories.json`), JSON.stringify(['news']));
       mockFiles.set(normalizePath(`${metaDir}/category-meta.json`), '{"news":');
 
-      await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+      await withCapturedConsole('warn', async ({ spy, text }) => {
+        await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          '[MetaEngine] Failed to parse category metadata JSON, using default metadata merge:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('Unexpected end of JSON input');
+      });
 
       const metadata = await metaEngine.getProjectMetadata() as any;
       expect(metadata?.name).toBe('Synced Project');
@@ -1293,7 +1306,16 @@ describe('MetaEngine', () => {
       }));
       mockFiles.set(normalizePath(`${metaDir}/publishing.json`), '{"sshHost":');
 
-      await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+      await withCapturedConsole('warn', async ({ spy, text }) => {
+        await expect(metaEngine.syncOnStartup()).resolves.toBeUndefined();
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          '[MetaEngine] Failed to parse publishing preferences JSON, using null:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('Unexpected end of JSON input');
+      });
 
       const prefs = await metaEngine.getPublishingPreferences();
       expect(prefs).toBeNull();

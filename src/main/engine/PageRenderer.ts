@@ -1269,6 +1269,17 @@ export class PageRenderer {
       return true;
     };
 
+    const resolveListContent = (post: PostData): string => {
+      const showTitle = shouldShowListTitle(post);
+      const excerpt = typeof post.excerpt === 'string' ? post.excerpt.trim() : '';
+
+      if (showTitle && excerpt.length > 0) {
+        return post.excerpt as string;
+      }
+
+      return post.content;
+    };
+
     const dayBlocks: DayBlockContext[] = [];
 
     if (!options.archiveGrouping) {
@@ -1280,7 +1291,7 @@ export class PageRenderer {
           id: post.id,
           slug: post.slug,
           title: post.title,
-          content: post.content,
+          content: resolveListContent(post),
           show_title: shouldShowListTitle(post),
         })),
       });
@@ -1306,7 +1317,7 @@ export class PageRenderer {
           id: post.id,
           slug: post.slug,
           title: post.title,
-          content: post.content,
+          content: resolveListContent(post),
           show_title: shouldShowListTitle(post),
         });
       }

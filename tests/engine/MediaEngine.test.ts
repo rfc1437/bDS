@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { withCapturedConsole } from '../utils';
 import { resetMockCounters } from '../utils/factories';
 
 // Mock electron BEFORE importing MediaEngine (it uses require('electron') internally)
@@ -30,6 +31,8 @@ const mockMedia = new Map<string, any>();
 const mockPostMedia = new Map<string, any>();
 const mockFiles = new Map<string, Buffer | string>();
 const normalizePath = (value: string): string => value.replace(/\\/g, '/');
+const sharpMetadataFailurePaths = new Set<string>();
+const sharpThumbnailFailurePaths = new Set<string>();
 
 // Track database operations for testing
 let mediaDeleteCalled = false;
@@ -169,6 +172,36 @@ vi.mock('uuid', () => ({
   v4: vi.fn(() => 'mock-media-uuid-' + Math.random().toString(36).substr(2, 9)),
 }));
 
+vi.mock('sharp', () => ({
+  default: vi.fn((sourcePath: string) => {
+    const normalizedSourcePath = normalizePath(sourcePath);
+    const pipeline = {
+      metadata: vi.fn(async () => {
+        if (Array.from(sharpMetadataFailurePaths).some((failurePath) => normalizedSourcePath.startsWith(failurePath))) {
+          throw new Error(`sharp metadata failed for ${sourcePath}`);
+        }
+
+        return {
+          width: 640,
+          height: 480,
+        };
+      }),
+      resize: vi.fn(() => pipeline),
+      jpeg: vi.fn(() => pipeline),
+      webp: vi.fn(() => pipeline),
+      toFile: vi.fn(async (outputPath: string) => {
+        if (Array.from(sharpThumbnailFailurePaths).some((failurePath) => normalizedSourcePath.startsWith(failurePath))) {
+          throw new Error(`sharp thumbnail failed for ${sourcePath}`);
+        }
+
+        mockFiles.set(normalizePath(outputPath), Buffer.from('thumbnail-data'));
+      }),
+    };
+
+    return pipeline;
+  }),
+}));
+
 describe('MediaEngine', () => {
   let mediaEngine: MediaEngine;
 
@@ -177,6 +210,8 @@ describe('MediaEngine', () => {
     mockMedia.clear();
     mockPostMedia.clear();
     mockFiles.clear();
+    sharpMetadataFailurePaths.clear();
+    sharpThumbnailFailurePaths.clear();
     mediaDeleteCalled = false;
     postMediaDeleteCalled = false;
     postMediaInserts = [];
@@ -249,19 +284,10 @@ describe('MediaEngine', () => {
   });
 
   describe('Media Import', () => {
-    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-    
     beforeEach(() => {
-      // Spy on console.error to suppress expected error output (sharp can't read mock files)
-      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
       // Setup a source file for import
       const imageBuffer = Buffer.from('fake-image-data');
       mockFiles.set('/source/image.jpg', imageBuffer);
-    });
-    
-    afterEach(() => {
-      consoleErrorSpy.mockRestore();
     });
 
     it('should import media from source path', async () => {
@@ -414,20 +440,40 @@ describe('MediaEngine', () => {
     });
 
     it('should store width and height when provided', async () => {
-      const media = await mediaEngine.importMedia('/source/image.jpg', {
-        width: 1920,
-        height: 1080,
-      });
+      sharpMetadataFailurePaths.add('/mock/userData/projects/default/media/');
 
-      expect(media.width).toBe(1920);
-      expect(media.height).toBe(1080);
+      await withCapturedConsole('error', async ({ spy, text }) => {
+        const media = await mediaEngine.importMedia('/source/image.jpg', {
+          width: 1920,
+          height: 1080,
+        });
+
+        expect(media.width).toBe(1920);
+        expect(media.height).toBe(1080);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          'Failed to get image dimensions:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('sharp metadata failed');
+      });
     });
 
     it('should handle media without dimensions', async () => {
-      const media = await mediaEngine.importMedia('/source/image.jpg');
+      sharpMetadataFailurePaths.add('/mock/userData/projects/default/media/');
 
-      expect(media.width).toBeUndefined();
-      expect(media.height).toBeUndefined();
+      await withCapturedConsole('error', async ({ spy, text }) => {
+        const media = await mediaEngine.importMedia('/source/image.jpg');
+
+        expect(media.width).toBeUndefined();
+        expect(media.height).toBeUndefined();
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          'Failed to get image dimensions:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('sharp metadata failed');
+      });
     });
   });
 
@@ -1594,39 +1640,36 @@ linkedPostIds: ["post-x"]`);
   describe('generateThumbnails', () => {
     it('should skip non-image media', async () => {
       const fs = await import('fs/promises');
+      sharpThumbnailFailurePaths.add('/mock/media/document.pdf');
       
-      // Spy on console.error to suppress expected error output
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
-      vi.mocked(mockLocalDb.select).mockImplementation(() => {
-        const chain = createSelectChain();
-        chain.where = vi.fn().mockReturnValue({
-          ...chain,
-          get: vi.fn().mockResolvedValue({
-            id: 'pdf-id',
-            mimeType: 'application/pdf',
-            filePath: '/mock/media/document.pdf',
-          }),
+      await withCapturedConsole('error', async ({ spy, text }) => {
+        vi.mocked(mockLocalDb.select).mockImplementation(() => {
+          const chain = createSelectChain();
+          chain.where = vi.fn().mockReturnValue({
+            ...chain,
+            get: vi.fn().mockResolvedValue({
+              id: 'pdf-id',
+              mimeType: 'application/pdf',
+              filePath: '/mock/media/document.pdf',
+            }),
+          });
+          return chain;
         });
-        return chain;
+
+        vi.mocked(fs.writeFile).mockClear();
+        await mediaEngine.generateThumbnails('pdf-id', '/mock/media/document.pdf');
+
+        const thumbnailWrites = vi.mocked(fs.writeFile).mock.calls.filter(
+          call => String(call[0]).includes('thumbnail')
+        );
+        expect(thumbnailWrites).toHaveLength(0);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          'Failed to generate thumbnails:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('sharp thumbnail failed for /mock/media/document.pdf');
       });
-
-      vi.mocked(fs.writeFile).mockClear();
-      await mediaEngine.generateThumbnails('pdf-id');
-
-      // Should not write any thumbnail files for non-images
-      const thumbnailWrites = vi.mocked(fs.writeFile).mock.calls.filter(
-        call => String(call[0]).includes('thumbnail')
-      );
-      expect(thumbnailWrites).toHaveLength(0);
-      
-      // Verify error was logged (graceful degradation behavior)
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to generate thumbnails:',
-        expect.any(Error)
-      );
-      
-      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -1671,17 +1714,6 @@ linkedPostIds: ["post-x"]`);
   });
 
   describe('replaceMediaFile', () => {
-    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-    
-    beforeEach(() => {
-      // Spy on console.error to suppress expected error output (sharp can't read mock files)
-      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    });
-    
-    afterEach(() => {
-      consoleErrorSpy.mockRestore();
-    });
-
     it('should return null for non-existent media', async () => {
       // Mock database to return nothing
       vi.mocked(mockLocalDb.select).mockImplementation(() => {
@@ -1699,9 +1731,6 @@ linkedPostIds: ["post-x"]`);
 
     it('should replace file and update database when checksum differs', async () => {
       const fs = await import('fs/promises');
-
-      // Spy on console.error to suppress expected error output (sharp can't read mock file)
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Setup new source file with different content
       const newImageBuffer = Buffer.from('new-image-data-different');
@@ -1736,21 +1765,21 @@ linkedPostIds: ["post-x"]`);
 
       // Clear any previous mock calls
       vi.mocked(fs.copyFile).mockClear();
+      sharpMetadataFailurePaths.add('/mock/media/2025/01/media-id-123.jpg');
 
-      const result = await mediaEngine.replaceMediaFile('media-id-123', '/source/new-image.jpg');
+      await withCapturedConsole('error', async ({ spy, text }) => {
+        const result = await mediaEngine.replaceMediaFile('media-id-123', '/source/new-image.jpg');
 
-      expect(result).not.toBeNull();
-      expect(result!.id).toBe('media-id-123');
-      // File should be copied to the existing location
-      expect(fs.copyFile).toHaveBeenCalledWith('/source/new-image.jpg', existingMedia.filePath);
-      
-      // Verify error was logged (graceful degradation for image dimensions)
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to get image dimensions:',
-        expect.any(Error)
-      );
-      
-      consoleErrorSpy.mockRestore();
+        expect(result).not.toBeNull();
+        expect(result!.id).toBe('media-id-123');
+        expect(fs.copyFile).toHaveBeenCalledWith('/source/new-image.jpg', existingMedia.filePath);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(
+          'Failed to get image dimensions:',
+          expect.any(Error)
+        );
+        expect(text()).toContain('sharp metadata failed for /mock/media/2025/01/media-id-123.jpg');
+      });
     });
 
     it('should not replace file when checksum is the same', async () => {
