@@ -486,34 +486,49 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     }
 
     const sourceLanguage = post.language || 'en';
-    const systemPrompt = `You translate blog posts. Return ONLY valid JSON with keys title, excerpt, and content. Preserve Markdown structure. Do not add commentary. Translate from ${sourceLanguage} to ${targetLanguage}.`;
-    const userPrompt = [
+    const metadataSystemPrompt = `You translate blog post metadata. Return ONLY valid JSON with keys title and excerpt. Do not add commentary. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const metadataUserPrompt = [
       `Title: ${post.title}`,
       `Excerpt: ${post.excerpt || ''}`,
+    ].join('\n\n');
+    const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const contentUserPrompt = [
       'Content:',
       post.content,
     ].join('\n\n');
 
     try {
       const model = this.providers.resolveModel(modelId);
-      const { text } = await generateText({
+      const { text: metadataText } = await generateText({
         model,
-        system: systemPrompt,
-        prompt: userPrompt,
+        system: metadataSystemPrompt,
+        prompt: metadataUserPrompt,
+        maxOutputTokens: 500,
+        maxRetries: 2,
+      });
+
+      const { text: translatedContent } = await generateText({
+        model,
+        system: contentSystemPrompt,
+        prompt: contentUserPrompt,
         maxOutputTokens: 4000,
         maxRetries: 2,
       });
 
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        return { success: false, error: 'Invalid response format from AI' };
+      let parsed: { title?: string; excerpt?: string } | null = null;
+      const jsonMatch = metadataText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch {
+          parsed = null;
+        }
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
       const translation = await this.postEngine.upsertPostTranslation(postId, targetLanguage, {
-        title: parsed.title || post.title,
-        excerpt: parsed.excerpt || undefined,
-        content: parsed.content || '',
+        title: parsed?.title || post.title,
+        excerpt: parsed?.excerpt || post.excerpt || undefined,
+        content: translatedContent || '',
       });
 
       return {
