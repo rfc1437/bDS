@@ -160,13 +160,17 @@ vi.mock('../../src/main/engine/TaskManager', () => ({
 
 // Track the mock function for PostEngine.syncPublishedPostFile
 const mockSyncPublishedPostFile = vi.fn(async () => true);
+const mockSyncPublishedPostTranslationFile = vi.fn(async () => true);
 const mockImportOrphanFile = vi.fn(async () => ({ id: 'imported-id', title: 'Imported' }));
+const mockImportOrphanTranslationFile = vi.fn(async () => ({ id: 'imported-translation-id', title: 'Imported translation' }));
 
 // Mock PostEngine
 vi.mock('../../src/main/engine/PostEngine', () => ({
   getPostEngine: vi.fn(() => ({
     syncPublishedPostFile: mockSyncPublishedPostFile,
+    syncPublishedPostTranslationFile: mockSyncPublishedPostTranslationFile,
     importOrphanFile: mockImportOrphanFile,
+    importOrphanTranslationFile: mockImportOrphanTranslationFile,
   })),
 }));
 
@@ -179,10 +183,23 @@ describe('MetadataDiffEngine', () => {
     mockPostsGetQueue = [];
     mockFileData.clear();
     mockAllPostsRows = [];
-    mockSyncPublishedPostFile.mockClear();
-    mockImportOrphanFile.mockClear();
+    mockLocalDb.select.mockImplementation(() => createSelectChain(mockAllPostsRows));
+    mockLocalDb.update.mockImplementation(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => Promise.resolve()),
+      })),
+    }) as any);
+    mockSyncPublishedPostFile.mockReset().mockResolvedValue(true);
+    mockSyncPublishedPostTranslationFile.mockReset().mockResolvedValue(true);
+    mockImportOrphanFile.mockReset().mockResolvedValue({ id: 'imported-id', title: 'Imported' });
+    mockImportOrphanTranslationFile.mockReset().mockResolvedValue({ id: 'imported-translation-id', title: 'Imported translation' });
     resetMockCounters();
-    engine = new MetadataDiffEngine({ syncPublishedPostFile: mockSyncPublishedPostFile, importOrphanFile: mockImportOrphanFile } as any);
+    engine = new MetadataDiffEngine({
+      syncPublishedPostFile: mockSyncPublishedPostFile,
+      syncPublishedPostTranslationFile: mockSyncPublishedPostTranslationFile,
+      importOrphanFile: mockImportOrphanFile,
+      importOrphanTranslationFile: mockImportOrphanTranslationFile,
+    } as any);
     engine.setProjectContext('test-project');
   });
 
@@ -498,38 +515,48 @@ Content here`);
 
   describe('scanAllPublishedPosts', () => {
     it('should scan all published posts and return differences', async () => {
-      // Mock the raw SQL query that returns published posts
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [
-          {
-            id: 'post-1',
-            title: 'Post 1',
-            slug: 'post-1',
-            file_path: '/mock/userData/posts/2024/01/post-1.md',
-            tags: '["new-tag"]',
-            categories: '["cat1"]',
-            excerpt: null,
-            author: null,
-          },
-          {
-            id: 'post-2',
-            title: 'Post 2',
-            slug: 'post-2',
-            file_path: '/mock/userData/posts/2024/01/post-2.md',
-            tags: '["tag1"]',
-            categories: '["cat1"]',
-            excerpt: null,
-            author: null,
-          },
-        ],
-      });
-
-      // Mock the second query that gets ALL post file paths (for orphan detection)
-      mockLocalClient.execute.mockResolvedValueOnce({
-        rows: [
-          { file_path: '/mock/userData/posts/2024/01/post-1.md' },
-          { file_path: '/mock/userData/posts/2024/01/post-2.md' },
-        ],
+      mockLocalClient.execute.mockImplementation(async (query: { sql: string; args: unknown[] }) => {
+        if (query.sql.includes('FROM posts') && query.sql.includes("status = 'published'")) {
+          return {
+            rows: [
+              {
+                id: 'post-1',
+                title: 'Post 1',
+                slug: 'post-1',
+                file_path: '/mock/userData/posts/2024/01/post-1.md',
+                tags: '["new-tag"]',
+                categories: '["cat1"]',
+                excerpt: null,
+                author: null,
+              },
+              {
+                id: 'post-2',
+                title: 'Post 2',
+                slug: 'post-2',
+                file_path: '/mock/userData/posts/2024/01/post-2.md',
+                tags: '["tag1"]',
+                categories: '["cat1"]',
+                excerpt: null,
+                author: null,
+              },
+            ],
+          };
+        }
+        if (query.sql.includes('FROM post_translations') && query.sql.includes("status = 'published'")) {
+          return { rows: [] };
+        }
+        if (query.sql.includes('SELECT file_path FROM posts')) {
+          return {
+            rows: [
+              { file_path: '/mock/userData/posts/2024/01/post-1.md' },
+              { file_path: '/mock/userData/posts/2024/01/post-2.md' },
+            ],
+          };
+        }
+        if (query.sql.includes('SELECT file_path FROM post_translations')) {
+          return { rows: [] };
+        }
+        return { rows: [] };
       });
 
       // Queue the posts for sequential .get() calls in comparePostMetadata
@@ -734,6 +761,93 @@ Content`);
       // Draft post file should NOT be flagged as orphan since it's in the DB
       expect(result.orphanFiles).toEqual([]);
     });
+
+    it('should include published translation metadata differences in the scan', async () => {
+      mockLocalClient.execute.mockImplementation(async (query: { sql: string; args: unknown[] }) => {
+        if (query.sql.includes('FROM posts') && query.sql.includes("status = 'published'")) {
+          return { rows: [] };
+        }
+        if (query.sql.includes('FROM post_translations') && query.sql.includes("status = 'published'")) {
+          return {
+            rows: [
+              {
+                id: 'translation-1',
+                translation_for: 'post-1',
+                language: 'de',
+                title: 'Hallo Welt',
+                excerpt: 'DB excerpt',
+                file_path: '/mock/posts/2024/01/post-1.de.md',
+              },
+            ],
+          };
+        }
+        if (query.sql.includes('SELECT file_path FROM posts')) {
+          return { rows: [] };
+        }
+        if (query.sql.includes('SELECT file_path FROM post_translations')) {
+          return { rows: [{ file_path: '/mock/posts/2024/01/post-1.de.md' }] };
+        }
+        return { rows: [] };
+      });
+
+      let selectCall = 0;
+      mockLocalDb.select.mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockImplementation(() => {
+            selectCall += 1;
+            if (selectCall === 1) return Promise.resolve(undefined);
+            if (selectCall === 2) {
+              return Promise.resolve({
+                id: 'translation-1',
+                projectId: 'test-project',
+                translationFor: 'post-1',
+                language: 'de',
+                title: 'Hallo Welt',
+                excerpt: 'DB excerpt',
+                content: null,
+                status: 'published',
+                createdAt: new Date('2024-01-15T00:00:00.000Z'),
+                updatedAt: new Date('2024-01-15T00:00:00.000Z'),
+                publishedAt: new Date('2024-01-15T00:00:00.000Z'),
+                filePath: '/mock/posts/2024/01/post-1.de.md',
+              });
+            }
+            return Promise.resolve({
+              id: 'post-1',
+              projectId: 'test-project',
+              title: 'Hello World',
+              slug: 'post-1',
+              status: 'published',
+              filePath: '/mock/posts/2024/01/post-1.md',
+              tags: '[]',
+              categories: '[]',
+              createdAt: new Date('2024-01-15T00:00:00.000Z'),
+              updatedAt: new Date('2024-01-15T00:00:00.000Z'),
+            });
+          }),
+        });
+        return chain;
+      });
+
+      mockFileData.set('/mock/posts/2024/01/post-1.de.md', `---
+translationFor: post-1
+language: de
+title: "Hallo Welt"
+excerpt: "File excerpt"
+---
+Translated content`);
+
+      const result = await engine.scanAllPublishedPosts((current, total) => {}, '/mock/posts');
+
+      expect(result.totalScanned).toBe(1);
+      expect(result.postsWithDifferences).toBe(1);
+      expect(result.differences).toHaveLength(1);
+      expect(result.differences[0].postId).toBe('translation-1');
+      expect(result.differences[0].differences.excerpt).toEqual({ dbValue: 'DB excerpt', fileValue: 'File excerpt' });
+      expect(result.orphanFiles).toEqual([]);
+    });
   });
 
   describe('importOrphanFiles', () => {
@@ -777,6 +891,22 @@ Content`);
       expect(progressCalls.length).toBe(1);
       expect(progressCalls[0][0]).toBe(5);
       expect(progressCalls[0][1]).toBe(5);
+    });
+
+    it('should import orphan translation files into the translations table path', async () => {
+      mockFileData.set('/posts/2024/01/post.de.md', `---
+translationFor: post-1
+language: de
+title: "Hallo Welt"
+excerpt: "Translated excerpt"
+---
+Translated content`);
+
+      const result = await engine.importOrphanFiles(['/posts/2024/01/post.de.md']);
+
+      expect(result).toEqual({ success: 1, failed: 0 });
+      expect(mockImportOrphanTranslationFile).toHaveBeenCalledWith('/posts/2024/01/post.de.md');
+      expect(mockImportOrphanFile).not.toHaveBeenCalled();
     });
   });
 
@@ -856,11 +986,25 @@ Content`);
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false)
         .mockRejectedValueOnce(new Error('sync failure'));
+      mockSyncPublishedPostTranslationFile
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false);
 
       const result = await engine.syncDbToFile(['post-1', 'post-2', 'post-3']);
 
       expect(result).toEqual({ success: 1, failed: 2 });
       expect(mockSyncPublishedPostFile).toHaveBeenCalledTimes(3);
+    });
+
+    it('should fall back to syncing published translation files when the post file sync does not apply', async () => {
+      mockSyncPublishedPostFile.mockResolvedValueOnce(false);
+      mockSyncPublishedPostTranslationFile.mockResolvedValueOnce(true);
+
+      const result = await engine.syncDbToFile(['translation-1']);
+
+      expect(result).toEqual({ success: 1, failed: 0 });
+      expect(mockSyncPublishedPostFile).toHaveBeenCalledWith('translation-1');
+      expect(mockSyncPublishedPostTranslationFile).toHaveBeenCalledWith('translation-1');
     });
   });
 
@@ -1018,6 +1162,49 @@ Content here`);
 
       expect(result).toEqual({ success: 1, failed: 2 });
       expect(mockLocalDb.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('should sync published translation metadata from file to database', async () => {
+      let selectCall = 0;
+      mockLocalDb.select.mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockImplementation(() => {
+            selectCall += 1;
+            if (selectCall === 1) return Promise.resolve(undefined);
+            return Promise.resolve({
+              id: 'translation-1',
+              projectId: 'test-project',
+              translationFor: 'post-1',
+              language: 'de',
+              title: 'Hallo Welt',
+              excerpt: 'DB excerpt',
+              status: 'published',
+              filePath: '/mock/userData/posts/2024/01/post-1.de.md',
+              createdAt: new Date('2024-01-15'),
+              updatedAt: new Date('2024-01-15'),
+              publishedAt: new Date('2024-01-15'),
+            });
+          }),
+        });
+        return chain;
+      });
+
+      mockFileData.set('/mock/userData/posts/2024/01/post-1.de.md', `---
+translationFor: post-1
+language: de
+title: "Hallo Datei"
+excerpt: "File excerpt"
+---
+Translated content`);
+
+      await engine.syncFileToDb(['translation-1'], 'title');
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      expect(setCall.title).toBe('Hallo Datei');
     });
   });
 

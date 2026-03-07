@@ -978,6 +978,44 @@ export class PostEngine extends EventEmitter {
     return true;
   }
 
+  async syncPublishedPostTranslationFile(translationId: string): Promise<boolean> {
+    const db = getDatabase().getLocal();
+    const dbTranslation = await db.select().from(postTranslations).where(eq(postTranslations.id, translationId)).get();
+
+    if (!dbTranslation || !dbTranslation.filePath) {
+      return false;
+    }
+
+    const sourcePost = await this.getPost(dbTranslation.translationFor);
+    if (!sourcePost) {
+      return false;
+    }
+
+    const fileData = await this.readPostTranslationFile(dbTranslation.filePath, dbTranslation);
+    const body = fileData?.content ?? dbTranslation.content ?? '';
+    const translationData: PostTranslationData = {
+      id: dbTranslation.id,
+      projectId: dbTranslation.projectId,
+      translationFor: dbTranslation.translationFor,
+      language: dbTranslation.language,
+      title: dbTranslation.title,
+      excerpt: dbTranslation.excerpt || undefined,
+      content: body,
+      status: dbTranslation.status as 'draft' | 'published' | 'archived',
+      createdAt: dbTranslation.createdAt,
+      updatedAt: dbTranslation.updatedAt,
+      publishedAt: dbTranslation.publishedAt || undefined,
+      filePath: dbTranslation.filePath,
+    };
+
+    const newFilePath = await this.writePostTranslationFile(sourcePost, translationData);
+    if (newFilePath !== dbTranslation.filePath) {
+      await db.update(postTranslations).set({ filePath: newFilePath }).where(eq(postTranslations.id, translationId));
+    }
+
+    return true;
+  }
+
   /**
    * Import a single orphan file (exists on disk but not in DB) into the database
    * as a published post. Reads frontmatter metadata and content from the file,
@@ -1036,6 +1074,60 @@ export class PostEngine extends EventEmitter {
     this.emit('postCreated', imported);
     await this.notifier.notify('post', id, 'created');
     return imported;
+  }
+
+  async importOrphanTranslationFile(filePath: string): Promise<PostTranslationData | null> {
+    const db = getDatabase().getLocal();
+    const translationData = await readPostTranslationFileShared(filePath);
+    if (!translationData) {
+      return null;
+    }
+
+    const sourcePost = await this.getPost(translationData.translationFor);
+    if (!sourcePost) {
+      return null;
+    }
+
+    const normalizedLanguage = translationData.language.trim().toLowerCase();
+    const existing = await this.getTranslationRow(sourcePost.id, normalizedLanguage);
+    if (existing) {
+      return null;
+    }
+
+    const now = new Date();
+    const created: PostTranslationData = {
+      id: uuidv4(),
+      projectId: this.currentProjectId,
+      translationFor: sourcePost.id,
+      language: normalizedLanguage,
+      title: translationData.title,
+      excerpt: translationData.excerpt,
+      content: translationData.content,
+      status: 'published',
+      createdAt: sourcePost.createdAt,
+      updatedAt: now,
+      publishedAt: sourcePost.publishedAt || now,
+      filePath,
+    };
+
+    await db.insert(postTranslations).values({
+      id: created.id,
+      projectId: created.projectId,
+      translationFor: created.translationFor,
+      language: created.language,
+      title: created.title,
+      excerpt: created.excerpt,
+      content: null,
+      status: created.status,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+      publishedAt: created.publishedAt,
+      filePath: created.filePath,
+      checksum: this.calculateChecksum(created.content),
+    });
+
+    this.emit('postTranslationCreated', created);
+    return created;
   }
 
   async getAllPosts(options?: PaginationOptions): Promise<PaginatedResult<PostData>> {
