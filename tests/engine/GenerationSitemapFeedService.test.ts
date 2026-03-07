@@ -183,4 +183,56 @@ describe('GenerationSitemapFeedService', () => {
     expect(result.atomXml).toContain('xml:lang="en"');
     expect(result.atomXml).toContain('xml:lang="de"');
   });
+
+  it('uses excerpt instead of full body in feed entry content when excerpt is available', () => {
+    const publishedPosts = [
+      makePost({
+        id: '1',
+        slug: 'excerpt-post',
+        title: 'Excerpt Post',
+        excerpt: 'Short feed summary.',
+        content: '# Excerpt Post\n\nVery long body that should not appear in feed content.',
+      }),
+    ];
+
+    const result = buildSitemapAndFeeds({
+      baseUrl: 'https://example.com',
+      projectName: 'Test Blog',
+      maxPostsPerPage: 10,
+      publishedPosts,
+      publishedListPosts: publishedPosts,
+      postIndex: buildIndex(publishedPosts),
+      includeFeeds: true,
+    });
+
+    expect(result.rssXml).toContain('<content:encoded><![CDATA[<p>Short feed summary.</p>]]></content:encoded>');
+    expect(result.rssXml).not.toContain('Very long body that should not appear in feed content.');
+
+    expect(result.atomXml).toContain('<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Short feed summary.</p></div></content>');
+    expect(result.atomXml).not.toContain('Very long body that should not appear in feed content.');
+  });
+
+  it('falls back to the post body in feed entry content when excerpt is missing', () => {
+    const publishedPosts = [
+      makePost({
+        id: '1',
+        slug: 'body-post',
+        title: 'Body Post',
+        content: '# Body Post\n\nBody paragraph used in feed content.',
+      }),
+    ];
+
+    const result = buildSitemapAndFeeds({
+      baseUrl: 'https://example.com',
+      projectName: 'Test Blog',
+      maxPostsPerPage: 10,
+      publishedPosts,
+      publishedListPosts: publishedPosts,
+      postIndex: buildIndex(publishedPosts),
+      includeFeeds: true,
+    });
+
+    expect(result.rssXml).toContain('Body paragraph used in feed content.');
+    expect(result.atomXml).toContain('Body paragraph used in feed content.');
+  });
 });
