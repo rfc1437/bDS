@@ -12,6 +12,7 @@ interface SinglePostPreviewOptions {
   useDraftContent?: boolean;
   draftPostId?: string;
   lang?: string;
+  preferredLanguage?: string;
 }
 
 function buildSnapshotBaseFilter(filter: PostFilter): PostFilter {
@@ -203,7 +204,7 @@ export async function findSinglePostBySlug(
     return null;
   }
 
-  const requestedLanguage = singlePostOptions?.lang?.trim().toLowerCase();
+  const requestedLanguage = (singlePostOptions?.lang ?? singlePostOptions?.preferredLanguage)?.trim().toLowerCase();
   if (!requestedLanguage || requestedLanguage === (resolvedPost.language || '').trim().toLowerCase() || !postEngine.getPostTranslation) {
     return resolvedPost;
   }

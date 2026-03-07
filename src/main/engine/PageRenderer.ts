@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { marked } from 'marked';
 import { Liquid } from 'liquidjs';
 import type { MediaData } from './MediaEngine';
+import type { PostTranslationData } from './PostEngine';
 import type { PostData } from './PostEngine';
 import type { MenuDocument, MenuItemData } from './MenuEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
@@ -191,6 +192,7 @@ export interface PostMediaEngineContract {
 
 export interface PostEngineContract {
   getPost: (id: string) => Promise<PostData | null>;
+  getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
   getPostsFiltered?: (filter: { status?: 'draft' | 'published' | 'archived' }) => Promise<PostData[]>;
 }
 
@@ -1425,13 +1427,40 @@ export class PageRenderer {
     };
   }
 
-  async resolveRenderablePost(post: PostData, postEngine: PostEngineContract): Promise<PostData> {
-    if (post.status === 'published' && !post.content) {
-      const fullPost = await postEngine.getPost(post.id);
-      return fullPost ?? post;
+  async resolveRenderablePost(post: PostData, postEngine: PostEngineContract, preferredLanguage?: string): Promise<PostData> {
+    const hydratedPost = post.status === 'published' && !post.content
+      ? (await postEngine.getPost(post.id)) ?? post
+      : post;
+
+    const requestedLanguage = preferredLanguage?.trim().toLowerCase();
+    const canonicalLanguage = hydratedPost.language?.trim().toLowerCase();
+    if (!requestedLanguage || requestedLanguage === canonicalLanguage || !postEngine.getPostTranslation) {
+      return hydratedPost;
     }
 
-    return post;
+    const translation = await postEngine.getPostTranslation(hydratedPost.id, requestedLanguage);
+    if (!translation || !translation.content) {
+      return hydratedPost;
+    }
+
+    const availableLanguages = Array.from(new Set([
+      ...(Array.isArray(hydratedPost.availableLanguages) ? hydratedPost.availableLanguages : []),
+      requestedLanguage,
+      canonicalLanguage,
+    ].filter((language): language is string => typeof language === 'string' && language.length > 0)));
+
+    return {
+      ...hydratedPost,
+      title: translation.title,
+      excerpt: translation.excerpt,
+      content: translation.content,
+      language: translation.language,
+      updatedAt: translation.updatedAt,
+      publishedAt: translation.publishedAt ?? hydratedPost.publishedAt,
+      availableLanguages,
+      translationSourceSlug: hydratedPost.slug,
+      translationCanonicalLanguage: canonicalLanguage || undefined,
+    } as PostData;
   }
 
   async renderPostList(
@@ -1458,7 +1487,7 @@ export class PageRenderer {
     }
 
     const renderablePosts = postEngine
-      ? await Promise.all(posts.map(async (post) => this.resolveRenderablePost(post, postEngine)))
+      ? await Promise.all(posts.map(async (post) => this.resolveRenderablePost(post, postEngine, options.language)))
       : posts;
     const templateContext = this.buildListTemplateContext(
       renderablePosts,
@@ -1492,7 +1521,7 @@ export class PageRenderer {
     postEngine?: PostEngineContract,
   ): Promise<string> {
     const renderablePost = postEngine
-      ? await this.resolveRenderablePost(post, postEngine)
+      ? await this.resolveRenderablePost(post, postEngine, pageContext.language)
       : post;
 
     const postCategories = Array.isArray(renderablePost.categories)

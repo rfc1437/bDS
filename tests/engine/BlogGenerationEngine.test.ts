@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import type { PostData, PostTranslationData } from '../../src/main/engine/PostEngine';
 import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 import type { MenuDocument } from '../../src/main/engine/MenuEngine';
+import { createPreviewBackedGenerationRouteRenderer } from '../../src/main/engine/GenerationRouteRendererFactory';
 
 const generatedFileHashes = new Map<string, string>();
 const generatedFileUpdatedAt = new Map<string, number>();
@@ -72,6 +73,7 @@ vi.mock('../../src/main/engine/PostEngine', async (importOriginal) => {
     getPostsFiltered: vi.fn(async () => []),
     getPublishedVersion: vi.fn(async () => null),
     getPost: vi.fn(async () => null),
+    getPostTranslation: vi.fn(async () => null),
     getPostTranslations: vi.fn(async () => []),
     setProjectContext: vi.fn(),
   };
@@ -116,6 +118,7 @@ function makePost(overrides: Partial<PostData> = {}): PostData {
     content: overrides.content ?? '# Test\n\nBody text',
     status: overrides.status ?? 'published',
     author: overrides.author,
+    language: overrides.language,
     createdAt,
     updatedAt,
     publishedAt: overrides.publishedAt ?? createdAt,
@@ -199,6 +202,7 @@ describe('BlogGenerationEngine', () => {
     mockPostEngine.getPost.mockImplementation(async (id: string) => {
       return posts.find((p) => p.id === id) ?? null;
     });
+    mockPostEngine.getPostTranslation.mockResolvedValue(null);
     mockPostEngine.getPostTranslations.mockResolvedValue([]);
   }
 
@@ -688,6 +692,117 @@ describe('BlogGenerationEngine', () => {
     expect(monthHtml).toContain('<html lang="fr">');
     expect(monthHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
     expect(monthHtml).not.toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
+  });
+
+  it('renders canonical single-post route with project main language content when available', async () => {
+    const canonicalPost = makePost({
+      id: 'post-1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nCanonical body',
+      language: 'en',
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+    });
+
+    setupPosts([canonicalPost]);
+    mockPostEngine.getPostTranslation.mockImplementation(async (postId: string, language: string) => {
+      if (postId === 'post-1' && language === 'fr') {
+        return {
+          id: 'translation-1-fr',
+          projectId: 'default',
+          translationFor: 'post-1',
+          language: 'fr',
+          title: 'Bonjour le monde',
+          excerpt: 'Resume FR',
+          content: '# Bonjour le monde\n\nCorps FR',
+          status: 'published',
+          createdAt: new Date('2025-01-15T10:05:00Z'),
+          updatedAt: new Date('2025-01-15T10:05:00Z'),
+          publishedAt: new Date('2025-01-15T10:06:00Z'),
+          filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+        };
+      }
+      return null;
+    });
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'fr',
+    }, vi.fn());
+
+    const canonicalHtml = await readFile(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world', 'index.html'), 'utf-8');
+
+    expect(mockPostEngine.getPostTranslation).toHaveBeenCalledWith('post-1', 'fr');
+    expect(canonicalHtml).toContain('<html lang="fr"');
+    expect(canonicalHtml).toContain('Bonjour le monde');
+    expect(canonicalHtml).toContain('Corps FR');
+    expect(canonicalHtml).not.toContain('Canonical body');
+  });
+
+  it('preview-backed generation route renderer prefers project main language content on canonical single-post routes', async () => {
+    const canonicalPost = makePost({
+      id: 'post-1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nCanonical body',
+      language: 'en',
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+    });
+
+    const renderRoute = createPreviewBackedGenerationRouteRenderer({
+      options: {
+        projectId: 'test',
+        dataDir: tempDir,
+        projectName: 'Test Blog',
+        language: 'fr',
+      },
+      maxPostsPerPage: 50,
+      publishedPostsForLookup: [canonicalPost],
+      engines: {
+        postEngine: {
+          getPostsFiltered: mockPostEngine.getPostsFiltered,
+          getPublishedVersion: mockPostEngine.getPublishedVersion,
+          getPost: mockPostEngine.getPost,
+          getPostTranslation: vi.fn(async (postId: string, language: string) => {
+            if (postId === 'post-1' && language === 'fr') {
+              return {
+                id: 'translation-1-fr',
+                projectId: 'default',
+                translationFor: 'post-1',
+                language: 'fr',
+                title: 'Bonjour le monde',
+                excerpt: 'Resume FR',
+                content: '# Bonjour le monde\n\nCorps FR',
+                status: 'published',
+                createdAt: new Date('2025-01-15T10:05:00Z'),
+                updatedAt: new Date('2025-01-15T10:05:00Z'),
+                publishedAt: new Date('2025-01-15T10:06:00Z'),
+                filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+              } satisfies PostTranslationData;
+            }
+            return null;
+          }),
+          hasPublishedVersion: mockPostEngine.hasPublishedVersion,
+          setProjectContext: mockPostEngine.setProjectContext,
+        },
+        mediaEngine: mockMediaEngine,
+        postMediaEngine: mockPostMediaEngine,
+      },
+    });
+
+    const html = await renderRoute('/2025/01/15/hello-world');
+
+    expect(html).not.toBeNull();
+    expect(html).toContain('<html lang="fr"');
+    expect(html).toContain('Bonjour le monde');
+    expect(html).toContain('Corps FR');
+    expect(html).not.toContain('Canonical body');
   });
 
   it('excludes draft-only posts from generated pages', async () => {

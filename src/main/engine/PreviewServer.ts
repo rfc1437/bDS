@@ -184,7 +184,7 @@ export class PreviewServer {
       requestTheme?: string | null;
       htmlThemeAttribute?: string;
       allowEmptyArchiveRender?: boolean;
-      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string };
+      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string };
     },
   ): Promise<string | null> {
     return renderRouteWithSharedContext(pathname, options, {

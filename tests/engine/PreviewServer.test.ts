@@ -39,6 +39,7 @@ function makePost(overrides: Partial<PostData> = {}): PostData {
     content: overrides.content ?? `# ${title}\n\nBody`,
     status: overrides.status ?? 'published',
     author: overrides.author,
+    language: overrides.language,
     createdAt,
     updatedAt,
     publishedAt: overrides.publishedAt,
@@ -666,6 +667,91 @@ describe('PreviewServer', () => {
     expect(draftHtml).toContain('Contenu brouillon traduit');
     expect(draftHtml).toContain('<html lang="fr"');
     expect(draftHtml).not.toContain('Draft-only body');
+  });
+
+  it('prefers project main language content for canonical single post route and falls back to canonical content when unavailable', async () => {
+    const publishedPost = makePost({
+      id: 'post-1',
+      slug: 'shared-slug',
+      title: 'Published Title',
+      content: 'Published body',
+      status: 'published',
+      language: 'en',
+      createdAt: new Date('2025-01-03T10:00:00.000Z'),
+    });
+
+    server = new PreviewServer({
+      postEngine: {
+        ...makeEngine([publishedPost]),
+        async getPostTranslation(postId: string, language: string) {
+          if (postId === 'post-1' && language === 'fr') {
+            return {
+              id: 'translation-1-fr',
+              projectId: 'default',
+              translationFor: 'post-1',
+              language: 'fr',
+              title: 'Titre publie',
+              excerpt: 'Resume FR',
+              content: 'Contenu FR',
+              status: 'published',
+              createdAt: new Date('2025-01-03T10:00:00.000Z'),
+              updatedAt: new Date('2025-01-03T11:00:00.000Z'),
+              publishedAt: new Date('2025-01-03T11:00:00.000Z'),
+              filePath: 'posts/shared-slug.fr.md',
+            };
+          }
+          return null;
+        },
+      } as any,
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return { maxPostsPerPage: 50, mainLanguage: 'fr' };
+        },
+      } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const translatedResponse = await fetch(`${server.getBaseUrl()}/2025/01/03/shared-slug`);
+    expect(translatedResponse.status).toBe(200);
+    const translatedHtml = await translatedResponse.text();
+    expect(translatedHtml).toContain('<html lang="fr"');
+    expect(translatedHtml).toContain('Titre publie');
+    expect(translatedHtml).toContain('Contenu FR');
+    expect(translatedHtml).not.toContain('Published body');
+
+    server = new PreviewServer({
+      postEngine: {
+        ...makeEngine([publishedPost]),
+        async getPostTranslation() {
+          return null;
+        },
+      } as any,
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return { maxPostsPerPage: 50, mainLanguage: 'fr' };
+        },
+      } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const fallbackResponse = await fetch(`${server.getBaseUrl()}/2025/01/03/shared-slug`);
+    expect(fallbackResponse.status).toBe(200);
+    const fallbackHtml = await fallbackResponse.text();
+    expect(fallbackHtml).toContain('Published Title');
+    expect(fallbackHtml).toContain('Published body');
+    expect(fallbackHtml).not.toContain('Contenu FR');
   });
 
   it('uses selected pico theme stylesheet from project metadata', async () => {

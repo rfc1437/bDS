@@ -21,6 +21,7 @@ function makePost(overrides: Partial<PostData> = {}): PostData {
     content: overrides.content ?? `# ${title}\n\nBody`,
     status: overrides.status ?? 'published',
     author: overrides.author,
+    language: overrides.language,
     createdAt,
     updatedAt,
     publishedAt: overrides.publishedAt,
@@ -157,6 +158,75 @@ describe('SharedSnapshotService', () => {
       excerpt: 'Resume traduit',
       content: 'Contenu traduit',
     });
+  });
+
+  it('prefers project main language content and falls back to canonical language when no translation exists', async () => {
+    const published = makePost({
+      id: 'post-1',
+      slug: 'my-post',
+      status: 'published',
+      language: 'en',
+      title: 'Canonical title',
+      content: 'Canonical body',
+      createdAt: new Date('2025-03-21T10:00:00.000Z'),
+    });
+    const getPostTranslation = vi.fn(async (postId: string, language: string) => {
+      if (postId === 'post-1' && language === 'fr') {
+        return {
+          id: 'translation-1',
+          projectId: 'default',
+          translationFor: 'post-1',
+          language: 'fr',
+          title: 'Titre principal',
+          excerpt: 'Resume principal',
+          content: 'Contenu principal',
+          status: 'published',
+          createdAt: new Date('2025-03-21T10:00:00.000Z'),
+          updatedAt: new Date('2025-03-21T11:00:00.000Z'),
+          publishedAt: new Date('2025-03-21T11:00:00.000Z'),
+          filePath: 'posts/my-post.fr.md',
+        };
+      }
+      return null;
+    });
+    const engine = {
+      ...makeEngine([published]),
+      getPostTranslation,
+    } as SharedSnapshotPostEngine & {
+      getPostTranslation: (postId: string, language: string) => Promise<any>;
+    };
+
+    const translated = await findSinglePostBySlug(
+      engine,
+      'my-post',
+      { preferredLanguage: 'fr' } as any,
+      { year: 2025, month: 3, day: 21 },
+    );
+
+    expect(translated).toMatchObject({
+      id: 'translation-1',
+      slug: 'my-post.fr',
+      language: 'fr',
+      title: 'Titre principal',
+      content: 'Contenu principal',
+    });
+
+    const fallback = await findSinglePostBySlug(
+      engine,
+      'my-post',
+      { preferredLanguage: 'de' } as any,
+      { year: 2025, month: 3, day: 21 },
+    );
+
+    expect(fallback).toMatchObject({
+      id: 'post-1',
+      slug: 'my-post',
+      language: 'en',
+      title: 'Canonical title',
+      content: 'Canonical body',
+    });
+    expect(getPostTranslation).toHaveBeenNthCalledWith(1, 'post-1', 'fr');
+    expect(getPostTranslation).toHaveBeenNthCalledWith(2, 'post-1', 'de');
   });
 
   it('uses findPublishedBySlug shortcut when present', async () => {
