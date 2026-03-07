@@ -129,7 +129,8 @@
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "0.27.3"
-    }
+    },
+    "dompurify": ">=3.3.2"
   },
   "build": {
     "appId": "com.bds.blogging-desktop-server",
