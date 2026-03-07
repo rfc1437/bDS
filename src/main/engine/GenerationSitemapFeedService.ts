@@ -156,6 +156,13 @@ function excerptToXhtml(post: PostData): string {
   return paragraphToXhtml(firstParagraph);
 }
 
+function feedContentToXhtml(post: PostData): string {
+  if (typeof post.excerpt === 'string' && post.excerpt.trim().length > 0) {
+    return paragraphToXhtml(post.excerpt.trim());
+  }
+  return markdownToXhtml(post.content || '');
+}
+
 function escapeCdata(value: string): string {
   return value.replace(/]]>/g, ']]]]><![CDATA[>');
 }
@@ -384,7 +391,7 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
     const permalink = `${baseUrl}${canonicalPath}`;
     const excerptXhtml = excerptToXhtml(post);
-    const contentXhtml = markdownToXhtml(post.content || '');
+    const contentXhtml = feedContentToXhtml(post);
     const categories = [
       ...(post.categories || []).map((category) => `<category>${escapeXml(category)}</category>`),
       ...(post.tags || []).map((tag) => `<category>${escapeXml(tag)}</category>`),
@@ -425,7 +432,7 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
     const permalink = `${baseUrl}${canonicalPath}`;
     const excerptXhtml = excerptToXhtml(post);
-    const contentXhtml = markdownToXhtml(post.content || '');
+    const contentXhtml = feedContentToXhtml(post);
     const categories = [
       ...(post.tags || []).map((tag) => `<category term="${escapeXml(tag)}" />`),
       ...(post.categories || []).map((category) => `<category term="${escapeXml(category)}" />`),

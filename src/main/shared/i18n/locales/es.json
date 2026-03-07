@@ -83,6 +83,8 @@
   "render.month.12": "diciembre",
   "ai.imageAnalysis.system": "Generas metadatos de imagen. Escribe todos los valores en español.\n\nReglas:\n- \"title\": título descriptivo corto (3-8 palabras)\n- \"alt\": descripción factual de lo visible (5-12 palabras). Sin interpretaciones. Sin prefijo \"Imagen de\".\n- \"caption\": pie de foto atractivo para blog (5-20 palabras)\n\nResponde solo con JSON: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
   "ai.imageAnalysis.user": "Analiza esta imagen. Responde con JSON en español.",
+  "ai.postAnalysis.system": "Eres un asistente de edición de blog. Analiza el siguiente artículo y sugiere mejoras.\n\nDevuelve un objeto JSON con:\n- \"title\": un título claro y atractivo (3-10 palabras)\n- \"excerpt\": un párrafo de resumen en texto plano (2-3 oraciones, sin markdown, sin formato)\n- \"slug\": un slug URL conciso y SEO-friendly (minúsculas, solo guiones, sin caracteres especiales)\n\nResponde en español. Devuelve solo el objeto JSON.",
+  "ai.postAnalysis.user": "Título: {title}\n\nContenido:\n{content}",
   "task.embeddingIndex.name": "Indexar entradas para similitud semántica",
   "task.embeddingIndex.loading": "Cargando modelo…",
   "task.embeddingIndex.indexing": "Indexando: {indexed}/{total}",

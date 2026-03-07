@@ -83,6 +83,8 @@
   "render.month.12": "décembre",
   "ai.imageAnalysis.system": "Tu génères des métadonnées d'image. Écris toutes les valeurs en français.\n\nRègles :\n- \"title\" : titre descriptif court (3-8 mots)\n- \"alt\" : description factuelle de ce qui est visible (5-12 mots). Pas d'interprétations. Pas de préfixe \"Image de\".\n- \"caption\" : légende de blog engageante (5-20 mots)\n\nRéponds uniquement en JSON : {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
   "ai.imageAnalysis.user": "Analyse cette image. Réponds en JSON en français.",
+  "ai.postAnalysis.system": "Tu es un assistant de rédaction de blog. Analyse l'article suivant et suggère des améliorations.\n\nRetourne un objet JSON avec :\n- \"title\" : un titre clair et engageant (3-10 mots)\n- \"excerpt\" : un paragraphe de résumé en texte brut (2-3 phrases, pas de markdown, pas de formatage)\n- \"slug\" : un slug URL court et SEO-friendly (minuscules, tirets uniquement, pas de caractères spéciaux)\n\nRéponds en français. Retourne uniquement l'objet JSON.",
+  "ai.postAnalysis.user": "Titre : {title}\n\nContenu :\n{content}",
   "task.embeddingIndex.name": "Indexer les articles pour la similarité sémantique",
   "task.embeddingIndex.loading": "Chargement du modèle…",
   "task.embeddingIndex.indexing": "Indexation : {indexed}/{total}",

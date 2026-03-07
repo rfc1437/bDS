@@ -24,7 +24,8 @@ import { TemplatesView } from '../TemplatesView/TemplatesView';
 import { DuplicatesView } from '../DuplicatesView/DuplicatesView';
 import { AutoSaveManager, getContrastColor, loadTagColorMap } from '../../utils';
 import { InsertModal } from '../InsertModal';
-import { AISuggestionsModal, AISuggestions } from '../AISuggestionsModal/AISuggestionsModal';
+import { AISuggestionsModal } from '../AISuggestionsModal/AISuggestionsModal';
+import type { SuggestionField } from '../AISuggestionsModal/AISuggestionsModal';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { EditorRoute, resolveEditorRoute } from '../../navigation/editorRouting';
 import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEditor';
@@ -67,6 +68,7 @@ const autoSaveManager = new AutoSaveManager({
     const update: Parameters<typeof window.electronAPI.posts.update>[1] = {};
     if ('title' in changes) update.title = changes.title as string;
     if ('content' in changes) update.content = changes.content as string;
+    if ('excerpt' in changes) update.excerpt = changes.excerpt as string;
     if ('tags' in changes) {
       const tagsStr = changes.tags as string;
       update.tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
@@ -193,6 +195,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [excerpt, setExcerpt] = useState('');
   const [author, setAuthor] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
@@ -209,10 +212,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [showPostSearch, setShowPostSearch] = useState(false);
   const [showMediaSearch, setShowMediaSearch] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(true);
+  const [excerptExpanded, setExcerptExpanded] = useState(false);
   const editorRef = useRef<unknown>(null);
   // Token incremented to signal Monaco that it should re-read its defaultValue.
   // This is used instead of controlled `value` to avoid cursor-reset races.
   const [monacoResetToken, setMonacoResetToken] = useState(0);
+
+  // Quick actions state for AI post analysis
+  const [showPostQuickActions, setShowPostQuickActions] = useState(false);
+  const [projectLanguage, setProjectLanguage] = useState('en');
+  const postQuickActionsRef = useRef<HTMLDivElement>(null);
+  const [showPostAISuggestionsModal, setShowPostAISuggestionsModal] = useState(false);
+  const [isAnalyzingPost, setIsAnalyzingPost] = useState(false);
+  const [postAISuggestionFields, setPostAISuggestionFields] = useState<SuggestionField[]>([]);
+  const [postAIError, setPostAIError] = useState<string | undefined>(undefined);
 
   const isDirty = checkIsDirty(postId);
 
@@ -325,6 +338,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     if (post && !isInitialized) {
       setTitle(post.title);
       setContent(post.content);
+      setExcerpt(post.excerpt || '');
       setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
@@ -349,10 +363,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     // Short-circuit: check cheap comparisons first (content changes on every keystroke)
     const contentChanged = content !== post.content;
     const titleChanged = title !== post.title;
+    const excerptChanged = excerpt !== (post.excerpt || '');
     const authorChanged = author !== (post.author || '');
     const templateSlugChanged = templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '');
     const languageChanged = postLanguage !== (post.language || '');
-    const hasChanges = contentChanged || titleChanged || authorChanged || templateSlugChanged || languageChanged ||
+    const hasChanges = contentChanged || titleChanged || excerptChanged || authorChanged || templateSlugChanged || languageChanged ||
       JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort()) ||
       JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
 
@@ -363,6 +378,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       autoSaveManager.notifyChange(postId, {
         title,
         content,
+        excerpt,
         author,
         tags: tags.join(', '),
         categories: selectedCategories,
@@ -372,7 +388,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } else {
       markClean(postId);
     }
-  }, [title, content, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean]);
+  }, [title, content, excerpt, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -391,6 +407,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const updated = await window.electronAPI?.posts.update(postId, {
         title,
         content,
+        excerpt: excerpt || undefined,
         author: author || undefined,
         language: postLanguage || undefined,
         tags,
@@ -434,6 +451,100 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setIsDetectingLanguage(false);
     }
   }, [title, content, isDetectingLanguage, tr]);
+
+  // Load project language for AI post analysis
+  useEffect(() => {
+    window.electronAPI?.meta?.getProjectMetadata?.()?.then(metadata => {
+      if (metadata?.mainLanguage) {
+        setProjectLanguage(metadata.mainLanguage);
+      }
+    });
+  }, []);
+
+  // Close quick actions menu when clicking outside
+  useEffect(() => {
+    if (!showPostQuickActions) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (postQuickActionsRef.current && !postQuickActionsRef.current.contains(e.target as Node)) {
+        setShowPostQuickActions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPostQuickActions]);
+
+  // Handle AI post analysis (title, excerpt, slug suggestions)
+  const handlePostAIAnalysis = useCallback(async () => {
+    if (!post || isAnalyzingPost) return;
+
+    setShowPostQuickActions(false);
+    setShowPostAISuggestionsModal(true);
+    setIsAnalyzingPost(true);
+    setPostAISuggestionFields([]);
+    setPostAIError(undefined);
+
+    try {
+      const result = await window.electronAPI?.chat.analyzePost(postId, projectLanguage);
+
+      if (result?.success) {
+        const slugLocked = !!post.publishedAt;
+        setPostAISuggestionFields([
+          { key: 'title', label: tr('aiSuggestions.titleField'), currentValue: title, suggestedValue: result.title },
+          { key: 'excerpt', label: tr('aiSuggestions.excerptField'), currentValue: excerpt, suggestedValue: result.excerpt },
+          {
+            key: 'slug',
+            label: tr('aiSuggestions.slugField'),
+            currentValue: post.slug,
+            suggestedValue: result.slug,
+            disabled: slugLocked,
+            warning: slugLocked ? tr('aiSuggestions.slugLockedWarning') : undefined,
+          },
+        ]);
+      } else {
+        setPostAIError(result?.error || tr('editor.post.error.analyzePost'));
+      }
+    } catch (error) {
+      console.error('Failed to analyze post:', error);
+      setPostAIError((error as Error).message || tr('editor.post.error.analyzePost'));
+    } finally {
+      setIsAnalyzingPost(false);
+    }
+  }, [post, postId, projectLanguage, isAnalyzingPost, title, excerpt, tr]);
+
+  // Handle applying AI post suggestions
+  const handleApplyPostAISuggestions = useCallback(async (values: Record<string, string>) => {
+    setShowPostAISuggestionsModal(false);
+    if (Object.keys(values).length === 0) return;
+
+    try {
+      const updatePayload: Record<string, unknown> = {};
+      if (values.title) updatePayload.title = values.title;
+      if (values.excerpt) updatePayload.excerpt = values.excerpt;
+      if (values.slug && !post?.publishedAt) updatePayload.slug = values.slug;
+
+      const updated = await window.electronAPI?.posts.update(postId, updatePayload as Parameters<typeof window.electronAPI.posts.update>[1]);
+      if (updated) {
+        updatePost(postId, updated as Partial<PostData>);
+        setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
+        // Update local state for fields that changed
+        if (values.title) setTitle(values.title);
+        if (values.excerpt) setExcerpt(values.excerpt);
+        markDirty(postId);
+        showToast.success(tr('editor.post.toast.aiApplied'));
+      }
+    } catch (error) {
+      console.error('Failed to apply AI suggestions:', error);
+      showToast.error(tr('editor.post.error.applyFailed'));
+    }
+  }, [post, postId, updatePost, markDirty, tr]);
+
+  // Close AI post suggestions modal
+  const handleClosePostAISuggestionsModal = useCallback(() => {
+    setShowPostAISuggestionsModal(false);
+    setPostAISuggestionFields([]);
+    setPostAIError(undefined);
+  }, []);
+
   const handlePublish = async () => {
     await handleSave();
     try {
@@ -743,9 +854,34 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             {post.status}
           </span>
           {isSaving && <span className="auto-save-indicator">{tr('editor.saving')}</span>}
+          <div className="quick-actions-wrapper" ref={postQuickActionsRef}>
+            <button
+              className="secondary quick-actions-btn"
+              onClick={() => setShowPostQuickActions(!showPostQuickActions)}
+              disabled={isAnalyzingPost}
+              title={tr('editor.post.quickActions.title')}
+            >
+              {isAnalyzingPost ? tr('editor.post.quickActions.analyzing') : tr('editor.post.quickActions.button')}
+            </button>
+            {showPostQuickActions && (
+              <div className="quick-actions-menu">
+                <button
+                  className="quick-action-item"
+                  onClick={handlePostAIAnalysis}
+                  disabled={isAnalyzingPost || !content}
+                >
+                  <span className="quick-action-icon">🤖</span>
+                  <span className="quick-action-text">
+                    <strong>{tr('editor.post.quickActions.aiTitle')}</strong>
+                    <small>{tr('editor.post.quickActions.aiDescription')}</small>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
           {post.status === 'draft' && (
-            <button 
-              onClick={handlePublish} 
+            <button
+              onClick={handlePublish}
               className="success"
               title={tr('editor.publishTitle')}
             >
@@ -879,6 +1015,27 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             <LinkedMediaPanel postId={postId} />
           </div>
         </div>
+        )}
+
+        <button
+          className={`metadata-toggle ${excerptExpanded ? 'expanded' : ''}`}
+          onClick={() => setExcerptExpanded(v => !v)}
+        >
+          <span className="metadata-toggle-chevron">{excerptExpanded ? '▼' : '▶'}</span>
+          <span>{tr('editor.excerpt.toggle')}</span>
+        </button>
+        {excerptExpanded && (
+          <div className="editor-excerpt-panel">
+            <div className="editor-field">
+              <label>{tr('editor.field.excerpt')}</label>
+              <textarea
+                value={excerpt}
+                onChange={(e) => setExcerpt(e.target.value)}
+                placeholder={tr('editor.placeholder.excerpt')}
+                rows={4}
+              />
+            </div>
+          </div>
         )}
         
         <div className="editor-body">
@@ -1038,6 +1195,19 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           onClose={() => setShowMediaSearch(false)}
         />
       )}
+
+      {/* AI Post Suggestions Modal */}
+      <AISuggestionsModal
+        isOpen={showPostAISuggestionsModal}
+        isLoading={isAnalyzingPost}
+        fields={postAISuggestionFields}
+        modalTitle={tr('aiSuggestions.postTitle')}
+        loadingText={tr('aiSuggestions.analyzingPost')}
+        emptyText={tr('aiSuggestions.postEmpty')}
+        error={postAIError}
+        onConfirm={handleApplyPostAISuggestions}
+        onClose={handleClosePostAISuggestionsModal}
+      />
     </div>
   );
 };
@@ -1067,7 +1237,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // AI suggestions modal state
   const [showAISuggestionsModal, setShowAISuggestionsModal] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiSuggestions, setAISuggestions] = useState<AISuggestions | null>(null);
+  const [aiSuggestionFields, setAISuggestionFields] = useState<Array<{ key: string; label: string; currentValue: string; suggestedValue?: string }>>([]);
   const [aiError, setAIError] = useState<string | undefined>(undefined);
 
   // Load project language setting
@@ -1096,22 +1266,22 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // Handle AI image analysis for alt text and caption
   const handleAIAnalysis = async () => {
     if (!item || isAnalyzing) return;
-    
+
     setShowQuickActions(false);
     setShowAISuggestionsModal(true);
     setIsAnalyzing(true);
-    setAISuggestions(null);
+    setAISuggestionFields([]);
     setAIError(undefined);
-    
+
     try {
       const result = await window.electronAPI?.chat.analyzeMediaImage(item.id, projectLanguage);
-      
+
       if (result?.success) {
-        setAISuggestions({
-          title: result.title,
-          alt: result.alt,
-          caption: result.caption,
-        });
+        setAISuggestionFields([
+          { key: 'title', label: tr('aiSuggestions.titleField'), currentValue: title, suggestedValue: result.title },
+          { key: 'alt', label: tr('aiSuggestions.altField'), currentValue: alt, suggestedValue: result.alt },
+          { key: 'caption', label: tr('aiSuggestions.captionField'), currentValue: caption, suggestedValue: result.caption },
+        ]);
       } else {
         setAIError(result?.error || tr('editor.media.error.analyzeImage'));
       }
@@ -1124,7 +1294,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   };
 
   // Handle applying AI suggestions
-  const handleApplyAISuggestions = (values: Partial<AISuggestions>) => {
+  const handleApplyAISuggestions = (values: Record<string, string>) => {
     if (values.title) setTitle(values.title);
     if (values.alt) setAlt(values.alt);
     if (values.caption) setCaption(values.caption);
@@ -1551,8 +1721,10 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       <AISuggestionsModal
         isOpen={showAISuggestionsModal}
         isLoading={isAnalyzing}
-        suggestions={aiSuggestions}
-        currentValues={{ title, alt, caption }}
+        fields={aiSuggestionFields}
+        modalTitle={tr('aiSuggestions.title')}
+        loadingText={tr('aiSuggestions.analyzing')}
+        emptyText={tr('aiSuggestions.empty')}
         error={aiError}
         onConfirm={handleApplyAISuggestions}
         onClose={handleCloseAISuggestionsModal}

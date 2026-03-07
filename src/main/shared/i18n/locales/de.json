@@ -83,6 +83,8 @@
   "render.month.12": "Dezember",
   "ai.imageAnalysis.system": "Du erzeugst Bild-Metadaten. Schreibe alle Werte auf Deutsch.\n\nRegeln:\n- \"title\": kurzer beschreibender Titel (3-8 Wörter)\n- \"alt\": sachliche Beschreibung des Sichtbaren (5-12 Wörter). Keine Interpretationen. Kein Präfix \"Bild von\".\n- \"caption\": ansprechende Blog-Bildunterschrift (5-20 Wörter)\n\nAntworte ausschließlich mit JSON: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
   "ai.imageAnalysis.user": "Analysiere dieses Bild. Antworte mit JSON auf Deutsch.",
+  "ai.postAnalysis.system": "Du bist ein Blog-Redaktionsassistent. Analysiere den folgenden Blogbeitrag und schlage Verbesserungen vor.\n\nGib ein JSON-Objekt zurück mit:\n- \"title\": ein klarer, ansprechender Titel (3-10 Wörter)\n- \"excerpt\": eine Zusammenfassung als Fließtext (2-3 Sätze, kein Markdown, keine Formatierung)\n- \"slug\": ein kurzer, SEO-freundlicher URL-Slug (Kleinbuchstaben, nur Bindestriche, keine Sonderzeichen)\n\nAntworte auf Deutsch. Gib nur das JSON-Objekt zurück.",
+  "ai.postAnalysis.user": "Titel: {title}\n\nInhalt:\n{content}",
   "task.embeddingIndex.name": "Beiträge für semantische Ähnlichkeit indexieren",
   "task.embeddingIndex.loading": "Modell wird geladen…",
   "task.embeddingIndex.indexing": "Indexierung: {indexed}/{total}",

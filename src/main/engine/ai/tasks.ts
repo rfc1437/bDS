@@ -8,8 +8,10 @@
 import { generateText } from 'ai';
 import type { ChatEngine } from '../ChatEngine';
 import type { MediaEngine } from '../MediaEngine';
+import type { PostEngine } from '../PostEngine';
 import { ProviderRegistry } from './providers';
 import { resolveSupportedRenderLanguage, translateRender } from '../../shared/i18n';
+import { slugify } from '../slugify';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +38,14 @@ export interface LanguageDetectionResult {
   error?: string;
 }
 
+export interface PostAnalysisResult {
+  success: boolean;
+  title?: string;
+  excerpt?: string;
+  slug?: string;
+  error?: string;
+}
+
 // ---------------------------------------------------------------------------
 // OneShotTasks
 // ---------------------------------------------------------------------------
@@ -44,15 +54,18 @@ export class OneShotTasks {
   private providers: ProviderRegistry;
   private chatEngine: ChatEngine;
   private mediaEngine: MediaEngine;
+  private postEngine?: PostEngine;
 
   constructor(
     providers: ProviderRegistry,
     chatEngine: ChatEngine,
     mediaEngine: MediaEngine,
+    postEngine?: PostEngine,
   ) {
     this.providers = providers;
     this.chatEngine = chatEngine;
     this.mediaEngine = mediaEngine;
+    this.postEngine = postEngine;
   }
 
   /**
@@ -343,6 +356,88 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       }
 
       return { success: true, language: detected };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Analyze a blog post and suggest title, excerpt (plain text), and slug.
+   * Uses the configured title model (text-only).
+   */
+  async analyzePost(
+    postId: string,
+    language: string = 'en',
+  ): Promise<PostAnalysisResult> {
+    if (!this.postEngine) {
+      return { success: false, error: 'Post engine not available' };
+    }
+
+    // Load post (resolves content from filesystem for published posts)
+    const post = await this.postEngine.getPost(postId);
+    if (!post) return { success: false, error: 'Post not found' };
+    if (!post.content || post.content.trim().length === 0) {
+      return { success: false, error: 'Post has no content to analyze' };
+    }
+
+    // Use the title model — lightweight, text-only task
+    let modelId = await this.chatEngine.getSetting('chat_title_model');
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
+      modelId = this.providers.getOpencodeKey()
+        ? 'claude-sonnet-4-5'
+        : this.providers.getMistralKey()
+          ? 'mistral-large-latest'
+          : null;
+    }
+
+    // In offline mode, swap to configured offline title model
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+
+    const snippet = post.content.slice(0, 2000);
+    const renderLanguage = resolveSupportedRenderLanguage(language);
+    const systemPrompt = translateRender(renderLanguage, 'ai.postAnalysis.system');
+    const userPrompt = translateRender(renderLanguage, 'ai.postAnalysis.user')
+      .replace('{title}', post.title || '')
+      .replace('{content}', snippet);
+
+    try {
+      const model = this.providers.resolveModel(modelId);
+
+      const { text } = await generateText({
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 500,
+        maxRetries: 2,
+      });
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+
+      const result = JSON.parse(jsonMatch[0]);
+
+      // Sanitize slug: lowercase, hyphens only
+      let resultSlug = result.slug ? slugify(result.slug) : undefined;
+      if (resultSlug === '') resultSlug = undefined;
+
+      return {
+        success: true,
+        title: result.title || undefined,
+        excerpt: result.excerpt || undefined,
+        slug: resultSlug,
+      };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }

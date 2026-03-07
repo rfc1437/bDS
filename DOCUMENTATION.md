@@ -103,6 +103,12 @@ A post usually combines several layers of information: title, body content, cate
 
 A reliable post workflow starts by drafting content to completion, then reviewing structure and metadata, and finally previewing the output before publishing. After publishing, commit in Source Control immediately so the editorially approved state is recoverable and shareable.
 
+When you want help refining post metadata, use the **Quick Actions** button in the post editor and choose the AI suggestion action for title, summary, and slug. bDS analyzes the current post content and opens a review dialog that shows the suggested values next to the current ones. You can apply only the fields you want, so this is best used as an editorial assistant rather than an automatic rewrite step.
+
+The generated summary is stored in the post excerpt field. In the editor, the excerpt appears in its own collapsible block between the metadata area and the main body, and it starts closed by default. Open this block when you want to review or manually adjust the summary text for list pages, previews, and other overview contexts.
+
+This feature has a few practical limits. It depends on AI being configured in bDS, so it is not available in projects that are using only local editing without AI access. Slug suggestions can only be applied before the post has ever been published. After the first publish, the slug remains locked to protect existing URLs, so the dialog will still show the suggestion for reference but will not let you apply it.
+
 ### Key takeaways
 
 - Use Posts for date-oriented, regularly updated content.

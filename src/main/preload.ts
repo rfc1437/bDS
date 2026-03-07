@@ -393,6 +393,9 @@ export const electronAPI: ElectronAPI = {
     // Post Language Detection
     detectPostLanguage: (title: string, content: string) => ipcRenderer.invoke('chat:detectPostLanguage', title, content),
 
+    // Post Analysis (title, excerpt, slug suggestions)
+    analyzePost: (postId: string, language?: string) => ipcRenderer.invoke('chat:analyzePost', postId, language),
+
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {
       const subscription = (_event: Electron.IpcRendererEvent, data: { conversationId: string; delta: string }) => callback(data);

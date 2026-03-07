@@ -83,6 +83,8 @@
   "render.month.12": "December",
   "ai.imageAnalysis.system": "You generate image metadata. Write all values in English.\n\nRules:\n- \"title\": short descriptive title (3-8 words)\n- \"alt\": factual description of what is visible (5-12 words). No interpretations. No \"Image of\" prefix.\n- \"caption\": engaging blog caption (5-20 words)\n\nRespond with JSON only: {\"title\": \"...\", \"alt\": \"...\", \"caption\": \"...\"}",
   "ai.imageAnalysis.user": "Analyze this image. Respond with JSON in English.",
+  "ai.postAnalysis.system": "You are a blog editor assistant. Analyze the following blog post and suggest improvements.\n\nReturn a JSON object with:\n- \"title\": a clear, engaging title for this post (3-10 words)\n- \"excerpt\": a plain text summary paragraph (2-3 sentences, no markdown, no formatting)\n- \"slug\": a concise, SEO-friendly URL slug (lowercase, hyphens only, no special characters)\n\nRespond in English. Return only the JSON object.",
+  "ai.postAnalysis.user": "Title: {title}\n\nContent:\n{content}",
   "task.embeddingIndex.name": "Index posts for Semantic Similarity",
   "task.embeddingIndex.loading": "Loading model…",
   "task.embeddingIndex.indexing": "Indexing: {indexed}/{total}",

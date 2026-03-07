@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useI18n } from '../../i18n';
 import './AISuggestionsModal.css';
 
+// Keep legacy types for backward-compatible re-export
 export interface AISuggestions {
   title?: string;
   alt?: string;
@@ -14,52 +15,55 @@ export interface CurrentValues {
   caption: string;
 }
 
-type SuggestionFieldKey = 'title' | 'alt' | 'caption';
-
-interface SuggestionFieldConfig {
-  key: SuggestionFieldKey;
+/**
+ * Generic field definition for the AI suggestions modal.
+ * Each field represents one suggestion the user can accept or reject.
+ */
+export interface SuggestionField {
+  key: string;
   label: string;
+  currentValue: string;
+  suggestedValue?: string;
+  disabled?: boolean;
+  warning?: string;
 }
-
-const SUGGESTION_FIELDS: SuggestionFieldConfig[] = [
-  { key: 'title', label: 'aiSuggestions.titleField' },
-  { key: 'alt', label: 'aiSuggestions.altField' },
-  { key: 'caption', label: 'aiSuggestions.captionField' },
-];
 
 interface AISuggestionsModalProps {
   isOpen: boolean;
   isLoading: boolean;
-  suggestions: AISuggestions | null;
-  currentValues: CurrentValues;
+  fields: SuggestionField[];
   error?: string;
-  onConfirm: (values: Partial<AISuggestions>) => void;
+  modalTitle: string;
+  loadingText: string;
+  emptyText: string;
+  onConfirm: (values: Record<string, string>) => void;
   onClose: () => void;
 }
 
 export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
   isOpen,
   isLoading,
-  suggestions,
-  currentValues,
+  fields,
   error,
+  modalTitle,
+  loadingText,
+  emptyText,
   onConfirm,
   onClose,
 }) => {
   const { t: tr } = useI18n();
-  // Checkbox state - initialized based on whether current values are empty
-  const [useTitle, setUseTitle] = useState(false);
-  const [useAlt, setUseAlt] = useState(false);
-  const [useCaption, setUseCaption] = useState(false);
+  // Dynamic checkbox state keyed by field key
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
 
-  // Update checkbox state when suggestions arrive, based on whether current fields are empty
+  // Auto-check fields when suggestions arrive:
+  // checked only when there IS a suggestion AND current value is empty
   useEffect(() => {
-    if (suggestions) {
-      setUseTitle(suggestions.title ? !currentValues.title : false);
-      setUseAlt(suggestions.alt ? !currentValues.alt : false);
-      setUseCaption(suggestions.caption ? !currentValues.caption : false);
+    const initial: Record<string, boolean> = {};
+    for (const field of fields) {
+      initial[field.key] = !field.disabled && !!field.suggestedValue && !field.currentValue;
     }
-  }, [suggestions, currentValues]);
+    setChecked(initial);
+  }, [fields]);
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget && !isLoading) {
@@ -68,68 +72,30 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
   }, [isLoading, onClose]);
 
   const handleConfirm = useCallback(() => {
-    const valuesToApply: Partial<AISuggestions> = {};
-    if (useTitle && suggestions?.title) valuesToApply.title = suggestions.title;
-    if (useAlt && suggestions?.alt) valuesToApply.alt = suggestions.alt;
-    if (useCaption && suggestions?.caption) valuesToApply.caption = suggestions.caption;
+    const valuesToApply: Record<string, string> = {};
+    for (const field of fields) {
+      if (checked[field.key] && field.suggestedValue) {
+        valuesToApply[field.key] = field.suggestedValue;
+      }
+    }
     onConfirm(valuesToApply);
-  }, [useTitle, useAlt, useCaption, suggestions, onConfirm]);
+  }, [checked, fields, onConfirm]);
+
+  const setFieldChecked = useCallback((key: string, value: boolean) => {
+    setChecked(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   if (!isOpen) return null;
 
-  const hasAnySuggestion = suggestions && (suggestions.title || suggestions.alt || suggestions.caption);
-  const hasAnySelected = useTitle || useAlt || useCaption;
-
-  const fieldSelection: Record<SuggestionFieldKey, [boolean, (checked: boolean) => void]> = {
-    title: [useTitle, setUseTitle],
-    alt: [useAlt, setUseAlt],
-    caption: [useCaption, setUseCaption],
-  };
-
-  const renderSuggestionField = (field: SuggestionFieldConfig) => {
-    if (!suggestions?.[field.key]) {
-      return null;
-    }
-
-    const [isChecked, setChecked] = fieldSelection[field.key];
-    const currentValue = currentValues[field.key];
-    const suggestedValue = suggestions[field.key];
-
-    return (
-      <div key={field.key} className="ai-suggestion-item">
-        <label className="ai-suggestion-checkbox">
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={(e) => setChecked(e.target.checked)}
-          />
-          <span className="checkmark"></span>
-        </label>
-        <div className="ai-suggestion-content">
-          <div className="ai-suggestion-label">
-            {field.label}
-            {currentValue && (
-              <span className="ai-suggestion-has-value" title={tr('aiSuggestions.hasExisting')}>
-                {tr('aiSuggestions.hasExisting')}
-              </span>
-            )}
-          </div>
-          <div className="ai-suggestion-value">{suggestedValue}</div>
-          {currentValue && (
-            <div className="ai-suggestion-current">
-              {tr('aiSuggestions.current')}: <em>{currentValue}</em>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const fieldsWithSuggestions = fields.filter(f => !!f.suggestedValue);
+  const hasAnySuggestion = fieldsWithSuggestions.length > 0;
+  const hasAnySelected = Object.values(checked).some(v => v);
 
   return (
     <div className="ai-suggestions-modal-backdrop" onClick={handleBackdropClick}>
       <div className="ai-suggestions-modal">
         <div className="ai-suggestions-modal-header">
-          <h2>{tr('aiSuggestions.title')}</h2>
+          <h2>{modalTitle}</h2>
           {!isLoading && (
             <button className="ai-suggestions-modal-close" onClick={onClose} title={tr('aiSuggestions.close')}>
               ✕
@@ -141,7 +107,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
           {isLoading && (
             <div className="ai-suggestions-loading">
               <div className="ai-suggestions-spinner"></div>
-              <p>{tr('aiSuggestions.analyzing')}</p>
+              <p>{loadingText}</p>
             </div>
           )}
 
@@ -157,13 +123,44 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
               <p className="ai-suggestions-intro">
                 {tr('aiSuggestions.intro')}
               </p>
-              {SUGGESTION_FIELDS.map((field) => renderSuggestionField({ ...field, label: tr(field.label) }))}
+              {fieldsWithSuggestions.map((field) => (
+                <div key={field.key} className="ai-suggestion-item">
+                  <label className="ai-suggestion-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={!!checked[field.key]}
+                      disabled={field.disabled}
+                      onChange={(e) => setFieldChecked(field.key, e.target.checked)}
+                    />
+                    <span className="checkmark"></span>
+                  </label>
+                  <div className="ai-suggestion-content">
+                    <div className="ai-suggestion-label">
+                      {field.label}
+                      {field.currentValue && (
+                        <span className="ai-suggestion-has-value" title={tr('aiSuggestions.hasExisting')}>
+                          {tr('aiSuggestions.hasExisting')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="ai-suggestion-value">{field.suggestedValue}</div>
+                    {field.warning && (
+                      <div className="ai-suggestion-current">{field.warning}</div>
+                    )}
+                    {field.currentValue && (
+                      <div className="ai-suggestion-current">
+                        {tr('aiSuggestions.current')}: <em>{field.currentValue}</em>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          {!isLoading && !error && !hasAnySuggestion && suggestions && (
+          {!isLoading && !error && !hasAnySuggestion && fields.length > 0 && (
             <div className="ai-suggestions-empty">
-              {tr('aiSuggestions.empty')}
+              {emptyText}
             </div>
           )}
         </div>

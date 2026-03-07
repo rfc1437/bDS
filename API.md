@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.12.0
+Contract version: 1.13.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -3513,6 +3513,7 @@ result = await bds.tags.sync_from_posts()
 
 - [chat.analyzeMediaImage](#chatanalyzemediaimage)
 - [chat.detectPostLanguage](#chatdetectpostlanguage)
+- [chat.analyzePost](#chatanalyzepost)
 
 ### chat.analyzeMediaImage
 
@@ -3571,6 +3572,39 @@ result = await bds.chat.detect_post_language(title='title', content='content')
 
 ```python
 {}
+```
+
+### chat.analyzePost
+
+Analyze a post and generate suggested title, excerpt, and slug using AI.
+
+**Parameters**
+
+- postId (str, required)
+- language (str, optional)
+
+**Response specification**
+
+- Return type: `PostAnalysisResult`
+- Data structures: `PostAnalysisResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.analyze_post(post_id='post-1')
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'title': 'value',
+    'excerpt': 'value',
+    'slug': 'value',
+    'error': 'value'
+}
 ```
 
 [↑ Back to Table of contents](#table-of-contents)
@@ -4375,6 +4409,20 @@ Result from AI image analysis containing generated title, alt text, and caption.
 
 [↑ Back to Table of contents](#table-of-contents)
 
+### PostAnalysisResult
+
+Result from AI post analysis containing suggested title, excerpt, and slug.
+
+**Fields**
+
+- success (`boolean`, required): Whether the analysis succeeded.
+- title (`string`, optional): Suggested post title.
+- excerpt (`string`, optional): Suggested plain-text excerpt summarizing the post.
+- slug (`string`, optional): Suggested URL-friendly slug.
+- error (`string`, optional): Error message when analysis failed.
+
+[↑ Back to Table of contents](#table-of-contents)
+
 ### SimilarPost
 
 A post with its semantic similarity score relative to a reference post.
@@ -4411,4 +4459,4 @@ A pair of posts with high content similarity that may be duplicates.
 
 ---
 
-Generated from contract at 2026-03-05T00:00:00.000Z.
+Generated from contract at 2026-03-07T00:00:00.000Z.
