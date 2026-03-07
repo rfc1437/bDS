@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="{{ language }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
-  {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href %}
+  {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href, alternate_links: alternate_links %}
   <body>
     <main>
       <h1>{{ post.title }}</h1>

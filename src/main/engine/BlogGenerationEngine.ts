@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import type { PostEngine, PostData } from './PostEngine';
+import type { PostEngine, PostData, PostTranslationData } from './PostEngine';
 import type { MediaEngine, MediaData } from './MediaEngine';
 import type { PostMediaEngine } from './PostMediaEngine';
 import {
@@ -194,6 +194,12 @@ function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
+type PublishedTranslationVariant = PostData & {
+  translationSourceSlug: string;
+  translationCanonicalLanguage?: string;
+  translationFilePath: string;
+};
+
 export class BlogGenerationEngine {
   private readonly postEngine: PostEngine;
   private readonly mediaEngine: MediaEngine;
@@ -203,6 +209,55 @@ export class BlogGenerationEngine {
     this.postEngine = postEngine;
     this.mediaEngine = mediaEngine;
     this.postMediaEngine = postMediaEngine;
+  }
+
+  private buildPublishedTranslationVariant(sourcePost: PostData, translation: PostTranslationData): PublishedTranslationVariant {
+    const canonicalLanguage = typeof sourcePost.language === 'string' ? sourcePost.language.trim() : '';
+    const variantLanguages = Array.from(new Set([
+      canonicalLanguage,
+      ...(Array.isArray(sourcePost.availableLanguages) ? sourcePost.availableLanguages : []),
+      translation.language,
+    ].filter((language) => typeof language === 'string' && language.trim().length > 0)));
+
+    return {
+      ...sourcePost,
+      id: translation.id,
+      slug: `${sourcePost.slug}.${translation.language}`,
+      title: translation.title,
+      excerpt: translation.excerpt,
+      content: translation.content,
+      language: translation.language,
+      updatedAt: translation.updatedAt,
+      publishedAt: translation.publishedAt ?? sourcePost.publishedAt,
+      availableLanguages: variantLanguages,
+      translationSourceSlug: sourcePost.slug,
+      translationCanonicalLanguage: canonicalLanguage || undefined,
+      translationFilePath: translation.filePath,
+    };
+  }
+
+  private async buildPublishedRoutePosts(publishedPosts: PostData[]): Promise<PostData[]> {
+    const routePosts: PostData[] = [...publishedPosts];
+    const getPostTranslations = (this.postEngine as PostEngine & {
+      getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
+    }).getPostTranslations;
+
+    if (typeof getPostTranslations !== 'function') {
+      return routePosts;
+    }
+
+    for (const post of publishedPosts) {
+      const translations = await getPostTranslations.call(this.postEngine, post.id);
+      for (const translation of translations) {
+        if (translation.status !== 'published') {
+          continue;
+        }
+
+        routePosts.push(this.buildPublishedTranslationVariant(post, translation));
+      }
+    }
+
+    return routePosts;
   }
 
   async generate(options: BlogGenerationOptions, onProgress: (progress: number, message?: string) => void): Promise<BlogGenerationResult> {
@@ -226,6 +281,7 @@ export class BlogGenerationEngine {
 
     const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
     const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
+    const publishedRoutePosts = await this.buildPublishedRoutePosts(publishedPosts);
 
     onProgress(3, `Found ${publishedPosts.length} published posts`);
 
@@ -250,7 +306,7 @@ export class BlogGenerationEngine {
         projectName: options.projectName,
         projectDescription: options.projectDescription,
         maxPostsPerPage,
-        publishedPosts,
+        publishedPosts: publishedRoutePosts,
         publishedListPosts,
         postIndex: generationPostIndex,
         includeFeeds: true,
@@ -273,7 +329,7 @@ export class BlogGenerationEngine {
       const archiveMetadata = collectSitemapArchiveMetadata({
         baseUrl: options.baseUrl,
         maxPostsPerPage,
-        publishedPosts,
+        publishedPosts: publishedRoutePosts,
         publishedListPosts,
       });
 
@@ -368,7 +424,7 @@ export class BlogGenerationEngine {
     const renderRoute = createPreviewBackedGenerationRouteRenderer({
       options,
       maxPostsPerPage,
-      publishedPostsForLookup: publishedPosts,
+      publishedPostsForLookup: publishedRoutePosts,
       engines: {
         postEngine: this.postEngine,
         mediaEngine: this.mediaEngine,
@@ -400,7 +456,7 @@ export class BlogGenerationEngine {
       });
       pagesGenerated += await generatePageRoutes({
         projectId: options.projectId,
-        posts: publishedPosts,
+        posts: publishedRoutePosts,
         renderRoute,
         writePage,
         onPageGenerated: reportUnitProgress,
@@ -411,7 +467,7 @@ export class BlogGenerationEngine {
       onProgress(35, 'Generating single post pages...');
       pagesGenerated += await generateSinglePostPages({
         projectId: options.projectId,
-        posts: publishedPosts,
+        posts: publishedRoutePosts,
         renderRoute,
         writePage,
         onPageGenerated: reportUnitProgress,
@@ -535,6 +591,7 @@ export class BlogGenerationEngine {
       .map(([category]) => category);
 
     const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
+    const publishedRoutePosts = await this.buildPublishedRoutePosts(publishedPosts);
     const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
     const { sitemapXml } = buildSitemapAndFeeds({
@@ -542,7 +599,7 @@ export class BlogGenerationEngine {
       projectName: options.projectName,
       projectDescription: options.projectDescription,
       maxPostsPerPage,
-      publishedPosts,
+      publishedPosts: publishedRoutePosts,
       publishedListPosts,
       postIndex: generationPostIndex,
       includeFeeds: false,
@@ -560,11 +617,12 @@ export class BlogGenerationEngine {
 
     onProgress(50, 'Comparing sitemap to html pages...');
 
-    const postTimestampChecks = await Promise.all(publishedPosts.map(async (post) => {
+    const postTimestampChecks = await Promise.all(publishedRoutePosts.map(async (post) => {
       const createdAt = resolvePostCreatedAt(post);
       const year = String(createdAt.getFullYear());
       const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-      const postFilePath = path.join(options.dataDir, 'posts', year, month, `${post.slug}.md`);
+      const postFilePath = (post as PublishedTranslationVariant).translationFilePath
+        ?? path.join(options.dataDir, 'posts', year, month, `${post.slug}.md`);
       const postUrlPath = buildCanonicalPostPath(post);
       const relativePath = `${postUrlPath.replace(/^\//, '')}/index.html`;
       const generatedRecord = await getGeneratedFileHashRecord(options.projectId, relativePath);
@@ -687,13 +745,14 @@ export class BlogGenerationEngine {
 
       const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
       const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
+      const publishedRoutePosts = await this.buildPublishedRoutePosts(publishedPosts);
       const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
       const { allCategories, allTags, years, yearMonths, yearMonthDays } = buildApplyValidationArchives(publishedListPosts);
 
       const targetedPlan = buildTargetedValidationPlan({
         initialPlan: missingPathPlan,
-        publishedPosts,
+        publishedPosts: publishedRoutePosts,
         allCategories,
         allTags,
         availableYearMonths: yearMonths.keys(),
@@ -706,7 +765,7 @@ export class BlogGenerationEngine {
       const renderRoute = createPreviewBackedGenerationRouteRenderer({
         options,
         maxPostsPerPage,
-        publishedPostsForLookup: publishedPosts,
+        publishedPostsForLookup: publishedRoutePosts,
         engines: {
           postEngine: this.postEngine,
           mediaEngine: this.mediaEngine,
@@ -725,7 +784,7 @@ export class BlogGenerationEngine {
       };
 
       const { requestedSinglePosts, requestedPagePosts } = selectRequestedPosts({
-        publishedPosts,
+        publishedPosts: publishedRoutePosts,
         requestedPostIds: targetedPlan.requestedPostIds,
         requestedPageSlugs: targetedPlan.requestedPageSlugs,
       });

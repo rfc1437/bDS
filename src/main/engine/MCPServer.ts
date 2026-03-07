@@ -512,6 +512,8 @@ export class MCPServer {
         query: z.string().optional().describe('Full-text search query'),
         category: z.string().optional().describe('Filter by category'),
         tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
+        language: z.string().optional().describe('Require posts that are available in this language'),
+        missingTranslationLanguage: z.string().optional().describe('Require posts missing this translation language'),
         year: z.number().optional().describe('Filter by year'),
         month: z.number().optional().describe('Filter by month (1-12). Requires year.'),
         status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter by status'),
@@ -527,7 +529,7 @@ export class MCPServer {
         };
       }
 
-      const hasFilters = args.category || args.tags || args.year || args.month || args.status;
+      const hasFilters = args.category || args.tags || args.language || args.missingTranslationLanguage || args.year || args.month || args.status;
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 50;
 
@@ -543,6 +545,8 @@ export class MCPServer {
         const filter: PostFilter = {};
         if (args.category) filter.categories = [args.category];
         if (args.tags) filter.tags = args.tags;
+        if (args.language) filter.language = args.language;
+        if (args.missingTranslationLanguage) filter.missingTranslationLanguage = args.missingTranslationLanguage;
         if (args.year) filter.year = args.year;
         if (args.month) filter.month = args.month;
         if (args.status) filter.status = args.status;
@@ -634,7 +638,7 @@ export class MCPServer {
             id: post.id, title: post.title, slug: post.slug,
             content: post.content, excerpt: post.excerpt,
             status: post.status, author: post.author,
-            categories: post.categories, tags: post.tags,
+            categories: post.categories, tags: post.tags, availableLanguages: post.availableLanguages,
             createdAt: post.createdAt, updatedAt: post.updatedAt,
             publishedAt: post.publishedAt,
             backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, readdir, stat, mkdir, writeFile } from 'node:fs/
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import type { PostData } from '../../src/main/engine/PostEngine';
+import type { PostData, PostTranslationData } from '../../src/main/engine/PostEngine';
 import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 import type { MenuDocument } from '../../src/main/engine/MenuEngine';
 
@@ -72,6 +73,7 @@ vi.mock('../../src/main/engine/PostEngine', async (importOriginal) => {
     getPostsFiltered: vi.fn(async () => []),
     getPublishedVersion: vi.fn(async () => null),
     getPost: vi.fn(async () => null),
+    getPostTranslations: vi.fn(async () => []),
     setProjectContext: vi.fn(),
   };
   return {
@@ -120,6 +122,7 @@ function makePost(overrides: Partial<PostData> = {}): PostData {
     publishedAt: overrides.publishedAt ?? createdAt,
     tags: overrides.tags ?? [],
     categories: overrides.categories ?? [],
+    availableLanguages: overrides.availableLanguages ?? (overrides.language ? [overrides.language] : []),
   };
 }
 
@@ -197,6 +200,7 @@ describe('BlogGenerationEngine', () => {
     mockPostEngine.getPost.mockImplementation(async (id: string) => {
       return posts.find((p) => p.id === id) ?? null;
     });
+    mockPostEngine.getPostTranslations.mockResolvedValue([]);
   }
 
   async function generate(
@@ -1219,6 +1223,60 @@ describe('BlogGenerationEngine', () => {
     expect(sitemap).toContain('<loc>https://example.com/tag/canonical-tag/</loc>');
     expect(sitemap).toContain('<loc>https://example.com/canonical-page/</loc>');
     expect(sitemap).toContain('<loc>https://example.com/page/2/</loc>');
+  });
+
+  it('generates published translation pages with alternate links and sitemap entries', async () => {
+    const sourcePost = makePost({
+      id: '1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nEnglish body',
+      language: 'en',
+      availableLanguages: ['en', 'fr'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const translationsByPostId = new Map<string, PostTranslationData[]>([
+      ['1', [{
+        id: 'translation-1-fr',
+        projectId: 'default',
+        translationFor: '1',
+        language: 'fr',
+        title: 'Bonjour le monde',
+        excerpt: 'Resume FR',
+        content: '# Bonjour le monde\n\nCorps FR',
+        status: 'published',
+        createdAt: new Date('2025-01-15T10:05:00Z'),
+        updatedAt: new Date('2025-01-15T10:05:00Z'),
+        publishedAt: new Date('2025-01-15T10:06:00Z'),
+        filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+      }]],
+    ]);
+
+    setupPosts([sourcePost]);
+    mockPostEngine.getPostTranslations.mockImplementation(async (postId: string) => translationsByPostId.get(postId) ?? []);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn());
+
+    const canonicalHtml = await readFile(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world', 'index.html'), 'utf-8');
+    const translationHtml = await readFile(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world.fr', 'index.html'), 'utf-8');
+    const sitemap = await readFile(path.join(tempDir, 'html', 'sitemap.xml'), 'utf-8');
+
+    expect(canonicalHtml).toContain('hreflang="fr"');
+    expect(canonicalHtml).toContain('href="/2025/01/15/hello-world.fr"');
+    expect(translationHtml).toContain('<html lang="fr"');
+    expect(translationHtml).toContain('Bonjour le monde');
+    expect(sitemap).toContain('<loc>https://example.com/2025/01/15/hello-world/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/2025/01/15/hello-world.fr/</loc>');
   });
 
   it('applies validation by generating only missing category and tag routes', async () => {

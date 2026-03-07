@@ -91,7 +91,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('posts.rebuildFromFiles', 'Rebuild posts database from files.', [], 'void'),
   method('posts.reindexText', 'Reindex post search text.', [], 'void'),
   method('posts.search', 'Search posts by free-text query.', [requiredString('query')], 'SearchResult[]'),
-  method('posts.filter', 'Filter posts by criteria.', [requiredObject('filter')], 'PostData[]'),
+  method('posts.filter', 'Filter posts by criteria, including optional language and missingTranslationLanguage filters.', [requiredObject('filter')], 'PostData[]'),
   method('posts.getTags', 'Get all post tags.', [], 'string[]'),
   method('posts.getCategories', 'Get all post categories.', [], 'string[]'),
   method('posts.getByYearMonth', 'Get post counts grouped by year/month.', [], 'Array<{ year: number; month: number; count: number } >'),
@@ -257,6 +257,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'publishedAt', type: 'string', required: false, description: 'Publication timestamp for published posts.' },
       { name: 'tags', type: 'string[]', required: true, description: 'List of tag names.' },
       { name: 'categories', type: 'string[]', required: true, description: 'List of category names.' },
+      { name: 'availableLanguages', type: 'string[]', required: true, description: 'Canonical language plus all available translation language codes for this post.' },
     ],
   },
   {

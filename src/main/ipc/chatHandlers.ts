@@ -907,6 +907,17 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // Translate a post and persist/update its translation record
+  ipcMain.handle('chat:translatePost', async (_, postId: string, targetLanguage: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().translatePost(postId, targetLanguage || 'en');
+    } catch (error) {
+      console.error('[Chat IPC] Error translating post:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // ============ A2UI Actions ============
 
   ipcMain.handle('a2ui:dispatch', async (_, action: { surfaceId: string; componentId: string; action: string; payload?: Record<string, unknown> }) => {

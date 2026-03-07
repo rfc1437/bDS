@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="/assets/bds.css" />
   <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
   <link rel="alternate" type="application/atom+xml" title="Atom" href="/atom.xml" />
+  {% for alternate_link in alternate_links %}
+  <link rel="alternate" hreflang="{{ alternate_link.hreflang | escape }}" href="{{ alternate_link.href | escape }}" />
+  {% endfor %}
   <script defer src="/assets/highlight.min.js"></script>
   <script defer src="/assets/code-enhancements.js"></script>
   <script defer src="/assets/d3.layout.cloud.js"></script>

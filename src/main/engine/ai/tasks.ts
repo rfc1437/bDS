@@ -46,6 +46,12 @@ export interface PostAnalysisResult {
   error?: string;
 }
 
+export interface PostTranslationResult {
+  success: boolean;
+  translation?: Awaited<ReturnType<PostEngine['upsertPostTranslation']>>;
+  error?: string;
+}
+
 // ---------------------------------------------------------------------------
 // OneShotTasks
 // ---------------------------------------------------------------------------
@@ -437,6 +443,82 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
         title: result.title || undefined,
         excerpt: result.excerpt || undefined,
         slug: resultSlug,
+      };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  async translatePost(postId: string, targetLanguage: string): Promise<PostTranslationResult> {
+    if (!this.postEngine) {
+      return { success: false, error: 'Post engine not available' };
+    }
+
+    const post = await this.postEngine.getPost(postId);
+    if (!post) {
+      return { success: false, error: 'Post not found' };
+    }
+    if (!post.content || post.content.trim().length === 0) {
+      return { success: false, error: 'Post has no content to translate' };
+    }
+
+    let modelId = await this.chatEngine.getSetting('chat_title_model');
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
+      modelId = this.providers.getOpencodeKey()
+        ? 'claude-sonnet-4-5'
+        : this.providers.getMistralKey()
+          ? 'mistral-large-latest'
+          : null;
+    }
+
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+
+    const sourceLanguage = post.language || 'en';
+    const systemPrompt = `You translate blog posts. Return ONLY valid JSON with keys title, excerpt, and content. Preserve Markdown structure. Do not add commentary. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const userPrompt = [
+      `Title: ${post.title}`,
+      `Excerpt: ${post.excerpt || ''}`,
+      'Content:',
+      post.content,
+    ].join('\n\n');
+
+    try {
+      const model = this.providers.resolveModel(modelId);
+      const { text } = await generateText({
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 4000,
+        maxRetries: 2,
+      });
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { success: false, error: 'Invalid response format from AI' };
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const translation = await this.postEngine.upsertPostTranslation(postId, targetLanguage, {
+        title: parsed.title || post.title,
+        excerpt: parsed.excerpt || undefined,
+        content: parsed.content || '',
+      });
+
+      return {
+        success: true,
+        translation,
       };
     } catch (error) {
       return { success: false, error: (error as Error).message };

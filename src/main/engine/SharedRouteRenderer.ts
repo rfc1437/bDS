@@ -6,6 +6,7 @@ import {
   clampMaxPostsPerPage,
   parseRoutePagination,
   resolvePageTitle,
+  type AlternateLinkEntry,
   type BacklinkEntry,
   type PostEngineContract,
   type CategoryRenderSettings,
@@ -112,6 +113,48 @@ async function resolveBacklinks(
       };
     })
     .filter((entry): entry is BacklinkEntry => entry !== null);
+}
+
+function resolveAlternateLinks(
+  post: PostData,
+  rewriteContext: HtmlRewriteContext,
+): AlternateLinkEntry[] {
+  const variantPost = post as PostData & {
+    translationSourceSlug?: string;
+    translationCanonicalLanguage?: string;
+  };
+  const sourceSlug = typeof variantPost.translationSourceSlug === 'string' && variantPost.translationSourceSlug.trim().length > 0
+    ? variantPost.translationSourceSlug.trim()
+    : post.slug;
+  const canonicalLanguage = typeof variantPost.translationCanonicalLanguage === 'string' && variantPost.translationCanonicalLanguage.trim().length > 0
+    ? variantPost.translationCanonicalLanguage.trim()
+    : (post.language || '').trim();
+  const linkByLanguage = new Map<string, string>();
+  const currentLanguage = (post.language || canonicalLanguage).trim();
+  const currentHref = rewriteContext.canonicalPostPathBySlug.get(post.slug);
+  if (currentLanguage && currentHref) {
+    linkByLanguage.set(currentLanguage, currentHref);
+  }
+
+  const canonicalHref = rewriteContext.canonicalPostPathBySlug.get(sourceSlug);
+  if (canonicalLanguage && canonicalHref) {
+    linkByLanguage.set(canonicalLanguage, canonicalHref);
+  }
+
+  const languages = Array.from(new Set((Array.isArray(post.availableLanguages) ? post.availableLanguages : [])
+    .filter((language) => typeof language === 'string' && language.trim().length > 0)));
+  for (const language of languages) {
+    if (linkByLanguage.has(language)) {
+      continue;
+    }
+
+    const href = rewriteContext.canonicalPostPathBySlug.get(`${sourceSlug}.${language}`);
+    if (href) {
+      linkByLanguage.set(language, href);
+    }
+  }
+
+  return Array.from(linkByLanguage.entries()).map(([hreflang, href]) => ({ hreflang, href }));
 }
 
 async function resolveRouteWithSharedServices(
@@ -224,6 +267,7 @@ async function resolveRouteWithSharedServices(
       tagSettings: tagTemplateSettings,
       categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
       backlinks,
+      alternate_links: resolveAlternateLinks(post, rewriteContext),
     }, services.postEngineForMacros);
   }
 
@@ -311,6 +355,7 @@ async function resolveRouteWithSharedServices(
       tagSettings: tagTemplateSettings,
       categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
       backlinks,
+      alternate_links: resolveAlternateLinks(pagePost, rewriteContext),
     }, services.postEngineForMacros);
   }
 

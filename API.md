@@ -386,7 +386,8 @@ result = await bds.posts.create(data={})
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -430,7 +431,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -498,7 +500,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -541,7 +544,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -635,7 +639,8 @@ result = await bds.posts.get_by_status(status='status')
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -679,7 +684,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -722,7 +728,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -828,7 +835,7 @@ result = await bds.posts.search(query='search phrase')
 
 ### posts.filter
 
-Filter posts by criteria.
+Filter posts by criteria, including optional language and missingTranslationLanguage filters.
 
 **Parameters**
 
@@ -864,7 +871,8 @@ result = await bds.posts.filter(filter={})
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -1057,7 +1065,8 @@ result = await bds.posts.get_links_to(id='id-1')
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -1100,7 +1109,8 @@ result = await bds.posts.get_linked_by(id='id-1')
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -4200,6 +4210,7 @@ Canonical post object used across editor and generation flows.
 - publishedAt (`string`, optional): Publication timestamp for published posts.
 - tags (`string[]`, required): List of tag names.
 - categories (`string[]`, required): List of category names.
+- availableLanguages (`string[]`, required): Canonical language plus all available translation language codes for this post.
 
 [↑ Back to Table of contents](#table-of-contents)
 

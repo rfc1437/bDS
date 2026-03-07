@@ -215,6 +215,72 @@
   line-height: 1;
 }
 
+.editor-translations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 88%, transparent);
+}
+
+.editor-translations-current,
+.editor-translations-empty,
+.editor-translations-missing {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.editor-translations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-translation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+}
+
+.editor-translation-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.editor-translation-language {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.editor-translation-status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.editor-translation-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.editor-translations-create-row {
+  display: flex;
+  gap: 8px;
+}
+
+.editor-translations-create-row select {
+  flex: 1;
+}
+
 .editor-body {
   flex: 1;
   display: flex;

@@ -876,7 +876,14 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                    <div className="sidebar-item-title-row">
+                      <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                      {post.availableLanguages?.length > 1 && (
+                        <span className="sidebar-item-language-badge" title={t('sidebar.languagesAvailable', { count: post.availableLanguages.length })}>
+                          {post.availableLanguages.length}
+                        </span>
+                      )}
+                    </div>
                     <div className="sidebar-item-meta">{formatDate(post.updatedAt, uiLocale)}</div>
                   </div>
                 </div>
@@ -904,7 +911,14 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                    <div className="sidebar-item-title-row">
+                      <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                      {post.availableLanguages?.length > 1 && (
+                        <span className="sidebar-item-language-badge" title={t('sidebar.languagesAvailable', { count: post.availableLanguages.length })}>
+                          {post.availableLanguages.length}
+                        </span>
+                      )}
+                    </div>
                     <div className="sidebar-item-meta">{formatDate(post.publishedAt || post.updatedAt, uiLocale)}</div>
                   </div>
                 </div>
@@ -932,7 +946,14 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
                 >
                   <span className="post-type-icon" title={postType.type}>{postType.icon}</span>
                   <div className="sidebar-item-content">
-                    <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                    <div className="sidebar-item-title-row">
+                      <div className="sidebar-item-title">{post.title || t('sidebar.untitled')}</div>
+                      {post.availableLanguages?.length > 1 && (
+                        <span className="sidebar-item-language-badge" title={t('sidebar.languagesAvailable', { count: post.availableLanguages.length })}>
+                          {post.availableLanguages.length}
+                        </span>
+                      )}
+                    </div>
                     <div className="sidebar-item-meta">{formatDate(post.updatedAt, uiLocale)}</div>
                   </div>
                 </div>

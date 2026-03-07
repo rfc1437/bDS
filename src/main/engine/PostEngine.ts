@@ -7,10 +7,11 @@ import matter from 'gray-matter';
 import { eq, and, desc, gte, lte, like, inArray, ne, sql } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
-import { posts, Post, NewPost, postLinks } from '../database/schema';
+import { posts, postTranslations, Post, PostTranslation, NewPost, NewPostTranslation, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
+import { readPostTranslationFile as readPostTranslationFileShared } from './postTranslationFileUtils';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 import type { MediaEngine } from './MediaEngine';
 import { slugify } from './slugify';
@@ -30,6 +31,22 @@ export interface PostData {
   publishedAt?: Date;
   tags: string[];
   categories: string[];
+  availableLanguages: string[];
+}
+
+export interface PostTranslationData {
+  id: string;
+  projectId: string;
+  translationFor: string;
+  language: string;
+  title: string;
+  excerpt?: string;
+  content: string;
+  status: 'draft' | 'published' | 'archived';
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt?: Date;
+  filePath: string;
 }
 
 export interface PostMetadata {
@@ -60,6 +77,8 @@ export interface PostFilter {
   tags?: string[];
   categories?: string[];
   excludeCategories?: string[];
+  language?: string;
+  missingTranslationLanguage?: string;
   startDate?: Date;
   endDate?: Date;
   year?: number;
@@ -209,6 +228,11 @@ export class PostEngine extends EventEmitter {
     return path.join(dir, `${slug}.md`);
   }
 
+  private getPostTranslationPath(sourcePost: PostData, language: string): string {
+    const dir = this.getPostsDirForDate(sourcePost.createdAt);
+    return path.join(dir, `${sourcePost.slug}.${language}.md`);
+  }
+
   setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
     this.dataDir = dataDir || null;
@@ -270,6 +294,64 @@ export class PostEngine extends EventEmitter {
 
   private calculateChecksum(content: string): string {
     return crypto.createHash('md5').update(content).digest('hex');
+  }
+
+  private async getAllTranslationRows(): Promise<PostTranslation[]> {
+    const db = getDatabase().getLocal();
+    const rows = await db.select().from(postTranslations).all();
+    return rows.filter((row) => row.projectId === this.currentProjectId);
+  }
+
+  private async getTranslationRowsForPost(postId: string): Promise<PostTranslation[]> {
+    const rows = await this.getAllTranslationRows();
+    return rows.filter((row) => row.translationFor === postId);
+  }
+
+  private async getTranslationRow(postId: string, language: string): Promise<PostTranslation | null> {
+    const rows = await this.getTranslationRowsForPost(postId);
+    return rows.find((row) => row.language === language) || null;
+  }
+
+  private buildAvailableLanguages(post: Pick<PostData, 'language'>, translations: Array<Pick<PostTranslation, 'language'>>): string[] {
+    const languages = new Set<string>();
+    const canonicalLanguage = post.language?.trim();
+    if (canonicalLanguage) {
+      languages.add(canonicalLanguage);
+    }
+    for (const translation of translations) {
+      const translationLanguage = translation.language?.trim();
+      if (translationLanguage) {
+        languages.add(translationLanguage);
+      }
+    }
+    return Array.from(languages).sort();
+  }
+
+  private async appendAvailableLanguages(post: PostData): Promise<PostData> {
+    const translations = await this.getTranslationRowsForPost(post.id);
+    return {
+      ...post,
+      availableLanguages: this.buildAvailableLanguages(post, translations),
+    };
+  }
+
+  private async appendAvailableLanguagesToList(postList: PostData[]): Promise<PostData[]> {
+    if (postList.length === 0) {
+      return [];
+    }
+
+    const translations = await this.getAllTranslationRows();
+    const bySource = new Map<string, PostTranslation[]>();
+    for (const translation of translations) {
+      const current = bySource.get(translation.translationFor) || [];
+      current.push(translation);
+      bySource.set(translation.translationFor, current);
+    }
+
+    return postList.map((post) => ({
+      ...post,
+      availableLanguages: this.buildAvailableLanguages(post, bySource.get(post.id) || []),
+    }));
   }
 
   private normalizePathForCompare(filePath: string): string {
@@ -335,6 +417,24 @@ export class PostEngine extends EventEmitter {
     return filePath;
   }
 
+  private async writePostTranslationFile(sourcePost: PostData, translation: PostTranslationData): Promise<string> {
+    const metadata: Record<string, unknown> = {
+      translationFor: translation.translationFor,
+      language: translation.language,
+      title: translation.title,
+    };
+
+    if (translation.excerpt) metadata.excerpt = translation.excerpt;
+
+    const postsDir = this.getPostsDirForDate(sourcePost.createdAt);
+    await fs.mkdir(postsDir, { recursive: true });
+
+    const filePath = this.getPostTranslationPath(sourcePost, translation.language);
+    const fileContent = matter.stringify(translation.content, metadata);
+    await fs.writeFile(filePath, fileContent, 'utf-8');
+    return filePath;
+  }
+
   private async readPostFile(filePath: string): Promise<PostData | null> {
     const data = await readPostFileShared(filePath);
     if (!data) return null;
@@ -372,6 +472,29 @@ export class PostEngine extends EventEmitter {
       updatedAt,
       tags: normalizedTags,
       categories: normalizedCategories,
+      availableLanguages: data.language ? [data.language] : [],
+    };
+  }
+
+  private async readPostTranslationFile(filePath: string, dbTranslation: PostTranslation): Promise<PostTranslationData | null> {
+    const fileData = await readPostTranslationFileShared(filePath);
+    if (!fileData) {
+      return null;
+    }
+
+    return {
+      id: dbTranslation.id,
+      projectId: dbTranslation.projectId,
+      translationFor: dbTranslation.translationFor,
+      language: dbTranslation.language,
+      title: fileData.title,
+      excerpt: fileData.excerpt,
+      content: fileData.content,
+      status: dbTranslation.status as 'draft' | 'published' | 'archived',
+      createdAt: dbTranslation.createdAt,
+      updatedAt: dbTranslation.updatedAt,
+      publishedAt: dbTranslation.publishedAt || undefined,
+      filePath: dbTranslation.filePath,
     };
   }
 
@@ -401,6 +524,7 @@ export class PostEngine extends EventEmitter {
       publishedAt: data.publishedAt,
       tags: data.tags || [],
       categories: data.categories || [],
+      availableLanguages: data.language ? [data.language] : [],
     };
 
     const checksum = this.calculateChecksum(post.content);
@@ -615,13 +739,15 @@ export class PostEngine extends EventEmitter {
       publishedAt: dbPost.publishedAt || undefined,
       tags: JSON.parse(dbPost.tags || '[]'),
       categories: JSON.parse(dbPost.categories || '[]'),
+      availableLanguages: [],
     };
   }
 
   async getPost(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
     const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
-    return this.resolvePostData(dbPost);
+    const post = await this.resolvePostData(dbPost);
+    return post ? this.appendAvailableLanguages(post) : null;
   }
 
   async getPostBySlug(slug: string): Promise<PostData | null> {
@@ -634,7 +760,148 @@ export class PostEngine extends EventEmitter {
         eq(posts.projectId, this.currentProjectId)
       ))
       .get();
-    return this.resolvePostData(dbPost);
+    const post = await this.resolvePostData(dbPost);
+    return post ? this.appendAvailableLanguages(post) : null;
+  }
+
+  private async resolvePostTranslationData(dbTranslation: PostTranslation | undefined | null): Promise<PostTranslationData | null> {
+    if (!dbTranslation) {
+      return null;
+    }
+
+    if (dbTranslation.content) {
+      return {
+        id: dbTranslation.id,
+        projectId: dbTranslation.projectId,
+        translationFor: dbTranslation.translationFor,
+        language: dbTranslation.language,
+        title: dbTranslation.title,
+        excerpt: dbTranslation.excerpt || undefined,
+        content: dbTranslation.content,
+        status: dbTranslation.status as 'draft' | 'published' | 'archived',
+        createdAt: dbTranslation.createdAt,
+        updatedAt: dbTranslation.updatedAt,
+        publishedAt: dbTranslation.publishedAt || undefined,
+        filePath: dbTranslation.filePath,
+      };
+    }
+
+    if (dbTranslation.filePath) {
+      const fileData = await this.readPostTranslationFile(dbTranslation.filePath, dbTranslation);
+      if (fileData) {
+        return fileData;
+      }
+    }
+
+    return {
+      id: dbTranslation.id,
+      projectId: dbTranslation.projectId,
+      translationFor: dbTranslation.translationFor,
+      language: dbTranslation.language,
+      title: dbTranslation.title,
+      excerpt: dbTranslation.excerpt || undefined,
+      content: '',
+      status: dbTranslation.status as 'draft' | 'published' | 'archived',
+      createdAt: dbTranslation.createdAt,
+      updatedAt: dbTranslation.updatedAt,
+      publishedAt: dbTranslation.publishedAt || undefined,
+      filePath: dbTranslation.filePath,
+    };
+  }
+
+  async getPostTranslation(postId: string, language: string): Promise<PostTranslationData | null> {
+    const translation = await this.getTranslationRow(postId, language);
+    return this.resolvePostTranslationData(translation);
+  }
+
+  async getPostTranslations(postId: string): Promise<PostTranslationData[]> {
+    const rows = await this.getTranslationRowsForPost(postId);
+    const translations = await Promise.all(rows.map((row) => this.resolvePostTranslationData(row)));
+    return translations.filter((translation): translation is PostTranslationData => translation !== null)
+      .sort((left, right) => left.language.localeCompare(right.language));
+  }
+
+  async upsertPostTranslation(
+    postId: string,
+    language: string,
+    data: Partial<PostTranslationData>,
+  ): Promise<PostTranslationData> {
+    const db = getDatabase().getLocal();
+    const sourcePost = await this.getPost(postId);
+    if (!sourcePost) {
+      throw new Error('Source post not found');
+    }
+
+    const normalizedLanguage = language.trim().toLowerCase();
+    const now = new Date();
+    const existing = await this.getTranslationRow(postId, normalizedLanguage);
+
+    if (existing) {
+      const updated: PostTranslationData = {
+        id: existing.id,
+        projectId: existing.projectId,
+        translationFor: existing.translationFor,
+        language: existing.language,
+        title: data.title ?? existing.title,
+        excerpt: data.excerpt ?? existing.excerpt ?? undefined,
+        content: data.content ?? existing.content ?? '',
+        status: (data.status || existing.status) as 'draft' | 'published' | 'archived',
+        createdAt: existing.createdAt,
+        updatedAt: now,
+        publishedAt: data.publishedAt ?? existing.publishedAt ?? undefined,
+        filePath: existing.filePath,
+      };
+
+      await db.update(postTranslations)
+        .set({
+          title: updated.title,
+          excerpt: updated.excerpt,
+          content: updated.content,
+          status: updated.status,
+          updatedAt: updated.updatedAt,
+          publishedAt: updated.publishedAt,
+          checksum: this.calculateChecksum(updated.content),
+        })
+        .where(eq(postTranslations.id, existing.id));
+
+      this.emit('postTranslationUpdated', updated);
+      return updated;
+    }
+
+    const created: PostTranslationData = {
+      id: uuidv4(),
+      projectId: this.currentProjectId,
+      translationFor: postId,
+      language: normalizedLanguage,
+      title: data.title || sourcePost.title,
+      excerpt: data.excerpt,
+      content: data.content || '',
+      status: (data.status || 'draft') as 'draft' | 'published' | 'archived',
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: data.publishedAt,
+      filePath: '',
+    };
+
+    const dbTranslation: NewPostTranslation = {
+      id: created.id,
+      projectId: created.projectId,
+      translationFor: created.translationFor,
+      language: created.language,
+      title: created.title,
+      excerpt: created.excerpt,
+      content: created.content,
+      status: created.status,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+      publishedAt: created.publishedAt,
+      filePath: '',
+      checksum: this.calculateChecksum(created.content),
+    };
+
+    await db.insert(postTranslations).values(dbTranslation);
+    this.emit('postTranslationCreated', created);
+    return created;
   }
 
   private async resolvePostData(dbPost: typeof posts.$inferSelect | undefined): Promise<PostData | null> {
@@ -796,9 +1063,9 @@ export class PostEngine extends EventEmitter {
         .all() : [];
 
       const allDbPosts = [...draftPosts, ...nonDraftPosts];
-      const items: PostData[] = allDbPosts.map(dbPost =>
+      const items = await this.appendAvailableLanguagesToList(allDbPosts.map(dbPost =>
         this.dbRowToPostData(dbPost, dbPost.content || '')
-      );
+      ));
 
       return {
         items,
@@ -834,9 +1101,9 @@ export class PostEngine extends EventEmitter {
       .offset(nonDraftOffset)
       .all();
 
-    const items: PostData[] = dbPosts.map(dbPost =>
+    const items = await this.appendAvailableLanguagesToList(dbPosts.map(dbPost =>
       this.dbRowToPostData(dbPost, dbPost.content || '')
-    );
+    ));
 
     return {
       items,
@@ -860,7 +1127,7 @@ export class PostEngine extends EventEmitter {
     
     // Use DB content for drafts, empty string for published posts.
     // This avoids expensive filesystem reads.
-    return dbPosts.map(dbPost => this.dbRowToPostData(dbPost, dbPost.content || ''));
+    return this.appendAvailableLanguagesToList(dbPosts.map(dbPost => this.dbRowToPostData(dbPost, dbPost.content || '')));
   }
 
   async getPostsByStatus(status: 'draft' | 'published' | 'archived'): Promise<PostData[]> {
@@ -877,7 +1144,7 @@ export class PostEngine extends EventEmitter {
     
     // Use DB content for drafts, empty string for published posts.
     // This avoids expensive filesystem reads.
-    return dbPosts.map(dbPost => this.dbRowToPostData(dbPost, dbPost.content || ''));
+    return this.appendAvailableLanguagesToList(dbPosts.map(dbPost => this.dbRowToPostData(dbPost, dbPost.content || '')));
   }
 
   async getPostsFiltered(filter: PostFilter): Promise<PostData[]> {
@@ -954,7 +1221,17 @@ export class PostEngine extends EventEmitter {
       result.push(postData);
     }
 
-    return result;
+    const withLanguages = await this.appendAvailableLanguagesToList(result);
+
+    return withLanguages.filter((post) => {
+      if (filter.language && !post.availableLanguages.includes(filter.language)) {
+        return false;
+      }
+      if (filter.missingTranslationLanguage && post.availableLanguages.includes(filter.missingTranslationLanguage)) {
+        return false;
+      }
+      return true;
+    });
   }
 
   async searchPosts(query: string): Promise<SearchResult[]> {
@@ -1084,6 +1361,15 @@ export class PostEngine extends EventEmitter {
         postDataList = postDataList.filter((p) =>
           filter.tags!.every((tag) => p.tags.includes(tag))
         );
+      }
+
+      postDataList = await this.appendAvailableLanguagesToList(postDataList);
+
+      if (filter.language) {
+        postDataList = postDataList.filter((post) => post.availableLanguages.includes(filter.language!));
+      }
+      if (filter.missingTranslationLanguage) {
+        postDataList = postDataList.filter((post) => !post.availableLanguages.includes(filter.missingTranslationLanguage!));
       }
 
       // Apply pagination
@@ -1456,7 +1742,55 @@ export class PostEngine extends EventEmitter {
 
     this.emit('postUpdated', published);
     await this.notifier.notify('post', id, 'updated');
-    return published;
+    return this.appendAvailableLanguages(published);
+  }
+
+  async publishPostTranslation(postId: string, language: string): Promise<PostTranslationData | null> {
+    const db = getDatabase().getLocal();
+    const sourcePost = await this.getPost(postId);
+    if (!sourcePost) {
+      return null;
+    }
+
+    const existing = await this.getTranslationRow(postId, language.trim().toLowerCase());
+    if (!existing) {
+      return null;
+    }
+
+    const translation = await this.resolvePostTranslationData(existing);
+    if (!translation) {
+      return null;
+    }
+
+    const now = new Date();
+    const publishedAt = translation.publishedAt || now;
+    const published: PostTranslationData = {
+      ...translation,
+      status: 'published',
+      updatedAt: now,
+      publishedAt,
+    };
+
+    const filePath = await this.writePostTranslationFile(sourcePost, published);
+
+    await db.update(postTranslations)
+      .set({
+        title: published.title,
+        excerpt: published.excerpt,
+        content: null,
+        status: 'published',
+        updatedAt: published.updatedAt,
+        publishedAt: published.publishedAt,
+        filePath,
+        checksum: this.calculateChecksum(published.content),
+      })
+      .where(eq(postTranslations.id, published.id));
+
+    const resolved = await this.getPostTranslation(postId, published.language);
+    if (resolved) {
+      this.emit('postTranslationUpdated', resolved);
+    }
+    return resolved;
   }
 
   async discardChanges(id: string): Promise<PostData | null> {
@@ -1511,13 +1845,14 @@ export class PostEngine extends EventEmitter {
       publishedAt: publishedData.publishedAt,
       tags: publishedData.tags || [],
       categories: publishedData.categories || [],
+      availableLanguages: publishedData.language ? [publishedData.language] : [],
     };
 
     // Update FTS index
     await this.updateFTSIndex(reverted);
 
     this.emit('postUpdated', reverted);
-    return reverted;
+    return this.appendAvailableLanguages(reverted);
   }
 
   async hasPublishedVersion(id: string): Promise<boolean> {
@@ -1553,6 +1888,7 @@ export class PostEngine extends EventEmitter {
       publishedAt: fileData.publishedAt ?? dbPost.publishedAt ?? undefined,
       tags: fileData.tags,
       categories: fileData.categories,
+      availableLanguages: fileData.language ? [fileData.language] : [],
     };
   }
 
@@ -1700,6 +2036,7 @@ export class PostEngine extends EventEmitter {
           publishedAt: nextPublishedAt || undefined,
           tags: fileData.tags,
           categories: fileData.categories,
+          availableLanguages: fileData.language ? [fileData.language] : [],
         };
 
         this.emit('postUpdated', updatedPost);
@@ -1781,6 +2118,7 @@ export class PostEngine extends EventEmitter {
         publishedAt: publishedAt || undefined,
         tags: fileData.tags,
         categories: fileData.categories,
+        availableLanguages: fileData.language ? [fileData.language] : [],
       };
 
       this.emit('postCreated', createdPost);

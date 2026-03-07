@@ -133,6 +133,11 @@ export interface BacklinkEntry {
   path: string;
 }
 
+export interface AlternateLinkEntry {
+  href: string;
+  hreflang: string;
+}
+
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
@@ -149,6 +154,7 @@ export interface SinglePostTemplateContext {
   canonical_media_path_by_source_path: Record<string, string>;
   post_data_json_by_id: Record<string, string>;
   backlinks: BacklinkEntry[];
+  alternate_links: AlternateLinkEntry[];
 }
 
 export interface NotFoundTemplateContext {
@@ -1481,6 +1487,7 @@ export class PageRenderer {
       tagSettings?: Record<string, { postTemplateSlug?: string | null }>;
       categorySettings?: Record<string, { postTemplateSlug?: string | null }>;
       backlinks?: BacklinkEntry[];
+      alternate_links?: AlternateLinkEntry[];
     },
     postEngine?: PostEngineContract,
   ): Promise<string> {
@@ -1523,6 +1530,7 @@ export class PageRenderer {
         [renderablePost.id]: JSON.stringify(serializePostDataForMacro(renderablePost)),
       },
       backlinks: pageContext.backlinks ?? [],
+      alternate_links: pageContext.alternate_links ?? [],
     };
 
     const postTemplateName = resolvePostTemplateName(

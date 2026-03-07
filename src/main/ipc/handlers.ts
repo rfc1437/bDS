@@ -537,6 +537,26 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.getPostBySlug(slug);
   });
 
+  safeHandle('posts:getTranslation', async (_, postId: string, language: string) => {
+    const engine = bundle.postEngine;
+    return engine.getPostTranslation(postId, language);
+  });
+
+  safeHandle('posts:getTranslations', async (_, postId: string) => {
+    const engine = bundle.postEngine;
+    return engine.getPostTranslations(postId);
+  });
+
+  safeHandle('posts:upsertTranslation', async (_, postId: string, language: string, data: Record<string, unknown>) => {
+    const engine = bundle.postEngine;
+    return engine.upsertPostTranslation(postId, language, data as never);
+  });
+
+  safeHandle('posts:publishTranslation', async (_, postId: string, language: string) => {
+    const engine = bundle.postEngine;
+    return engine.publishPostTranslation(postId, language);
+  });
+
   safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean }) => {
     const engine = bundle.postEngine;
     const post = await engine.getPost(id);

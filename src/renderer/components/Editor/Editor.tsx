@@ -52,6 +52,8 @@ const UI_DATE_LOCALE: Record<string, string> = {
   es: 'es-ES',
 };
 
+const SUPPORTED_POST_LANGUAGES = ['en', 'de', 'fr', 'it', 'es'] as const;
+
 /** Get display name for media: prefer title over originalName */
 function getMediaDisplayName(media: { title?: string; originalName: string }): string {
   return media.title || media.originalName;
@@ -221,6 +223,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   // Quick actions state for AI post analysis
   const [showPostQuickActions, setShowPostQuickActions] = useState(false);
   const [projectLanguage, setProjectLanguage] = useState('en');
+  const [translations, setTranslations] = useState<import('../../../main/shared/electronApi').PostTranslationData[]>([]);
+  const [translationTargetLanguage, setTranslationTargetLanguage] = useState('');
+  const [isTranslatingPost, setIsTranslatingPost] = useState(false);
+  const [publishingTranslationLanguage, setPublishingTranslationLanguage] = useState<string | null>(null);
   const postQuickActionsRef = useRef<HTMLDivElement>(null);
   const [showPostAISuggestionsModal, setShowPostAISuggestionsModal] = useState(false);
   const [isAnalyzingPost, setIsAnalyzingPost] = useState(false);
@@ -228,6 +234,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [postAIError, setPostAIError] = useState<string | undefined>(undefined);
 
   const isDirty = checkIsDirty(postId);
+
+  const loadTranslations = useCallback(async () => {
+    const result = await window.electronAPI?.posts.getTranslations(postId);
+    setTranslations(result || []);
+  }, [postId]);
+
+  const getLanguageLabel = useCallback((languageCode: string) => {
+    return tr(`language.${languageCode}`);
+  }, [tr]);
+
+  const missingTranslationLanguages = useMemo(() => {
+    const currentLanguage = postLanguage || post?.language || projectLanguage;
+    const excluded = new Set([currentLanguage, ...translations.map((item) => item.language)]);
+    return SUPPORTED_POST_LANGUAGES.filter((languageCode) => !excluded.has(languageCode));
+  }, [postLanguage, post?.language, projectLanguage, translations]);
 
   // Listen for auto-save events to keep local post state in sync
   useEffect(() => {
@@ -245,6 +266,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   useEffect(() => {
     window.electronAPI?.posts.hasPublishedVersion(postId).then(setHasPublishedVersion);
   }, [postId]);
+
+  useEffect(() => {
+    loadTranslations().catch((error) => {
+      console.error('Failed to load post translations:', error);
+    });
+  }, [loadTranslations]);
 
   // Debounce content for lightbox-only computations (not time-critical)
   const debouncedContent = useDebouncedValue(content, 500);
@@ -451,6 +478,52 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setIsDetectingLanguage(false);
     }
   }, [title, content, isDetectingLanguage, tr]);
+
+  const handleTranslatePost = useCallback(async (targetLanguage: string) => {
+    if (!targetLanguage || isTranslatingPost) return;
+    setIsTranslatingPost(true);
+    try {
+      const result = await window.electronAPI?.chat.translatePost(postId, targetLanguage);
+      if (result?.success) {
+        await loadTranslations();
+        const refreshedPost = await window.electronAPI?.posts.get(postId);
+        if (refreshedPost) {
+          updatePost(postId, refreshedPost as Partial<PostData>);
+          setPost(prev => prev ? { ...prev, ...refreshedPost as Partial<PostData> } : prev);
+        }
+        showToast.success(tr('editor.translations.translateSuccess', { language: getLanguageLabel(targetLanguage) }));
+      } else {
+        showToast.error(result?.error || tr('editor.translations.translateFailed'));
+      }
+    } catch (error) {
+      console.error('Failed to translate post:', error);
+      showToast.error(tr('editor.translations.translateFailed'));
+    } finally {
+      setIsTranslatingPost(false);
+    }
+  }, [getLanguageLabel, isTranslatingPost, loadTranslations, postId, tr, updatePost]);
+
+  const handlePublishTranslation = useCallback(async (languageCode: string) => {
+    if (!languageCode || publishingTranslationLanguage) return;
+    setPublishingTranslationLanguage(languageCode);
+    try {
+      const updated = await window.electronAPI?.posts.publishTranslation(postId, languageCode);
+      if (updated) {
+        await loadTranslations();
+        const refreshedPost = await window.electronAPI?.posts.get(postId);
+        if (refreshedPost) {
+          updatePost(postId, refreshedPost as Partial<PostData>);
+          setPost(prev => prev ? { ...prev, ...refreshedPost as Partial<PostData> } : prev);
+        }
+        showToast.success(tr('editor.translations.publishSuccess', { language: getLanguageLabel(languageCode) }));
+      }
+    } catch (error) {
+      console.error('Failed to publish translation:', error);
+      showToast.error(tr('editor.translations.publishFailed'));
+    } finally {
+      setPublishingTranslationLanguage(null);
+    }
+  }, [getLanguageLabel, loadTranslations, postId, publishingTranslationLanguage, tr, updatePost]);
 
   // Load project language for AI post analysis
   useEffect(() => {
@@ -951,11 +1024,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                   onChange={(e) => setPostLanguage(e.target.value)}
                 >
                   <option value="">{tr('editor.field.languageDefault')}</option>
-                  <option value="en">{tr('language.en')}</option>
-                  <option value="de">{tr('language.de')}</option>
-                  <option value="fr">{tr('language.fr')}</option>
-                  <option value="it">{tr('language.it')}</option>
-                  <option value="es">{tr('language.es')}</option>
+                  {SUPPORTED_POST_LANGUAGES.map((languageCode) => (
+                    <option key={languageCode} value={languageCode}>{getLanguageLabel(languageCode)}</option>
+                  ))}
                 </select>
                 <button
                   className="secondary compact"
@@ -965,6 +1036,75 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 >
                   {isDetectingLanguage ? tr('editor.post.quickActions.detecting') : '🤖'}
                 </button>
+              </div>
+            </div>
+            <div className="editor-field">
+              <label>{tr('editor.translations.title')}</label>
+              <div className="editor-translations-panel">
+                <div className="editor-translations-current">
+                  {tr('editor.translations.currentLanguage', { language: getLanguageLabel(postLanguage || post?.language || projectLanguage) })}
+                </div>
+                {translations.length > 0 ? (
+                  <div className="editor-translations-list">
+                    {translations.map((translation) => (
+                      <div key={translation.id} className="editor-translation-item">
+                        <div className="editor-translation-copy">
+                          <span className="editor-translation-language">{getLanguageLabel(translation.language)}</span>
+                          <span className={`editor-translation-status status-${translation.status}`}>{tr(`editor.translations.status.${translation.status}`)}</span>
+                        </div>
+                        <div className="editor-translation-actions">
+                          <button
+                            className="secondary compact"
+                            onClick={() => handleTranslatePost(translation.language)}
+                            disabled={isTranslatingPost}
+                            title={tr('editor.translations.refreshTitle')}
+                          >
+                            {tr('editor.translations.refresh')}
+                          </button>
+                          {translation.status !== 'published' && (
+                            <button
+                              className="secondary compact"
+                              onClick={() => handlePublishTranslation(translation.language)}
+                              disabled={publishingTranslationLanguage === translation.language}
+                              title={tr('editor.translations.publishTitle')}
+                            >
+                              {publishingTranslationLanguage === translation.language ? tr('editor.translations.publishing') : tr('editor.translations.publish')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="editor-translations-empty">{tr('editor.translations.none')}</div>
+                )}
+                <div className="editor-translations-create-row">
+                  <select
+                    value={translationTargetLanguage}
+                    onChange={(e) => setTranslationTargetLanguage(e.target.value)}
+                  >
+                    <option value="">{tr('editor.translations.selectTarget')}</option>
+                    {missingTranslationLanguages.map((languageCode) => (
+                      <option key={languageCode} value={languageCode}>{getLanguageLabel(languageCode)}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      if (!translationTargetLanguage) return;
+                      void handleTranslatePost(translationTargetLanguage);
+                    }}
+                    disabled={!translationTargetLanguage || isTranslatingPost}
+                    title={tr('editor.translations.translateTitle')}
+                  >
+                    {isTranslatingPost ? tr('editor.translations.translating') : tr('editor.translations.translateButton')}
+                  </button>
+                </div>
+                <div className="editor-translations-missing">
+                  {missingTranslationLanguages.length > 0
+                    ? tr('editor.translations.missing', { languages: missingTranslationLanguages.map((languageCode) => getLanguageLabel(languageCode)).join(', ') })
+                    : tr('editor.translations.complete')}
+                </div>
               </div>
             </div>
             <div className="editor-field-row">

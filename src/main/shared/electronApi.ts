@@ -101,13 +101,31 @@ export interface PostData {
   publishedAt?: string;
   tags: string[];
   categories: string[];
+  availableLanguages: string[];
   templateSlug?: string;
+}
+
+export interface PostTranslationData {
+  id: string;
+  projectId: string;
+  translationFor: string;
+  language: string;
+  title: string;
+  excerpt?: string;
+  content: string;
+  status: 'draft' | 'published' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  filePath: string;
 }
 
 export interface PostFilter {
   status?: 'draft' | 'published' | 'archived';
   tags?: string[];
   categories?: string[];
+  language?: string;
+  missingTranslationLanguage?: string;
   year?: number;
   month?: number;
   from?: string;
@@ -596,6 +614,10 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<PostData | null>;
     getBySlug: (slug: string) => Promise<PostData | null>;
+    getTranslation: (postId: string, language: string) => Promise<PostTranslationData | null>;
+    getTranslations: (postId: string) => Promise<PostTranslationData[]>;
+    upsertTranslation: (postId: string, language: string, data: Partial<PostTranslationData>) => Promise<PostTranslationData>;
+    publishTranslation: (postId: string, language: string) => Promise<PostTranslationData | null>;
     getPreviewUrl: (id: string, options?: { draft?: boolean }) => Promise<string | null>;
     getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;
@@ -996,6 +1018,9 @@ export interface ElectronAPI {
 
     // Post Analysis (title, excerpt, slug suggestions)
     analyzePost: (postId: string, language?: string) => Promise<{ success: boolean; title?: string; excerpt?: string; slug?: string; error?: string }>;
+
+    // Post Translation
+    translatePost: (postId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: PostTranslationData; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

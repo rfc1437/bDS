@@ -46,6 +46,24 @@ export const posts = sqliteTable('posts', {
   projectSlugIdx: uniqueIndex('posts_project_slug_idx').on(table.projectId, table.slug),
 }));
 
+export const postTranslations = sqliteTable('post_translations', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  translationFor: text('translation_for').notNull(),
+  language: text('language').notNull(),
+  title: text('title').notNull(),
+  excerpt: text('excerpt'),
+  content: text('content'),
+  status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull().default('draft'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  publishedAt: integer('published_at', { mode: 'timestamp' }),
+  filePath: text('file_path').notNull().default(''),
+  checksum: text('checksum'),
+}, (table) => ({
+  translationLanguageIdx: uniqueIndex('post_translations_translation_language_idx').on(table.translationFor, table.language),
+}));
+
 // Media table - stores metadata for images and other media
 export const media = sqliteTable('media', {
   projectId: text('project_id').notNull(),
@@ -294,6 +312,8 @@ export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
+export type PostTranslation = typeof postTranslations.$inferSelect;
+export type NewPostTranslation = typeof postTranslations.$inferInsert;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
 export type Setting = typeof settings.$inferSelect;

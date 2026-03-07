@@ -55,6 +55,10 @@ export const electronAPI: ElectronAPI = {
     delete: (id: string) => ipcRenderer.invoke('posts:delete', id),
     get: (id: string) => ipcRenderer.invoke('posts:get', id),
     getBySlug: (slug: string) => ipcRenderer.invoke('posts:getBySlug', slug),
+    getTranslation: (postId: string, language: string) => ipcRenderer.invoke('posts:getTranslation', postId, language),
+    getTranslations: (postId: string) => ipcRenderer.invoke('posts:getTranslations', postId),
+    upsertTranslation: (postId: string, language: string, data: unknown) => ipcRenderer.invoke('posts:upsertTranslation', postId, language, data),
+    publishTranslation: (postId: string, language: string) => ipcRenderer.invoke('posts:publishTranslation', postId, language),
     getPreviewUrl: (id: string, options?: { draft?: boolean }) => ipcRenderer.invoke('posts:getPreviewUrl', id, options),
     getAll: (options?: { limit?: number; offset?: number }) => ipcRenderer.invoke('posts:getAll', options),
     getByStatus: (status: string) => ipcRenderer.invoke('posts:getByStatus', status),
@@ -395,6 +399,9 @@ export const electronAPI: ElectronAPI = {
 
     // Post Analysis (title, excerpt, slug suggestions)
     analyzePost: (postId: string, language?: string) => ipcRenderer.invoke('chat:analyzePost', postId, language),
+
+    // Post Translation
+    translatePost: (postId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translatePost', postId, targetLanguage),
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {
