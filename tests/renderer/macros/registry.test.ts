@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { withCapturedConsole } from '../../utils';
 import {
   registerMacro,
   getMacro,
@@ -52,18 +53,18 @@ describe('Macro Registry', () => {
     });
 
     it('should overwrite existing macro with warning', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
-      const macro1 = createTestMacro({ name: 'dupe', description: 'First' });
-      const macro2 = createTestMacro({ name: 'dupe', description: 'Second' });
-      
-      registerMacro(macro1);
-      registerMacro(macro2);
-      
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('already registered'));
-      expect(getMacro('dupe')?.description).toBe('Second');
-      
-      consoleSpy.mockRestore();
+      return withCapturedConsole('warn', ({ spy, text }) => {
+        const macro1 = createTestMacro({ name: 'dupe', description: 'First' });
+        const macro2 = createTestMacro({ name: 'dupe', description: 'Second' });
+
+        registerMacro(macro1);
+        registerMacro(macro2);
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(expect.stringContaining('already registered'));
+        expect(text()).toContain('Macro "dupe" is already registered. Overwriting.');
+        expect(getMacro('dupe')?.description).toBe('Second');
+      });
     });
   });
 
