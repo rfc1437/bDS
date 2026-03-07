@@ -109,7 +109,7 @@ describe('replaceAllMacrosAsync', () => {
     expect(result).toContain('<aside class="custom-box">Custom Content</aside>');
   });
 
-  it('returns empty string for unknown macros without Python renderer', async () => {
+  it('preserves unknown macros without Python renderer', async () => {
     const result = await replaceAllMacrosAsync(
       'Before [[unknown_macro]] After',
       'post-1',
@@ -120,10 +120,10 @@ describe('replaceAllMacrosAsync', () => {
       null,
     );
 
-    expect(result).toBe('Before  After');
+    expect(result).toBe('Before [[unknown_macro]] After');
   });
 
-  it('returns empty string for unmatched Python macros', async () => {
+  it('preserves unmatched Python macros', async () => {
     const mockRenderer: PythonMacroRendererContract = {
       getEnabledMacroScripts: vi.fn().mockResolvedValue([]),
       renderMacro: vi.fn(),
@@ -139,7 +139,7 @@ describe('replaceAllMacrosAsync', () => {
       mockRenderer,
     );
 
-    expect(result).toBe('Before  After');
+    expect(result).toBe('Before [[nonexistent_macro]] After');
     expect(mockRenderer.renderMacro).not.toHaveBeenCalled();
   });
 
@@ -186,7 +186,21 @@ describe('replaceAllMacrosAsync', () => {
       mockRenderer,
     );
 
-    expect(result).toBe('Before  After');
+    expect(result).toBe('Before [[my_macro]] After');
+  });
+
+  it('preserves the original unknown macro tag including params', async () => {
+    const result = await replaceAllMacrosAsync(
+      'Before [[unknown_macro title="Hello" count="2"]] After',
+      'post-1',
+      [],
+      null,
+      [],
+      'en',
+      null,
+    );
+
+    expect(result).toBe('Before [[unknown_macro title="Hello" count="2"]] After');
   });
 
   it('does not look up Python scripts when all macros are built-in', async () => {

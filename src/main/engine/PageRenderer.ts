@@ -973,7 +973,7 @@ export async function replaceAllMacrosAsync(
         rendered.push('');
       }
     } else {
-      rendered.push('');
+      rendered.push(m.fullMatch);
     }
   }
 
