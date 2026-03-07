@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PostEngine, PostData } from '../../src/main/engine/PostEngine';
+import { postTranslations } from '../../src/main/database/schema';
 import { resetMockCounters } from '../utils/factories';
 import * as fs from 'fs/promises';
 
@@ -1837,6 +1838,71 @@ Content`);
 
       expect(insertedProjects).toHaveLength(1);
       expect(insertedProjects[0]).toBe('current-project-id');
+    });
+
+    it('should rebuild published translation files into the translations table', async () => {
+      const fs = await import('fs/promises');
+      const insertedRows: Array<{ table: unknown; data: any }> = [];
+
+      vi.mocked(mockLocalDb.insert).mockImplementation((table: unknown) => ({
+        values: vi.fn((data: any) => {
+          insertedRows.push({ table, data });
+          if (data && data.id) {
+            mockPosts.set(data.id, data);
+          }
+          return Promise.resolve();
+        }),
+      }) as any);
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        mockDirent('source-post.md'),
+        mockDirent('source-post.de.md'),
+      ] as any);
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (filePath: any) => {
+        if (filePath.includes('source-post.md') && !filePath.includes('source-post.de.md')) {
+          return `---
+id: source-post-id
+projectId: default
+title: Source Post
+slug: source-post
+status: published
+language: en
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-02T00:00:00.000Z
+publishedAt: 2024-01-02T00:00:00.000Z
+tags: []
+categories: []
+---
+Canonical content`;
+        }
+
+        if (filePath.includes('source-post.de.md')) {
+          return `---
+translationFor: source-post-id
+language: de
+title: Quellbeitrag
+excerpt: Deutsche Zusammenfassung
+---
+Deutscher Inhalt`;
+        }
+
+        throw new Error('ENOENT');
+      });
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      const translationInsert = insertedRows.find((row) => row.table === postTranslations);
+      expect(translationInsert).toBeDefined();
+      expect(translationInsert?.data).toMatchObject({
+        projectId: 'default',
+        translationFor: 'source-post-id',
+        language: 'de',
+        title: 'Quellbeitrag',
+        excerpt: 'Deutsche Zusammenfassung',
+        status: 'published',
+        filePath: expect.stringContaining('source-post.de.md'),
+      });
     });
   });
 

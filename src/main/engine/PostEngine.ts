@@ -11,7 +11,7 @@ import { posts, postTranslations, Post, PostTranslation, NewPost, NewPostTransla
 import { taskManager, Task } from './TaskManager';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
-import { readPostTranslationFile as readPostTranslationFileShared } from './postTranslationFileUtils';
+import { readPostTranslationFile as readPostTranslationFileShared, type PostTranslationFileData } from './postTranslationFileUtils';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 import type { MediaEngine } from './MediaEngine';
 import { slugify } from './slugify';
@@ -368,6 +368,16 @@ export class PostEngine extends EventEmitter {
     return extension === '.md' || extension === '.markdown' || extension === '.mdx';
   }
 
+  private isLikelyTranslationFilePath(filePath: string): boolean {
+    const extension = path.extname(filePath).toLowerCase();
+    if (extension !== '.md' && extension !== '.markdown' && extension !== '.mdx') {
+      return false;
+    }
+
+    const stem = path.parse(filePath).name;
+    return /.+\.[a-z]{2,}(?:-[a-z0-9]+)*$/i.test(stem);
+  }
+
   private async ensureUniquePostIdentity(id: string, slug: string): Promise<{ id: string; slug: string }> {
     const uniqueId = id.trim().length > 0 ? id.trim() : uuidv4();
     const safeSlug = slug.trim().length > 0 ? slug.trim() : await this.generateUniqueSlug('untitled');
@@ -496,6 +506,65 @@ export class PostEngine extends EventEmitter {
       publishedAt: dbTranslation.publishedAt || undefined,
       filePath: dbTranslation.filePath,
     };
+  }
+
+  private async rebuildTranslationRowsFromFiles(
+    db: ReturnType<ReturnType<typeof getDatabase>['getLocal']>,
+    translationFiles: Array<{ filePath: string; data: PostTranslationFileData }>,
+    sourcePostsByOriginalId: Map<string, Pick<PostData, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt'>>,
+    onProgress: (progress: number, message: string) => void,
+  ): Promise<{ imported: number; skippedMissingSource: number; skippedDuplicates: number }> {
+    if (translationFiles.length === 0) {
+      return { imported: 0, skippedMissingSource: 0, skippedDuplicates: 0 };
+    }
+
+    const insertedTranslationKeys = new Set<string>();
+    let imported = 0;
+    let skippedMissingSource = 0;
+    let skippedDuplicates = 0;
+
+    for (let i = 0; i < translationFiles.length; i++) {
+      const { filePath, data } = translationFiles[i];
+      const sourcePost = sourcePostsByOriginalId.get(data.translationFor);
+      if (!sourcePost) {
+        skippedMissingSource++;
+        continue;
+      }
+
+      const normalizedLanguage = data.language.trim().toLowerCase();
+      const translationKey = `${sourcePost.id}:${normalizedLanguage}`;
+      if (insertedTranslationKeys.has(translationKey)) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      const now = new Date();
+      await db.insert(postTranslations).values({
+        id: uuidv4(),
+        projectId: this.currentProjectId,
+        translationFor: sourcePost.id,
+        language: normalizedLanguage,
+        title: data.title,
+        excerpt: data.excerpt,
+        content: null,
+        status: 'published',
+        createdAt: sourcePost.createdAt,
+        updatedAt: now,
+        publishedAt: sourcePost.publishedAt || sourcePost.updatedAt || now,
+        filePath,
+        checksum: this.calculateChecksum(data.content),
+      });
+
+      insertedTranslationKeys.add(translationKey);
+      imported++;
+
+      onProgress(
+        90 + (10 * ((i + 1) / translationFiles.length)),
+        `Processing translations ${i + 1}/${translationFiles.length}: ${path.basename(filePath)}`,
+      );
+    }
+
+    return { imported, skippedMissingSource, skippedDuplicates };
   }
 
   async createPost(data: Partial<PostData>): Promise<PostData> {
@@ -2326,6 +2395,7 @@ export class PostEngine extends EventEmitter {
           await db.delete(posts).where(eq(posts.projectId, this.currentProjectId));
           console.log(`Deleted ${existingPosts.length} existing post(s) for project ${this.currentProjectId}`);
         }
+        await db.delete(postTranslations).where(eq(postTranslations.projectId, this.currentProjectId));
 
         onProgress(5, 'Scanning posts directory...');
 
@@ -2363,17 +2433,30 @@ export class PostEngine extends EventEmitter {
         // Track slugs and ids to avoid collisions while still importing all files
         const insertedSlugs = new Set<string>(); // projectId:slug
         const insertedIds = new Set<string>();
+        const sourcePostsByOriginalId = new Map<string, Pick<PostData, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt'>>();
+        const translationFiles: Array<{ filePath: string; data: PostTranslationFileData }> = [];
         let importedCount = 0;
+        let importedTranslationCount = 0;
         let parseFailedCount = 0;
         let deduplicatedSlugCount = 0;
         let deduplicatedIdCount = 0;
         let insertFailedCount = 0;
+        let skippedTranslationMissingSourceCount = 0;
+        let skippedDuplicateTranslationCount = 0;
 
         for (let i = 0; i < markdownFiles.length; i++) {
           const filePath = markdownFiles[i];
           const fileName = path.basename(filePath);
 
           onProgress(10 + (80 * (i / markdownFiles.length)), `Processing ${i + 1}/${markdownFiles.length}: ${fileName}`);
+
+          const translationFileData = this.isLikelyTranslationFilePath(filePath)
+            ? await readPostTranslationFileShared(filePath)
+            : null;
+          if (translationFileData) {
+            translationFiles.push({ filePath, data: translationFileData });
+            continue;
+          }
 
           const postData = await this.readPostFile(filePath);
 
@@ -2423,6 +2506,12 @@ export class PostEngine extends EventEmitter {
 
             insertedIds.add(postId);
             insertedSlugs.add(`${projectId}:${slug}`);
+            sourcePostsByOriginalId.set(postData.id, {
+              id: postId,
+              createdAt: postData.createdAt,
+              updatedAt: postData.updatedAt,
+              publishedAt: postData.publishedAt || postData.updatedAt,
+            });
             importedCount++;
 
             await this.updateFTSIndex({
@@ -2449,8 +2538,19 @@ export class PostEngine extends EventEmitter {
           }
         }
 
-        onProgress(100, `Database rebuild complete: imported ${importedCount}/${markdownFiles.length} files`);
-        console.log(`[PostEngine] rebuildDatabaseFromFiles complete. scanned=${markdownFiles.length}, imported=${importedCount}, parseFailed=${parseFailedCount}, insertFailed=${insertFailedCount}, deduplicatedSlugs=${deduplicatedSlugCount}, deduplicatedIds=${deduplicatedIdCount}`);
+        onProgress(90, `Importing ${translationFiles.length} translation files`);
+        const translationImportResult = await this.rebuildTranslationRowsFromFiles(
+          db,
+          translationFiles,
+          sourcePostsByOriginalId,
+          onProgress,
+        );
+        importedTranslationCount = translationImportResult.imported;
+        skippedTranslationMissingSourceCount = translationImportResult.skippedMissingSource;
+        skippedDuplicateTranslationCount = translationImportResult.skippedDuplicates;
+
+        onProgress(100, `Database rebuild complete: imported ${importedCount} posts and ${importedTranslationCount} translations from ${markdownFiles.length} files`);
+        console.log(`[PostEngine] rebuildDatabaseFromFiles complete. scanned=${markdownFiles.length}, importedPosts=${importedCount}, importedTranslations=${importedTranslationCount}, parseFailed=${parseFailedCount}, insertFailed=${insertFailedCount}, deduplicatedSlugs=${deduplicatedSlugCount}, deduplicatedIds=${deduplicatedIdCount}, skippedTranslationsMissingSource=${skippedTranslationMissingSourceCount}, skippedDuplicateTranslations=${skippedDuplicateTranslationCount}`);
         this.emit('databaseRebuilt');
       },
     };
