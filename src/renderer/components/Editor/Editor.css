@@ -147,6 +147,12 @@
   align-items: flex-start;
 }
 
+.editor-excerpt-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .editor-meta {
   display: flex;
   flex-direction: column;

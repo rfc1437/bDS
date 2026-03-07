@@ -1,6 +1,8 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act, fireEvent } from '@testing-library/react';
+import { render, act, fireEvent, screen } from '@testing-library/react';
+
+let lastSuggestionFields: Array<{ key: string; label: string; currentValue: string; suggestedValue?: string; disabled?: boolean; warning?: string }> = [];
 
 vi.mock('@monaco-editor/react', () => ({
   default: () => <div data-testid="monaco-editor" />,
@@ -12,9 +14,7 @@ vi.mock('@milkdown/kit/core', () => {
       config: (callback: (ctx: { set: () => void; get: () => { markdownUpdated: () => void } }) => void) => {
         callback({
           set: () => {},
-          get: () => ({
-            markdownUpdated: () => {},
-          }),
+          get: () => ({ markdownUpdated: () => {} }),
         });
         return chain;
       },
@@ -106,7 +106,20 @@ vi.mock('../../../src/renderer/components/MetadataDiffPanel', () => ({ MetadataD
 vi.mock('../../../src/renderer/components/GitDiffView/GitDiffView', () => ({ GitDiffView: () => null }));
 vi.mock('../../../src/renderer/components/InsertModal', () => ({ InsertModal: () => null }));
 vi.mock('../../../src/renderer/components/AISuggestionsModal/AISuggestionsModal', () => ({
-  AISuggestionsModal: () => null,
+  AISuggestionsModal: ({ isOpen, fields, onConfirm }: { isOpen: boolean; fields: typeof lastSuggestionFields; onConfirm: (values: Record<string, string>) => void }) => {
+    if (!isOpen) return null;
+    lastSuggestionFields = fields;
+    return (
+      <div data-testid="ai-suggestions-modal">
+        {fields.map((field) => (
+          <div key={field.key} data-testid={`field-${field.key}`} data-disabled={field.disabled ? 'true' : 'false'}>
+            {field.label}
+          </div>
+        ))}
+        <button onClick={() => onConfirm({ title: 'Better Title', slug: 'better-title' })}>apply-suggestions</button>
+      </div>
+    );
+  },
 }));
 vi.mock('../../../src/renderer/components/Toast', () => ({
   showToast: {
@@ -125,7 +138,7 @@ const createPost = (overrides: Record<string, unknown> = {}) => ({
   excerpt: '',
   slug: 'test-post',
   status: 'draft' as const,
-  tags: ['tag1'],
+  tags: [],
   categories: ['article'],
   featuredImage: null,
   publishedAt: null,
@@ -141,18 +154,36 @@ const createPost = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-describe('Editor metadata collapse', () => {
+describe('Editor AI post suggestions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    lastSuggestionFields = [];
     const neverSettles = new Promise<never>(() => {});
+
+    (window as any).electronAPI ??= {};
+    (window as any).electronAPI.posts ??= {};
+    (window as any).electronAPI.meta ??= {};
+    (window as any).electronAPI.chat ??= {};
+    (window as any).electronAPI.templates ??= {};
 
     (window as any).addEventListener = vi.fn();
     (window as any).removeEventListener = vi.fn();
 
     (window as any).electronAPI.posts.hasPublishedVersion = vi.fn().mockReturnValue(neverSettles);
-    (window as any).electronAPI.posts.update = vi.fn().mockResolvedValue(null);
     (window as any).electronAPI.posts.getPreviewUrl = vi.fn().mockResolvedValue('http://127.0.0.1:4123/preview');
+    (window as any).electronAPI.posts.update = vi.fn().mockImplementation(async (_postId: string, payload: Record<string, string>) => ({
+      ...createPost(),
+      ...payload,
+    }));
     (window as any).electronAPI.meta.getCategories = vi.fn().mockReturnValue(neverSettles);
+    (window as any).electronAPI.meta.getProjectMetadata = vi.fn().mockResolvedValue({ mainLanguage: 'en' });
+    (window as any).electronAPI.templates.getEnabledByKind = vi.fn().mockResolvedValue([]);
+    (window as any).electronAPI.chat.analyzePost = vi.fn().mockResolvedValue({
+      success: true,
+      title: 'Better Title',
+      excerpt: 'A concise summary.',
+      slug: 'better-title',
+    });
 
     useAppStore.setState({
       activeProject: { id: 'project-1', name: 'Test', path: '/tmp/test' } as any,
@@ -164,10 +195,13 @@ describe('Editor metadata collapse', () => {
     });
   });
 
-  it('collapses metadata for existing posts (non-empty title)', async () => {
-    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({ title: 'Existing Post' }));
+  it('passes a disabled slug suggestion for published posts', async () => {
+    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({
+      status: 'published',
+      publishedAt: new Date('2026-02-16T12:00:00.000Z'),
+    }));
 
-    const { container } = render(<PostEditor postId="post-1" />);
+    render(<PostEditor postId="post-1" />);
 
     await act(async () => {
       await Promise.resolve();
@@ -175,36 +209,23 @@ describe('Editor metadata collapse', () => {
       await Promise.resolve();
     });
 
-    const headerRow = container.querySelector('.editor-header-row');
-    expect(headerRow).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '⚡ Quick Actions' }));
+    });
 
-    const toggle = container.querySelector('.metadata-toggle');
-    expect(toggle).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /AI: Suggest Title, Summary & Slug/i }));
+    });
+
+    const slugField = lastSuggestionFields.find((field) => field.key === 'slug');
+    expect(slugField).toBeDefined();
+    expect(slugField?.disabled).toBe(true);
   });
 
-  it('expands metadata for new posts (empty title)', async () => {
-    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({ title: '' }));
+  it('submits the AI slug for a never-published draft when applying suggestions', async () => {
+    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost());
 
-    const { container } = render(<PostEditor postId="post-1" />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const headerRow = container.querySelector('.editor-header-row');
-    expect(headerRow).not.toBeNull();
-
-    const toggle = container.querySelector('.metadata-toggle');
-    expect(toggle).not.toBeNull();
-    expect(toggle?.classList.contains('expanded')).toBe(true);
-  });
-
-  it('toggles metadata visibility on click', async () => {
-    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({ title: 'Existing Post' }));
-
-    const { container } = render(<PostEditor postId="post-1" />);
+    render(<PostEditor postId="post-1" />);
 
     await act(async () => {
       await Promise.resolve();
@@ -212,54 +233,21 @@ describe('Editor metadata collapse', () => {
       await Promise.resolve();
     });
 
-    // Initially collapsed for existing post
-    expect(container.querySelector('.editor-header-row')).toBeNull();
-
-    const toggle = container.querySelector('.metadata-toggle')!;
-
-    // Click to expand
     await act(async () => {
-      fireEvent.click(toggle);
-    });
-    expect(container.querySelector('.editor-header-row')).not.toBeNull();
-
-    // Click to collapse again
-    await act(async () => {
-      fireEvent.click(toggle);
-    });
-    expect(container.querySelector('.editor-header-row')).toBeNull();
-  });
-
-  it('keeps excerpt panel collapsed by default and toggles it independently', async () => {
-    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({ title: '' }));
-
-    const { container } = render(<PostEditor postId="post-1" />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      fireEvent.click(screen.getByRole('button', { name: '⚡ Quick Actions' }));
     });
 
-    expect(container.querySelector('.editor-header-row')).not.toBeNull();
-    expect(container.querySelector('.editor-excerpt-panel')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /AI: Suggest Title, Summary & Slug/i }));
+    });
 
-    const excerptToggle = Array.from(container.querySelectorAll('.metadata-toggle')).find((node) =>
-      node.textContent?.includes('Excerpt')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'apply-suggestions' }));
+    });
+
+    expect((window as any).electronAPI.posts.update).toHaveBeenCalledWith(
+      'post-1',
+      expect.objectContaining({ title: 'Better Title', slug: 'better-title' })
     );
-    expect(excerptToggle).not.toBeNull();
-    expect(excerptToggle?.classList.contains('expanded')).toBe(false);
-
-    await act(async () => {
-      fireEvent.click(excerptToggle!);
-    });
-
-    expect(container.querySelector('.editor-excerpt-panel')).not.toBeNull();
-
-    await act(async () => {
-      fireEvent.click(excerptToggle!);
-    });
-
-    expect(container.querySelector('.editor-excerpt-panel')).toBeNull();
   });
 });

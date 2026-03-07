@@ -1028,6 +1028,40 @@ Original content`);
       expect(result?.slug).toBe('new-title');
     });
 
+    it('should honor explicit slug when title and slug both change on a never-published draft', async () => {
+      const created = await postEngine.createPost({ title: 'Original Title' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: created.content || '',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+            publishedAt: null,
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, {
+        title: 'New Title',
+        slug: 'custom-ai-slug',
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.slug).toBe('custom-ai-slug');
+    });
+
     it('should NOT auto-update slug when title changes on a previously published post', async () => {
       const created = await postEngine.createPost({ title: 'Published Post' });
 
@@ -1057,6 +1091,37 @@ Original content`);
 
       expect(result).not.toBeNull();
       expect(result?.slug).toBe('published-post'); // slug preserved
+    });
+
+    it('should ignore explicit slug changes on a previously published post', async () => {
+      const created = await postEngine.createPost({ title: 'Published Post' });
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({
+            id: created.id,
+            projectId: created.projectId,
+            title: created.title,
+            slug: created.slug,
+            status: 'draft',
+            content: created.content || '',
+            filePath: '',
+            tags: '[]',
+            categories: '[]',
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+            publishedAt: new Date('2025-01-01'),
+          }),
+        });
+        return chain;
+      });
+
+      const result = await postEngine.updatePost(created.id, { slug: 'new-slug' });
+
+      expect(result).not.toBeNull();
+      expect(result?.slug).toBe('published-post');
     });
 
     it('should allow empty title and use untitled as slug base', async () => {

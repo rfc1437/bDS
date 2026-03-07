@@ -68,6 +68,7 @@ const autoSaveManager = new AutoSaveManager({
     const update: Parameters<typeof window.electronAPI.posts.update>[1] = {};
     if ('title' in changes) update.title = changes.title as string;
     if ('content' in changes) update.content = changes.content as string;
+    if ('excerpt' in changes) update.excerpt = changes.excerpt as string;
     if ('tags' in changes) {
       const tagsStr = changes.tags as string;
       update.tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
@@ -194,6 +195,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [excerpt, setExcerpt] = useState('');
   const [author, setAuthor] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
@@ -210,6 +212,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [showPostSearch, setShowPostSearch] = useState(false);
   const [showMediaSearch, setShowMediaSearch] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(true);
+  const [excerptExpanded, setExcerptExpanded] = useState(false);
   const editorRef = useRef<unknown>(null);
   // Token incremented to signal Monaco that it should re-read its defaultValue.
   // This is used instead of controlled `value` to avoid cursor-reset races.
@@ -335,6 +338,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     if (post && !isInitialized) {
       setTitle(post.title);
       setContent(post.content);
+      setExcerpt(post.excerpt || '');
       setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
@@ -359,10 +363,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     // Short-circuit: check cheap comparisons first (content changes on every keystroke)
     const contentChanged = content !== post.content;
     const titleChanged = title !== post.title;
+    const excerptChanged = excerpt !== (post.excerpt || '');
     const authorChanged = author !== (post.author || '');
     const templateSlugChanged = templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '');
     const languageChanged = postLanguage !== (post.language || '');
-    const hasChanges = contentChanged || titleChanged || authorChanged || templateSlugChanged || languageChanged ||
+    const hasChanges = contentChanged || titleChanged || excerptChanged || authorChanged || templateSlugChanged || languageChanged ||
       JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort()) ||
       JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
 
@@ -373,6 +378,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       autoSaveManager.notifyChange(postId, {
         title,
         content,
+        excerpt,
         author,
         tags: tags.join(', '),
         categories: selectedCategories,
@@ -382,7 +388,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } else {
       markClean(postId);
     }
-  }, [title, content, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean]);
+  }, [title, content, excerpt, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -401,6 +407,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const updated = await window.electronAPI?.posts.update(postId, {
         title,
         content,
+        excerpt: excerpt || undefined,
         author: author || undefined,
         language: postLanguage || undefined,
         tags,
@@ -480,10 +487,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const result = await window.electronAPI?.chat.analyzePost(postId, projectLanguage);
 
       if (result?.success) {
+        const slugLocked = !!post.publishedAt;
         setPostAISuggestionFields([
           { key: 'title', label: tr('aiSuggestions.titleField'), currentValue: title, suggestedValue: result.title },
-          { key: 'excerpt', label: tr('aiSuggestions.excerptField'), currentValue: post.excerpt || '', suggestedValue: result.excerpt },
-          { key: 'slug', label: tr('aiSuggestions.slugField'), currentValue: post.slug, suggestedValue: result.slug },
+          { key: 'excerpt', label: tr('aiSuggestions.excerptField'), currentValue: excerpt, suggestedValue: result.excerpt },
+          {
+            key: 'slug',
+            label: tr('aiSuggestions.slugField'),
+            currentValue: post.slug,
+            suggestedValue: result.slug,
+            disabled: slugLocked,
+            warning: slugLocked ? tr('aiSuggestions.slugLockedWarning') : undefined,
+          },
         ]);
       } else {
         setPostAIError(result?.error || tr('editor.post.error.analyzePost'));
@@ -494,7 +509,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } finally {
       setIsAnalyzingPost(false);
     }
-  }, [post, postId, projectLanguage, isAnalyzingPost, title, tr]);
+  }, [post, postId, projectLanguage, isAnalyzingPost, title, excerpt, tr]);
 
   // Handle applying AI post suggestions
   const handleApplyPostAISuggestions = useCallback(async (values: Record<string, string>) => {
@@ -505,7 +520,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const updatePayload: Record<string, unknown> = {};
       if (values.title) updatePayload.title = values.title;
       if (values.excerpt) updatePayload.excerpt = values.excerpt;
-      if (values.slug) updatePayload.slug = values.slug;
+      if (values.slug && !post?.publishedAt) updatePayload.slug = values.slug;
 
       const updated = await window.electronAPI?.posts.update(postId, updatePayload as Parameters<typeof window.electronAPI.posts.update>[1]);
       if (updated) {
@@ -513,6 +528,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
         // Update local state for fields that changed
         if (values.title) setTitle(values.title);
+        if (values.excerpt) setExcerpt(values.excerpt);
         markDirty(postId);
         showToast.success(tr('editor.post.toast.aiApplied'));
       }
@@ -520,7 +536,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       console.error('Failed to apply AI suggestions:', error);
       showToast.error(tr('editor.post.error.applyFailed'));
     }
-  }, [postId, updatePost, markDirty, tr]);
+  }, [post, postId, updatePost, markDirty, tr]);
 
   // Close AI post suggestions modal
   const handleClosePostAISuggestionsModal = useCallback(() => {
@@ -999,6 +1015,27 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             <LinkedMediaPanel postId={postId} />
           </div>
         </div>
+        )}
+
+        <button
+          className={`metadata-toggle ${excerptExpanded ? 'expanded' : ''}`}
+          onClick={() => setExcerptExpanded(v => !v)}
+        >
+          <span className="metadata-toggle-chevron">{excerptExpanded ? '▼' : '▶'}</span>
+          <span>{tr('editor.excerpt.toggle')}</span>
+        </button>
+        {excerptExpanded && (
+          <div className="editor-excerpt-panel">
+            <div className="editor-field">
+              <label>{tr('editor.field.excerpt')}</label>
+              <textarea
+                value={excerpt}
+                onChange={(e) => setExcerpt(e.target.value)}
+                placeholder={tr('editor.placeholder.excerpt')}
+                rows={4}
+              />
+            </div>
+          </div>
         )}
         
         <div className="editor-body">

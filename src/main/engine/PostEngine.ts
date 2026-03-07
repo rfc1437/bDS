@@ -460,9 +460,14 @@ export class PostEngine extends EventEmitter {
       newStatus = 'draft';
     }
 
-    // Auto-update slug when title changes, but only if post was never published
-    let newSlug = data.slug ?? existing.slug;
-    if (data.title !== undefined && data.title !== existing.title && !existing.publishedAt) {
+    // Explicit slug changes are only allowed before the first publish.
+    const requestedSlug = typeof data.slug === 'string' ? slugify(data.slug) : undefined;
+    let newSlug = existing.slug;
+    if (!existing.publishedAt && requestedSlug) {
+      newSlug = await this.isSlugAvailable(requestedSlug, id)
+        ? requestedSlug
+        : await this.generateUniqueSlug(requestedSlug, id);
+    } else if (data.title !== undefined && data.title !== existing.title && !existing.publishedAt) {
       newSlug = await this.generateUniqueSlug(data.title || 'untitled', id);
     }
 

@@ -24,6 +24,8 @@ export interface SuggestionField {
   label: string;
   currentValue: string;
   suggestedValue?: string;
+  disabled?: boolean;
+  warning?: string;
 }
 
 interface AISuggestionsModalProps {
@@ -58,7 +60,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
   useEffect(() => {
     const initial: Record<string, boolean> = {};
     for (const field of fields) {
-      initial[field.key] = !!field.suggestedValue && !field.currentValue;
+      initial[field.key] = !field.disabled && !!field.suggestedValue && !field.currentValue;
     }
     setChecked(initial);
   }, [fields]);
@@ -127,6 +129,7 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
                     <input
                       type="checkbox"
                       checked={!!checked[field.key]}
+                      disabled={field.disabled}
                       onChange={(e) => setFieldChecked(field.key, e.target.checked)}
                     />
                     <span className="checkmark"></span>
@@ -141,6 +144,9 @@ export const AISuggestionsModal: React.FC<AISuggestionsModalProps> = ({
                       )}
                     </div>
                     <div className="ai-suggestion-value">{field.suggestedValue}</div>
+                    {field.warning && (
+                      <div className="ai-suggestion-current">{field.warning}</div>
+                    )}
                     {field.currentValue && (
                       <div className="ai-suggestion-current">
                         {tr('aiSuggestions.current')}: <em>{field.currentValue}</em>
