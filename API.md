@@ -551,7 +551,7 @@ None  # or
 
 ### posts.getPreviewUrl
 
-Get preview URL for post.
+Get preview URL for post. options may include draft=true and lang=<language-code>.
 
 **Parameters**
 

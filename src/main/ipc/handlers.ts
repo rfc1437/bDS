@@ -557,7 +557,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.publishPostTranslation(postId, language);
   });
 
-  safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean }) => {
+  safeHandle('posts:getPreviewUrl', async (_, id: string, options?: { draft?: boolean; lang?: string }) => {
     const engine = bundle.postEngine;
     const post = await engine.getPost(id);
 
@@ -568,7 +568,15 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     const createdAt = resolvePostCreatedAt(post);
     const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
     if (options?.draft) {
-      return `http://127.0.0.1:4123${canonicalPath}?draft=true&postId=${encodeURIComponent(id)}`;
+      const params = new URLSearchParams({ draft: 'true', postId: id });
+      if (options.lang?.trim()) {
+        params.set('lang', options.lang.trim().toLowerCase());
+      }
+      return `http://127.0.0.1:4123${canonicalPath}?${params.toString()}`;
+    }
+
+    if (options?.lang?.trim()) {
+      return `http://127.0.0.1:4123${canonicalPath}?lang=${encodeURIComponent(options.lang.trim().toLowerCase())}`;
     }
 
     return `http://127.0.0.1:4123${canonicalPath}`;

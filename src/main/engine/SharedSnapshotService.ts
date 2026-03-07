@@ -1,10 +1,17 @@
-import type { PostData, PostFilter } from './PostEngine';
+import type { PostData, PostFilter, PostTranslationData } from './PostEngine';
 
 export interface SharedSnapshotPostEngine {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPost: (id: string) => Promise<PostData | null>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
+  getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
   findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
+}
+
+interface SinglePostPreviewOptions {
+  useDraftContent?: boolean;
+  draftPostId?: string;
+  lang?: string;
 }
 
 function buildSnapshotBaseFilter(filter: PostFilter): PostFilter {
@@ -166,25 +173,64 @@ export async function findPublishedPostBySlug(
 export async function findSinglePostBySlug(
   postEngine: SharedSnapshotPostEngine,
   slug: string,
-  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+  singlePostOptions?: SinglePostPreviewOptions,
   dateFilter?: { year: number; month: number; day?: number },
 ): Promise<PostData | null> {
+  let resolvedPost: PostData | null = null;
+
   if (singlePostOptions?.useDraftContent && singlePostOptions.draftPostId) {
     const draftCandidate = await postEngine.getPost(singlePostOptions.draftPostId);
     if (draftCandidate && draftCandidate.status === 'draft' && draftCandidate.slug === slug) {
       if (!dateFilter) {
-        return draftCandidate;
-      }
-
-      const sameYear = draftCandidate.createdAt.getFullYear() === dateFilter.year;
-      const sameMonth = draftCandidate.createdAt.getMonth() === dateFilter.month - 1;
-      const sameDay = dateFilter.day === undefined || draftCandidate.createdAt.getDate() === dateFilter.day;
-      if (sameYear && sameMonth && sameDay) {
-        return draftCandidate;
+        resolvedPost = draftCandidate;
+      } else {
+        const sameYear = draftCandidate.createdAt.getFullYear() === dateFilter.year;
+        const sameMonth = draftCandidate.createdAt.getMonth() === dateFilter.month - 1;
+        const sameDay = dateFilter.day === undefined || draftCandidate.createdAt.getDate() === dateFilter.day;
+        if (sameYear && sameMonth && sameDay) {
+          resolvedPost = draftCandidate;
+        }
       }
     }
   }
 
-  const fallbackDateFilter = dateFilter ? { year: dateFilter.year, month: dateFilter.month } : undefined;
-  return findPublishedPostBySlug(postEngine, slug, fallbackDateFilter);
+  if (!resolvedPost) {
+    const fallbackDateFilter = dateFilter ? { year: dateFilter.year, month: dateFilter.month } : undefined;
+    resolvedPost = await findPublishedPostBySlug(postEngine, slug, fallbackDateFilter);
+  }
+
+  if (!resolvedPost) {
+    return null;
+  }
+
+  const requestedLanguage = singlePostOptions?.lang?.trim().toLowerCase();
+  if (!requestedLanguage || requestedLanguage === (resolvedPost.language || '').trim().toLowerCase() || !postEngine.getPostTranslation) {
+    return resolvedPost;
+  }
+
+  const translation = await postEngine.getPostTranslation(resolvedPost.id, requestedLanguage);
+  if (!translation) {
+    return resolvedPost;
+  }
+
+  const availableLanguages = Array.from(new Set([
+    ...((Array.isArray(resolvedPost.availableLanguages) ? resolvedPost.availableLanguages : [])),
+    requestedLanguage,
+    (resolvedPost.language || '').trim(),
+  ].filter((language): language is string => typeof language === 'string' && language.length > 0)));
+
+  return {
+    ...resolvedPost,
+    id: translation.id,
+    slug: `${resolvedPost.slug}.${translation.language}`,
+    title: translation.title,
+    excerpt: translation.excerpt,
+    content: translation.content,
+    language: translation.language,
+    updatedAt: translation.updatedAt,
+    publishedAt: translation.publishedAt ?? resolvedPost.publishedAt,
+    availableLanguages,
+    translationSourceSlug: resolvedPost.slug,
+    translationCanonicalLanguage: resolvedPost.language,
+  } as PostData;
 }

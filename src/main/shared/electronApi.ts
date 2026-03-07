@@ -618,7 +618,7 @@ export interface ElectronAPI {
     getTranslations: (postId: string) => Promise<PostTranslationData[]>;
     upsertTranslation: (postId: string, language: string, data: Partial<PostTranslationData>) => Promise<PostTranslationData>;
     publishTranslation: (postId: string, language: string) => Promise<PostTranslationData | null>;
-    getPreviewUrl: (id: string, options?: { draft?: boolean }) => Promise<string | null>;
+    getPreviewUrl: (id: string, options?: { draft?: boolean; lang?: string }) => Promise<string | null>;
     getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;
     publish: (id: string) => Promise<PostData | null>;

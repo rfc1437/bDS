@@ -53,6 +53,13 @@ const UI_DATE_LOCALE: Record<string, string> = {
 };
 
 const SUPPORTED_POST_LANGUAGES = ['en', 'de', 'fr', 'it', 'es'] as const;
+const POST_LANGUAGE_FLAGS: Record<(typeof SUPPORTED_POST_LANGUAGES)[number], string> = {
+  en: '🇬🇧',
+  de: '🇩🇪',
+  fr: '🇫🇷',
+  it: '🇮🇹',
+  es: '🇪🇸',
+};
 
 /** Get display name for media: prefer title over originalName */
 function getMediaDisplayName(media: { title?: string; originalName: string }): string {
@@ -159,6 +166,28 @@ interface PostEditorProps {
   postId: string;
 }
 
+interface EditableContentDraft {
+  title: string;
+  excerpt: string;
+  content: string;
+}
+
+function toEditableContentDraft(value: { title?: string; excerpt?: string; content?: string } | null | undefined): EditableContentDraft {
+  return {
+    title: value?.title || '',
+    excerpt: value?.excerpt || '',
+    content: value?.content || '',
+  };
+}
+
+function editableDraftEquals(left: EditableContentDraft, right: EditableContentDraft): boolean {
+  return left.title === right.title && left.excerpt === right.excerpt && left.content === right.content;
+}
+
+function mapTranslationsByLanguage(items: import('../../../main/shared/electronApi').PostTranslationData[]): Record<string, import('../../../main/shared/electronApi').PostTranslationData> {
+  return Object.fromEntries(items.map((item) => [item.language, item]));
+}
+
 export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const { t: tr, language } = useI18n();
   const {
@@ -195,14 +224,19 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     },
   });
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [excerpt, setExcerpt] = useState('');
+  const [title, setTitleState] = useState('');
+  const [content, setContentState] = useState('');
+  const [excerpt, setExcerptState] = useState('');
   const [author, setAuthor] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
   const [templateSlug, setTemplateSlug] = useState('');
   const [postLanguage, setPostLanguage] = useState('');
+  const [activeEditingLanguage, setActiveEditingLanguage] = useState('');
+  const [canonicalDraft, setCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
+  const [savedCanonicalDraft, setSavedCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
+  const [translationDrafts, setTranslationDrafts] = useState<Record<string, import('../../../main/shared/electronApi').PostTranslationData>>({});
+  const [savedTranslationDrafts, setSavedTranslationDrafts] = useState<Record<string, import('../../../main/shared/electronApi').PostTranslationData>>({});
   const [availablePostTemplates, setAvailablePostTemplates] = useState<Array<{ slug: string; title: string }>>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
@@ -216,6 +250,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [metadataExpanded, setMetadataExpanded] = useState(true);
   const [excerptExpanded, setExcerptExpanded] = useState(false);
   const editorRef = useRef<unknown>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const excerptInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorBodyRef = useRef<HTMLDivElement | null>(null);
   // Token incremented to signal Monaco that it should re-read its defaultValue.
   // This is used instead of controlled `value` to avoid cursor-reset races.
   const [monacoResetToken, setMonacoResetToken] = useState(0);
@@ -224,9 +261,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [showPostQuickActions, setShowPostQuickActions] = useState(false);
   const [projectLanguage, setProjectLanguage] = useState('en');
   const [translations, setTranslations] = useState<import('../../../main/shared/electronApi').PostTranslationData[]>([]);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState('');
   const [isTranslatingPost, setIsTranslatingPost] = useState(false);
-  const [publishingTranslationLanguage, setPublishingTranslationLanguage] = useState<string | null>(null);
   const postQuickActionsRef = useRef<HTMLDivElement>(null);
   const [showPostAISuggestionsModal, setShowPostAISuggestionsModal] = useState(false);
   const [isAnalyzingPost, setIsAnalyzingPost] = useState(false);
@@ -235,20 +272,155 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   const isDirty = checkIsDirty(postId);
 
+  const canonicalLanguage = postLanguage || post?.language || projectLanguage;
+  const fieldIdPrefix = `post-editor-${postId}`;
+
   const loadTranslations = useCallback(async () => {
-    const result = await window.electronAPI?.posts.getTranslations(postId);
-    setTranslations(result || []);
+    const result = await window.electronAPI?.posts.getTranslations?.(postId);
+    const items = result || [];
+    const mapped = mapTranslationsByLanguage(items);
+    setTranslations(items);
+    setTranslationDrafts(mapped);
+    setSavedTranslationDrafts(mapped);
+    return items;
   }, [postId]);
 
   const getLanguageLabel = useCallback((languageCode: string) => {
     return tr(`language.${languageCode}`);
   }, [tr]);
 
-  const missingTranslationLanguages = useMemo(() => {
-    const currentLanguage = postLanguage || post?.language || projectLanguage;
-    const excluded = new Set([currentLanguage, ...translations.map((item) => item.language)]);
-    return SUPPORTED_POST_LANGUAGES.filter((languageCode) => !excluded.has(languageCode));
-  }, [postLanguage, post?.language, projectLanguage, translations]);
+  const getLanguageFlag = useCallback((languageCode: string) => {
+    return POST_LANGUAGE_FLAGS[languageCode as keyof typeof POST_LANGUAGE_FLAGS] || '🏳️';
+  }, []);
+
+  const applyDisplayedDraft = useCallback((languageCode: string, canonicalValue: EditableContentDraft, translationMap: Record<string, import('../../../main/shared/electronApi').PostTranslationData>) => {
+    if (languageCode === canonicalLanguage) {
+      setTitleState(canonicalValue.title);
+      setExcerptState(canonicalValue.excerpt);
+      setContentState(canonicalValue.content);
+    } else {
+      const translation = translationMap[languageCode];
+      setTitleState(translation?.title || '');
+      setExcerptState(translation?.excerpt || '');
+      setContentState(translation?.content || '');
+    }
+    setActiveEditingLanguage(languageCode);
+    setMonacoResetToken((value) => value + 1);
+  }, [canonicalLanguage]);
+
+  const translationLanguageOptions = useMemo(() => {
+    const statusByLanguage = new Map(translations.map((item) => [item.language, item.status]));
+    return SUPPORTED_POST_LANGUAGES
+      .filter((languageCode) => languageCode !== canonicalLanguage)
+      .map((languageCode) => ({
+        language: languageCode,
+        status: statusByLanguage.get(languageCode),
+      }));
+  }, [canonicalLanguage, translations]);
+
+  const selectedTranslation = useMemo(() => {
+    return translations.find((item) => item.language === translationTargetLanguage) ?? null;
+  }, [translationTargetLanguage, translations]);
+
+  const languageFlags = useMemo(() => {
+    const canonicalLabel = getLanguageLabel(canonicalLanguage);
+    return [
+      {
+        language: canonicalLanguage,
+        status: post?.status || 'draft',
+        isCanonical: true,
+        ariaLabel: `${canonicalLabel} (${tr('editor.field.languageDefault')})`,
+      },
+      ...translations.map((translation) => ({
+        language: translation.language,
+        status: translation.status,
+        isCanonical: false,
+        ariaLabel: `${getLanguageLabel(translation.language)} (${tr(`editor.translations.status.${translation.status}`)})`,
+      })),
+    ];
+  }, [canonicalLanguage, getLanguageLabel, post?.status, tr, translations]);
+
+  const updateDisplayedDraft = useCallback((field: keyof EditableContentDraft, value: string) => {
+    if (field === 'title') setTitleState(value);
+    if (field === 'excerpt') setExcerptState(value);
+    if (field === 'content') setContentState(value);
+
+    if (activeEditingLanguage === canonicalLanguage) {
+      setCanonicalDraft((current) => ({ ...current, [field]: value }));
+    } else if (activeEditingLanguage) {
+      setTranslationDrafts((current) => {
+        const existing = current[activeEditingLanguage] ?? {
+          id: `local-${postId}-${activeEditingLanguage}`,
+          projectId: post?.projectId || '',
+          translationFor: postId,
+          language: activeEditingLanguage,
+          title: canonicalDraft.title,
+          excerpt: canonicalDraft.excerpt || undefined,
+          content: canonicalDraft.content,
+          status: 'draft' as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          publishedAt: undefined,
+          filePath: '',
+        };
+        return {
+          ...current,
+          [activeEditingLanguage]: {
+            ...existing,
+            [field]: value,
+            status: 'draft',
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      });
+      setTranslations((current) => {
+        const existing = current.find((item) => item.language === activeEditingLanguage);
+        const next = {
+          ...(existing ?? {
+            id: `local-${postId}-${activeEditingLanguage}`,
+            projectId: post?.projectId || '',
+            translationFor: postId,
+            language: activeEditingLanguage,
+            title: canonicalDraft.title,
+            excerpt: canonicalDraft.excerpt || undefined,
+            content: canonicalDraft.content,
+            status: 'draft' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            publishedAt: undefined,
+            filePath: '',
+          }),
+          [field]: value,
+          status: 'draft' as const,
+          updatedAt: new Date().toISOString(),
+        };
+        return existing
+          ? current.map((item) => item.language === activeEditingLanguage ? next : item)
+          : [...current, next].sort((left, right) => left.language.localeCompare(right.language));
+      });
+      if (post?.status === 'published') {
+        setPost((current) => current ? { ...current, status: 'draft' } : current);
+        updatePost(postId, { status: 'draft' } as Partial<PostData>);
+      }
+    }
+  }, [activeEditingLanguage, canonicalDraft, canonicalLanguage, post?.projectId, post?.status, postId, updatePost]);
+
+  const setTitle = useCallback((value: string) => updateDisplayedDraft('title', value), [updateDisplayedDraft]);
+  const setExcerpt = useCallback((value: string) => updateDisplayedDraft('excerpt', value), [updateDisplayedDraft]);
+  const setContent = useCallback((value: string) => updateDisplayedDraft('content', value), [updateDisplayedDraft]);
+
+  const handleActivateLanguage = useCallback((languageCode: string) => {
+    applyDisplayedDraft(languageCode, canonicalDraft, translationDrafts);
+  }, [applyDisplayedDraft, canonicalDraft, translationDrafts]);
+
+  const handleCanonicalLanguageChange = useCallback((nextLanguage: string) => {
+    const resolvedLanguage = nextLanguage || projectLanguage;
+    const wasCanonicalActive = !activeEditingLanguage || activeEditingLanguage === canonicalLanguage;
+    setPostLanguage(nextLanguage);
+    if (wasCanonicalActive) {
+      setActiveEditingLanguage(resolvedLanguage);
+    }
+  }, [activeEditingLanguage, canonicalLanguage, projectLanguage]);
 
   // Listen for auto-save events to keep local post state in sync
   useEffect(() => {
@@ -288,7 +460,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     let cancelled = false;
     setPreviewUrl(null);
 
-    window.electronAPI?.posts.getPreviewUrl(postId, { draft: true })
+    const previewOptions: Parameters<typeof window.electronAPI.posts.getPreviewUrl>[1] = { draft: true };
+    if (activeEditingLanguage && activeEditingLanguage !== canonicalLanguage) {
+      previewOptions.lang = activeEditingLanguage;
+    }
+
+    window.electronAPI?.posts.getPreviewUrl(postId, previewOptions)
       .then((url) => {
         if (!cancelled) {
           setPreviewUrl(url);
@@ -304,12 +481,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     return () => {
       cancelled = true;
     };
-  }, [editorMode, postId]);
+  }, [activeEditingLanguage, canonicalLanguage, editorMode, postId]);
 
   // Track latest values for auto-save on unmount/switch
   const pendingChangesRef = useRef<{
     title: string;
     content: string;
+    excerpt: string;
     tags: string[];
     categories: string[];
     postId: string;
@@ -319,14 +497,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   // Update ref when values change
   useEffect(() => {
     pendingChangesRef.current = {
-      title,
-      content,
+      title: canonicalDraft.title,
+      content: canonicalDraft.content,
+      excerpt: canonicalDraft.excerpt,
       tags,
       categories: selectedCategories,
       postId,
       isDirty,
     };
-  }, [title, content, tags, selectedCategories, postId, isDirty]);
+  }, [canonicalDraft, tags, selectedCategories, postId, isDirty]);
 
   // Auto-save when switching away from a post or unmounting
   useEffect(() => {
@@ -341,6 +520,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         window.electronAPI?.posts.update(pending.postId, {
           title: pending.title,
           content: pending.content,
+          excerpt: pending.excerpt || undefined,
           tags: pending.tags,
           categories: pending.categories.length > 0 ? pending.categories : ['article'],
         }).then((updated) => {
@@ -363,14 +543,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   // edits and causing the Monaco editor to reset cursor position.
   useEffect(() => {
     if (post && !isInitialized) {
-      setTitle(post.title);
-      setContent(post.content);
-      setExcerpt(post.excerpt || '');
+      const nextCanonicalDraft = toEditableContentDraft(post);
+      setCanonicalDraft(nextCanonicalDraft);
+      setSavedCanonicalDraft(nextCanonicalDraft);
+      setTitleState(nextCanonicalDraft.title);
+      setContentState(nextCanonicalDraft.content);
+      setExcerptState(nextCanonicalDraft.excerpt);
       setAuthor(post.author || '');
       setTags(post.tags);
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
       setTemplateSlug((post as PostData & { templateSlug?: string }).templateSlug || '');
       setPostLanguage(post.language || '');
+      setActiveEditingLanguage(post.language || projectLanguage);
       setMetadataExpanded(post.title === '');
       markClean(postId);
       // Mark as initialized AFTER setting local state
@@ -380,7 +564,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         setAvailablePostTemplates((templates ?? []).map((tmpl) => ({ slug: tmpl.slug, title: tmpl.title })));
       });
     }
-  }, [post, postId, markClean, isInitialized]);
+  }, [post, postId, markClean, isInitialized, projectLanguage]);
 
   // Track changes and notify auto-save manager
   // Only run after form has been initialized from post data
@@ -388,13 +572,24 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     if (!post || !isInitialized) return;
 
     // Short-circuit: check cheap comparisons first (content changes on every keystroke)
-    const contentChanged = content !== post.content;
-    const titleChanged = title !== post.title;
-    const excerptChanged = excerpt !== (post.excerpt || '');
+    const contentChanged = canonicalDraft.content !== post.content;
+    const titleChanged = canonicalDraft.title !== post.title;
+    const excerptChanged = canonicalDraft.excerpt !== (post.excerpt || '');
     const authorChanged = author !== (post.author || '');
     const templateSlugChanged = templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '');
     const languageChanged = postLanguage !== (post.language || '');
+    const translationChanged = (() => {
+      const languages = new Set([...Object.keys(translationDrafts), ...Object.keys(savedTranslationDrafts)]);
+      return Array.from(languages).some((languageCode) => {
+        const current = translationDrafts[languageCode];
+        const saved = savedTranslationDrafts[languageCode];
+        if (!current && !saved) return false;
+        if (!current || !saved) return true;
+        return !editableDraftEquals(toEditableContentDraft(current), toEditableContentDraft(saved));
+      });
+    })();
     const hasChanges = contentChanged || titleChanged || excerptChanged || authorChanged || templateSlugChanged || languageChanged ||
+      translationChanged ||
       JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort()) ||
       JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort());
 
@@ -403,9 +598,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       // Notify auto-save manager with accumulated changes
       // Convert tags array to comma-separated string for auto-save compatibility
       autoSaveManager.notifyChange(postId, {
-        title,
-        content,
-        excerpt,
+        title: canonicalDraft.title,
+        content: canonicalDraft.content,
+        excerpt: canonicalDraft.excerpt,
         author,
         tags: tags.join(', '),
         categories: selectedCategories,
@@ -415,7 +610,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } else {
       markClean(postId);
     }
-  }, [title, content, excerpt, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean]);
+  }, [canonicalDraft, author, tags, selectedCategories, templateSlug, postLanguage, post, postId, isInitialized, isDirty, markDirty, markClean, savedTranslationDrafts, translationDrafts]);
 
   // Handle editor mode change and persist preference
   const handleEditorModeChange = (mode: EditorMode) => {
@@ -423,30 +618,159 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     setPreferredEditorMode(mode);
   };
 
+  const getDisplayedDraft = useCallback((): EditableContentDraft => {
+    let currentContent = content;
+
+    if (editorMode === 'markdown') {
+      const monacoEditor = editorRef.current as { getValue?: () => string } | null;
+      if (typeof monacoEditor?.getValue === 'function') {
+        currentContent = monacoEditor.getValue();
+      }
+    } else if (editorMode === 'wysiwyg') {
+      const textarea = editorBodyRef.current?.querySelector('textarea');
+      if (textarea instanceof HTMLTextAreaElement) {
+        currentContent = textarea.value;
+      }
+    }
+
+    return {
+      title: titleInputRef.current?.value ?? title,
+      excerpt: excerptInputRef.current?.value ?? excerpt,
+      content: currentContent,
+    };
+  }, [content, editorMode, excerpt, title]);
+
   const handleSave = useCallback(async () => {
-    if (!isDirty || isSaving) return;
+    if (isSaving) return;
+
+    const displayedDraft = getDisplayedDraft();
+    const effectiveCanonicalDraft = activeEditingLanguage === canonicalLanguage ? displayedDraft : canonicalDraft;
+
+    const effectiveTranslationDrafts = activeEditingLanguage && activeEditingLanguage !== canonicalLanguage
+      ? {
+          ...translationDrafts,
+          [activeEditingLanguage]: {
+            ...(translationDrafts[activeEditingLanguage] ?? {
+              id: `local-${postId}-${activeEditingLanguage}`,
+              projectId: post?.projectId || '',
+              translationFor: postId,
+              language: activeEditingLanguage,
+              title: displayedDraft.title,
+              excerpt: displayedDraft.excerpt || undefined,
+              content: displayedDraft.content,
+              status: 'draft' as const,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              publishedAt: undefined,
+              filePath: '',
+            }),
+            title: displayedDraft.title,
+            excerpt: displayedDraft.excerpt || undefined,
+            content: displayedDraft.content,
+            status: 'draft' as const,
+            updatedAt: new Date().toISOString(),
+          },
+        }
+      : translationDrafts;
+
+    const translationChanged = (() => {
+      const languages = new Set([...Object.keys(effectiveTranslationDrafts), ...Object.keys(savedTranslationDrafts)]);
+      return Array.from(languages).some((languageCode) => {
+        const current = effectiveTranslationDrafts[languageCode];
+        const saved = savedTranslationDrafts[languageCode];
+        if (!current && !saved) return false;
+        if (!current || !saved) return true;
+        return !editableDraftEquals(toEditableContentDraft(current), toEditableContentDraft(saved));
+      });
+    })();
+
+    const canonicalChanged = post
+      ? !editableDraftEquals(effectiveCanonicalDraft, toEditableContentDraft(post))
+        || author !== (post.author || '')
+        || templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '')
+        || postLanguage !== (post.language || '')
+        || JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort())
+        || JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort())
+      : false;
+
+    if (!canonicalChanged && !translationChanged) return;
 
     // Cancel any pending auto-save since we're saving manually
     autoSaveManager.cancel(postId);
     
     setIsSaving(true);
     try {
-      const updated = await window.electronAPI?.posts.update(postId, {
-        title,
-        content,
-        excerpt: excerpt || undefined,
-        author: author || undefined,
-        language: postLanguage || undefined,
-        tags,
-        categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
-        templateSlug: templateSlug || null,
-      } as Parameters<typeof window.electronAPI.posts.update>[1]);
-      
-      if (updated) {
-        updatePost(postId, updated as Partial<PostData>);
-        setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
-        markClean(postId);
+      let updatedPost = post;
+      if (canonicalChanged) {
+        const updated = await window.electronAPI?.posts.update(postId, {
+          title: effectiveCanonicalDraft.title,
+          content: effectiveCanonicalDraft.content,
+          excerpt: effectiveCanonicalDraft.excerpt || undefined,
+          author: author || undefined,
+          language: postLanguage || undefined,
+          tags,
+          categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
+          templateSlug: templateSlug || null,
+        } as Parameters<typeof window.electronAPI.posts.update>[1]);
+
+        if (updated) {
+          updatedPost = updated as PostData;
+          updatePost(postId, updated as Partial<PostData>);
+          setPost(prev => prev ? { ...prev, ...updated as Partial<PostData> } : prev);
+          setSavedCanonicalDraft(toEditableContentDraft(updated as PostData));
+          setCanonicalDraft(toEditableContentDraft(updated as PostData));
+        }
       }
+
+      const languages = new Set([...Object.keys(effectiveTranslationDrafts), ...Object.keys(savedTranslationDrafts)]);
+      const nextSavedTranslations = { ...savedTranslationDrafts };
+      let savedTranslationCount = 0;
+
+      if (activeEditingLanguage && activeEditingLanguage !== canonicalLanguage) {
+        const activeDraft = effectiveTranslationDrafts[activeEditingLanguage];
+        const savedActiveDraft = savedTranslationDrafts[activeEditingLanguage];
+        if (activeDraft && (!savedActiveDraft || !editableDraftEquals(toEditableContentDraft(activeDraft), toEditableContentDraft(savedActiveDraft)))) {
+          const updatedActiveTranslation = await window.electronAPI?.posts.upsertTranslation(postId, activeEditingLanguage, {
+            title: activeDraft.title,
+            excerpt: activeDraft.excerpt || undefined,
+            content: activeDraft.content,
+          });
+          if (updatedActiveTranslation) {
+            nextSavedTranslations[activeEditingLanguage] = updatedActiveTranslation as import('../../../main/shared/electronApi').PostTranslationData;
+            savedTranslationCount += 1;
+          }
+        }
+      }
+
+      for (const languageCode of languages) {
+        if (languageCode === activeEditingLanguage) continue;
+        const current = effectiveTranslationDrafts[languageCode];
+        const saved = savedTranslationDrafts[languageCode];
+        if (!current) continue;
+        if (saved && editableDraftEquals(toEditableContentDraft(current), toEditableContentDraft(saved))) continue;
+
+        const updatedTranslation = await window.electronAPI?.posts.upsertTranslation(postId, languageCode, {
+          title: current.title,
+          excerpt: current.excerpt || undefined,
+          content: current.content,
+        });
+        if (updatedTranslation) {
+          nextSavedTranslations[languageCode] = updatedTranslation as import('../../../main/shared/electronApi').PostTranslationData;
+          savedTranslationCount += 1;
+        }
+      }
+      setSavedTranslationDrafts(nextSavedTranslations);
+      setTranslationDrafts(nextSavedTranslations);
+
+      if (Object.keys(nextSavedTranslations).length > 0) {
+        setTranslations(Object.values(nextSavedTranslations).sort((left, right) => left.language.localeCompare(right.language)));
+      }
+
+      if (!canonicalChanged && savedTranslationCount > 0 && updatedPost?.status === 'published') {
+        setPost(prev => prev ? { ...prev, status: 'draft' } : prev);
+        updatePost(postId, { status: 'draft' } as Partial<PostData>);
+      }
+      markClean(postId);
     } catch (error) {
       console.error('Failed to save post:', error);
       const err = error as Error;
@@ -458,7 +782,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [postId, title, content, author, tags, selectedCategories, isDirty, isSaving, updatePost, markClean, showErrorModal]);
+  }, [activeEditingLanguage, author, canonicalDraft, canonicalLanguage, getDisplayedDraft, isSaving, markClean, post, postId, postLanguage, savedTranslationDrafts, selectedCategories, showErrorModal, tags, templateSlug, translationDrafts, updatePost]);
 
   const handleDetectLanguage = useCallback(async () => {
     if (isDetectingLanguage || (!title && !content)) return;
@@ -485,12 +809,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     try {
       const result = await window.electronAPI?.chat.translatePost(postId, targetLanguage);
       if (result?.success) {
-        await loadTranslations();
+        setTranslationTargetLanguage('');
+        const loadedTranslations = await loadTranslations();
         const refreshedPost = await window.electronAPI?.posts.get(postId);
         if (refreshedPost) {
           updatePost(postId, refreshedPost as Partial<PostData>);
           setPost(prev => prev ? { ...prev, ...refreshedPost as Partial<PostData> } : prev);
         }
+        const refreshedMap = mapTranslationsByLanguage(loadedTranslations);
+        applyDisplayedDraft(targetLanguage, canonicalDraft, refreshedMap);
         showToast.success(tr('editor.translations.translateSuccess', { language: getLanguageLabel(targetLanguage) }));
       } else {
         showToast.error(result?.error || tr('editor.translations.translateFailed'));
@@ -501,29 +828,27 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     } finally {
       setIsTranslatingPost(false);
     }
-  }, [getLanguageLabel, isTranslatingPost, loadTranslations, postId, tr, updatePost]);
+  }, [applyDisplayedDraft, canonicalDraft, getLanguageLabel, isTranslatingPost, loadTranslations, postId, tr, updatePost]);
 
-  const handlePublishTranslation = useCallback(async (languageCode: string) => {
-    if (!languageCode || publishingTranslationLanguage) return;
-    setPublishingTranslationLanguage(languageCode);
-    try {
-      const updated = await window.electronAPI?.posts.publishTranslation(postId, languageCode);
-      if (updated) {
-        await loadTranslations();
-        const refreshedPost = await window.electronAPI?.posts.get(postId);
-        if (refreshedPost) {
-          updatePost(postId, refreshedPost as Partial<PostData>);
-          setPost(prev => prev ? { ...prev, ...refreshedPost as Partial<PostData> } : prev);
-        }
-        showToast.success(tr('editor.translations.publishSuccess', { language: getLanguageLabel(languageCode) }));
-      }
-    } catch (error) {
-      console.error('Failed to publish translation:', error);
-      showToast.error(tr('editor.translations.publishFailed'));
-    } finally {
-      setPublishingTranslationLanguage(null);
-    }
-  }, [getLanguageLabel, loadTranslations, postId, publishingTranslationLanguage, tr, updatePost]);
+  const handleOpenTranslationModal = useCallback(() => {
+    const preferredLanguage = translationTargetLanguage
+      || translationLanguageOptions.find((option) => !option.status)?.language
+      || translationLanguageOptions[0]?.language
+      || '';
+    setShowPostQuickActions(false);
+    setTranslationTargetLanguage(preferredLanguage);
+    setShowTranslationModal(true);
+  }, [translationLanguageOptions, translationTargetLanguage]);
+
+  const handleCloseTranslationModal = useCallback(() => {
+    setShowTranslationModal(false);
+  }, []);
+
+  const handleConfirmTranslation = useCallback(() => {
+    if (!translationTargetLanguage) return;
+    setShowTranslationModal(false);
+    void handleTranslatePost(translationTargetLanguage);
+  }, [handleTranslatePost, translationTargetLanguage]);
 
   // Load project language for AI post analysis
   useEffect(() => {
@@ -949,6 +1274,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                     <small>{tr('editor.post.quickActions.aiDescription')}</small>
                   </span>
                 </button>
+                <div className="quick-actions-divider" />
+                <button
+                  className="quick-action-item"
+                  onClick={handleOpenTranslationModal}
+                  disabled={isTranslatingPost || translationLanguageOptions.length === 0}
+                >
+                  <span className="quick-action-icon">🌍</span>
+                  <span className="quick-action-text">
+                    <strong>{tr('editor.translations.translateButton')}</strong>
+                    <small>{tr('editor.translations.selectTarget')}</small>
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -990,8 +1327,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         <div className="editor-header-row">
           <div className="editor-meta">
             <div className="editor-field">
-              <label>{tr('editor.field.title')}</label>
+              <label htmlFor={`${fieldIdPrefix}-title`}>{tr('editor.field.title')}</label>
               <input
+                id={`${fieldIdPrefix}-title`}
+                ref={titleInputRef}
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -1008,8 +1347,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               />
             </div>
             <div className="editor-field">
-              <label>{tr('editor.field.author')}</label>
+              <label htmlFor={`${fieldIdPrefix}-author`}>{tr('editor.field.author')}</label>
               <input
+                id={`${fieldIdPrefix}-author`}
                 type="text"
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
@@ -1017,17 +1357,32 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               />
             </div>
             <div className="editor-field">
-              <label>{tr('editor.field.language')}</label>
+              <label htmlFor={`${fieldIdPrefix}-language`}>{tr('editor.field.language')}</label>
               <div className="editor-language-row">
                 <select
+                  id={`${fieldIdPrefix}-language`}
                   value={postLanguage}
-                  onChange={(e) => setPostLanguage(e.target.value)}
+                  onChange={(e) => handleCanonicalLanguageChange(e.target.value)}
                 >
                   <option value="">{tr('editor.field.languageDefault')}</option>
                   {SUPPORTED_POST_LANGUAGES.map((languageCode) => (
                     <option key={languageCode} value={languageCode}>{getLanguageLabel(languageCode)}</option>
                   ))}
                 </select>
+                <div className="editor-translations-flags" aria-label={tr('editor.translations.title')}>
+                  {languageFlags.map((item) => (
+                    <button
+                      key={item.language}
+                      type="button"
+                      onClick={() => handleActivateLanguage(item.language)}
+                      aria-label={item.ariaLabel}
+                      title={item.ariaLabel}
+                      className={`editor-translation-flag status-${item.status} ${activeEditingLanguage === item.language ? 'active' : ''}`}
+                    >
+                      {getLanguageFlag(item.language)}
+                    </button>
+                  ))}
+                </div>
                 <button
                   className="secondary compact"
                   onClick={handleDetectLanguage}
@@ -1038,79 +1393,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                 </button>
               </div>
             </div>
-            <div className="editor-field">
-              <label>{tr('editor.translations.title')}</label>
-              <div className="editor-translations-panel">
-                <div className="editor-translations-current">
-                  {tr('editor.translations.currentLanguage', { language: getLanguageLabel(postLanguage || post?.language || projectLanguage) })}
-                </div>
-                {translations.length > 0 ? (
-                  <div className="editor-translations-list">
-                    {translations.map((translation) => (
-                      <div key={translation.id} className="editor-translation-item">
-                        <div className="editor-translation-copy">
-                          <span className="editor-translation-language">{getLanguageLabel(translation.language)}</span>
-                          <span className={`editor-translation-status status-${translation.status}`}>{tr(`editor.translations.status.${translation.status}`)}</span>
-                        </div>
-                        <div className="editor-translation-actions">
-                          <button
-                            className="secondary compact"
-                            onClick={() => handleTranslatePost(translation.language)}
-                            disabled={isTranslatingPost}
-                            title={tr('editor.translations.refreshTitle')}
-                          >
-                            {tr('editor.translations.refresh')}
-                          </button>
-                          {translation.status !== 'published' && (
-                            <button
-                              className="secondary compact"
-                              onClick={() => handlePublishTranslation(translation.language)}
-                              disabled={publishingTranslationLanguage === translation.language}
-                              title={tr('editor.translations.publishTitle')}
-                            >
-                              {publishingTranslationLanguage === translation.language ? tr('editor.translations.publishing') : tr('editor.translations.publish')}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="editor-translations-empty">{tr('editor.translations.none')}</div>
-                )}
-                <div className="editor-translations-create-row">
-                  <select
-                    value={translationTargetLanguage}
-                    onChange={(e) => setTranslationTargetLanguage(e.target.value)}
-                  >
-                    <option value="">{tr('editor.translations.selectTarget')}</option>
-                    {missingTranslationLanguages.map((languageCode) => (
-                      <option key={languageCode} value={languageCode}>{getLanguageLabel(languageCode)}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="secondary"
-                    onClick={() => {
-                      if (!translationTargetLanguage) return;
-                      void handleTranslatePost(translationTargetLanguage);
-                    }}
-                    disabled={!translationTargetLanguage || isTranslatingPost}
-                    title={tr('editor.translations.translateTitle')}
-                  >
-                    {isTranslatingPost ? tr('editor.translations.translating') : tr('editor.translations.translateButton')}
-                  </button>
-                </div>
-                <div className="editor-translations-missing">
-                  {missingTranslationLanguages.length > 0
-                    ? tr('editor.translations.missing', { languages: missingTranslationLanguages.map((languageCode) => getLanguageLabel(languageCode)).join(', ') })
-                    : tr('editor.translations.complete')}
-                </div>
-              </div>
-            </div>
             <div className="editor-field-row">
               <div className="editor-field">
-                <label>{tr('editor.field.slug')}</label>
+                <label htmlFor={`${fieldIdPrefix}-slug`}>{tr('editor.field.slug')}</label>
                 <input
+                  id={`${fieldIdPrefix}-slug`}
                   type="text"
                   value={post.slug}
                   disabled
@@ -1131,8 +1418,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
             </div>
             {availablePostTemplates.length > 0 && (
               <div className="editor-field">
-                <label>{tr('editor.field.template')}</label>
+                <label htmlFor={`${fieldIdPrefix}-template`}>{tr('editor.field.template')}</label>
                 <select
+                  id={`${fieldIdPrefix}-template`}
                   value={templateSlug}
                   onChange={(e) => setTemplateSlug(e.target.value)}
                 >
@@ -1167,8 +1455,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         {excerptExpanded && (
           <div className="editor-excerpt-panel">
             <div className="editor-field">
-              <label>{tr('editor.field.excerpt')}</label>
+              <label htmlFor={`${fieldIdPrefix}-excerpt`}>{tr('editor.field.excerpt')}</label>
               <textarea
+                id={`${fieldIdPrefix}-excerpt`}
+                ref={excerptInputRef}
                 value={excerpt}
                 onChange={(e) => setExcerpt(e.target.value)}
                 placeholder={tr('editor.placeholder.excerpt')}
@@ -1178,7 +1468,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           </div>
         )}
         
-        <div className="editor-body">
+        <div className="editor-body" ref={editorBodyRef}>
           <div className="editor-toolbar">
             <div className="editor-toolbar-left">
               <label>{tr('editor.field.content')}</label>
@@ -1348,6 +1638,56 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         onConfirm={handleApplyPostAISuggestions}
         onClose={handleClosePostAISuggestionsModal}
       />
+
+      {showTranslationModal && (
+        <div className="translation-modal-backdrop" onClick={handleCloseTranslationModal}>
+          <div className="translation-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="translation-modal-header">
+              <h2>{tr('editor.translations.title')}</h2>
+              <button className="translation-modal-close" onClick={handleCloseTranslationModal} title={tr('common.cancel')}>×</button>
+            </div>
+            <div className="translation-modal-body">
+              <label className="translation-modal-label" htmlFor="translation-target-language">{tr('editor.translations.selectTarget')}</label>
+              <p className="translation-modal-copy">{tr('editor.translations.currentLanguage', { language: getLanguageLabel(postLanguage || post?.language || projectLanguage) })}</p>
+              <select
+                id="translation-target-language"
+                className="translation-modal-select"
+                value={translationTargetLanguage}
+                onChange={(e) => setTranslationTargetLanguage(e.target.value)}
+              >
+                {translationLanguageOptions.map((option) => (
+                  <option key={option.language} value={option.language}>
+                    {getLanguageLabel(option.language)}{option.status ? ` (${tr(`editor.translations.status.${option.status}`)})` : ''}
+                  </option>
+                ))}
+              </select>
+              {translationTargetLanguage && (
+                <div className="translation-modal-status-row">
+                  <span className="translation-modal-flag" aria-hidden="true">{getLanguageFlag(translationTargetLanguage)}</span>
+                  <span className="translation-modal-status-copy">
+                    <strong>{getLanguageLabel(translationTargetLanguage)}</strong>
+                    <small>
+                      {selectedTranslation
+                        ? tr(`editor.translations.status.${selectedTranslation.status}`)
+                        : tr('editor.translations.none')}
+                    </small>
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="translation-modal-footer">
+              <button className="secondary" onClick={handleCloseTranslationModal}>{tr('common.cancel')}</button>
+              <button
+                onClick={handleConfirmTranslation}
+                disabled={!translationTargetLanguage || isTranslatingPost}
+                title={tr('editor.translations.translateTitle')}
+              >
+                {isTranslatingPost ? tr('editor.translations.translating') : tr('editor.translations.translateButton')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -463,7 +463,6 @@ describe('PreviewServer', () => {
       postMediaEngine,
       settingsEngine: settingsEngine as any,
       menuEngine,
-      menuEngine: makeMenuEngine({ items: [] }) as any,
       getActiveProjectContext: async () => ({ projectId: 'default', dataDir: '/tmp/default' }),
     });
 
@@ -616,6 +615,57 @@ describe('PreviewServer', () => {
     expect(draftHtml).toContain('Draft Title');
     expect(draftHtml).toContain('Draft-only body');
     expect(draftHtml).not.toContain('Published body');
+  });
+
+  it('serves translated draft content for single post route when lang query param is provided', async () => {
+    const draftPost = makePost({
+      id: 'post-2',
+      slug: 'shared-slug',
+      title: 'Draft Title',
+      content: 'Draft-only body',
+      status: 'draft',
+      language: 'en',
+      createdAt: new Date('2025-01-03T10:00:00.000Z'),
+    });
+
+    server = new PreviewServer({
+      postEngine: {
+        ...makeEngine([draftPost]),
+        async getPostTranslation(postId: string, language: string) {
+          if (postId === 'post-2' && language === 'fr') {
+            return {
+              id: 'translation-2-fr',
+              translationFor: 'post-2',
+              language: 'fr',
+              title: 'Titre brouillon',
+              excerpt: 'Resume brouillon',
+              content: 'Contenu brouillon traduit',
+              status: 'draft',
+              createdAt: new Date('2025-01-03T10:00:00.000Z'),
+              updatedAt: new Date('2025-01-03T11:00:00.000Z'),
+              publishedAt: null,
+              filePath: 'posts/shared-slug.fr.md',
+            };
+          }
+          return null;
+        },
+      } as any,
+      settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const draftResponse = await fetch(`${server.getBaseUrl()}/2025/01/03/shared-slug?draft=true&postId=post-2&lang=fr`);
+    expect(draftResponse.status).toBe(200);
+    const draftHtml = await draftResponse.text();
+    expect(draftHtml).toContain('Titre brouillon');
+    expect(draftHtml).toContain('Contenu brouillon traduit');
+    expect(draftHtml).toContain('<html lang="fr"');
+    expect(draftHtml).not.toContain('Draft-only body');
   });
 
   it('uses selected pico theme stylesheet from project metadata', async () => {
@@ -1692,7 +1742,7 @@ describe('PreviewServer', () => {
       postMediaEngine: makePostMediaEngine({}) as any,
       settingsEngine: makeSettings(50),
       menuEngine: makeMenuEngine({ items: [] }) as any,
-      getActiveProjectContext: async () => ({ projectId: 'default' }),
+      getActiveProjectContext: async () => ({ projectId: 'default', dataDir: '/tmp/default' }),
     });
 
     await server.start(0);

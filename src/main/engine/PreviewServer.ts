@@ -4,7 +4,7 @@ import path from 'node:path';
 import { type CategoryMetadata, type ProjectMetadata } from './MetaEngine';
 import { type MediaData } from './MediaEngine';
 import { type MenuDocument } from './MenuEngine';
-import { type PostData, type PostFilter } from './PostEngine';
+import { type PostData, type PostFilter, type PostTranslationData } from './PostEngine';
 import {
   PageRenderer,
   PREVIEW_ASSETS,
@@ -40,6 +40,7 @@ interface ActiveProjectContext {
 interface PostEngineContract {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPost: (id: string) => Promise<PostData | null>;
+  getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
   hasPublishedVersion: (id: string) => Promise<boolean>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
   findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
@@ -183,7 +184,7 @@ export class PreviewServer {
       requestTheme?: string | null;
       htmlThemeAttribute?: string;
       allowEmptyArchiveRender?: boolean;
-      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
+      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string };
     },
   ): Promise<string | null> {
     return renderRouteWithSharedContext(pathname, options, {
@@ -251,7 +252,8 @@ export class PreviewServer {
       const menuItems = buildTemplateMenuItems(menu, categoryMetadata);
       const categorySettings = this.resolveCategorySettings(metadata);
       const listExcludedCategories = this.resolveListExcludedCategories(categorySettings);
-      const language = metadata?.mainLanguage?.trim() || 'en';
+      const requestLanguage = requestUrl.searchParams.get('lang')?.trim().toLowerCase() || undefined;
+      const language = requestLanguage || metadata?.mainLanguage?.trim() || 'en';
       const pageTitle = resolvePageTitle(metadata, context.projectName, context.projectDescription);
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
       const requestTheme = sanitizePicoTheme(requestUrl.searchParams.get('theme'));
@@ -302,6 +304,7 @@ export class PreviewServer {
         singlePostOptions: {
           useDraftContent,
           draftPostId,
+          lang: requestLanguage,
         },
       });
       if (!result) {

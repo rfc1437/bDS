@@ -199,7 +199,7 @@ describe('Post translation system', () => {
     expect(translations[0]).toMatchObject({ title: 'Salut', content: 'Version 2' });
   });
 
-  it('publishes translations to source-slug.language.md files and filters posts by language availability', async () => {
+  it('moves the source post back to draft when translation text changes', async () => {
     const source = await engine.createPost({
       title: 'Hello world',
       language: 'en',
@@ -207,16 +207,40 @@ describe('Post translation system', () => {
     });
 
     await engine.publishPost(source.id);
+
+    await engine.upsertPostTranslation(source.id, 'fr', {
+      title: 'Bonjour',
+      content: 'Version 1',
+    });
+
+    const updatedSource = await engine.getPost(source.id);
+    const translation = await engine.getPostTranslation(source.id, 'fr');
+
+    expect(updatedSource?.status).toBe('draft');
+    expect(updatedSource?.content.trim()).toBe('Canonical content');
+    expect(translation?.status).toBe('draft');
+    expect(Array.from(mockFiles.keys()).some((filePath) => filePath.endsWith('/hello-world.fr.md'))).toBe(false);
+  });
+
+  it('publishes canonical and available translations together when the post is published', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
     await engine.upsertPostTranslation(source.id, 'fr', {
       title: 'Bonjour le monde',
       excerpt: 'Resume',
       content: 'Contenu traduit',
     });
 
-    const publishedTranslation = await engine.publishPostTranslation(source.id, 'fr');
+    const publishedPost = await engine.publishPost(source.id);
+    const publishedTranslation = await engine.getPostTranslation(source.id, 'fr');
     const frenchPosts = await engine.getPostsFiltered({ language: 'fr' });
     const missingSpanish = await engine.getPostsFiltered({ missingTranslationLanguage: 'es' });
 
+    expect(publishedPost?.status).toBe('published');
     expect(publishedTranslation?.status).toBe('published');
     expect(publishedTranslation?.filePath.endsWith('/hello-world.fr.md')).toBe(true);
     expect(Array.from(mockFiles.keys()).some((filePath) => filePath.endsWith('/hello-world.fr.md'))).toBe(true);

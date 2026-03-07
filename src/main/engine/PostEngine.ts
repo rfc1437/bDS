@@ -835,8 +835,25 @@ export class PostEngine extends EventEmitter {
     const normalizedLanguage = language.trim().toLowerCase();
     const now = new Date();
     const existing = await this.getTranslationRow(postId, normalizedLanguage);
+    const sourceShouldDraft = sourcePost.status === 'published'
+      && (data.title !== undefined || data.excerpt !== undefined || data.content !== undefined);
+
+    if (sourceShouldDraft) {
+      await db.update(posts)
+        .set({
+          content: sourcePost.content,
+          status: 'draft',
+          updatedAt: now,
+          checksum: this.calculateChecksum(sourcePost.content),
+        })
+        .where(eq(posts.id, postId));
+      this.emit('postUpdated', { ...sourcePost, status: 'draft', updatedAt: now });
+    }
 
     if (existing) {
+      const contentChanged = (data.title !== undefined && data.title !== existing.title)
+        || (data.excerpt !== undefined && data.excerpt !== (existing.excerpt ?? undefined))
+        || (data.content !== undefined && data.content !== (existing.content ?? ''));
       const updated: PostTranslationData = {
         id: existing.id,
         projectId: existing.projectId,
@@ -845,7 +862,7 @@ export class PostEngine extends EventEmitter {
         title: data.title ?? existing.title,
         excerpt: data.excerpt ?? existing.excerpt ?? undefined,
         content: data.content ?? existing.content ?? '',
-        status: (data.status || existing.status) as 'draft' | 'published' | 'archived',
+        status: ((data.status && !contentChanged) ? data.status : (contentChanged ? 'draft' : existing.status)) as 'draft' | 'published' | 'archived',
         createdAt: existing.createdAt,
         updatedAt: now,
         publishedAt: data.publishedAt ?? existing.publishedAt ?? undefined,
@@ -876,7 +893,7 @@ export class PostEngine extends EventEmitter {
       title: data.title || sourcePost.title,
       excerpt: data.excerpt,
       content: data.content || '',
-      status: (data.status || 'draft') as 'draft' | 'published' | 'archived',
+      status: 'draft',
       createdAt: now,
       updatedAt: now,
       publishedAt: data.publishedAt,
@@ -1740,57 +1757,48 @@ export class PostEngine extends EventEmitter {
     // Update post links based on published content
     await this.updatePostLinks(id, published.content);
 
+    const translationRows = await this.getTranslationRowsForPost(id);
+    for (const row of translationRows) {
+      const translation = await this.resolvePostTranslationData(row);
+      if (!translation) continue;
+
+      const publishedTranslation: PostTranslationData = {
+        ...translation,
+        status: 'published',
+        updatedAt: now,
+        publishedAt: translation.publishedAt || publishedAt,
+      };
+
+      const translationFilePath = await this.writePostTranslationFile(published, publishedTranslation);
+      await db.update(postTranslations)
+        .set({
+          title: publishedTranslation.title,
+          excerpt: publishedTranslation.excerpt,
+          content: null,
+          status: 'published',
+          updatedAt: publishedTranslation.updatedAt,
+          publishedAt: publishedTranslation.publishedAt,
+          filePath: translationFilePath,
+          checksum: this.calculateChecksum(translation.content),
+        })
+        .where(eq(postTranslations.id, publishedTranslation.id));
+
+      const resolvedTranslation = await this.getPostTranslation(id, publishedTranslation.language);
+      if (resolvedTranslation) {
+        this.emit('postTranslationUpdated', resolvedTranslation);
+      }
+    }
+
     this.emit('postUpdated', published);
     await this.notifier.notify('post', id, 'updated');
     return this.appendAvailableLanguages(published);
   }
 
   async publishPostTranslation(postId: string, language: string): Promise<PostTranslationData | null> {
-    const db = getDatabase().getLocal();
-    const sourcePost = await this.getPost(postId);
-    if (!sourcePost) {
-      return null;
-    }
-
     const existing = await this.getTranslationRow(postId, language.trim().toLowerCase());
-    if (!existing) {
-      return null;
-    }
-
-    const translation = await this.resolvePostTranslationData(existing);
-    if (!translation) {
-      return null;
-    }
-
-    const now = new Date();
-    const publishedAt = translation.publishedAt || now;
-    const published: PostTranslationData = {
-      ...translation,
-      status: 'published',
-      updatedAt: now,
-      publishedAt,
-    };
-
-    const filePath = await this.writePostTranslationFile(sourcePost, published);
-
-    await db.update(postTranslations)
-      .set({
-        title: published.title,
-        excerpt: published.excerpt,
-        content: null,
-        status: 'published',
-        updatedAt: published.updatedAt,
-        publishedAt: published.publishedAt,
-        filePath,
-        checksum: this.calculateChecksum(published.content),
-      })
-      .where(eq(postTranslations.id, published.id));
-
-    const resolved = await this.getPostTranslation(postId, published.language);
-    if (resolved) {
-      this.emit('postTranslationUpdated', resolved);
-    }
-    return resolved;
+    if (!existing) return null;
+    await this.publishPost(postId);
+    return this.getPostTranslation(postId, language.trim().toLowerCase());
   }
 
   async discardChanges(id: string): Promise<PostData | null> {

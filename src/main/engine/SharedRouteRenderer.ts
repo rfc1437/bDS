@@ -33,7 +33,7 @@ export interface SharedRouteRenderOptions {
   requestTheme?: string | null;
   htmlThemeAttribute?: string;
   allowEmptyArchiveRender?: boolean;
-  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
+  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string };
 }
 
 export interface SharedRouteRenderServices<TCategoryMetadata> {
@@ -80,7 +80,7 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
   ) => Promise<{ posts: PostData[]; totalPosts: number }>;
   findSinglePostBySlug: (
     slug: string,
-    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string },
     dateFilter?: { year: number; month: number; day?: number },
   ) => Promise<PostData | null>;
   getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
@@ -175,7 +175,7 @@ async function resolveRouteWithSharedServices(
   listExcludedCategories: string[],
   services: SharedRouteRenderServices<CategoryMetadata>,
   allowEmptyArchiveRender: boolean,
-  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string },
 ): Promise<string | null> {
   const routePagination = parseRoutePagination(pathname);
   if (!routePagination) {
