@@ -1393,6 +1393,67 @@ describe('BlogGenerationEngine', () => {
     expect(sitemap).toContain('<loc>https://example.com/2025/01/15/hello-world.fr/</loc>');
   });
 
+  it('preserves post engine method binding when loading published translations', async () => {
+    const sourcePost = makePost({
+      id: '1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nEnglish body',
+      language: 'en',
+      availableLanguages: ['en', 'fr'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const translationsByPostId = new Map<string, PostTranslationData[]>([
+      ['1', [{
+        id: 'translation-1-fr',
+        projectId: 'default',
+        translationFor: '1',
+        language: 'fr',
+        title: 'Bonjour le monde',
+        excerpt: 'Resume FR',
+        content: '# Bonjour le monde\n\nCorps FR',
+        status: 'published',
+        createdAt: new Date('2025-01-15T10:05:00Z'),
+        updatedAt: new Date('2025-01-15T10:05:00Z'),
+        publishedAt: new Date('2025-01-15T10:06:00Z'),
+        filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+      }]],
+    ]);
+
+    const postEngine = {
+      translationsByPostId,
+      setProjectContext: vi.fn(),
+      async getPostsFiltered(filter: { status?: string }) {
+        return filter.status === 'published' ? [sourcePost] : [];
+      },
+      async getPublishedVersion() {
+        return null;
+      },
+      async getPost(postId: string) {
+        return postId === sourcePost.id ? sourcePost : null;
+      },
+      async getPostTranslations(postId: string) {
+        return this.translationsByPostId.get(postId) ?? [];
+      },
+    };
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(postEngine as any, mockMediaEngine, mockPostMediaEngine);
+
+    await expect(engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn())).resolves.toMatchObject({
+      postCount: 1,
+    });
+
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world.fr', 'index.html'))).toBe(true);
+  });
+
   it('applies validation by generating only missing category and tag routes', async () => {
     const posts = [
       makePost({ id: '1', slug: 'ordered-post', categories: ['news'], tags: ['ordered-tag'], createdAt: new Date('2025-01-15T10:00:00Z') }),
@@ -1787,6 +1848,49 @@ describe('BlogGenerationEngine', () => {
 
     expect(await fileExists(path.join(tempDir, 'html', 'about', 'index.html'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', 'hello-world', 'index.html'))).toBe(false);
+  });
+
+  it('generates translated static page routes for published page translations', async () => {
+    const pagePost = makePost({
+      id: 'page-1',
+      slug: 'tag-cloud',
+      title: 'Tag Cloud',
+      categories: ['page'],
+      language: 'en',
+      availableLanguages: ['en', 'de'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+
+    setupPosts([pagePost]);
+    mockPostEngine.getPostTranslations.mockResolvedValue([{
+      id: 'translation-page-1-de',
+      projectId: 'default',
+      translationFor: 'page-1',
+      language: 'de',
+      title: 'Schlagwortwolke',
+      excerpt: 'Zusammenfassung DE',
+      content: '# Schlagwortwolke\n\nInhalt DE',
+      status: 'published',
+      createdAt: new Date('2025-01-15T10:05:00Z'),
+      updatedAt: new Date('2025-01-15T10:05:00Z'),
+      publishedAt: new Date('2025-01-15T10:06:00Z'),
+      filePath: path.join(tempDir, 'posts', 'tag-cloud.de.md'),
+    }]);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn());
+
+    expect(await fileExists(path.join(tempDir, 'html', 'tag-cloud', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'tag-cloud.de', 'index.html'))).toBe(true);
   });
 
   it('generates canonical post routes only and does not generate aliases', async () => {

@@ -7,6 +7,7 @@ import type { PostData } from './PostEngine';
 import type { PicoThemeName } from '../shared/picoThemes';
 import type { CategoryMetadata } from './BlogGenerationEngine';
 import { PreviewServer } from './PreviewServer';
+import type { PostTranslationData } from './PostEngine';
 
 interface RenderContext {
   projectContext: {
@@ -61,7 +62,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       getPublishedVersion: (postId: string) => Promise<PostData | null>;
       findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
       getPost: (postId: string) => Promise<PostData | null>;
-      getPostTranslation?: (postId: string, language: string) => Promise<import('./PostEngine').PostTranslationData | null>;
+      getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
       hasPublishedVersion: (postId: string) => Promise<boolean>;
       getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
       setProjectContext: (projectId: string, dataDir?: string) => void;

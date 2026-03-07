@@ -248,14 +248,13 @@ export class BlogGenerationEngine {
 
   private async buildPublishedRoutePosts(publishedPosts: PostData[]): Promise<PostData[]> {
     const routePosts: PostData[] = [...publishedPosts];
-    const { getPostTranslations } = this.postEngine;
 
-    if (typeof getPostTranslations !== 'function') {
+    if (typeof this.postEngine.getPostTranslations !== 'function') {
       return routePosts;
     }
 
     for (const post of publishedPosts) {
-      const translations = await getPostTranslations(post.id);
+      const translations = await this.postEngine.getPostTranslations(post.id);
       for (const translation of translations) {
         if (translation.status !== 'published') {
           continue;

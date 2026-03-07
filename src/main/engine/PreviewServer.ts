@@ -22,6 +22,7 @@ import {
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
 import {
+  findPublishedPostBySlug,
   findSinglePostBySlug,
   loadPostsForDayPage,
   loadPublishedSnapshots,
@@ -204,6 +205,7 @@ export class PreviewServer {
       loadPublishedSnapshotsPage: (filter, pagination) => loadPublishedSnapshotsPage(this.postEngine, filter, pagination),
       loadPublishedSnapshots: (filter, pagination) => loadPublishedSnapshots(this.postEngine, filter, pagination),
       loadPostsForDayPage: (year, month, day, pagination) => loadPostsForDayPage(this.postEngine, year, month, day, pagination),
+      findPublishedPostBySlug: (slug, dateFilter) => findPublishedPostBySlug(this.postEngine, slug, dateFilter),
       findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => findSinglePostBySlug(this.postEngine, slug, singlePostOptions, dateFilter),
       getLinkedBy: this.postEngine.getLinkedBy ? (postId) => this.postEngine.getLinkedBy!(postId) : undefined,
     });

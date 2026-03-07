@@ -78,6 +78,10 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
     day: number,
     pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ) => Promise<{ posts: PostData[]; totalPosts: number }>;
+  findPublishedPostBySlug: (
+    slug: string,
+    dateFilter?: { year: number; month: number },
+  ) => Promise<PostData | null>;
   findSinglePostBySlug: (
     slug: string,
     singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string },
@@ -344,9 +348,10 @@ async function resolveRouteWithSharedServices(
   const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
   if (pageSlugMatch) {
     const slug = pageSlugMatch[1];
-    const pages = await services.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
-    const pagePost = pages.find((candidate) => candidate.slug === slug) || null;
-    if (!pagePost) return null;
+    const pagePost = await services.findPublishedPostBySlug(slug);
+    if (!pagePost || !(Array.isArray(pagePost.categories) && pagePost.categories.includes('page'))) {
+      return null;
+    }
     const backlinks = await resolveBacklinks(pagePost.id, rewriteContext, services.getLinkedBy);
     return services.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
       page_title: pageContext.pageTitle,
