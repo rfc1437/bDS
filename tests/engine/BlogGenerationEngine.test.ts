@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, readdir, stat, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import type { PostData } from '../../src/main/engine/PostEngine';
 import type { PostData, PostTranslationData } from '../../src/main/engine/PostEngine';
 import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 import type { MenuDocument } from '../../src/main/engine/MenuEngine';

@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import type { PostEngine, PostData, PostTranslationData } from './PostEngine';
+import type { PostData, PostTranslationData } from './PostEngine';
 import type { MediaEngine, MediaData } from './MediaEngine';
 import type { PostMediaEngine } from './PostMediaEngine';
 import {
@@ -200,12 +200,22 @@ type PublishedTranslationVariant = PostData & {
   translationFilePath: string;
 };
 
+interface BlogGenerationPostEngineContract {
+  getPostsFiltered: (filter: { status?: 'draft' | 'published' | 'archived'; excludeCategories?: string[] }) => Promise<PostData[]>;
+  getPublishedVersion: (id: string) => Promise<PostData | null>;
+  getPost: (postId: string) => Promise<PostData | null>;
+  hasPublishedVersion: (postId: string) => Promise<boolean>;
+  getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
+  getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
+  setProjectContext: (projectId: string, dataDir?: string) => void;
+}
+
 export class BlogGenerationEngine {
-  private readonly postEngine: PostEngine;
+  private readonly postEngine: BlogGenerationPostEngineContract;
   private readonly mediaEngine: MediaEngine;
   private readonly postMediaEngine: PostMediaEngine;
 
-  constructor(postEngine: PostEngine, mediaEngine: MediaEngine, postMediaEngine: PostMediaEngine) {
+  constructor(postEngine: BlogGenerationPostEngineContract, mediaEngine: MediaEngine, postMediaEngine: PostMediaEngine) {
     this.postEngine = postEngine;
     this.mediaEngine = mediaEngine;
     this.postMediaEngine = postMediaEngine;
@@ -238,16 +248,14 @@ export class BlogGenerationEngine {
 
   private async buildPublishedRoutePosts(publishedPosts: PostData[]): Promise<PostData[]> {
     const routePosts: PostData[] = [...publishedPosts];
-    const getPostTranslations = (this.postEngine as PostEngine & {
-      getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
-    }).getPostTranslations;
+    const { getPostTranslations } = this.postEngine;
 
     if (typeof getPostTranslations !== 'function') {
       return routePosts;
     }
 
     for (const post of publishedPosts) {
-      const translations = await getPostTranslations.call(this.postEngine, post.id);
+      const translations = await getPostTranslations(post.id);
       for (const translation of translations) {
         if (translation.status !== 'published') {
           continue;
