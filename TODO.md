@@ -96,6 +96,10 @@ Add translation generation on top of the existing one-shot AI tooling.
 - Read the source post's full content plus title/excerpt.
 - Return translated `title`, `excerpt`, and markdown `content`.
 - Create or update a translation record/file from the returned data.
+- After the post translation is persisted, cascade to linked media: for every
+  image linked to the source post that does not already have a translation for
+  `targetLanguage`, call `translateMediaMetadata(mediaId, targetLanguage)` (see
+  §2.5) to keep the post and its images in the same set of languages.
 
 Language detection and excerpt suggestion already exist; this step is only
 about translation-specific tooling.
@@ -245,7 +249,40 @@ Add media-metadata translation on top of the existing one-shot AI tooling.
 AI media analysis already exists; this step is only about translation-specific
 tooling.
 
-#### 2.5 Import And Sync Integration
+#### 2.5 Post-Triggered Media Translation Cascade
+
+When a post is translated, all images linked to that post should be translated
+automatically so rendered output never mixes languages.
+
+**Trigger**: After `translatePost(postId, targetLanguage)` successfully
+persists a post translation (§1.4), the system resolves all media linked to
+the source post via the `postMedia` junction table.
+
+**For each linked media item**:
+
+1. Check whether the media already has a translation for `targetLanguage`
+   (via `getMediaTranslation(mediaId, targetLanguage)`).
+2. If a translation already exists, skip — the image is already covered.
+3. If no translation exists, call `translateMediaMetadata(mediaId,
+   targetLanguage)` (§2.4) to generate and persist the translated `title`,
+   `alt`, and `caption`.
+
+**Design constraints**:
+
+- The cascade is additive only — it never overwrites an existing media
+  translation. Users who independently translate an image via quick action
+  keep their version.
+- Images can still be translated independently at any time through their own
+  quick action or the media translation panel (§2.7). The cascade merely
+  ensures coverage; it does not create a hard coupling.
+- Failures on individual media translations should be logged but must not
+  block the post translation from succeeding. Report partial failures to the
+  UI so the user can retry individual images.
+- The cascade runs after the post translation is committed, not inside the
+  same transaction, so a media-translation failure never rolls back post
+  work.
+
+#### 2.6 Import And Sync Integration
 
 Integrate with the existing media import and metadata sync flow without
 creating translated duplicate media records.
@@ -258,7 +295,7 @@ creating translated duplicate media records.
 4. Extend metadata diff/sync tooling so canonical and translated sidecars can
    both be compared against the database safely.
 
-#### 2.6 API Surface
+#### 2.7 API Surface
 
 Expose translation metadata consistently across all media consumers:
 
@@ -271,7 +308,7 @@ Expose translation metadata consistently across all media consumers:
 - The same language and missing-language filters must be available to internal
   AI tools and MCP server queries.
 
-#### 2.7 UI — Translation Panel
+#### 2.8 UI — Translation Panel
 
 In the media editor/details area, add a "Translations" section:
 
@@ -282,7 +319,7 @@ In the media editor/details area, add a "Translations" section:
 
 Media list/detail views can optionally show a language-availability badge.
 
-#### 2.8 Rendering And Asset Use
+#### 2.9 Rendering And Asset Use
 
 When media metadata is consumed during rendering or editing:
 
