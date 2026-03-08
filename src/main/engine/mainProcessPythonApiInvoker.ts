@@ -105,6 +105,8 @@ const METHOD_NAME_MAP: Record<string, string> = {
   'posts.getAll': 'getAllPosts',
   'posts.getByStatus': 'getPostsByStatus',
   'posts.publish': 'publishPost',
+  'posts.getTranslation': 'getPostTranslation',
+  'posts.getTranslations': 'getPostTranslations',
   'posts.publishTranslation': 'publishPostTranslation',
   'posts.discard': 'discardChanges',
   'posts.hasPublishedVersion': 'hasPublishedVersion',

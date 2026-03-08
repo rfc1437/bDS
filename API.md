@@ -331,6 +331,8 @@ None  # or
 - [posts.getAll](#postsgetall)
 - [posts.getByStatus](#postsgetbystatus)
 - [posts.publish](#postspublish)
+- [posts.getTranslation](#postsgettranslation)
+- [posts.getTranslations](#postsgettranslations)
 - [posts.publishTranslation](#postspublishtranslation)
 - [posts.discard](#postsdiscard)
 - [posts.hasPublishedVersion](#postshaspublishedversion)
@@ -688,6 +690,89 @@ None  # or
     'categories': 'value',
     'availableLanguages': 'value'
 }
+```
+
+### posts.getTranslation
+
+Get a single translation for a post by language.
+
+**Parameters**
+
+- postId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `PostTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.get_translation(post_id='post-1', language='language')
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'translationFor': 'value',
+    'language': 'value',
+    'title': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'filePath': 'value'
+}
+```
+
+### posts.getTranslations
+
+Get all translations for a post.
+
+**Parameters**
+
+- postId (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationData[]`
+- Data structures: `PostTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.get_translations(post_id='post-1')
+```
+
+**Example response**
+
+```python
+[
+{
+    'id': 'value',
+    'projectId': 'value',
+    'translationFor': 'value',
+    'language': 'value',
+    'title': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'filePath': 'value'
+}
+]
 ```
 
 ### posts.publishTranslation

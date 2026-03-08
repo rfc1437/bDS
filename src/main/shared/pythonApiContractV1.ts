@@ -86,6 +86,8 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('posts.getAll', 'Fetch posts with pagination.', [optionalObject('options')], 'PaginatedPostsResult'),
   method('posts.getByStatus', 'Fetch posts by status.', [requiredString('status')], 'PostData[]'),
   method('posts.publish', 'Publish a post by id.', [requiredString('id')], 'PostData | null'),
+  method('posts.getTranslation', 'Get a single translation for a post by language.', [requiredString('postId'), requiredString('language')], 'PostTranslationData | null'),
+  method('posts.getTranslations', 'Get all translations for a post.', [requiredString('postId')], 'PostTranslationData[]'),
   method('posts.publishTranslation', 'Publish a specific translation of a post.', [requiredString('postId'), requiredString('language')], 'PostTranslationData | null'),
   method('posts.discard', 'Discard draft changes for post.', [requiredString('id')], 'PostData | null'),
   method('posts.hasPublishedVersion', 'Check if post has published version.', [requiredString('id')], 'boolean'),
