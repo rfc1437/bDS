@@ -537,11 +537,10 @@ const App: React.FC = () => {
           try {
             const result = await window.electronAPI?.blog.fillMissingTranslations();
             if (result) {
-              const total = result.enqueuedPosts + result.enqueuedMedia;
-              if (total === 0) {
+              if (!result.taskStarted) {
                 showToast.info(tr('blog.fillMissing.nothingToDo'));
               } else {
-                showToast.success(tr('blog.fillMissing.enqueued', { posts: String(result.enqueuedPosts), media: String(result.enqueuedMedia) }));
+                showToast.success(tr('blog.fillMissing.started'));
               }
             }
           } catch (error) {

@@ -2867,7 +2867,7 @@ describe('IPC Handlers', () => {
     });
 
     describe('blog:fillMissingTranslations', () => {
-      it('should return zero counts when only main language is configured', async () => {
+      it('should return taskStarted false when only main language is configured', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -2878,11 +2878,11 @@ describe('IPC Handlers', () => {
 
         const result = await invokeHandler('blog:fillMissingTranslations');
 
-        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(result).toEqual({ taskStarted: false });
         expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
       });
 
-      it('should return zero counts when no blog languages configured', async () => {
+      it('should return taskStarted false when no blog languages configured', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -2893,11 +2893,11 @@ describe('IPC Handlers', () => {
 
         const result = await invokeHandler('blog:fillMissingTranslations');
 
-        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(result).toEqual({ taskStarted: false });
         expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
       });
 
-      it('should return zero counts when metadata has no blogLanguages', async () => {
+      it('should return taskStarted false when metadata has no blogLanguages', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -2907,11 +2907,11 @@ describe('IPC Handlers', () => {
 
         const result = await invokeHandler('blog:fillMissingTranslations');
 
-        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(result).toEqual({ taskStarted: false });
         expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
       });
 
-      it('should run a single batch task for missing post translations', async () => {
+      it('should start task immediately and scan inside the task', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -2920,27 +2920,20 @@ describe('IPC Handlers', () => {
           blogLanguages: ['en', 'fr', 'de'],
         });
 
-        const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
-        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
-        mockPostEngine.getPostTranslations.mockResolvedValue([
-          { language: 'fr' },
-        ]);
-        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
-
         mockTaskManager.runTask.mockResolvedValue(undefined);
 
         const result = await invokeHandler('blog:fillMissingTranslations');
 
-        expect(result).toEqual({ enqueuedPosts: 1, enqueuedMedia: 0 });
+        expect(result).toEqual({ taskStarted: true });
         expect(mockTaskManager.runTask).toHaveBeenCalledTimes(1);
         expect(mockTaskManager.runTask).toHaveBeenCalledWith(
           expect.objectContaining({
-            name: 'Fill missing translations (1 posts, 0 media)',
+            name: 'Fill missing translations',
           }),
         );
       });
 
-      it('should include media in the single batch task', async () => {
+      it('should include media scanning inside the task', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -2949,21 +2942,15 @@ describe('IPC Handlers', () => {
           blogLanguages: ['en', 'fr'],
         });
 
-        const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
-        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
-        mockPostEngine.getPostTranslations.mockResolvedValue([{ language: 'fr' }]);
-        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([{ mediaId: 'media-1' }]);
-        mockMediaEngine.getMediaTranslations.mockResolvedValue([]);
-
         mockTaskManager.runTask.mockResolvedValue(undefined);
 
         const result = await invokeHandler('blog:fillMissingTranslations');
 
-        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 1 });
+        expect(result).toEqual({ taskStarted: true });
         expect(mockTaskManager.runTask).toHaveBeenCalledTimes(1);
         expect(mockTaskManager.runTask).toHaveBeenCalledWith(
           expect.objectContaining({
-            name: 'Fill missing translations (0 posts, 1 media)',
+            name: 'Fill missing translations',
           }),
         );
       });
@@ -2978,16 +2965,32 @@ describe('IPC Handlers', () => {
         });
 
         const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en', doNotTranslate: true });
-        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
+        // missingTranslationLanguage queries return the post (it IS missing fr),
+        // but the handler filters it out due to doNotTranslate
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: any) => {
+          if (filter.missingTranslationLanguage) {
+            return filter.missingTranslationLanguage === 'fr' ? [post1] : [];
+          }
+          return [post1]; // all published (for media scanning)
+        });
+        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+
+        const onProgress = vi.fn();
+        let taskDone: Promise<void> | undefined;
+        mockTaskManager.runTask.mockImplementation((task: any) => {
+          taskDone = task.execute(onProgress);
+          return taskDone;
+        });
 
         const result = await invokeHandler('blog:fillMissingTranslations');
+        await taskDone;
 
-        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
-        expect(mockPostEngine.getPostTranslations).not.toHaveBeenCalled();
-        expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+        expect(result).toEqual({ taskStarted: true });
+        // Task completes with "up to date" since doNotTranslate posts are skipped
+        expect(onProgress).toHaveBeenCalledWith(100, 'All translations are up to date');
       });
 
-      it('should not create a task when all translations already exist', async () => {
+      it('should complete with nothing to do when all translations exist', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -2997,14 +3000,27 @@ describe('IPC Handlers', () => {
         });
 
         const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
-        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
-        mockPostEngine.getPostTranslations.mockResolvedValue([{ language: 'fr' }]);
+        // missingTranslationLanguage queries return empty (all translations exist)
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: any) => {
+          if (filter.missingTranslationLanguage) {
+            return [];
+          }
+          return [post1]; // all published (for media scanning)
+        });
         mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
 
-        const result = await invokeHandler('blog:fillMissingTranslations');
+        const onProgress = vi.fn();
+        let taskDone: Promise<void> | undefined;
+        mockTaskManager.runTask.mockImplementation((task: any) => {
+          taskDone = task.execute(onProgress);
+          return taskDone;
+        });
 
-        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
-        expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+        const result = await invokeHandler('blog:fillMissingTranslations');
+        await taskDone;
+
+        expect(result).toEqual({ taskStarted: true });
+        expect(onProgress).toHaveBeenCalledWith(100, 'All translations are up to date');
       });
     });
 

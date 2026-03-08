@@ -1208,6 +1208,6 @@
   "duplicatesView.notEnabled": "La similitud semántica no está activada. Actívela en Configuración → Tecnología.",
   "editor.doNotTranslateLabel": "No traducir",
   "blog.fillMissing.nothingToDo": "Todas las traducciones están al día.",
-  "blog.fillMissing.enqueued": "{posts} traducciones de publicaciones y {media} traducciones de medios en cola.",
+  "blog.fillMissing.started": "Tarea de traducción iniciada. Consulte el panel de tareas para ver el progreso.",
   "blog.fillMissing.error": "Error al rellenar las traducciones faltantes."
 }

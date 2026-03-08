@@ -1208,6 +1208,6 @@
   "duplicatesView.notEnabled": "Semantic similarity is not enabled. Enable it in Settings → Technology.",
   "editor.doNotTranslateLabel": "Do not translate",
   "blog.fillMissing.nothingToDo": "All translations are up to date.",
-  "blog.fillMissing.enqueued": "Enqueued {posts} post and {media} media translations.",
+  "blog.fillMissing.started": "Translation task started. Check the task panel for progress.",
   "blog.fillMissing.error": "Failed to fill missing translations."
 }

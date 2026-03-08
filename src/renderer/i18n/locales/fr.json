@@ -1208,6 +1208,6 @@
   "duplicatesView.notEnabled": "La similarité sémantique n'est pas activée. Activez-la dans Paramètres → Technologie.",
   "editor.doNotTranslateLabel": "Ne pas traduire",
   "blog.fillMissing.nothingToDo": "Toutes les traductions sont à jour.",
-  "blog.fillMissing.enqueued": "{posts} traductions d’articles et {media} traductions de médias mises en file.",
+  "blog.fillMissing.started": "Tâche de traduction démarrée. Consultez le panneau des tâches pour le progrès.",
   "blog.fillMissing.error": "Échec du remplissage des traductions manquantes."
 }

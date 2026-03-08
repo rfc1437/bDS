@@ -965,7 +965,7 @@ export interface ElectronAPI {
     validateSite: () => Promise<SiteValidationReport>;
     validateTranslations: () => Promise<TranslationValidationReport>;
     fixInvalidTranslations: (report: TranslationValidationReport) => Promise<TranslationValidationFixResult>;
-    fillMissingTranslations: () => Promise<{ enqueuedPosts: number; enqueuedMedia: number }>;
+    fillMissingTranslations: () => Promise<{ taskStarted: boolean }>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
     regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };

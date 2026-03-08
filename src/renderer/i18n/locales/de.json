@@ -1208,6 +1208,6 @@
   "duplicatesView.notEnabled": "Semantische Ähnlichkeit ist nicht aktiviert. Aktivieren Sie sie unter Einstellungen → Technologie.",
   "editor.doNotTranslateLabel": "Nicht übersetzen",
   "blog.fillMissing.nothingToDo": "Alle Übersetzungen sind aktuell.",
-  "blog.fillMissing.enqueued": "{posts} Post- und {media} Medienübersetzungen eingeplant.",
+  "blog.fillMissing.started": "Übersetzungsaufgabe gestartet. Fortschritt im Aufgabenbereich.",
   "blog.fillMissing.error": "Fehlende Übersetzungen konnten nicht erstellt werden."
 }
