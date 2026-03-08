@@ -8,6 +8,7 @@ export interface CreateAndFocusPostOptions {
   setSelectedPost: (postId: string) => void;
   ensurePostsSidebar?: () => void;
   onError?: (error: unknown) => void;
+  categories?: string[];
 }
 
 export async function createAndFocusPost(options: CreateAndFocusPostOptions): Promise<string | null> {
@@ -16,7 +17,7 @@ export async function createAndFocusPost(options: CreateAndFocusPostOptions): Pr
       title: '',
       content: '',
       tags: [],
-      categories: [],
+      categories: options.categories ?? [],
     });
 
     if (!post) {

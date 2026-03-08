@@ -40,6 +40,24 @@ describe('postCreation', () => {
     expect(result).toBeNull();
   });
 
+  it('passes provided categories to createPost', async () => {
+    const createPost = vi.fn().mockResolvedValue({ id: 'page-1' });
+    const setSelectedPost = vi.fn();
+
+    await createAndFocusPost({
+      createPost,
+      setSelectedPost,
+      categories: ['page'],
+    });
+
+    expect(createPost).toHaveBeenCalledWith({
+      title: '',
+      content: '',
+      tags: [],
+      categories: ['page'],
+    });
+  });
+
   it('returns null and reports errors', async () => {
     const createPost = vi.fn().mockRejectedValue(new Error('fail'));
     const setSelectedPost = vi.fn();

@@ -736,6 +736,7 @@ const PostsList: React.FC<PostsListProps> = ({ mode, isActive }) => {
     await createAndFocusPost({
       createPost: async (input) => (await window.electronAPI?.posts.create(input)) as { id: string } | null | undefined,
       setSelectedPost: selectPost,
+      categories: isPagesMode ? [PAGE_CATEGORY] : [],
       onError: (error) => {
         console.error('Failed to create post:', error);
       },
