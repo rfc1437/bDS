@@ -902,6 +902,28 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.regenerateMissingThumbnails();
   });
 
+  // ============ Media Translation Handlers ============
+
+  safeHandle('media:getTranslation', async (_, mediaId: string, language: string) => {
+    const engine = bundle.mediaEngine;
+    return engine.getMediaTranslation(mediaId, language);
+  });
+
+  safeHandle('media:getTranslations', async (_, mediaId: string) => {
+    const engine = bundle.mediaEngine;
+    return engine.getMediaTranslations(mediaId);
+  });
+
+  safeHandle('media:upsertTranslation', async (_, mediaId: string, language: string, data: { title?: string; alt?: string; caption?: string }) => {
+    const engine = bundle.mediaEngine;
+    return engine.upsertMediaTranslation(mediaId, language, data);
+  });
+
+  safeHandle('media:deleteTranslation', async (_, mediaId: string, language: string) => {
+    const engine = bundle.mediaEngine;
+    return engine.deleteMediaTranslation(mediaId, language);
+  });
+
   // ============ Script Handlers ============
 
   safeHandle('scripts:create', async (_, data: CreateScriptInput) => {
@@ -1844,6 +1866,9 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   mediaEngine.on('mediaUpdated', forwardEvent('media:updated'));
   mediaEngine.on('mediaDeleted', forwardEvent('media:deleted'));
   mediaEngine.on('mediaFileReplaced', forwardEvent('media:fileReplaced'));
+  mediaEngine.on('mediaTranslationCreated', forwardEvent('media:translationCreated'));
+  mediaEngine.on('mediaTranslationUpdated', forwardEvent('media:translationUpdated'));
+  mediaEngine.on('mediaTranslationDeleted', forwardEvent('media:translationDeleted'));
   mediaEngine.on('rebuildStarted', forwardEvent('media:rebuildStarted'));
   mediaEngine.on('databaseRebuilt', forwardEvent('media:databaseRebuilt'));
 

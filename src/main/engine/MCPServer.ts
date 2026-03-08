@@ -174,6 +174,7 @@ export class MCPServer {
     this.registerResources(server);
     this.registerResourceTemplates(server);
     this.registerReadTools(server);
+    this.registerMediaTranslationTools(server);
     this.registerProposalTools(server);
     this.registerAcceptDiscardTools(server);
     this.registerPrompts(server);
@@ -646,6 +647,54 @@ export class MCPServer {
           },
         }) }],
       };
+    });
+  }
+
+  private registerMediaTranslationTools(server: McpServer): void {
+    // ── get_media_translations ──
+    server.registerTool('get_media_translations', {
+      title: 'Get Media Translations',
+      description: 'List all available translations for a media item. Returns translation records with language, title, alt, and caption.',
+      inputSchema: {
+        mediaId: z.string().describe('The ID of the media item'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    }, async (args) => {
+      const mediaEngine = this.deps.mediaEngine as import('./MediaEngine').MediaEngine;
+      const translations = await mediaEngine.getMediaTranslations(args.mediaId);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ translations }) }] };
+    });
+
+    // ── upsert_media_translation ──
+    registerAppTool(server, 'upsert_media_translation', {
+      title: 'Upsert Media Translation',
+      description: 'Create or update a translation of media metadata (title, alt text, caption) for a specific language.',
+      inputSchema: {
+        mediaId: z.string().describe('The ID of the media item to translate'),
+        language: z.string().describe('Target language code (e.g., "fr", "de", "es")'),
+        title: z.string().optional().describe('Translated title'),
+        alt: z.string().optional().describe('Translated alt text'),
+        caption: z.string().optional().describe('Translated caption'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      _meta: { ui: { resourceUri: 'ui://bds/review-media-translation' } },
+    }, async (args: { mediaId: string; language: string; title?: string; alt?: string; caption?: string }) => {
+      try {
+        const mediaEngine = this.deps.mediaEngine as import('./MediaEngine').MediaEngine;
+        const translation = await mediaEngine.upsertMediaTranslation(args.mediaId, args.language, {
+          title: args.title,
+          alt: args.alt,
+          caption: args.caption,
+        });
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ translation }) }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Failed to upsert media translation: ${error instanceof Error ? error.message : String(error)}` }) }],
+          isError: true,
+        };
+      }
     });
   }
 

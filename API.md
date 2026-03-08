@@ -1259,6 +1259,10 @@ result = await bds.posts.generate_unique_slug(title='title')
 - [media.getByYearMonth](#mediagetbyyearmonth)
 - [media.getTags](#mediagettags)
 - [media.getTagsWithCounts](#mediagettagswithcounts)
+- [media.getTranslation](#mediagettranslation)
+- [media.getTranslations](#mediagettranslations)
+- [media.upsertTranslation](#mediaupserttranslation)
+- [media.deleteTranslation](#mediadeletetranslation)
 
 ### media.import
 
@@ -1828,6 +1832,111 @@ result = await bds.media.get_tags_with_counts()
 
 ```python
 []
+```
+
+### media.getTranslation
+
+Get a single translation for a media item by language.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationData | null`
+- Nullability: Returns `None` when no matching value exists.
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.get_translation(media_id='media-1', language='language')
+```
+
+**Example response**
+
+```python
+None  # or dict-like object when found
+```
+
+### media.getTranslations
+
+Get all translations for a media item.
+
+**Parameters**
+
+- mediaId (str, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationData[]`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.get_translations(media_id='media-1')
+```
+
+**Example response**
+
+```python
+[]
+```
+
+### media.upsertTranslation
+
+Create or update a media translation for a specific language.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, required)
+- data (dict, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.upsert_translation(media_id='media-1', language='language', data={})
+```
+
+**Example response**
+
+```python
+{}
+```
+
+### media.deleteTranslation
+
+Delete a media translation by language.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `boolean`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.delete_translation(media_id='media-1', language='language')
+```
+
+**Example response**
+
+```python
+True
 ```
 
 [↑ Back to Table of contents](#table-of-contents)
@@ -3568,6 +3677,8 @@ result = await bds.tags.sync_from_posts()
 - [chat.detectPostLanguage](#chatdetectpostlanguage)
 - [chat.analyzePost](#chatanalyzepost)
 - [chat.translatePost](#chattranslatepost)
+- [chat.detectMediaLanguage](#chatdetectmedialanguage)
+- [chat.translateMediaMetadata](#chattranslatemediametadata)
 
 ### chat.analyzeMediaImage
 
@@ -3690,6 +3801,59 @@ result = await bds.chat.translate_post(post_id='post-1', target_language='target
     'translation': None,
     'error': 'value'
 }
+```
+
+### chat.detectMediaLanguage
+
+Detect the language of media metadata from its title, alt text, and caption.
+
+**Parameters**
+
+- title (str, required)
+- alt (str, required)
+- caption (str, required)
+
+**Response specification**
+
+- Return type: `{ success: boolean; language?: string; error?: string }`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.detect_media_language(title='title', alt='alt', caption='caption')
+```
+
+**Example response**
+
+```python
+{}
+```
+
+### chat.translateMediaMetadata
+
+Translate media metadata (title, alt, caption) into a target language using AI.
+
+**Parameters**
+
+- mediaId (str, required)
+- targetLanguage (str, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.translate_media_metadata(media_id='media-1', target_language='target_language')
+```
+
+**Example response**
+
+```python
+{}
 ```
 
 [↑ Back to Table of contents](#table-of-contents)

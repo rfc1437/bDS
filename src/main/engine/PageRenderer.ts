@@ -182,6 +182,7 @@ export interface RoutePagination {
 
 export interface MediaEngineContract {
   getAllMedia: () => Promise<MediaData[]>;
+  getMediaTranslation?: (mediaId: string, language: string) => Promise<{ title?: string; alt?: string; caption?: string } | null>;
   setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
 }
 

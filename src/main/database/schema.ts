@@ -84,7 +84,27 @@ export const media = sqliteTable('media', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
+  language: text('language'), // Optional per-media language override (ISO code, e.g. 'en', 'de')
 });
+
+// Media translations table - stores localized metadata for media items
+// The binary asset remains shared; only title, alt, and caption vary by language.
+export const mediaTranslations = sqliteTable('media_translations', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  translationFor: text('translation_for').notNull(),
+  language: text('language').notNull(),
+  title: text('title'),
+  alt: text('alt'),
+  caption: text('caption'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  translationLanguageIdx: uniqueIndex('media_translations_translation_language_idx').on(table.translationFor, table.language),
+}));
+
+export type MediaTranslation = typeof mediaTranslations.$inferSelect;
+export type NewMediaTranslation = typeof mediaTranslations.$inferInsert;
 
 // App settings - stores application configuration
 export const settings = sqliteTable('settings', {

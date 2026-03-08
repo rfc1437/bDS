@@ -105,6 +105,10 @@ export const electronAPI: ElectronAPI = {
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => ipcRenderer.invoke('media:getThumbnail', id, size),
     regenerateThumbnails: (id: string) => ipcRenderer.invoke('media:regenerateThumbnails', id),
     regenerateMissingThumbnails: () => ipcRenderer.invoke('media:regenerateMissingThumbnails'),
+    getTranslation: (mediaId: string, language: string) => ipcRenderer.invoke('media:getTranslation', mediaId, language),
+    getTranslations: (mediaId: string) => ipcRenderer.invoke('media:getTranslations', mediaId),
+    upsertTranslation: (mediaId: string, language: string, data: unknown) => ipcRenderer.invoke('media:upsertTranslation', mediaId, language, data),
+    deleteTranslation: (mediaId: string, language: string) => ipcRenderer.invoke('media:deleteTranslation', mediaId, language),
   },
 
   // Scripts
@@ -405,6 +409,12 @@ export const electronAPI: ElectronAPI = {
 
     // Post Translation
     translatePost: (postId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translatePost', postId, targetLanguage),
+
+    // Media Language Detection
+    detectMediaLanguage: (mediaId: string) => ipcRenderer.invoke('chat:detectMediaLanguage', mediaId),
+
+    // Media Metadata Translation
+    translateMediaMetadata: (mediaId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translateMediaMetadata', mediaId, targetLanguage),
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {

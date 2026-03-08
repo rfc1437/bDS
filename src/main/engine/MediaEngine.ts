@@ -6,7 +6,7 @@ import * as crypto from 'crypto';
 import { eq, and, gte, lte, lt, desc } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
-import { media, Media, NewMedia, postMedia } from '../database/schema';
+import { media, Media, NewMedia, postMedia, mediaTranslations } from '../database/schema';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 
@@ -33,10 +33,24 @@ export interface MediaData {
   alt?: string;
   caption?: string;
   author?: string;
+  language?: string;
   createdAt: Date;
   updatedAt: Date;
   tags: string[];
   linkedPostIds?: string[]; // Posts this media is linked to
+  availableLanguages: string[];
+}
+
+export interface MediaTranslationData {
+  id: string;
+  projectId: string;
+  translationFor: string;
+  language: string;
+  title?: string;
+  alt?: string;
+  caption?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface MediaMetadata {
@@ -50,6 +64,7 @@ export interface MediaMetadata {
   alt?: string;
   caption?: string;
   author?: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];
@@ -62,6 +77,8 @@ export interface MediaFilter {
   endDate?: Date;
   year?: number;
   month?: number;
+  language?: string;
+  missingTranslationLanguage?: string;
 }
 
 export interface MediaSearchResult {
@@ -348,6 +365,7 @@ export class MediaEngine extends EventEmitter {
       alt: mediaData.alt,
       caption: mediaData.caption,
       author: mediaData.author,
+      language: mediaData.language,
       createdAt: mediaData.createdAt.toISOString(),
       updatedAt: mediaData.updatedAt.toISOString(),
       tags: mediaData.tags,
@@ -369,6 +387,7 @@ export class MediaEngine extends EventEmitter {
     if (metadata.alt) lines.push(`alt: "${metadata.alt}"`);
     if (metadata.caption) lines.push(`caption: "${metadata.caption}"`);
     if (metadata.author) lines.push(`author: "${metadata.author}"`);
+    if (metadata.language) lines.push(`language: ${metadata.language}`);
     
     lines.push(`createdAt: ${metadata.createdAt}`);
     lines.push(`updatedAt: ${metadata.updatedAt}`);
@@ -444,6 +463,9 @@ export class MediaEngine extends EventEmitter {
             break;
           case 'author':
             metadata.author = value;
+            break;
+          case 'language':
+            metadata.language = value;
             break;
           case 'createdAt':
             metadata.createdAt = value;
@@ -550,9 +572,11 @@ export class MediaEngine extends EventEmitter {
       alt: metadata?.alt,
       caption: metadata?.caption,
       author: metadata?.author,
+      language: metadata?.language,
       createdAt,
       updatedAt,
       tags: metadata?.tags || [],
+      availableLanguages: metadata?.language ? [metadata.language] : [],
     };
 
     const sidecarPath = await this.writeSidecarFile(mediaData, destPath);
@@ -578,6 +602,7 @@ export class MediaEngine extends EventEmitter {
       alt: mediaData.alt,
       caption: mediaData.caption,
       author: mediaData.author,
+      language: mediaData.language,
       filePath: destPath,
       sidecarPath,
       createdAt: mediaData.createdAt,
@@ -643,6 +668,7 @@ export class MediaEngine extends EventEmitter {
         alt: updated.alt,
         caption: updated.caption,
         author: updated.author,
+        language: updated.language,
         updatedAt: updated.updatedAt,
         tags: JSON.stringify(updated.tags),
       })
@@ -765,6 +791,22 @@ export class MediaEngine extends EventEmitter {
     const { postMedia } = await import('../database/schema');
     await db.delete(postMedia).where(eq(postMedia.mediaId, id));
 
+    // Delete media translations (cascade cleanup)
+    await db.delete(mediaTranslations).where(eq(mediaTranslations.translationFor, id));
+
+    // Delete translated sidecar files
+    try {
+      const mediaDir = path.dirname(existing.filePath);
+      const entries = await fs.readdir(mediaDir);
+      const basename = path.basename(existing.filePath);
+      for (const entry of entries) {
+        const translatedSidecarPattern = new RegExp(`^${basename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[a-z]{2}\\.meta$`);
+        if (translatedSidecarPattern.test(entry)) {
+          try { await fs.unlink(path.join(mediaDir, entry)); } catch { /* ignore */ }
+        }
+      }
+    } catch { /* directory may not exist */ }
+
     await db.delete(media).where(eq(media.id, id));
 
     // Delete from FTS index
@@ -783,6 +825,13 @@ export class MediaEngine extends EventEmitter {
       return null;
     }
 
+    const translations = await db.select().from(mediaTranslations).where(eq(mediaTranslations.translationFor, id)).all();
+    const canonicalLang = dbMedia.language || undefined;
+    const translationLangs = translations.map(t => t.language);
+    const availableLanguages = canonicalLang
+      ? [canonicalLang, ...translationLangs]
+      : translationLangs.length > 0 ? translationLangs : [];
+
     return {
       id: dbMedia.id,
       filename: dbMedia.filename,
@@ -795,9 +844,11 @@ export class MediaEngine extends EventEmitter {
       alt: dbMedia.alt || undefined,
       caption: dbMedia.caption || undefined,
       author: dbMedia.author || undefined,
+      language: canonicalLang,
       createdAt: dbMedia.createdAt,
       updatedAt: dbMedia.updatedAt,
       tags: JSON.parse(dbMedia.tags || '[]'),
+      availableLanguages,
     };
   }
 
@@ -822,9 +873,11 @@ export class MediaEngine extends EventEmitter {
       alt: dbMedia.alt || undefined,
       caption: dbMedia.caption || undefined,
       author: dbMedia.author || undefined,
+      language: dbMedia.language || undefined,
       createdAt: dbMedia.createdAt,
       updatedAt: dbMedia.updatedAt,
       tags: JSON.parse(dbMedia.tags || '[]'),
+      availableLanguages: [] as string[],
     }));
   }
 
@@ -884,9 +937,11 @@ export class MediaEngine extends EventEmitter {
         alt: dbMedia.alt || undefined,
         caption: dbMedia.caption || undefined,
         author: dbMedia.author || undefined,
+        language: dbMedia.language || undefined,
         createdAt: dbMedia.createdAt,
         updatedAt: dbMedia.updatedAt,
         tags: JSON.parse(dbMedia.tags || '[]'),
+        availableLanguages: [] as string[],
       };
 
       // Client-side filtering for tags (JSON array)
@@ -1306,6 +1361,198 @@ export class MediaEngine extends EventEmitter {
     };
 
     await taskManager.runTask(task);
+  }
+
+  // ─── Media Translation CRUD ─────────────────────────────────────────
+
+  async getMediaTranslation(mediaId: string, language: string): Promise<MediaTranslationData | null> {
+    const db = getDatabase().getLocal();
+    const rows = await db.select().from(mediaTranslations)
+      .where(eq(mediaTranslations.translationFor, mediaId))
+      .all();
+    const row = rows.find(r => r.language === language.toLowerCase());
+    if (!row) return null;
+    return this.toMediaTranslationData(row);
+  }
+
+  async getMediaTranslations(mediaId: string): Promise<MediaTranslationData[]> {
+    const db = getDatabase().getLocal();
+    const rows = await db.select().from(mediaTranslations)
+      .where(eq(mediaTranslations.translationFor, mediaId))
+      .all();
+    return rows.map(r => this.toMediaTranslationData(r));
+  }
+
+  async upsertMediaTranslation(
+    mediaId: string,
+    language: string,
+    data: { title?: string; alt?: string; caption?: string },
+  ): Promise<MediaTranslationData> {
+    const db = getDatabase().getLocal();
+    const normalizedLang = language.toLowerCase();
+
+    // Verify media exists
+    const mediaItem = await db.select().from(media).where(eq(media.id, mediaId)).get();
+    if (!mediaItem) {
+      throw new Error('Media item not found');
+    }
+
+    // Reject if language matches canonical
+    const canonicalLang = mediaItem.language?.toLowerCase();
+    if (canonicalLang && canonicalLang === normalizedLang) {
+      throw new Error('Translation language must differ from canonical media language');
+    }
+
+    const now = new Date();
+
+    // Check for existing translation
+    const existing = await this.getMediaTranslation(mediaId, normalizedLang);
+
+    if (existing) {
+      // Update existing
+      await db.update(mediaTranslations)
+        .set({
+          title: data.title ?? existing.title,
+          alt: data.alt ?? existing.alt,
+          caption: data.caption ?? existing.caption,
+          updatedAt: now,
+        })
+        .where(eq(mediaTranslations.id, existing.id));
+
+      const updated: MediaTranslationData = {
+        ...existing,
+        title: data.title ?? existing.title,
+        alt: data.alt ?? existing.alt,
+        caption: data.caption ?? existing.caption,
+        updatedAt: now,
+      };
+
+      // Write translated sidecar
+      await this.writeTranslatedSidecarFile(mediaItem.filePath, updated);
+
+      this.emit('mediaTranslationUpdated', updated);
+      return updated;
+    }
+
+    // Create new
+    const id = uuidv4();
+    const newTranslation: MediaTranslationData = {
+      id,
+      projectId: this.currentProjectId,
+      translationFor: mediaId,
+      language: normalizedLang,
+      title: data.title,
+      alt: data.alt,
+      caption: data.caption,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await db.insert(mediaTranslations).values({
+      id,
+      projectId: this.currentProjectId,
+      translationFor: mediaId,
+      language: normalizedLang,
+      title: data.title,
+      alt: data.alt,
+      caption: data.caption,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Write translated sidecar
+    await this.writeTranslatedSidecarFile(mediaItem.filePath, newTranslation);
+
+    this.emit('mediaTranslationCreated', newTranslation);
+    return newTranslation;
+  }
+
+  async deleteMediaTranslation(mediaId: string, language: string): Promise<boolean> {
+    const normalizedLang = language.toLowerCase();
+    const existing = await this.getMediaTranslation(mediaId, normalizedLang);
+    if (!existing) return false;
+
+    const db = getDatabase().getLocal();
+    await db.delete(mediaTranslations).where(eq(mediaTranslations.id, existing.id));
+
+    // Delete translated sidecar file
+    const mediaItem = await db.select().from(media).where(eq(media.id, mediaId)).get();
+    if (mediaItem) {
+      const sidecarPath = `${mediaItem.filePath}.${normalizedLang}.meta`;
+      try { await fs.unlink(sidecarPath); } catch { /* ignore */ }
+    }
+
+    this.emit('mediaTranslationDeleted', { mediaId, language: normalizedLang });
+    return true;
+  }
+
+  private toMediaTranslationData(row: typeof mediaTranslations.$inferSelect): MediaTranslationData {
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      translationFor: row.translationFor,
+      language: row.language,
+      title: row.title || undefined,
+      alt: row.alt || undefined,
+      caption: row.caption || undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // ─── Translated Sidecar I/O ─────────────────────────────────────────
+
+  private async writeTranslatedSidecarFile(
+    mediaFilePath: string,
+    translation: MediaTranslationData,
+  ): Promise<string> {
+    const sidecarPath = `${mediaFilePath}.${translation.language}.meta`;
+
+    const lines = [
+      '---',
+      `translationFor: ${translation.translationFor}`,
+      `language: ${translation.language}`,
+    ];
+    if (translation.title) lines.push(`title: "${translation.title}"`);
+    if (translation.alt) lines.push(`alt: "${translation.alt}"`);
+    if (translation.caption) lines.push(`caption: "${translation.caption}"`);
+    lines.push('---');
+
+    await fs.writeFile(sidecarPath, lines.join('\n'), 'utf-8');
+    return sidecarPath;
+  }
+
+  async readTranslatedSidecarFile(sidecarPath: string): Promise<{ translationFor?: string; language?: string; title?: string; alt?: string; caption?: string } | null> {
+    try {
+      try { await fs.access(sidecarPath); } catch { return null; }
+
+      const content = await fs.readFile(sidecarPath, 'utf-8');
+      const result: { translationFor?: string; language?: string; title?: string; alt?: string; caption?: string } = {};
+
+      for (const line of content.split('\n')) {
+        if (line === '---') continue;
+        const colonIndex = line.indexOf(':');
+        if (colonIndex === -1) continue;
+
+        const key = line.substring(0, colonIndex).trim();
+        let value = line.substring(colonIndex + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+
+        switch (key) {
+          case 'translationFor': result.translationFor = value; break;
+          case 'language': result.language = value; break;
+          case 'title': result.title = value; break;
+          case 'alt': result.alt = value; break;
+          case 'caption': result.caption = value; break;
+        }
+      }
+
+      return result;
+    } catch {
+      return null;
+    }
   }
 }
 

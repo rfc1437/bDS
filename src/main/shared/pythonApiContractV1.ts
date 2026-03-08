@@ -124,6 +124,11 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('media.getTags', 'Get all media tags.', [], 'string[]'),
   method('media.getTagsWithCounts', 'Get media tags with counts.', [], 'TagCount[]'),
 
+  method('media.getTranslation', 'Get a single translation for a media item by language.', [requiredString('mediaId'), requiredString('language')], 'MediaTranslationData | null'),
+  method('media.getTranslations', 'Get all translations for a media item.', [requiredString('mediaId')], 'MediaTranslationData[]'),
+  method('media.upsertTranslation', 'Create or update a media translation for a specific language.', [requiredString('mediaId'), requiredString('language'), requiredObject('data')], 'MediaTranslationData'),
+  method('media.deleteTranslation', 'Delete a media translation by language.', [requiredString('mediaId'), requiredString('language')], 'boolean'),
+
   method('scripts.create', 'Create script. data must include: title (str), kind ("macro"|"utility"|"transform"), content (str). Optional: slug (str), entrypoint (str, defaults to "render"), enabled (bool).', [requiredObject('data')], 'ScriptData'),
   method('scripts.update', 'Update script by id. data may include any of: title, kind, content, slug, entrypoint, enabled.', [requiredString('id'), requiredObject('data')], 'ScriptData | null'),
   method('scripts.delete', 'Delete script by id.', [requiredString('id')], 'boolean'),
@@ -194,6 +199,8 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('chat.detectPostLanguage', 'Detect the language of a post from its title and content.', [requiredString('title'), requiredString('content')], '{ success: boolean; language?: string; error?: string }'),
   method('chat.analyzePost', 'Analyze a post and generate suggested title, excerpt, and slug using AI.', [requiredString('postId'), optionalString('language')], 'PostAnalysisResult'),
   method('chat.translatePost', 'Translate a post into a target language and save it as a translation draft.', [requiredString('postId'), requiredString('targetLanguage')], 'PostTranslationResult'),
+  method('chat.detectMediaLanguage', 'Detect the language of media metadata from its title, alt text, and caption.', [requiredString('title'), requiredString('alt'), requiredString('caption')], '{ success: boolean; language?: string; error?: string }'),
+  method('chat.translateMediaMetadata', 'Translate media metadata (title, alt, caption) into a target language using AI.', [requiredString('mediaId'), requiredString('targetLanguage')], 'MediaTranslationResult'),
 
   method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
   method('sync.getRepoState', 'Get repository state for active project.', [], 'RepoState'),

@@ -918,6 +918,32 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // ============ Media Language Detection ============
+
+  // Detect the language of media metadata (title, alt, caption)
+  ipcMain.handle('chat:detectMediaLanguage', async (_, title: string, alt: string, caption: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().detectMediaLanguage(title, alt, caption);
+    } catch (error) {
+      console.error('[Chat IPC] Error detecting media language:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Media Metadata Translation ============
+
+  // Translate media metadata (title, alt, caption) into a target language
+  ipcMain.handle('chat:translateMediaMetadata', async (_, mediaId: string, targetLanguage: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().translateMediaMetadata(mediaId, targetLanguage);
+    } catch (error) {
+      console.error('[Chat IPC] Error translating media metadata:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // ============ A2UI Actions ============
 
   ipcMain.handle('a2ui:dispatch', async (_, action: { surfaceId: string; componentId: string; action: string; payload?: Record<string, unknown> }) => {

@@ -152,15 +152,31 @@ export interface MediaData {
   alt?: string;
   caption?: string;
   author?: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  availableLanguages: string[];
+}
+
+export interface MediaTranslationData {
+  id: string;
+  projectId: string;
+  translationFor: string;
+  language: string;
+  title?: string;
+  alt?: string;
+  caption?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MediaFilter {
   tags?: string[];
   year?: number;
   month?: number;
+  language?: string;
+  missingTranslationLanguage?: string;
 }
 
 export interface MediaSearchResult {
@@ -683,6 +699,10 @@ export interface ElectronAPI {
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
     getTags: () => Promise<string[]>;
     getTagsWithCounts: () => Promise<TagCount[]>;
+    getTranslation: (mediaId: string, language: string) => Promise<MediaTranslationData | null>;
+    getTranslations: (mediaId: string) => Promise<MediaTranslationData[]>;
+    upsertTranslation: (mediaId: string, language: string, data: Partial<MediaTranslationData>) => Promise<MediaTranslationData>;
+    deleteTranslation: (mediaId: string, language: string) => Promise<boolean>;
   };
   scripts: {
     create: (data: {
@@ -1045,6 +1065,12 @@ export interface ElectronAPI {
 
     // Post Translation
     translatePost: (postId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: PostTranslationData; error?: string }>;
+
+    // Media Language Detection
+    detectMediaLanguage: (mediaId: string) => Promise<{ success: boolean; language?: string; error?: string }>;
+
+    // Media Metadata Translation
+    translateMediaMetadata: (mediaId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: MediaTranslationData; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

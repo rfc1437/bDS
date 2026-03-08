@@ -62,7 +62,7 @@ describe('pythonApiContractV1', () => {
   it('exposes one-shot translation from chat namespace', () => {
     const methodNames = listPythonApiMethodNames();
     const chatMethods = methodNames.filter((m) => m.startsWith('chat.'));
-    expect(chatMethods).toEqual(['chat.analyzeMediaImage', 'chat.detectPostLanguage', 'chat.analyzePost', 'chat.translatePost']);
+    expect(chatMethods).toEqual(['chat.analyzeMediaImage', 'chat.detectPostLanguage', 'chat.analyzePost', 'chat.translatePost', 'chat.detectMediaLanguage', 'chat.translateMediaMetadata']);
   });
 
   it('documents chat.analyzeMediaImage contract with mediaId and language params', () => {

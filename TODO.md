@@ -167,6 +167,7 @@ language-specific metadata varies.
 - No translation relationship tracking for media yet.
 - No translation-aware media metadata such as `availableLanguages` yet.
 - No language/missing-language filtering in media query APIs yet.
+- No explicit language tracking on canonical media metadata yet.
 - AI media analysis already exists via `chat:analyzeMediaImage` and already
   suggests title, alt text, and caption in a requested language.
 - Main media metadata already uses DB + sidecar persistence.
@@ -174,6 +175,11 @@ language-specific metadata varies.
 ### Implementation Plan
 
 #### 2.1 Database Schema
+
+Add a `language` column to the `media` table (optional text, ISO code such as
+`'en'`, `'de'`). This records what language the canonical `title`, `alt`, and
+`caption` are written in. When null, the project `mainLanguage` is assumed.
+Persist the value in the canonical sidecar as well.
 
 Add a dedicated media translations table instead of storing localized metadata
 inside the canonical `media` row.
@@ -243,11 +249,21 @@ Add media-metadata translation on top of the existing one-shot AI tooling.
 
 - Read the source media metadata plus image context needed for a faithful
   translation.
+- Determine source language from `media.language` (falling back to the
+  project `mainLanguage`).
 - Return translated `title`, `alt`, and `caption`.
 - Create or update a translation record/sidecar from the returned data.
 
-AI media analysis already exists; this step is only about translation-specific
-tooling.
+**`detectMediaLanguage(mediaId)`**
+
+- Read the canonical `title`, `alt`, and `caption` of a media item.
+- Use the same lightweight title model and detection pattern as
+  `detectPostLanguage`.
+- Return the detected ISO language code.
+- Optionally persist the result to `media.language` if the caller requests it.
+
+AI media analysis already exists; these steps are only about
+language-detection and translation-specific tooling.
 
 #### 2.5 Post-Triggered Media Translation Cascade
 
@@ -312,7 +328,10 @@ Expose translation metadata consistently across all media consumers:
 
 In the media editor/details area, add a "Translations" section:
 
-- Show the canonical media language context if one is tracked.
+- Show the canonical media language as a dropdown (same UX as the post
+  language selector). Changing it updates `media.language`.
+- Provide a "Detect Language" button that calls `detectMediaLanguage` and
+  updates the dropdown.
 - List existing metadata translations by language.
 - "Translate to..." creates or refreshes the separate translation record.
 - Show which configured languages are still missing.

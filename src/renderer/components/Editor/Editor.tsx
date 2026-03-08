@@ -1721,6 +1721,13 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const [aiSuggestionFields, setAISuggestionFields] = useState<Array<{ key: string; label: string; currentValue: string; suggestedValue?: string }>>([]);
   const [aiError, setAIError] = useState<string | undefined>(undefined);
 
+  // Translation state
+  const [mediaLanguage, setMediaLanguage] = useState(item?.language || '');
+  const [mediaTranslations, setMediaTranslations] = useState<import('../../../main/shared/electronApi').MediaTranslationData[]>([]);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
+  const [showTranslateDropdown, setShowTranslateDropdown] = useState(false);
+
   // Load project language setting
   useEffect(() => {
     if (!activeProjectId) return;
@@ -1730,6 +1737,97 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       }
     });
   }, [activeProjectId]);
+
+  // Load media translations
+  const loadMediaTranslations = useCallback(async () => {
+    if (!mediaId) return;
+    const result = await window.electronAPI?.media.getTranslations?.(mediaId);
+    setMediaTranslations(result || []);
+  }, [mediaId]);
+
+  useEffect(() => {
+    loadMediaTranslations();
+  }, [loadMediaTranslations]);
+
+  // Handle language change on canonical media
+  const handleLanguageChange = async (newLanguage: string) => {
+    setMediaLanguage(newLanguage);
+    try {
+      const updated = await window.electronAPI?.media.update(item!.id, { language: newLanguage || undefined });
+      if (updated) {
+        updateMedia(item!.id, updated as Partial<typeof item>);
+      }
+    } catch (error) {
+      console.error('Failed to update media language:', error);
+    }
+  };
+
+  // Detect media language from metadata
+  const handleDetectLanguage = async () => {
+    if (!item || isDetectingLanguage) return;
+    setIsDetectingLanguage(true);
+    try {
+      const result = await window.electronAPI?.chat.detectMediaLanguage(
+        title || item.title || '',
+        alt || item.alt || '',
+        caption || item.caption || '',
+      );
+      if (result?.success && result.language) {
+        setMediaLanguage(result.language);
+        const updated = await window.electronAPI?.media.update(item.id, { language: result.language });
+        if (updated) {
+          updateMedia(item.id, updated as Partial<typeof item>);
+        }
+        showToast.success(tr('editor.media.toast.languageDetected', { language: tr(`language.${result.language}`) }));
+      } else {
+        showToast.error(result?.error || tr('editor.media.error.detectLanguage'));
+      }
+    } catch (error) {
+      console.error('Failed to detect media language:', error);
+      showToast.error(tr('editor.media.error.detectLanguage'));
+    } finally {
+      setIsDetectingLanguage(false);
+    }
+  };
+
+  // Translate media metadata with AI
+  const handleTranslateMedia = async (targetLanguage: string) => {
+    if (!item || isTranslating) return;
+    setShowTranslateDropdown(false);
+    setIsTranslating(true);
+    try {
+      const result = await window.electronAPI?.chat.translateMediaMetadata(item.id, targetLanguage);
+      if (result?.success) {
+        await loadMediaTranslations();
+        showToast.success(tr('editor.media.translations.translateSuccess', { language: tr(`language.${targetLanguage}`) }));
+      } else {
+        showToast.error(result?.error || tr('editor.media.translations.translateFailed'));
+      }
+    } catch (error) {
+      console.error('Failed to translate media metadata:', error);
+      showToast.error(tr('editor.media.translations.translateFailed'));
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // Delete a media translation
+  const handleDeleteTranslation = async (language: string) => {
+    if (!item) return;
+    try {
+      await window.electronAPI?.media.deleteTranslation?.(item.id, language);
+      await loadMediaTranslations();
+      showToast.success(tr('editor.media.translations.deleted', { language: tr(`language.${language}`) }));
+    } catch (error) {
+      console.error('Failed to delete media translation:', error);
+      showToast.error(tr('editor.media.translations.deleteFailed'));
+    }
+  };
+
+  // Available languages for translation (exclude canonical)
+  const availableTranslationLanguages = SUPPORTED_POST_LANGUAGES.filter(
+    lang => lang !== mediaLanguage && !mediaTranslations.find(t => t.language === lang)
+  );
 
   // Close quick actions menu when clicking outside
   useEffect(() => {
@@ -1884,6 +1982,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
       setCaption(item.caption || '');
       setAuthor(item.author || '');
       setTags(item.tags.join(', '));
+      setMediaLanguage(item.language || '');
     }
   }, [item?.id]);
 
@@ -1898,6 +1997,7 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         alt,
         caption,
         author: author || undefined,
+        language: mediaLanguage || undefined,
         tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
       });
       if (updated) {
@@ -2122,6 +2222,95 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
               placeholder={tr('editor.media.placeholder.author')}
             />
           </div>
+
+          {/* Language & Translations Section */}
+          <div className="editor-field">
+            <label>{tr('editor.media.field.language')}</label>
+            <div className="editor-field-row">
+              <select
+                value={mediaLanguage}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+              >
+                <option value="">{tr('editor.media.field.languageNone')}</option>
+                {SUPPORTED_POST_LANGUAGES.map((lang) => (
+                  <option key={lang} value={lang}>{tr(`language.${lang}`)}</option>
+                ))}
+              </select>
+              <button
+                className="secondary"
+                onClick={handleDetectLanguage}
+                disabled={isDetectingLanguage || (!title && !alt && !caption)}
+                title={tr('editor.media.translations.detectTitle')}
+              >
+                {isDetectingLanguage ? tr('editor.media.translations.detecting') : tr('editor.media.translations.detect')}
+              </button>
+            </div>
+          </div>
+
+          {mediaLanguage && (
+            <div className="editor-field media-translations-section">
+              <label>
+                {tr('editor.media.translations.title')}
+                {availableTranslationLanguages.length > 0 && (
+                  <div className="quick-actions-wrapper" style={{ display: 'inline-block', marginLeft: '8px' }}>
+                    <button
+                      className="add-link-btn"
+                      onClick={() => setShowTranslateDropdown(!showTranslateDropdown)}
+                      disabled={isTranslating}
+                    >
+                      {isTranslating ? tr('editor.media.translations.translating') : tr('editor.media.translations.translateButton')}
+                    </button>
+                    {showTranslateDropdown && (
+                      <div className="quick-actions-menu">
+                        {availableTranslationLanguages.map((lang) => (
+                          <button
+                            key={lang}
+                            className="quick-action-item"
+                            onClick={() => handleTranslateMedia(lang)}
+                          >
+                            <span className="quick-action-icon">{POST_LANGUAGE_FLAGS[lang]}</span>
+                            <span className="quick-action-text">{tr(`language.${lang}`)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </label>
+
+              {mediaTranslations.length === 0 ? (
+                <div className="no-linked-posts">{tr('editor.media.translations.none')}</div>
+              ) : (
+                <div className="linked-posts-list">
+                  {mediaTranslations.map((translation) => (
+                    <div key={translation.language} className="linked-post-item">
+                      <span className="linked-post-title">
+                        {POST_LANGUAGE_FLAGS[translation.language as keyof typeof POST_LANGUAGE_FLAGS] || '🏳️'}{' '}
+                        {tr(`language.${translation.language}`)}
+                        {translation.title && ` — ${translation.title}`}
+                      </span>
+                      <button
+                        className="secondary"
+                        onClick={() => handleTranslateMedia(translation.language)}
+                        disabled={isTranslating}
+                        title={tr('editor.media.translations.refreshTitle')}
+                        style={{ marginRight: '4px', fontSize: '0.8em', padding: '2px 6px' }}
+                      >
+                        {tr('editor.media.translations.refresh')}
+                      </button>
+                      <button
+                        className="unlink-btn"
+                        onClick={() => handleDeleteTranslation(translation.language)}
+                        title={tr('editor.media.translations.deleteTitle')}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Linked Posts Section */}
           <div className="editor-field linked-posts-section">
