@@ -22,6 +22,7 @@ import type {
   SearchResult,
   PaginatedResult,
   PaginationOptions,
+  PostTranslationData,
 } from './PostEngine';
 import type { MediaData } from './MediaEngine';
 import type { CreateScriptInput, ScriptData, ScriptValidationResult } from './ScriptEngine';
@@ -76,6 +77,8 @@ interface PostEngineContract {
   getLinksTo: (postId: string) => Promise<Array<{ id: string; title: string; slug: string }>>;
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPostCounts: (groupBy: Array<'year' | 'month' | 'tag' | 'category' | 'status'>, filter?: { year?: number; month?: number; status?: string; category?: string; tags?: string[] }) => Promise<{ groups: Record<string, string | number>[]; totalPosts: number }>;
+  getPostTranslation: (postId: string, language: string) => Promise<PostTranslationData | null>;
+  getPostTranslations: (postId: string) => Promise<PostTranslationData[]>;
 }
 
 interface MediaEngineContract {
@@ -616,9 +619,10 @@ export class MCPServer {
     // ── read_post_by_slug ──
     server.registerTool('read_post_by_slug', {
       title: 'Read Post by Slug',
-      description: 'Read the full content and metadata of a specific blog post by its slug. Includes backlinks and outlinks. Useful when you know the slug but not the ID.',
+      description: 'Read the full content and metadata of a specific blog post by its slug. Includes backlinks and outlinks. Optionally specify a language to read a translation instead of the canonical post.',
       inputSchema: {
         slug: z.string().describe('The slug of the post to read'),
+        language: z.string().optional().describe('Language code to read a specific translation (e.g., "en", "fr"). Omit to read the canonical post.'),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     }, async (args) => {
@@ -629,6 +633,38 @@ export class MCPServer {
           isError: true,
         };
       }
+
+      // If a language is requested and it differs from the canonical language, fetch translation
+      if (args.language && args.language !== post.language) {
+        const translation = await this.deps.postEngine.getPostTranslation(post.id, args.language);
+        if (!translation) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: `No ${args.language} translation found for "${args.slug}"` }) }],
+            isError: true,
+          };
+        }
+        const [backlinks, linksTo] = await Promise.all([
+          this.deps.postEngine.getLinkedBy(post.id),
+          this.deps.postEngine.getLinksTo(post.id),
+        ]);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            post: {
+              id: post.id, title: translation.title, slug: post.slug,
+              content: translation.content, excerpt: translation.excerpt,
+              status: post.status, author: post.author,
+              language: translation.language,
+              canonicalLanguage: post.language,
+              categories: post.categories, tags: post.tags, availableLanguages: post.availableLanguages,
+              createdAt: post.createdAt, updatedAt: post.updatedAt,
+              publishedAt: post.publishedAt,
+              backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
+              linksTo: linksTo.map(l => ({ id: l.id, title: l.title, slug: l.slug })),
+            },
+          }) }],
+        };
+      }
+
       const [backlinks, linksTo] = await Promise.all([
         this.deps.postEngine.getLinkedBy(post.id),
         this.deps.postEngine.getLinksTo(post.id),
@@ -651,6 +687,39 @@ export class MCPServer {
   }
 
   private registerMediaTranslationTools(server: McpServer): void {
+    // ── get_post_translations ──
+    server.registerTool('get_post_translations', {
+      title: 'Get Post Translations',
+      description: 'List all available translations for a blog post. Returns translation records with language, title, content, excerpt, and status.',
+      inputSchema: {
+        slug: z.string().describe('The slug of the canonical post'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    }, async (args) => {
+      const post = await this.deps.postEngine.getPostBySlug(args.slug);
+      if (!post) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Post with slug "${args.slug}" not found` }) }],
+          isError: true,
+        };
+      }
+      const translations = await this.deps.postEngine.getPostTranslations(post.id);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          translations: translations.map(t => ({
+            id: t.id,
+            language: t.language,
+            title: t.title,
+            excerpt: t.excerpt,
+            content: t.content,
+            status: t.status,
+            createdAt: t.createdAt,
+            updatedAt: t.updatedAt,
+          })),
+        }) }],
+      };
+    });
+
     // ── get_media_translations ──
     server.registerTool('get_media_translations', {
       title: 'Get Media Translations',
