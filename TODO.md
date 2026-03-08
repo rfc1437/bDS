@@ -489,6 +489,13 @@ verify output before uploading.
 
 ### Implementation Plan
 
+#### 4.0 Extract `SUPPORTED_POST_LANGUAGES` Constant
+
+The list of supported post languages is currently hardcoded inline in AI
+task files (e.g. `['en', 'de', 'fr', 'it', 'es']`). Extract it into a
+shared constant in `src/main/shared/` (or similar) so that both AI tasks
+and the Blog Languages UI (§4.1) reference a single source of truth.
+
 #### 4.1 Project Preferences — Blog Languages
 
 Add `blogLanguages?: string[]` to `ProjectMetadata`. This is the list of
@@ -540,15 +547,22 @@ Add a "Fill Missing Translations" menu item under the Blog menu.
 4. This is separate from Validate Translations — validate checks consistency,
    fill adds missing content.
 
-#### 4.5 Language-Prefixed Route Generation
+#### 4.5 Route Generation — Main Language Flat, Alternatives Prefixed
 
-Change `BlogGenerationEngine.generate()` to produce a separate route subtree
-per blog language:
+The main language keeps the current flat route structure. Only additional
+blog languages get a language-prefixed subtree. This means single-language
+blogs see zero change from today's output.
 
 ```
 html/
-  index.html                 ← duplicate of /en/index.html (main language)
-  en/                        ← mainLanguage subtree
+  index.html                 ← main language (flat, same as today)
+  page/2/index.html
+  2025/03/08/my-post/index.html
+  category/tech/index.html
+  tag/rust/index.html
+  rss.xml
+  atom.xml
+  de/                        ← additional blog language subtree
     index.html
     page/2/index.html
     2025/03/08/my-post/index.html
@@ -556,37 +570,31 @@ html/
     tag/rust/index.html
     rss.xml
     atom.xml
-  de/                        ← additional blog language
-    index.html
-    …same structure…
-    rss.xml
-    atom.xml
   sitemap.xml                ← combined, with hreflang alternates
   media/                     ← shared, not duplicated
   assets/                    ← shared, not duplicated
 ```
 
-The root `index.html` is a full copy of `/{mainLanguage}/index.html`, not a
-redirect. All its internal links point into the `/{mainLanguage}/` subtree,
-so navigation naturally stays within the language prefix. This avoids any
-dependency on JavaScript, meta-refresh, or server-side redirect support.
+For the main language pass, generation works exactly as today — no prefix,
+no routing changes. For each additional language in `blogLanguages`:
 
-For each language subtree:
-
+- Iterate the same route list, writing output under `/{lang}/…`.
 - Resolve every post through `resolveRenderablePost(post, engine, lang)`.
   If no translation exists, fall back to canonical content.
 - Same for media metadata in macros: `getMediaTranslation(id, lang)` with
   canonical fallback.
-- All internal links stay within the same language prefix (`/en/…` links to
-  `/en/…`).
-- Posts marked `doNotTranslate` render only in the canonical language subtree.
-  They are omitted from other language subtrees entirely.
+- All internal links within a language subtree stay prefixed (`/de/…` links
+  to `/de/…`). Main-language links remain unprefixed (`/2025/…`).
+- Posts marked `doNotTranslate` render only in the main language output.
+  They are omitted from alternative language subtrees entirely.
 
 #### 4.6 Per-Language Feeds
 
-Each language subtree gets its own `rss.xml` and `atom.xml` containing only
-posts available in that language, with URLs pointing into the language
-subtree. Feed `<language>` / `xml:lang` is set to the subtree language.
+The main language feeds (`rss.xml`, `atom.xml`) stay at the root as today.
+Each alternative language subtree gets its own `rss.xml` and `atom.xml`
+under `/{lang}/`, containing only posts available in that language, with
+URLs pointing into the language subtree. Feed `<language>` / `xml:lang` is
+set to the subtree language.
 
 #### 4.7 Combined Sitemap with hreflang
 
@@ -601,22 +609,22 @@ Add a `blogLanguages` array and `currentLanguage` string to the Liquid
 template context. Default templates render a language switcher bar (flag
 badges) at the top linking to the same page in each available language.
 
-The switcher links are absolute paths (`/de/2025/03/08/my-post/`) so they
-work regardless of the current route depth.
+The switcher links are absolute paths — unprefixed for the main language
+(`/2025/03/08/my-post/`) and prefixed for alternatives
+(`/de/2025/03/08/my-post/`) — so they work regardless of route depth.
 
 #### 4.9 Preview Server — Language-Prefixed Routes
 
-Extend `PreviewServer` to handle language-prefixed paths so preview matches
-the generated output:
+Extend `PreviewServer` to handle language-prefixed paths for alternative
+languages so preview matches the generated output:
 
-- `GET /en/2025/03/08/my-post` → render post in English.
+- `GET /2025/03/08/my-post` → render post in main language (unchanged).
 - `GET /de/category/tech` → render category list in German.
-- Strip the language prefix, resolve the route normally, pass the language as
-  `preferredLanguage` to `renderRouteForContext()`.
+- For paths starting with a known alternative language prefix, strip it and
+  pass the language as `preferredLanguage` to `renderRouteForContext()`.
+- Unprefixed paths use `mainLanguage` (current behaviour, no change).
 - Keep the existing `?lang=` parameter as a fallback for single-post preview
   from the editor.
-- The root `/` redirects to `/{mainLanguage}/` when `blogLanguages` is
-  configured.
 - Language switcher links in preview HTML work because they use the same
   prefix scheme as generation.
 
@@ -627,15 +635,16 @@ switching behaviour in preview as in the generated output.
 
 Both preview and generation must produce identical output for:
 
-- [ ] Language-prefixed route resolution (`/en/…`, `/de/…`).
+- [ ] Main language routes remain flat/unprefixed.
+- [ ] Alternative language routes use `/{lang}/…` prefix.
 - [ ] Post content: translated title, excerpt, body with canonical fallback.
 - [ ] Media metadata in macros (gallery, photo_album): translated alt/title/
       caption with canonical fallback.
-- [ ] Internal links staying within the current language prefix.
+- [ ] Internal links: unprefixed for main language, prefixed for alternatives.
 - [ ] Language switcher rendering with correct cross-language links.
 - [ ] Per-language feed links in HTML `<head>`.
-- [ ] `doNotTranslate` posts omitted from non-canonical subtrees.
-- [ ] Root `/` renders main language content (not a redirect).
+- [ ] `doNotTranslate` posts omitted from alternative language subtrees.
+- [ ] Root `/` renders main language content (unchanged from today).
 
 Shared implementation: both paths go through `SharedRouteRenderer` →
 `PageRenderer`, so language handling logic added there automatically applies
