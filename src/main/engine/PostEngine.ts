@@ -1204,6 +1204,7 @@ export class PostEngine extends EventEmitter {
           checksum: this.calculateChecksum(sourcePost.content),
         })
         .where(eq(posts.id, postId));
+      await this.updateFTSIndex(sourcePost);
       this.emit('postUpdated', { ...sourcePost, status: 'draft', updatedAt: now });
     }
 

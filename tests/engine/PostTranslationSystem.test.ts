@@ -477,6 +477,34 @@ describe('Post translation system', () => {
     expect(Array.from(mockFiles.keys()).some((filePath) => filePath.endsWith('/hello-world.fr.md'))).toBe(false);
   });
 
+  it('updates FTS index when drafting the source post during translation upsert', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
+    await engine.publishPost(source.id);
+
+    // Clear args so we only see what upsertPostTranslation does
+    mockExecuteArgs.length = 0;
+
+    await engine.upsertPostTranslation(source.id, 'fr', {
+      title: 'Bonjour',
+      content: 'Contenu traduit',
+    });
+
+    // sourceShouldDraft fires → must refresh FTS for the source post
+    const ftsDeleteForSource = mockExecuteArgs.find(
+      (q) => q.sql.includes('DELETE FROM posts_fts') && q.args[0] === source.id,
+    );
+    const ftsInsertForSource = mockExecuteArgs.find(
+      (q) => q.sql.includes('INSERT INTO posts_fts') && q.args[0] === source.id,
+    );
+    expect(ftsDeleteForSource).toBeDefined();
+    expect(ftsInsertForSource).toBeDefined();
+  });
+
   it('does not draft the source when translation is auto-published', async () => {
     const source = await engine.createPost({
       title: 'Hello world',
