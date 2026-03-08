@@ -433,6 +433,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
         const stemmerLang = isoToStemmerLanguage(metadata.mainLanguage);
         postEngine.setSearchLanguage(stemmerLang);
         mediaEngine.setSearchLanguage(stemmerLang);
+        postEngine.setMainLanguage(metadata.mainLanguage);
       }
     }
 
@@ -475,6 +476,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
         const stemmerLang = isoToStemmerLanguage(metadata.mainLanguage);
         postEngine.setSearchLanguage(stemmerLang);
         mediaEngine.setSearchLanguage(stemmerLang);
+        postEngine.setMainLanguage(metadata.mainLanguage);
       }
     }
 

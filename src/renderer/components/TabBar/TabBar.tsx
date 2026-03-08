@@ -87,6 +87,10 @@ const getTabTitle = (
     return tr('siteValidation.tabTitle');
   }
 
+  if (tab.type === 'translation-validation') {
+    return tr('translationValidation.tabTitle');
+  }
+
   if (tab.type === 'find-duplicates') {
     return tr('duplicatesView.tabTitle');
   }
@@ -182,6 +186,12 @@ const getTabIcon = (tab: Tab): React.ReactNode => {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 8 1.5zm0 1a5.5 5.5 0 0 1 4.39 8.82l-.88-.88a.5.5 0 0 0-.7.7l.8.8A5.5 5.5 0 1 1 8 2.5zm2.35 3.15L7 9 5.65 7.65a.5.5 0 1 0-.7.7l1.7 1.7a.5.5 0 0 0 .7 0l3.7-3.7a.5.5 0 1 0-.7-.7z"/>
+        </svg>
+      );
+    case 'translation-validation':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h5A1.5 1.5 0 0 1 10 2.5v1h2.5A1.5 1.5 0 0 1 14 5v7.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-10zM3.5 2a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V5a.5.5 0 0 0-.5-.5H10v1.15a.5.5 0 0 1-.85.35L7.5 4.35 5.85 6A.5.5 0 0 1 5 5.65V2.5a.5.5 0 0 0-.5-.5h-1zm2.5 1.71v.73l1.15-1.14a.5.5 0 0 1 .7 0L9 4.44v-.73a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5zM5.5 8h5v1h-5V8zm0 2h5v1h-5v-1z"/>
         </svg>
       );
     case 'find-duplicates':

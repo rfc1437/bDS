@@ -26,6 +26,7 @@ vi.mock('../../../src/renderer/components/MetadataDiffPanel', () => ({ MetadataD
 vi.mock('../../../src/renderer/components/GitDiffView/GitDiffView', () => ({ GitDiffView: () => null }));
 vi.mock('../../../src/renderer/components/DocumentationView/DocumentationView', () => ({ DocumentationView: () => null }));
 vi.mock('../../../src/renderer/components/SiteValidationView', () => ({ SiteValidationView: () => null }));
+vi.mock('../../../src/renderer/components/TranslationValidationView', () => ({ TranslationValidationView: () => null }));
 vi.mock('../../../src/renderer/components/InsertModal', () => ({ InsertModal: () => null }));
 vi.mock('../../../src/renderer/components/AISuggestionsModal/AISuggestionsModal', () => ({
   AISuggestionsModal: () => null,

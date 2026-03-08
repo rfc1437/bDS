@@ -42,6 +42,7 @@
   "menu.item.generateSitemap": "Render Site",
   "menu.item.regenerateCalendar": "Regenerate Calendar",
   "menu.item.validateSite": "Validate Site",
+  "menu.item.validateTranslations": "Validate Translations",
   "menu.item.findDuplicates": "Find Duplicate Posts",
   "menu.item.uploadSite": "Upload Site",
   "menu.item.about": "About Blogging Desktop Server",

@@ -19,6 +19,7 @@ import { MetadataDiffPanel } from '../MetadataDiffPanel';
 import { GitDiffView } from '../GitDiffView/GitDiffView';
 import { DocumentationView } from '../DocumentationView/DocumentationView';
 import { SiteValidationView } from '../SiteValidationView';
+import { TranslationValidationView } from '../TranslationValidationView';
 import { ScriptsView } from '../ScriptsView/ScriptsView';
 import { TemplatesView } from '../TemplatesView/TemplatesView';
 import { DuplicatesView } from '../DuplicatesView/DuplicatesView';
@@ -2558,6 +2559,7 @@ export const Editor: React.FC = () => {
       />
     ),
     'site-validation': () => <SiteValidationView />,
+    'translation-validation': () => <TranslationValidationView />,
     'find-duplicates': () => <DuplicatesView />,
     scripts: () => <ScriptsView scriptId={editorRoute.tabId} />,
     templates: () => <TemplatesView templateId={editorRoute.tabId} />,

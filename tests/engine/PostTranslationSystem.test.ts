@@ -112,6 +112,35 @@ vi.mock('fs/promises', () => ({
     }
     return content;
   }),
+  readdir: vi.fn(async (dirPath: string, options?: { withFileTypes?: boolean }) => {
+    const normalizedDir = dirPath.replace(/\\/g, '/').replace(/\/$/, '');
+    const childMap = new Map<string, { isDirectory: boolean }>();
+
+    for (const filePath of mockFiles.keys()) {
+      const normalizedFile = filePath.replace(/\\/g, '/');
+      if (!normalizedFile.startsWith(`${normalizedDir}/`)) {
+        continue;
+      }
+
+      const remainder = normalizedFile.slice(normalizedDir.length + 1);
+      if (!remainder) {
+        continue;
+      }
+
+      const [firstSegment, ...rest] = remainder.split('/');
+      childMap.set(firstSegment, { isDirectory: rest.length > 0 });
+    }
+
+    if (!options?.withFileTypes) {
+      return Array.from(childMap.keys());
+    }
+
+    return Array.from(childMap.entries()).map(([name, entry]) => ({
+      name,
+      isDirectory: () => entry.isDirectory,
+      isFile: () => !entry.isDirectory,
+    }));
+  }),
   rename: vi.fn(async (from: string, to: string) => {
     const content = mockFiles.get(from);
     if (content != null) {
@@ -199,6 +228,183 @@ describe('Post translation system', () => {
     expect(translations[0]).toMatchObject({ title: 'Salut', content: 'Version 2' });
   });
 
+  it('rejects translations whose language matches the canonical post language', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'de',
+      content: 'Canonical content',
+    });
+
+    await expect(engine.upsertPostTranslation(source.id, 'DE', {
+      title: 'Hallo Welt',
+      content: 'Ungueltige Uebersetzung',
+    })).rejects.toThrow('Translation language must differ from canonical post language');
+
+    expect(await engine.getPostTranslation(source.id, 'de')).toBeNull();
+    expect(await engine.getPostTranslations(source.id)).toEqual([]);
+  });
+
+  it('ignores stored translation rows whose language matches the canonical post language', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
+    mockTranslations.set('translation-invalid', {
+      id: 'translation-invalid',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'en',
+      title: 'Hello world duplicate',
+      excerpt: null,
+      content: 'Duplicate canonical content',
+      status: 'draft',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: null,
+      filePath: '',
+      checksum: 'checksum-invalid',
+    });
+
+    mockTranslations.set('translation-fr', {
+      id: 'translation-fr',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'fr',
+      title: 'Bonjour le monde',
+      excerpt: null,
+      content: 'Contenu traduit',
+      status: 'draft',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: null,
+      filePath: '',
+      checksum: 'checksum-fr',
+    });
+
+    const canonical = await engine.getPost(source.id);
+    const byCanonicalLanguage = await engine.getPostTranslation(source.id, 'en');
+    const translations = await engine.getPostTranslations(source.id);
+
+    expect(canonical?.availableLanguages).toEqual(['en', 'fr']);
+    expect(byCanonicalLanguage).toBeNull();
+    expect(translations.map((item) => item.language)).toEqual(['fr']);
+  });
+
+  it('skips orphan translation files whose language matches the canonical post language', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'de',
+      content: 'Canonical content',
+    });
+    const filePath = '/tmp/project-1/posts/2024/01/hello-world.de.md';
+
+    mockFiles.set(filePath, `---\ntranslationFor: ${source.id}\nlanguage: de\ntitle: Hallo Welt\n---\nInvalid translation`);
+
+    const imported = await engine.importOrphanTranslationFile(filePath);
+
+    expect(imported).toBeNull();
+    expect(await engine.getPostTranslations(source.id)).toEqual([]);
+  });
+
+  it('reports invalid translation rows and filesystem files in validateTranslations', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'de',
+      content: 'Canonical content',
+      status: 'published',
+    });
+
+    mockTranslations.set('translation-invalid-db', {
+      id: 'translation-invalid-db',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'de',
+      title: 'Hallo Welt',
+      excerpt: null,
+      content: 'Invalid db translation',
+      status: 'draft',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: null,
+      filePath: '/tmp/project-1/posts/2024/01/hello-world.de.md',
+      checksum: 'checksum-invalid-db',
+    });
+
+    mockTranslations.set('translation-valid-db', {
+      id: 'translation-valid-db',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'fr',
+      title: 'Bonjour le monde',
+      excerpt: null,
+      content: 'Valid translation',
+      status: 'draft',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: null,
+      filePath: '',
+      checksum: 'checksum-valid-db',
+    });
+
+    mockFiles.set('/tmp/project-1/posts/2024/01/hello-world.de.md', `---\ntranslationFor: ${source.id}\nlanguage: de\ntitle: Hallo Welt\n---\nInvalid filesystem translation`);
+    mockFiles.set('/tmp/project-1/posts/2024/01/hello-world.fr.md', `---\ntranslationFor: ${source.id}\nlanguage: fr\ntitle: Bonjour le monde\n---\nValid filesystem translation`);
+    mockFiles.set('/tmp/project-1/posts/2024/01/orphan.it.md', '---\ntranslationFor: missing-post\nlanguage: it\ntitle: Ciao\n---\nOrphan translation');
+
+    const report = await engine.validateTranslations();
+
+    expect(report.checkedDatabaseRowCount).toBe(2);
+    expect(report.checkedFilesystemFileCount).toBe(3);
+    expect(report.invalidDatabaseRows).toEqual([
+      expect.objectContaining({
+        issue: 'same-language-as-canonical',
+        translationId: 'translation-invalid-db',
+        translationFor: source.id,
+        canonicalLanguage: 'de',
+        translationLanguage: 'de',
+      }),
+    ]);
+    expect(report.invalidFilesystemFiles).toEqual([
+      expect.objectContaining({
+        issue: 'same-language-as-canonical',
+        translationFor: source.id,
+        canonicalLanguage: 'de',
+        translationLanguage: 'de',
+        filePath: '/tmp/project-1/posts/2024/01/hello-world.de.md',
+      }),
+      expect.objectContaining({
+        issue: 'missing-source-post',
+        translationFor: 'missing-post',
+        translationLanguage: 'it',
+        filePath: '/tmp/project-1/posts/2024/01/orphan.it.md',
+      }),
+    ]);
+  });
+
+    it('validates translation files by frontmatter even when the filename does not look like a translation', async () => {
+      const source = await engine.createPost({
+        title: 'Hallo Welt',
+        language: 'de',
+        content: 'Kanonischer Inhalt',
+      });
+
+      mockFiles.set('/tmp/project-1/posts/2024/01/hallo-welt-copy.md', `---\ntranslationFor: ${source.id}\nlanguage: de\ntitle: Hallo Welt Kopie\n---\nInvalid filesystem translation`);
+
+      const report = await engine.validateTranslations();
+
+      expect(report.checkedFilesystemFileCount).toBe(1);
+      expect(report.invalidFilesystemFiles).toEqual([
+        expect.objectContaining({
+          issue: 'same-language-as-canonical',
+          translationFor: source.id,
+          canonicalLanguage: 'de',
+          translationLanguage: 'de',
+          filePath: '/tmp/project-1/posts/2024/01/hallo-welt-copy.md',
+        }),
+      ]);
+    });
+
   it('moves the source post back to draft when translation text changes', async () => {
     const source = await engine.createPost({
       title: 'Hello world',
@@ -246,5 +452,198 @@ describe('Post translation system', () => {
     expect(Array.from(mockFiles.keys()).some((filePath) => filePath.endsWith('/hello-world.fr.md'))).toBe(true);
     expect(frenchPosts.map((post) => post.id)).toContain(source.id);
     expect(missingSpanish.map((post) => post.id)).toContain(source.id);
+  });
+
+  describe('mainLanguage fallback for posts without explicit language', () => {
+    it('rejects translations matching mainLanguage when the post has no explicit language', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+      });
+
+      await expect(engine.upsertPostTranslation(source.id, 'de', {
+        title: 'Hallo Welt',
+        content: 'Deutsche Uebersetzung',
+      })).rejects.toThrow('Translation language must differ from canonical post language');
+    });
+
+    it('allows translations in a different language when mainLanguage is set and post has no explicit language', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+      });
+
+      const translation = await engine.upsertPostTranslation(source.id, 'en', {
+        title: 'Hello world',
+        content: 'English translation',
+      });
+
+      expect(translation.language).toBe('en');
+    });
+
+    it('reports same-language-as-canonical for DB rows matching mainLanguage fallback', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+        status: 'published',
+      });
+
+      mockTranslations.set('translation-de', {
+        id: 'translation-de',
+        projectId: 'project-1',
+        translationFor: source.id,
+        language: 'de',
+        title: 'Hallo Welt',
+        excerpt: null,
+        content: 'Deutsche Uebersetzung',
+        status: 'draft',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        publishedAt: null,
+        filePath: '',
+        checksum: 'checksum-de',
+      });
+
+      const report = await engine.validateTranslations();
+
+      expect(report.invalidDatabaseRows).toEqual([
+        expect.objectContaining({
+          issue: 'same-language-as-canonical',
+          translationFor: source.id,
+          canonicalLanguage: 'de',
+          translationLanguage: 'de',
+        }),
+      ]);
+    });
+
+    it('reports same-language-as-canonical for filesystem files matching mainLanguage fallback', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+        status: 'published',
+      });
+
+      mockFiles.set(`/tmp/project-1/posts/2024/01/hello-world.de.md`, `---\ntranslationFor: ${source.id}\nlanguage: de\ntitle: Hallo Welt\n---\nDeutsche Uebersetzung`);
+
+      const report = await engine.validateTranslations();
+
+      expect(report.invalidFilesystemFiles).toEqual([
+        expect.objectContaining({
+          issue: 'same-language-as-canonical',
+          translationFor: source.id,
+          canonicalLanguage: 'de',
+          translationLanguage: 'de',
+        }),
+      ]);
+    });
+
+    it('skips orphan translation files matching mainLanguage fallback', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+      });
+      const filePath = '/tmp/project-1/posts/2024/01/hello-world.de.md';
+      mockFiles.set(filePath, `---\ntranslationFor: ${source.id}\nlanguage: de\ntitle: Hallo Welt\n---\nDeutsche Uebersetzung`);
+
+      const imported = await engine.importOrphanTranslationFile(filePath);
+
+      expect(imported).toBeNull();
+    });
+
+    it('returns null for getPostTranslation when language matches mainLanguage fallback', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+      });
+
+      mockTranslations.set('translation-de', {
+        id: 'translation-de',
+        projectId: 'project-1',
+        translationFor: source.id,
+        language: 'de',
+        title: 'Hallo Welt',
+        excerpt: null,
+        content: 'Deutsche Uebersetzung',
+        status: 'draft',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        publishedAt: null,
+        filePath: '',
+        checksum: 'checksum-de',
+      });
+
+      expect(await engine.getPostTranslation(source.id, 'de')).toBeNull();
+    });
+
+    it('filters out mainLanguage-matching rows from getPostTranslations', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        content: 'Canonical content',
+      });
+
+      mockTranslations.set('translation-de', {
+        id: 'translation-de',
+        projectId: 'project-1',
+        translationFor: source.id,
+        language: 'de',
+        title: 'Hallo Welt',
+        excerpt: null,
+        content: 'Deutsche Uebersetzung',
+        status: 'draft',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        publishedAt: null,
+        filePath: '',
+        checksum: 'checksum-de',
+      });
+
+      mockTranslations.set('translation-en', {
+        id: 'translation-en',
+        projectId: 'project-1',
+        translationFor: source.id,
+        language: 'en',
+        title: 'Hello world EN',
+        excerpt: null,
+        content: 'English translation',
+        status: 'draft',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        publishedAt: null,
+        filePath: '',
+        checksum: 'checksum-en',
+      });
+
+      const translations = await engine.getPostTranslations(source.id);
+      expect(translations.map((t) => t.language)).toEqual(['en']);
+    });
+
+    it('explicit post language takes precedence over mainLanguage', async () => {
+      engine.setMainLanguage('de');
+      const source = await engine.createPost({
+        title: 'Hello world',
+        language: 'en',
+        content: 'Canonical content',
+      });
+
+      // Should reject 'en' because the post explicitly has language 'en'
+      await expect(engine.upsertPostTranslation(source.id, 'en', {
+        title: 'Hello world',
+        content: 'English duplicate',
+      })).rejects.toThrow('Translation language must differ from canonical post language');
+
+      // Should allow 'de' because the post is explicitly English, not German
+      const translation = await engine.upsertPostTranslation(source.id, 'de', {
+        title: 'Hallo Welt',
+        content: 'Deutsche Uebersetzung',
+      });
+      expect(translation.language).toBe('de');
+    });
   });
 });

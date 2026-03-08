@@ -49,6 +49,23 @@ export interface PostTranslationData {
   filePath: string;
 }
 
+export interface TranslationValidationIssue {
+  issue: 'same-language-as-canonical' | 'missing-source-post';
+  translationId?: string;
+  translationFor: string;
+  canonicalLanguage?: string;
+  translationLanguage: string;
+  title?: string;
+  filePath?: string;
+}
+
+export interface TranslationValidationReport {
+  checkedDatabaseRowCount: number;
+  checkedFilesystemFileCount: number;
+  invalidDatabaseRows: TranslationValidationIssue[];
+  invalidFilesystemFiles: TranslationValidationIssue[];
+}
+
 export interface PostMetadata {
   id: string;
   projectId: string;
@@ -114,6 +131,7 @@ export interface PublishedPostReconcileResult {
 export class PostEngine extends EventEmitter {
   private currentProjectId: string = 'default';
   private searchLanguage: SupportedLanguage = 'english';
+  private mainLanguage: string = '';
   private readonly notifier: CliNotifier;
   private readonly mediaEngine: MediaEngine | undefined;
 
@@ -139,6 +157,21 @@ export class PostEngine extends EventEmitter {
    */
   getSearchLanguage(): SupportedLanguage {
     return this.searchLanguage;
+  }
+
+  /**
+   * Set the project's main language (ISO code, e.g. 'de', 'en').
+   * Used as fallback for posts without an explicit language.
+   */
+  setMainLanguage(language: string): void {
+    this.mainLanguage = language.trim().toLowerCase();
+  }
+
+  /**
+   * Get the project's main language.
+   */
+  getMainLanguage(): string {
+    return this.mainLanguage;
   }
 
   /**
@@ -312,9 +345,31 @@ export class PostEngine extends EventEmitter {
     return rows.find((row) => row.language === language) || null;
   }
 
+  private normalizeLanguageCode(language: string | undefined | null): string {
+    return typeof language === 'string' ? language.trim().toLowerCase() : '';
+  }
+
+  private effectiveCanonicalLanguage(sourcePost: { language?: string | null } | null | undefined): string {
+    const explicitLanguage = this.normalizeLanguageCode(sourcePost?.language);
+    return explicitLanguage.length > 0 ? explicitLanguage : this.mainLanguage;
+  }
+
+  private isCanonicalTranslationLanguage(sourcePost: { language?: string | null } | null | undefined, language: string | undefined | null): boolean {
+    const canonicalLanguage = this.effectiveCanonicalLanguage(sourcePost);
+    const translationLanguage = this.normalizeLanguageCode(language);
+    return canonicalLanguage.length > 0 && canonicalLanguage === translationLanguage;
+  }
+
+  private filterCanonicalTranslationRows(
+    sourcePost: { language?: string | null } | null | undefined,
+    translations: PostTranslation[],
+  ): PostTranslation[] {
+    return translations.filter((translation) => !this.isCanonicalTranslationLanguage(sourcePost, translation.language));
+  }
+
   private buildAvailableLanguages(post: Pick<PostData, 'language'>, translations: Array<Pick<PostTranslation, 'language'>>): string[] {
     const languages = new Set<string>();
-    const canonicalLanguage = post.language?.trim();
+    const canonicalLanguage = this.effectiveCanonicalLanguage(post);
     if (canonicalLanguage) {
       languages.add(canonicalLanguage);
     }
@@ -376,6 +431,54 @@ export class PostEngine extends EventEmitter {
 
     const stem = path.parse(filePath).name;
     return /.+\.[a-z]{2,}(?:-[a-z0-9]+)*$/i.test(stem);
+  }
+
+  private async listMarkdownFilesRecursive(dir: string): Promise<string[]> {
+    const markdownFiles: string[] = [];
+    const walk = async (currentDir: string): Promise<void> => {
+      let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+      try {
+        entries = await fs.readdir(currentDir, { withFileTypes: true }) as Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(fullPath);
+          continue;
+        }
+
+        const extension = path.extname(entry.name).toLowerCase();
+        if (entry.isFile() && (extension === '.md' || extension === '.markdown' || extension === '.mdx')) {
+          markdownFiles.push(fullPath);
+        }
+      }
+    };
+
+    await walk(dir);
+    return markdownFiles;
+  }
+
+  private createTranslationValidationIssue(params: {
+    issue: TranslationValidationIssue['issue'];
+    translationFor: string;
+    translationLanguage: string;
+    canonicalLanguage?: string;
+    translationId?: string;
+    title?: string;
+    filePath?: string;
+  }): TranslationValidationIssue {
+    return {
+      issue: params.issue,
+      translationId: params.translationId,
+      translationFor: params.translationFor,
+      canonicalLanguage: params.canonicalLanguage,
+      translationLanguage: params.translationLanguage,
+      title: params.title,
+      filePath: params.filePath,
+    };
   }
 
   private async ensureUniquePostIdentity(id: string, slug: string): Promise<{ id: string; slug: string }> {
@@ -511,7 +614,7 @@ export class PostEngine extends EventEmitter {
   private async rebuildTranslationRowsFromFiles(
     db: ReturnType<ReturnType<typeof getDatabase>['getLocal']>,
     translationFiles: Array<{ filePath: string; data: PostTranslationFileData }>,
-    sourcePostsByOriginalId: Map<string, Pick<PostData, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt'>>,
+    sourcePostsByOriginalId: Map<string, Pick<PostData, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'language'>>,
     onProgress: (progress: number, message: string) => void,
   ): Promise<{ imported: number; skippedMissingSource: number; skippedDuplicates: number }> {
     if (translationFiles.length === 0) {
@@ -532,6 +635,11 @@ export class PostEngine extends EventEmitter {
       }
 
       const normalizedLanguage = data.language.trim().toLowerCase();
+      if (this.isCanonicalTranslationLanguage(sourcePost, normalizedLanguage)) {
+        skippedDuplicates++;
+        continue;
+      }
+
       const translationKey = `${sourcePost.id}:${normalizedLanguage}`;
       if (insertedTranslationKeys.has(translationKey)) {
         skippedDuplicates++;
@@ -879,15 +987,108 @@ export class PostEngine extends EventEmitter {
   }
 
   async getPostTranslation(postId: string, language: string): Promise<PostTranslationData | null> {
-    const translation = await this.getTranslationRow(postId, language);
+    const sourcePost = await this.getPost(postId);
+    const normalizedLanguage = this.normalizeLanguageCode(language);
+    if (this.isCanonicalTranslationLanguage(sourcePost, normalizedLanguage)) {
+      return null;
+    }
+
+    const translation = await this.getTranslationRow(postId, normalizedLanguage);
     return this.resolvePostTranslationData(translation);
   }
 
   async getPostTranslations(postId: string): Promise<PostTranslationData[]> {
-    const rows = await this.getTranslationRowsForPost(postId);
+    const sourcePost = await this.getPost(postId);
+    const rows = this.filterCanonicalTranslationRows(sourcePost, await this.getTranslationRowsForPost(postId));
     const translations = await Promise.all(rows.map((row) => this.resolvePostTranslationData(row)));
     return translations.filter((translation): translation is PostTranslationData => translation !== null)
       .sort((left, right) => left.language.localeCompare(right.language));
+  }
+
+  async validateTranslations(): Promise<TranslationValidationReport> {
+    const db = getDatabase().getLocal();
+    const sourcePosts = (await db.select().from(posts).all())
+      .filter((post) => post.projectId === this.currentProjectId);
+    const sourcePostMap = new Map(sourcePosts.map((post) => [post.id, post]));
+
+    const translationRows = await this.getAllTranslationRows();
+    const invalidDatabaseRows = translationRows.flatMap((row) => {
+      const sourcePost = sourcePostMap.get(row.translationFor);
+      if (!sourcePost) {
+        return [this.createTranslationValidationIssue({
+          issue: 'missing-source-post',
+          translationId: row.id,
+          translationFor: row.translationFor,
+          translationLanguage: row.language,
+          title: row.title,
+          filePath: row.filePath || undefined,
+        })];
+      }
+
+      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) {
+        return [this.createTranslationValidationIssue({
+          issue: 'same-language-as-canonical',
+          translationId: row.id,
+          translationFor: row.translationFor,
+          canonicalLanguage: this.effectiveCanonicalLanguage(sourcePost),
+          translationLanguage: this.normalizeLanguageCode(row.language),
+          title: row.title,
+          filePath: row.filePath || undefined,
+        })];
+      }
+
+      return [];
+    }).sort((left, right) => {
+      const leftKey = `${left.translationFor}:${left.translationId || ''}:${left.filePath || ''}`;
+      const rightKey = `${right.translationFor}:${right.translationId || ''}:${right.filePath || ''}`;
+      return leftKey.localeCompare(rightKey);
+    });
+
+    const markdownFiles = await this.listMarkdownFilesRecursive(this.getPostsDir());
+    const invalidFilesystemFiles: TranslationValidationIssue[] = [];
+    let checkedFilesystemFileCount = 0;
+
+    for (const filePath of markdownFiles) {
+      const fileData = await readPostTranslationFileShared(filePath);
+      if (!fileData) {
+        continue;
+      }
+
+      checkedFilesystemFileCount += 1;
+
+      const sourcePost = sourcePostMap.get(fileData.translationFor);
+      const normalizedLanguage = this.normalizeLanguageCode(fileData.language);
+      if (!sourcePost) {
+        invalidFilesystemFiles.push(this.createTranslationValidationIssue({
+          issue: 'missing-source-post',
+          translationFor: fileData.translationFor,
+          translationLanguage: normalizedLanguage,
+          title: fileData.title,
+          filePath,
+        }));
+        continue;
+      }
+
+      if (this.isCanonicalTranslationLanguage(sourcePost, normalizedLanguage)) {
+        invalidFilesystemFiles.push(this.createTranslationValidationIssue({
+          issue: 'same-language-as-canonical',
+          translationFor: fileData.translationFor,
+          canonicalLanguage: this.effectiveCanonicalLanguage(sourcePost),
+          translationLanguage: normalizedLanguage,
+          title: fileData.title,
+          filePath,
+        }));
+      }
+    }
+
+    invalidFilesystemFiles.sort((left, right) => (left.filePath || '').localeCompare(right.filePath || ''));
+
+    return {
+      checkedDatabaseRowCount: translationRows.length,
+      checkedFilesystemFileCount,
+      invalidDatabaseRows,
+      invalidFilesystemFiles,
+    };
   }
 
   async upsertPostTranslation(
@@ -902,6 +1103,10 @@ export class PostEngine extends EventEmitter {
     }
 
     const normalizedLanguage = language.trim().toLowerCase();
+    if (this.isCanonicalTranslationLanguage(sourcePost, normalizedLanguage)) {
+      throw new Error('Translation language must differ from canonical post language');
+    }
+
     const now = new Date();
     const existing = await this.getTranslationRow(postId, normalizedLanguage);
     const sourceShouldDraft = sourcePost.status === 'published'
@@ -1158,6 +1363,10 @@ export class PostEngine extends EventEmitter {
     }
 
     const normalizedLanguage = translationData.language.trim().toLowerCase();
+    if (this.isCanonicalTranslationLanguage(sourcePost, normalizedLanguage)) {
+      return null;
+    }
+
     const existing = await this.getTranslationRow(sourcePost.id, normalizedLanguage);
     if (existing) {
       return null;
@@ -1918,7 +2127,7 @@ export class PostEngine extends EventEmitter {
     // Update post links based on published content
     await this.updatePostLinks(id, published.content);
 
-    const translationRows = await this.getTranslationRowsForPost(id);
+    const translationRows = this.filterCanonicalTranslationRows(published, await this.getTranslationRowsForPost(id));
     for (const row of translationRows) {
       const translation = await this.resolvePostTranslationData(row);
       if (!translation) continue;
@@ -2433,7 +2642,7 @@ export class PostEngine extends EventEmitter {
         // Track slugs and ids to avoid collisions while still importing all files
         const insertedSlugs = new Set<string>(); // projectId:slug
         const insertedIds = new Set<string>();
-        const sourcePostsByOriginalId = new Map<string, Pick<PostData, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt'>>();
+        const sourcePostsByOriginalId = new Map<string, Pick<PostData, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'language'>>();
         const translationFiles: Array<{ filePath: string; data: PostTranslationFileData }> = [];
         let importedCount = 0;
         let importedTranslationCount = 0;
@@ -2511,6 +2720,7 @@ export class PostEngine extends EventEmitter {
               createdAt: postData.createdAt,
               updatedAt: postData.updatedAt,
               publishedAt: postData.publishedAt || postData.updatedAt,
+              language: postData.language,
             });
             importedCount++;
 

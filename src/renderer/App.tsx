@@ -4,6 +4,7 @@ import { useAppStore, PostData, MediaData, TaskProgress } from './store';
 import { loadTabsForProject, saveTabsForProject } from './utils';
 import { openSingletonToolTab } from './navigation/tabPolicy';
 import { persistSiteValidationReport } from './navigation/siteValidationPersistence';
+import { persistTranslationValidationReport } from './navigation/translationValidationPersistence';
 import { persistDuplicatesResult } from './navigation/duplicatesPersistence';
 import { executeActivityClick } from './navigation/activityExecution';
 import { handleBlogmarkCreatedEvent } from './navigation/blogmarkHandling';
@@ -502,6 +503,28 @@ const App: React.FC = () => {
           } catch (error) {
             console.error('Site validation failed:', error);
             showToast.error(tr('siteValidation.error.validate'));
+          }
+        };
+        void validateAndOpen();
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
+      window.electronAPI?.on('menu:validateTranslations', () => {
+        const validateAndOpen = async () => {
+          try {
+            const report = await window.electronAPI?.blog.validateTranslations();
+            const projectId = useAppStore.getState().activeProject?.id;
+            if (projectId && report) {
+              persistTranslationValidationReport(projectId, report);
+              window.dispatchEvent(new CustomEvent('bds:translation-validation-updated', {
+                detail: { projectId },
+              }));
+            }
+            openSingletonToolTab(openTab, 'translation-validation');
+          } catch (error) {
+            console.error('Translation validation failed:', error);
+            showToast.error(tr('translationValidation.error.validate'));
           }
         };
         void validateAndOpen();

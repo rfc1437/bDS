@@ -12,7 +12,11 @@ import type { EngineBundle } from '../engine/EngineBundle';
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
 export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
-  const resolveBlogGenerationBaseOptions = async (): Promise<BlogGenerationOptions> => {
+  const resolveActiveProjectContext = async (): Promise<{
+    project: NonNullable<Awaited<ReturnType<EngineBundle['projectEngine']['getActiveProject']>>>;
+    dataDir: string;
+    metadata: Awaited<ReturnType<EngineBundle['metaEngine']['getProjectMetadata']>>;
+  }> => {
     const projectEngine = bundle.projectEngine;
     const postEngine = bundle.postEngine;
     const metaEngine = bundle.metaEngine;
@@ -37,6 +41,17 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
     }
 
     const metadata = await metaEngine.getProjectMetadata();
+
+    return {
+      project,
+      dataDir,
+      metadata,
+    };
+  };
+
+  const resolveBlogGenerationBaseOptions = async (): Promise<BlogGenerationOptions> => {
+    const menuEngine = bundle.menuEngine;
+    const { project, dataDir, metadata } = await resolveActiveProjectContext();
     const menu = await menuEngine.getMenu();
     const baseUrl = resolvePublicBaseUrl(metadata?.publicUrl);
     if (!baseUrl) {
@@ -141,6 +156,22 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         return blogGenerationEngine.validateSite(baseOptions, (progress, message) => {
           onProgress(progress, message || 'Validating site...');
         });
+      },
+    });
+  });
+
+  safeHandle('blog:validateTranslations', async () => {
+    await resolveActiveProjectContext();
+
+    const taskTimestamp = Date.now();
+    return bundle.taskManager.runTask({
+      id: `translation-validate-${taskTimestamp}`,
+      name: 'Validate Translations',
+      execute: async (onProgress) => {
+        onProgress(0, 'Validating translations...');
+        const result = await bundle.postEngine.validateTranslations();
+        onProgress(100, 'Translation validation complete');
+        return result;
       },
     });
   });

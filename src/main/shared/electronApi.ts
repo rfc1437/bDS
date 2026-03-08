@@ -551,6 +551,23 @@ export interface SiteValidationReport {
   existingHtmlUrlCount: number;
 }
 
+export interface TranslationValidationIssue {
+  issue: 'same-language-as-canonical' | 'missing-source-post';
+  translationId?: string;
+  translationFor: string;
+  canonicalLanguage?: string;
+  translationLanguage: string;
+  title?: string;
+  filePath?: string;
+}
+
+export interface TranslationValidationReport {
+  checkedDatabaseRowCount: number;
+  checkedFilesystemFileCount: number;
+  invalidDatabaseRows: TranslationValidationIssue[];
+  invalidFilesystemFiles: TranslationValidationIssue[];
+}
+
 export interface SiteValidationApplyResult {
   renderedUrlCount: number;
   deletedUrlCount: number;
@@ -919,6 +936,7 @@ export interface ElectronAPI {
       pagesGenerated: number;
     }>;
     validateSite: () => Promise<SiteValidationReport>;
+    validateTranslations: () => Promise<TranslationValidationReport>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
     regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };

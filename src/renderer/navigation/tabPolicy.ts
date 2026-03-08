@@ -10,6 +10,7 @@ export type SingletonToolTabKey =
   | 'api-documentation'
   | 'metadata-diff'
   | 'site-validation'
+  | 'translation-validation'
   | 'find-duplicates';
 
 export interface CanonicalTabSpec {
@@ -34,6 +35,7 @@ const SINGLETON_TOOL_TAB_REGISTRY: Record<SingletonToolTabKey, CanonicalTabSpec>
   'api-documentation': { type: 'api-documentation', id: 'api-documentation', isTransient: false },
   'metadata-diff': { type: 'metadata-diff', id: 'metadata-diff', isTransient: false },
   'site-validation': { type: 'site-validation', id: 'site-validation', isTransient: false },
+  'translation-validation': { type: 'translation-validation', id: 'translation-validation', isTransient: false },
   'find-duplicates': { type: 'find-duplicates', id: 'find-duplicates', isTransient: false },
 };
 

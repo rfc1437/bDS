@@ -44,6 +44,8 @@ const mockPostEngine = {
   on: vi.fn(),
   setProjectContext: vi.fn(),
   setSearchLanguage: vi.fn(),
+  setMainLanguage: vi.fn(),
+  validateTranslations: vi.fn(),
   reconcilePublishedPostsFromGitChanges: vi.fn(),
   createPost: vi.fn(),
   updatePost: vi.fn(),
@@ -911,6 +913,7 @@ describe('IPC Handlers', () => {
 
         expect(mockPostEngine.setSearchLanguage).toHaveBeenCalledWith('german');
         expect(mockMediaEngine.setSearchLanguage).toHaveBeenCalledWith('german');
+        expect(mockPostEngine.setMainLanguage).toHaveBeenCalledWith('de');
       });
     });
 
@@ -2777,6 +2780,42 @@ describe('IPC Handlers', () => {
             execute: expect.any(Function),
           }),
         );
+      });
+    });
+
+    describe('blog:validateTranslations', () => {
+      it('should run translation validation via taskManager.runTask', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+        mockPostEngine.validateTranslations.mockResolvedValue({
+          checkedDatabaseRowCount: 1,
+          checkedFilesystemFileCount: 1,
+          invalidDatabaseRows: [],
+          invalidFilesystemFiles: [],
+        });
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          return task.execute(vi.fn());
+        });
+
+        const result = await invokeHandler('blog:validateTranslations');
+
+        expect(result).toEqual(expect.objectContaining({
+          checkedDatabaseRowCount: 1,
+          checkedFilesystemFileCount: 1,
+        }));
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Validate Translations',
+            execute: expect.any(Function),
+          }),
+        );
+        expect(mockPostEngine.validateTranslations).toHaveBeenCalled();
       });
     });
 

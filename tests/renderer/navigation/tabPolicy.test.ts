@@ -29,6 +29,7 @@ describe('tabPolicy', () => {
     expect(getSingletonToolTabSpec('documentation')).toEqual({ type: 'documentation', id: 'documentation', isTransient: false });
     expect(getSingletonToolTabSpec('metadata-diff')).toEqual({ type: 'metadata-diff', id: 'metadata-diff', isTransient: false });
     expect(getSingletonToolTabSpec('site-validation')).toEqual({ type: 'site-validation', id: 'site-validation', isTransient: false });
+    expect(getSingletonToolTabSpec('translation-validation')).toEqual({ type: 'translation-validation', id: 'translation-validation', isTransient: false });
   });
 
   it('opens singleton tool tabs using canonical tab spec', () => {

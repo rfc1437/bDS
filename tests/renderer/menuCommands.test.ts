@@ -63,6 +63,17 @@ describe('Help menu documentation entry', () => {
     expect(APP_MENU_ACTION_EVENT_MAP.validateSite).toBe('menu:validateSite');
   });
 
+  it('includes Validate Translations action in Blog menu', () => {
+    const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
+
+    expect(blogGroup).toBeDefined();
+    expect(blogGroup?.items.some((item) => item.action === 'validateTranslations')).toBe(true);
+  });
+
+  it('maps Validate Translations to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.validateTranslations).toBe('menu:validateTranslations');
+  });
+
   it('includes Regenerate Calendar action in Blog menu', () => {
     const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
 

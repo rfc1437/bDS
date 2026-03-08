@@ -24,4 +24,12 @@ describe('main/shared locale completeness', () => {
       expect(localeKeys, `Locale ${locale} is missing or has extra keys`).toEqual(englishKeys);
     }
   });
+
+  it('includes a native-menu label for validate translations', () => {
+    expect((en as LocaleMap)['menu.item.validateTranslations']).toBeTruthy();
+    expect((de as LocaleMap)['menu.item.validateTranslations']).toBeTruthy();
+    expect((fr as LocaleMap)['menu.item.validateTranslations']).toBeTruthy();
+    expect((itLocale as LocaleMap)['menu.item.validateTranslations']).toBeTruthy();
+    expect((es as LocaleMap)['menu.item.validateTranslations']).toBeTruthy();
+  });
 });
