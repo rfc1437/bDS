@@ -42,6 +42,7 @@ interface PostEngineContract {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPost: (id: string) => Promise<PostData | null>;
   getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
+  getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
   hasPublishedVersion: (id: string) => Promise<boolean>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
   findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
@@ -370,6 +371,15 @@ export class PreviewServer {
 
     for (const post of publishedPosts) {
       canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
+
+      if (this.postEngine.getPostTranslations) {
+        const translations = await this.postEngine.getPostTranslations(post.id);
+        for (const translation of translations) {
+          if (translation.status !== 'published') continue;
+          const variantSlug = `${post.slug}.${translation.language}`;
+          canonicalPostPathBySlug.set(variantSlug, buildCanonicalPostPath({ ...post, slug: variantSlug }));
+        }
+      }
     }
 
     const canonicalMediaPathBySourcePath = new Map<string, string>();

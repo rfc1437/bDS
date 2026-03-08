@@ -1428,6 +1428,13 @@ export class PageRenderer {
   }
 
   async resolveRenderablePost(post: PostData, postEngine: PostEngineContract, preferredLanguage?: string): Promise<PostData> {
+    // Pre-built translation variants (from blog generation) already have content and
+    // translationSourceSlug set — skip hydration and language resolution entirely.
+    const variantPost = post as PostData & { translationSourceSlug?: string };
+    if (variantPost.translationSourceSlug) {
+      return post;
+    }
+
     const hydratedPost = post.status === 'published' && !post.content
       ? (await postEngine.getPost(post.id)) ?? post
       : post;

@@ -51,8 +51,8 @@ function makeEngine(posts: PostData[], snapshotsById: Record<string, PostData | 
         result = result.filter((post) => filter.categories!.some((category) => post.categories.includes(category)));
       }
 
-      if ((filter as any).excludeCategories && (filter as any).excludeCategories.length > 0) {
-        result = result.filter((post) => !(filter as any).excludeCategories.some((category: string) => post.categories.includes(category)));
+      if (filter.excludeCategories && filter.excludeCategories.length > 0) {
+        result = result.filter((post) => !filter.excludeCategories!.some((category: string) => post.categories.includes(category)));
       }
 
       if (filter.year !== undefined) {
@@ -146,7 +146,7 @@ describe('SharedSnapshotService', () => {
     const result = await findSinglePostBySlug(
       engine,
       'my-post',
-      { useDraftContent: true, draftPostId: 'draft-1', lang: 'fr' } as any,
+      { useDraftContent: true, draftPostId: 'draft-1', lang: 'fr' },
       { year: 2025, month: 3, day: 21 },
     );
 
@@ -199,7 +199,7 @@ describe('SharedSnapshotService', () => {
     const translated = await findSinglePostBySlug(
       engine,
       'my-post',
-      { preferredLanguage: 'fr' } as any,
+      { preferredLanguage: 'fr' },
       { year: 2025, month: 3, day: 21 },
     );
 
@@ -214,7 +214,7 @@ describe('SharedSnapshotService', () => {
     const fallback = await findSinglePostBySlug(
       engine,
       'my-post',
-      { preferredLanguage: 'de' } as any,
+      { preferredLanguage: 'de' },
       { year: 2025, month: 3, day: 21 },
     );
 

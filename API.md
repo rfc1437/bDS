@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.14.0
+Contract version: 1.15.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -331,6 +331,7 @@ None  # or
 - [posts.getAll](#postsgetall)
 - [posts.getByStatus](#postsgetbystatus)
 - [posts.publish](#postspublish)
+- [posts.publishTranslation](#postspublishtranslation)
 - [posts.discard](#postsdiscard)
 - [posts.hasPublishedVersion](#postshaspublishedversion)
 - [posts.rebuildFromFiles](#postsrebuildfromfiles)
@@ -686,6 +687,48 @@ None  # or
     'tags': 'value',
     'categories': 'value',
     'availableLanguages': 'value'
+}
+```
+
+### posts.publishTranslation
+
+Publish a specific translation of a post.
+
+**Parameters**
+
+- postId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `PostTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.publish_translation(post_id='post-1', language='language')
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'translationFor': 'value',
+    'language': 'value',
+    'title': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'filePath': 'value'
 }
 ```
 

@@ -578,7 +578,7 @@ export class MetadataDiffEngine extends EventEmitter {
         differences.push(diff);
       }
 
-      if ((i + 1) % 10 === 0 || i === total - 1) {
+      if ((i + 1) % 10 === 0 || i === publishedPosts.length - 1) {
         onProgress(i + 1, total, `Scanned ${i + 1}/${total} posts, found ${differences.length} with differences`);
       }
     }

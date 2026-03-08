@@ -28,20 +28,48 @@ function getTableRows(table: unknown): any[] {
   return [];
 }
 
+function extractEqValue(predicate: unknown): string | undefined {
+  // Drizzle eq() creates a BinaryOperator whose queryChunks contain a Param with the value.
+  const chunks = (predicate as any)?.queryChunks;
+  if (!Array.isArray(chunks)) return undefined;
+  for (const chunk of chunks) {
+    if (chunk?.value !== undefined && typeof chunk.value === 'string') {
+      return chunk.value;
+    }
+  }
+  return undefined;
+}
+
 function createSelectChain() {
   let selectedTable: unknown;
+  let filterValue: string | undefined;
 
   return {
     from: vi.fn().mockImplementation(function from(table: unknown) {
       selectedTable = table;
       return this;
     }),
-    where: vi.fn().mockReturnThis(),
+    where: vi.fn().mockImplementation(function where(predicate: unknown) {
+      filterValue = extractEqValue(predicate);
+      return this;
+    }),
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     offset: vi.fn().mockReturnThis(),
-    all: vi.fn().mockImplementation(async () => getTableRows(selectedTable)),
-    get: vi.fn().mockImplementation(async () => getTableRows(selectedTable)[0]),
+    all: vi.fn().mockImplementation(async () => {
+      const rows = getTableRows(selectedTable);
+      if (filterValue) {
+        return rows.filter((row) => row.id === filterValue || row.translationFor === filterValue || row.projectId === filterValue);
+      }
+      return rows;
+    }),
+    get: vi.fn().mockImplementation(async () => {
+      const rows = getTableRows(selectedTable);
+      if (filterValue) {
+        return rows.find((row) => row.id === filterValue || row.translationFor === filterValue || row.projectId === filterValue);
+      }
+      return rows[0];
+    }),
   };
 }
 
@@ -63,14 +91,21 @@ function createInsertChain(table: unknown) {
 function createUpdateChain(table: unknown) {
   return {
     set: vi.fn().mockImplementation((value: Record<string, unknown>) => ({
-      where: vi.fn(async () => {
+      where: vi.fn(async (predicate: unknown) => {
         const targetMap = table === posts ? mockPosts : table === postTranslations ? mockTranslations : null;
         if (!targetMap || targetMap.size === 0) {
           return;
         }
-        const [firstKey] = targetMap.keys();
-        const existing = targetMap.get(firstKey);
-        targetMap.set(firstKey, { ...existing, ...value });
+        const targetId = extractEqValue(predicate);
+        if (targetId && targetMap.has(targetId)) {
+          const existing = targetMap.get(targetId);
+          targetMap.set(targetId, { ...existing, ...value });
+        } else {
+          // Fallback: update the first entry (preserves old behaviour for edge cases)
+          const [firstKey] = targetMap.keys();
+          const existing = targetMap.get(firstKey);
+          targetMap.set(firstKey, { ...existing, ...value });
+        }
       }),
     })),
   };
@@ -80,7 +115,18 @@ const mockLocalDb = {
   select: vi.fn(() => createSelectChain()),
   insert: vi.fn((table: unknown) => createInsertChain(table)),
   update: vi.fn((table: unknown) => createUpdateChain(table)),
-  delete: vi.fn(() => ({ where: vi.fn(async () => {}) })),
+  delete: vi.fn((table: unknown) => ({
+    where: vi.fn(async (predicate: unknown) => {
+      const targetId = extractEqValue(predicate);
+      if (targetId) {
+        const targetMap = table === posts ? mockPosts : table === postTranslations ? mockTranslations : null;
+        if (targetMap) {
+          mockDeletedTranslationIds.push(targetId);
+          targetMap.delete(targetId);
+        }
+      }
+    }),
+  })),
 };
 
 const mockLocalClient = {
@@ -839,5 +885,70 @@ describe('Post translation system', () => {
       expect(result.deletedFiles).toBe(1);
       expect(fs.unlink).toHaveBeenCalledTimes(2);
     });
+
+    it('deletes the correct translation IDs from the database', async () => {
+      mockTranslations.set('translation-bad-1', {
+        id: 'translation-bad-1',
+        projectId: 'project-1',
+        translationFor: 'post-1',
+        language: 'de',
+      });
+
+      const report = {
+        checkedDatabaseRowCount: 1,
+        checkedFilesystemFileCount: 0,
+        invalidDatabaseRows: [
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationId: 'translation-bad-1',
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            title: 'Hallo Welt',
+          },
+        ],
+        invalidFilesystemFiles: [],
+      };
+
+      await engine.fixInvalidTranslations(report);
+
+      expect(mockDeletedTranslationIds).toContain('translation-bad-1');
+      expect(mockTranslations.has('translation-bad-1')).toBe(false);
+    });
+  });
+
+  it('throws when upserting a translation for a non-existent source post', async () => {
+    await expect(engine.upsertPostTranslation('non-existent-id', 'fr', {
+      title: 'Bonjour',
+      content: 'Contenu',
+    })).rejects.toThrow('Source post not found');
+  });
+
+  it('supports multiple translations on the same post', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
+    const fr = await engine.upsertPostTranslation(source.id, 'fr', {
+      title: 'Bonjour le monde',
+      content: 'Contenu traduit',
+    });
+
+    const de = await engine.upsertPostTranslation(source.id, 'de', {
+      title: 'Hallo Welt',
+      content: 'Ubersetzter Inhalt',
+    });
+
+    expect(fr.language).toBe('fr');
+    expect(de.language).toBe('de');
+    expect(fr.id).not.toBe(de.id);
+
+    const translations = await engine.getPostTranslations(source.id);
+    expect(translations.map((t) => t.language).sort()).toEqual(['de', 'fr']);
+
+    const canonical = await engine.getPost(source.id);
+    expect(canonical?.availableLanguages?.sort()).toEqual(['de', 'en', 'fr']);
   });
 });

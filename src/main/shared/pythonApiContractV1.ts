@@ -86,6 +86,7 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('posts.getAll', 'Fetch posts with pagination.', [optionalObject('options')], 'PaginatedPostsResult'),
   method('posts.getByStatus', 'Fetch posts by status.', [requiredString('status')], 'PostData[]'),
   method('posts.publish', 'Publish a post by id.', [requiredString('id')], 'PostData | null'),
+  method('posts.publishTranslation', 'Publish a specific translation of a post.', [requiredString('postId'), requiredString('language')], 'PostTranslationData | null'),
   method('posts.discard', 'Discard draft changes for post.', [requiredString('id')], 'PostData | null'),
   method('posts.hasPublishedVersion', 'Check if post has published version.', [requiredString('id')], 'boolean'),
   method('posts.rebuildFromFiles', 'Rebuild posts database from files.', [], 'void'),
@@ -494,7 +495,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.14.0',
+  version: '1.15.0',
   generatedAt: '2026-03-07T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

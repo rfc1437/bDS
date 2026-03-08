@@ -52,13 +52,13 @@ export interface PostTranslationResult {
   error?: string;
 }
 
-function normalizeTranslatedMarkdownBody(content: string, sourceContent: string): string {
+export function normalizeTranslatedMarkdownBody(content: string, sourceContent: string): string {
   const normalizedContent = content.trim();
   if (!normalizedContent) {
     return '';
   }
 
-  const leadingLabelPattern = /^(content|inhalt):\s*\n\s*\n/i;
+  const leadingLabelPattern = /^(content|inhalt|contenu|contenuto|contenido):\s*\n\s*\n/i;
   if (!leadingLabelPattern.test(normalizedContent) || leadingLabelPattern.test(sourceContent.trim())) {
     return normalizedContent;
   }
