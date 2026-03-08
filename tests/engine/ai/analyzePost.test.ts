@@ -396,4 +396,40 @@ describe('OneShotTasks.translatePost', () => {
       content: 'Bonjour',
     });
   });
+
+  it('passes status published when autoPublish is set', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Hello world',
+      language: 'en',
+      status: 'published',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Résumé',
+      content: 'Bonjour le monde',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"Mon Post","excerpt":"Résumé"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Bonjour le monde',
+      } as any);
+
+    const result = await tasks.translatePost('post-1', 'fr', { autoPublish: true });
+
+    expect(result.success).toBe(true);
+    expect(deps.postEngine.upsertPostTranslation).toHaveBeenCalledWith('post-1', 'fr', {
+      title: 'Mon Post',
+      excerpt: 'Résumé',
+      content: 'Bonjour le monde',
+      status: 'published',
+    });
+  });
 });

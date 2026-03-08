@@ -477,6 +477,29 @@ describe('Post translation system', () => {
     expect(Array.from(mockFiles.keys()).some((filePath) => filePath.endsWith('/hello-world.fr.md'))).toBe(false);
   });
 
+  it('does not draft the source when translation is auto-published', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
+    await engine.publishPost(source.id);
+
+    await engine.upsertPostTranslation(source.id, 'fr', {
+      title: 'Bonjour',
+      content: 'Contenu traduit',
+      status: 'published',
+    });
+
+    const updatedSource = await engine.getPost(source.id);
+    const translation = await engine.getPostTranslation(source.id, 'fr');
+
+    expect(updatedSource?.status).toBe('published');
+    expect(translation?.status).toBe('published');
+    expect(translation?.publishedAt).toBeDefined();
+  });
+
   it('publishes canonical and available translations together when the post is published', async () => {
     const source = await engine.createPost({
       title: 'Hello world',

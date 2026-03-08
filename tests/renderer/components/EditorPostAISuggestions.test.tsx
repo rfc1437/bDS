@@ -353,7 +353,7 @@ describe('Editor AI post suggestions', () => {
     });
 
     expect(container.querySelector('.editor-translations-panel')).toBeNull();
-    expect(container.querySelector('.editor-language-row .editor-translations-flags')).not.toBeNull();
+    expect(container.querySelector('.metadata-toggle-header .editor-translations-flags')).not.toBeNull();
     expect(ui.getByLabelText('French (Draft)')).toBeInTheDocument();
     expect(ui.getByLabelText('German (Published)')).toBeInTheDocument();
     expect(container.querySelector('.editor-translations-flags')).not.toBeNull();
@@ -386,7 +386,7 @@ describe('Editor AI post suggestions', () => {
       fireEvent.click(ui.getByRole('button', { name: /Metadata/i }));
     });
 
-    const flags = container.querySelectorAll('.editor-language-row .editor-translation-flag');
+    const flags = container.querySelectorAll('.metadata-toggle-header .editor-translation-flag');
     expect(flags).toHaveLength(2);
     expect(ui.getByDisplayValue('Hello world')).toBeInTheDocument();
 

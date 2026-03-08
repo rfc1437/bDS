@@ -50,6 +50,7 @@ export interface PostTranslationResult {
   success: boolean;
   translation?: Awaited<ReturnType<PostEngine['upsertPostTranslation']>>;
   error?: string;
+  warning?: string;
 }
 
 export interface MediaTranslationResult {
@@ -469,7 +470,7 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     }
   }
 
-  async translatePost(postId: string, targetLanguage: string): Promise<PostTranslationResult> {
+  async translatePost(postId: string, targetLanguage: string, options?: { autoPublish?: boolean }): Promise<PostTranslationResult> {
     if (!this.postEngine) {
       return { success: false, error: 'Post engine not available' };
     }
@@ -544,15 +545,26 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
 
       const normalizedTranslatedContent = normalizeTranslatedMarkdownBody(translatedContent || '', post.content);
 
+      // Collect warnings for partial failures
+      const warnings: string[] = [];
+      if (!parsed) {
+        warnings.push('metadata JSON parsing failed, title/excerpt kept as original');
+      }
+      if (normalizedTranslatedContent.trim() === post.content.trim()) {
+        warnings.push('translated content is identical to source');
+      }
+
       const translation = await this.postEngine.upsertPostTranslation(postId, targetLanguage, {
         title: parsed?.title || post.title,
         excerpt: parsed?.excerpt || post.excerpt || undefined,
         content: normalizedTranslatedContent,
+        status: options?.autoPublish ? 'published' : undefined,
       });
 
       return {
         success: true,
         translation,
+        warning: warnings.length > 0 ? warnings.join('; ') : undefined,
       };
     } catch (error) {
       return { success: false, error: (error as Error).message };

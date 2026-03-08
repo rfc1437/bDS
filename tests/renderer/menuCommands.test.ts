@@ -107,4 +107,15 @@ describe('Help menu documentation entry', () => {
   it('maps Edit Menu to a renderer menu event', () => {
     expect(APP_MENU_ACTION_EVENT_MAP.editMenu).toBe('menu:editMenu');
   });
+
+  it('includes Fill Missing Translations action in Blog menu', () => {
+    const blogGroup = APP_MENU_GROUPS.find((group) => group.label === 'Blog');
+
+    expect(blogGroup).toBeDefined();
+    expect(blogGroup?.items.some((item) => item.action === 'fillMissingTranslations')).toBe(true);
+  });
+
+  it('maps Fill Missing Translations to a renderer menu event', () => {
+    expect(APP_MENU_ACTION_EVENT_MAP.fillMissingTranslations).toBe('menu:fillMissingTranslations');
+  });
 });

@@ -115,11 +115,16 @@
   gap: 16px;
 }
 
+.metadata-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .metadata-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
   padding: 6px 4px;
   background: none;
   border: none;
@@ -130,6 +135,7 @@
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: color 0.15s;
+  flex-shrink: 0;
 }
 
 .metadata-toggle:hover {
@@ -206,9 +212,7 @@
 }
 
 .editor-language-row select {
-  flex: 0 0 50%;
-  width: 50%;
-  max-width: 50%;
+  flex: 1;
   min-width: 0;
 }
 

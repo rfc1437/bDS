@@ -686,15 +686,16 @@ function createApplicationMenu(): Menu {
       };
     }
 
-    return {
+    const item: MenuItemConstructorOptions = {
       label: translatedLabel,
-      accelerator: definition.accelerator,
-      id: definition.id,
-      enabled: definition.enabled,
       click: async () => {
         await triggerMenuAction(action);
       },
     };
+    if (definition.accelerator) item.accelerator = definition.accelerator;
+    if (definition.id) item.id = definition.id;
+    if (definition.enabled !== undefined) item.enabled = definition.enabled;
+    return item;
   };
 
   const buildSharedGroupMenuItems = (groupLabel: string): MenuItemConstructorOptions[] => {

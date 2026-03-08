@@ -1315,13 +1315,29 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       </div>
 
       <div className="editor-content">
-        <button
-          className={`metadata-toggle ${metadataExpanded ? 'expanded' : ''}`}
-          onClick={() => setMetadataExpanded(v => !v)}
-        >
-          <span className="metadata-toggle-chevron">{metadataExpanded ? '▼' : '▶'}</span>
-          <span>{tr('editor.metadata.toggle')}</span>
-        </button>
+        <div className="metadata-toggle-header">
+          <button
+            className={`metadata-toggle ${metadataExpanded ? 'expanded' : ''}`}
+            onClick={() => setMetadataExpanded(v => !v)}
+          >
+            <span className="metadata-toggle-chevron">{metadataExpanded ? '▼' : '▶'}</span>
+            <span>{tr('editor.metadata.toggle')}</span>
+          </button>
+          <div className="editor-translations-flags" aria-label={tr('editor.translations.title')}>
+            {languageFlags.map((item) => (
+              <button
+                key={item.language}
+                type="button"
+                onClick={() => handleActivateLanguage(item.language)}
+                aria-label={item.ariaLabel}
+                title={item.ariaLabel}
+                className={`editor-translation-flag status-${item.status} ${activeEditingLanguage === item.language ? 'active' : ''}`}
+              >
+                {getLanguageFlag(item.language)}
+              </button>
+            ))}
+          </div>
+        </div>
         {metadataExpanded && (
         <div className="editor-header-row">
           <div className="editor-meta">
@@ -1368,20 +1384,6 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                     <option key={languageCode} value={languageCode}>{getLanguageLabel(languageCode)}</option>
                   ))}
                 </select>
-                <div className="editor-translations-flags" aria-label={tr('editor.translations.title')}>
-                  {languageFlags.map((item) => (
-                    <button
-                      key={item.language}
-                      type="button"
-                      onClick={() => handleActivateLanguage(item.language)}
-                      aria-label={item.ariaLabel}
-                      title={item.ariaLabel}
-                      className={`editor-translation-flag status-${item.status} ${activeEditingLanguage === item.language ? 'active' : ''}`}
-                    >
-                      {getLanguageFlag(item.language)}
-                    </button>
-                  ))}
-                </div>
                 <button
                   className="secondary compact"
                   onClick={handleDetectLanguage}

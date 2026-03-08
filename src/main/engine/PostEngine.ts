@@ -1186,7 +1186,13 @@ export class PostEngine extends EventEmitter {
 
     const now = new Date();
     const existing = await this.getTranslationRow(postId, normalizedLanguage);
+
+    // Only draft the source post when manually editing a translation (not when
+    // auto-publishing via batch translation).  When the caller sets
+    // status='published' it signals an automated workflow that must not touch
+    // the source post's status.
     const sourceShouldDraft = sourcePost.status === 'published'
+      && data.status !== 'published'
       && (data.title !== undefined || data.excerpt !== undefined || data.content !== undefined);
 
     if (sourceShouldDraft) {
@@ -1213,7 +1219,7 @@ export class PostEngine extends EventEmitter {
         title: data.title ?? existing.title,
         excerpt: data.excerpt ?? existing.excerpt ?? undefined,
         content: data.content ?? existing.content ?? '',
-        status: ((data.status && !contentChanged) ? data.status : (contentChanged ? 'draft' : existing.status)) as 'draft' | 'published' | 'archived',
+        status: (data.status || (contentChanged ? 'draft' : existing.status)) as 'draft' | 'published' | 'archived',
         createdAt: existing.createdAt,
         updatedAt: now,
         publishedAt: data.publishedAt ?? existing.publishedAt ?? undefined,
@@ -1244,10 +1250,10 @@ export class PostEngine extends EventEmitter {
       title: data.title || sourcePost.title,
       excerpt: data.excerpt,
       content: data.content || '',
-      status: 'draft',
+      status: (data.status || 'draft') as 'draft' | 'published' | 'archived',
       createdAt: now,
       updatedAt: now,
-      publishedAt: data.publishedAt,
+      publishedAt: data.publishedAt ?? (data.status === 'published' ? now : undefined),
       filePath: '',
     };
 

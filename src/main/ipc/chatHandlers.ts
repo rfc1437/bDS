@@ -963,10 +963,10 @@ export function registerChatHandlers(): void {
  * Translate a post for auto-translation workflows (called from event handlers).
  * Returns the result of translatePost or an error object if AI is not initialized.
  */
-export async function autoTranslatePost(postId: string, targetLanguage: string): Promise<{ success: boolean; error?: string }> {
+export async function autoTranslatePost(postId: string, targetLanguage: string, options?: { autoPublish?: boolean }): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
     await ensureInitialized();
-    return await getOneShotTasks().translatePost(postId, targetLanguage);
+    return await getOneShotTasks().translatePost(postId, targetLanguage, options);
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }

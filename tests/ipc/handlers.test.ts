@@ -70,6 +70,7 @@ const mockPostEngine = {
   getLinksTo: vi.fn(),
   getLinkedBy: vi.fn(),
   rebuildLinks: vi.fn(),
+  getPostTranslations: vi.fn().mockResolvedValue([]),
 };
 
 const mockMediaEngine = {
@@ -91,6 +92,7 @@ const mockMediaEngine = {
   getThumbnailDataUrl: vi.fn(),
   regenerateMissingThumbnails: vi.fn(),
   getRelativePath: vi.fn(),
+  getMediaTranslations: vi.fn(),
 };
 
 const mockProjectEngine = {
@@ -2860,6 +2862,148 @@ describe('IPC Handlers', () => {
           }),
         );
         expect(mockPostEngine.fixInvalidTranslations).toHaveBeenCalledWith(report);
+      });
+    });
+
+    describe('blog:fillMissingTranslations', () => {
+      it('should return zero counts when only main language is configured', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+          blogLanguages: ['en'],
+        });
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
+      });
+
+      it('should return zero counts when no blog languages configured', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+          blogLanguages: [],
+        });
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
+      });
+
+      it('should return zero counts when metadata has no blogLanguages', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+        });
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(mockPostEngine.getPostsFiltered).not.toHaveBeenCalled();
+      });
+
+      it('should run a single batch task for missing post translations', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+          blogLanguages: ['en', 'fr', 'de'],
+        });
+
+        const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
+        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
+        mockPostEngine.getPostTranslations.mockResolvedValue([
+          { language: 'fr' },
+        ]);
+        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+
+        mockTaskManager.runTask.mockResolvedValue(undefined);
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 1, enqueuedMedia: 0 });
+        expect(mockTaskManager.runTask).toHaveBeenCalledTimes(1);
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Fill missing translations (1 posts, 0 media)',
+          }),
+        );
+      });
+
+      it('should include media in the single batch task', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+          blogLanguages: ['en', 'fr'],
+        });
+
+        const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
+        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
+        mockPostEngine.getPostTranslations.mockResolvedValue([{ language: 'fr' }]);
+        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([{ mediaId: 'media-1' }]);
+        mockMediaEngine.getMediaTranslations.mockResolvedValue([]);
+
+        mockTaskManager.runTask.mockResolvedValue(undefined);
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 1 });
+        expect(mockTaskManager.runTask).toHaveBeenCalledTimes(1);
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Fill missing translations (0 posts, 1 media)',
+          }),
+        );
+      });
+
+      it('should skip posts marked as doNotTranslate', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+          blogLanguages: ['en', 'fr'],
+        });
+
+        const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en', doNotTranslate: true });
+        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(mockPostEngine.getPostTranslations).not.toHaveBeenCalled();
+        expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+      });
+
+      it('should not create a task when all translations already exist', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'en',
+          blogLanguages: ['en', 'fr'],
+        });
+
+        const post1 = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
+        mockPostEngine.getPostsFiltered.mockResolvedValue([post1]);
+        mockPostEngine.getPostTranslations.mockResolvedValue([{ language: 'fr' }]);
+        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+
+        expect(result).toEqual({ enqueuedPosts: 0, enqueuedMedia: 0 });
+        expect(mockTaskManager.runTask).not.toHaveBeenCalled();
       });
     });
 
