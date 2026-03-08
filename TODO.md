@@ -350,8 +350,6 @@ When media metadata is consumed during rendering or editing:
 
 ---
 
----
-
 ## 3. Drag-and-Drop Image Insertion
 
 ### Goal
@@ -460,3 +458,196 @@ The same plugin can handle `paste` events with image files:
   editor state after drop.
 - Test edge cases: non-image files, failed imports, multiple simultaneous
   drops.
+
+---
+
+## 4. Multi-Language Blog Rendering (Phase 2)
+
+### Goal
+
+The generated blog is fully navigable in each activated language. Every
+language gets its own route subtree (`/en/`, `/de/`, …), its own feeds, and
+its own sitemap entries. Media assets are shared; only HTML differs. The
+preview server must serve the same language-prefixed routes so the user can
+verify output before uploading.
+
+### Current State
+
+- Post and media translation schemas, CRUD, AI translation, and validation
+  already exist (§1, §2).
+- `PageRenderer` already accepts `preferredLanguage` and resolves translations
+  via `resolveRenderablePost()` and `getMediaTranslation()`.
+- `BlogGenerationEngine` builds translation variants with `.lang` slug
+  suffixes but writes everything to a flat `html/` directory — no
+  language-prefixed subtrees.
+- `PreviewServer` supports a `?lang=` query parameter but has no
+  language-prefixed routes.
+- `ProjectMetadata` has `mainLanguage` but no `blogLanguages` list.
+- No `doNotTranslate` flag on posts.
+- No automatic translation on post create/update.
+- No "Fill missing translations" batch tool.
+
+### Implementation Plan
+
+#### 4.1 Project Preferences — Blog Languages
+
+Add `blogLanguages?: string[]` to `ProjectMetadata`. This is the list of
+languages the blog is rendered in (e.g. `['en', 'de']`). The `mainLanguage`
+is always implicitly included. When `blogLanguages` is empty or absent, the
+blog renders in `mainLanguage` only (current behaviour).
+
+**UI**: Add a "Blog Languages" multi-select in the Project Settings panel,
+populated from `SUPPORTED_POST_LANGUAGES`. The main language is shown but
+cannot be removed. i18n keys: `settings.project.blogLanguagesLabel`,
+`settings.project.blogLanguagesDescription`.
+
+#### 4.2 Do-Not-Translate Flag
+
+Add a boolean `doNotTranslate` column to the `posts` table (default false).
+Persist in YAML frontmatter as `doNotTranslate: true`. Migration required.
+
+**UI**: Checkbox in the post editor metadata area, labelled via i18n
+(`editor.doNotTranslateLabel`).
+
+**Validate Translations** must detect posts marked `doNotTranslate` that
+still have translations and offer to remove them.
+
+#### 4.3 Automatic Translation on Post Create/Update
+
+When a canonical post is created or updated and `blogLanguages` contains
+languages beyond `mainLanguage`:
+
+1. For each active blog language missing a translation (skip if
+   `doNotTranslate` is set), enqueue a `TaskManager` task calling
+   `chat:translatePost`.
+2. On success, show a toast ("Translated to French"). On failure, show an
+   error toast. Task progress is visible in the task panel.
+3. Only canonical content changes trigger re-translation. Editing a
+   translation directly does **not** re-trigger anything.
+4. After each post translation succeeds, cascade to linked media: for every
+   media item linked via `postMedia` that lacks a translation for the target
+   language, enqueue `chat:translateMediaMetadata`.
+
+#### 4.4 Fill Missing Translations (Blog Menu Tool)
+
+Add a "Fill Missing Translations" menu item under the Blog menu.
+
+1. Scan all published posts (excluding `doNotTranslate`) and all linked media
+   for missing translations across `blogLanguages`.
+2. Create one task for post translations and a second task for media metadata
+   translations.
+3. Report progress and partial failures via the task panel and toasts.
+4. This is separate from Validate Translations — validate checks consistency,
+   fill adds missing content.
+
+#### 4.5 Language-Prefixed Route Generation
+
+Change `BlogGenerationEngine.generate()` to produce a separate route subtree
+per blog language:
+
+```
+html/
+  index.html                 ← duplicate of /en/index.html (main language)
+  en/                        ← mainLanguage subtree
+    index.html
+    page/2/index.html
+    2025/03/08/my-post/index.html
+    category/tech/index.html
+    tag/rust/index.html
+    rss.xml
+    atom.xml
+  de/                        ← additional blog language
+    index.html
+    …same structure…
+    rss.xml
+    atom.xml
+  sitemap.xml                ← combined, with hreflang alternates
+  media/                     ← shared, not duplicated
+  assets/                    ← shared, not duplicated
+```
+
+The root `index.html` is a full copy of `/{mainLanguage}/index.html`, not a
+redirect. All its internal links point into the `/{mainLanguage}/` subtree,
+so navigation naturally stays within the language prefix. This avoids any
+dependency on JavaScript, meta-refresh, or server-side redirect support.
+
+For each language subtree:
+
+- Resolve every post through `resolveRenderablePost(post, engine, lang)`.
+  If no translation exists, fall back to canonical content.
+- Same for media metadata in macros: `getMediaTranslation(id, lang)` with
+  canonical fallback.
+- All internal links stay within the same language prefix (`/en/…` links to
+  `/en/…`).
+- Posts marked `doNotTranslate` render only in the canonical language subtree.
+  They are omitted from other language subtrees entirely.
+
+#### 4.6 Per-Language Feeds
+
+Each language subtree gets its own `rss.xml` and `atom.xml` containing only
+posts available in that language, with URLs pointing into the language
+subtree. Feed `<language>` / `xml:lang` is set to the subtree language.
+
+#### 4.7 Combined Sitemap with hreflang
+
+The root `sitemap.xml` lists all language variants of every URL. Each `<url>`
+entry includes `<xhtml:link rel="alternate" hreflang="…" href="…"/>` for
+every language the post is available in, plus `x-default` pointing to the
+main language variant.
+
+#### 4.8 Language Switcher in Templates
+
+Add a `blogLanguages` array and `currentLanguage` string to the Liquid
+template context. Default templates render a language switcher bar (flag
+badges) at the top linking to the same page in each available language.
+
+The switcher links are absolute paths (`/de/2025/03/08/my-post/`) so they
+work regardless of the current route depth.
+
+#### 4.9 Preview Server — Language-Prefixed Routes
+
+Extend `PreviewServer` to handle language-prefixed paths so preview matches
+the generated output:
+
+- `GET /en/2025/03/08/my-post` → render post in English.
+- `GET /de/category/tech` → render category list in German.
+- Strip the language prefix, resolve the route normally, pass the language as
+  `preferredLanguage` to `renderRouteForContext()`.
+- Keep the existing `?lang=` parameter as a fallback for single-post preview
+  from the editor.
+- The root `/` redirects to `/{mainLanguage}/` when `blogLanguages` is
+  configured.
+- Language switcher links in preview HTML work because they use the same
+  prefix scheme as generation.
+
+This ensures the user sees the exact same route structure and language
+switching behaviour in preview as in the generated output.
+
+#### 4.10 Preview/Generation Parity Checklist
+
+Both preview and generation must produce identical output for:
+
+- [ ] Language-prefixed route resolution (`/en/…`, `/de/…`).
+- [ ] Post content: translated title, excerpt, body with canonical fallback.
+- [ ] Media metadata in macros (gallery, photo_album): translated alt/title/
+      caption with canonical fallback.
+- [ ] Internal links staying within the current language prefix.
+- [ ] Language switcher rendering with correct cross-language links.
+- [ ] Per-language feed links in HTML `<head>`.
+- [ ] `doNotTranslate` posts omitted from non-canonical subtrees.
+- [ ] Root `/` renders main language content (not a redirect).
+
+Shared implementation: both paths go through `SharedRouteRenderer` →
+`PageRenderer`, so language handling logic added there automatically applies
+to both preview and generation. The key change is making
+`SharedRouteRenderer` language-prefix-aware and ensuring
+`BlogGenerationEngine` iterates over `blogLanguages` when building routes.
+
+#### 4.11 Testing
+
+- **Unit**: Route prefix stripping, language fallback resolution, feed
+  language filtering, `doNotTranslate` exclusion, sitemap hreflang building.
+- **Integration**: End-to-end generation with two languages produces correct
+  subtree structure, shared assets, per-language feeds, combined sitemap.
+- **Preview parity**: Same route in preview and generation produces identical
+  HTML (modulo asset URLs).
