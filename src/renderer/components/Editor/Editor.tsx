@@ -1693,7 +1693,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   );
 };
 
-const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
+export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const { t: tr } = useI18n();
   const { media, updateMedia, showErrorModal, showConfirmDeleteModal, openTab } = useAppStore();
   const activeProjectId = useAppStore((s) => s.activeProject?.id ?? null);
@@ -1726,7 +1726,8 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const [mediaTranslations, setMediaTranslations] = useState<import('../../../main/shared/electronApi').MediaTranslationData[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
-  const [showTranslateDropdown, setShowTranslateDropdown] = useState(false);
+  const [showMediaTranslationModal, setShowMediaTranslationModal] = useState(false);
+  const [translationTargetLanguage, setTranslationTargetLanguage] = useState('');
 
   // Load project language setting
   useEffect(() => {
@@ -1793,7 +1794,6 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // Translate media metadata with AI
   const handleTranslateMedia = async (targetLanguage: string) => {
     if (!item || isTranslating) return;
-    setShowTranslateDropdown(false);
     setIsTranslating(true);
     try {
       const result = await window.electronAPI?.chat.translateMediaMetadata(item.id, targetLanguage);
@@ -1809,6 +1809,26 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     } finally {
       setIsTranslating(false);
     }
+  };
+
+  // Open translation modal (like posts)
+  const handleOpenMediaTranslationModal = () => {
+    const preferred = translationTargetLanguage
+      || availableTranslationLanguages[0]
+      || '';
+    setShowQuickActions(false);
+    setTranslationTargetLanguage(preferred);
+    setShowMediaTranslationModal(true);
+  };
+
+  const handleCloseMediaTranslationModal = () => {
+    setShowMediaTranslationModal(false);
+  };
+
+  const handleConfirmMediaTranslation = () => {
+    if (!translationTargetLanguage) return;
+    setShowMediaTranslationModal(false);
+    void handleTranslateMedia(translationTargetLanguage);
   };
 
   // Delete a media translation
@@ -2098,18 +2118,18 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         </div>
         <div className="editor-actions">
           {/* Quick Actions Dropdown */}
-          {item.mimeType.startsWith('image/') && (
-            <div className="quick-actions-wrapper" ref={quickActionsRef}>
-              <button 
-                className="secondary quick-actions-btn"
-                onClick={() => setShowQuickActions(!showQuickActions)}
-                disabled={isAnalyzing}
-                title={tr('editor.media.quickActions.title')}
-              >
-                {isAnalyzing ? tr('editor.media.quickActions.analyzing') : tr('editor.media.quickActions.button')}
-              </button>
-              {showQuickActions && (
-                <div className="quick-actions-menu">
+          <div className="quick-actions-wrapper" ref={quickActionsRef}>
+            <button 
+              className="secondary quick-actions-btn"
+              onClick={() => setShowQuickActions(!showQuickActions)}
+              disabled={isAnalyzing || isDetectingLanguage || isTranslating}
+              title={tr('editor.media.quickActions.title')}
+            >
+              {(isAnalyzing || isDetectingLanguage || isTranslating) ? tr('editor.media.quickActions.analyzing') : tr('editor.media.quickActions.button')}
+            </button>
+            {showQuickActions && (
+              <div className="quick-actions-menu">
+                {item.mimeType.startsWith('image/') && (
                   <button 
                     className="quick-action-item" 
                     onClick={handleAIAnalysis}
@@ -2121,10 +2141,34 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                       <small>{tr('editor.media.quickActions.aiDescription')}</small>
                     </span>
                   </button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+                {item.mimeType.startsWith('image/') && <div className="quick-actions-divider" />}
+                <button
+                  className="quick-action-item"
+                  onClick={() => { setShowQuickActions(false); void handleDetectLanguage(); }}
+                  disabled={isDetectingLanguage || (!title && !alt && !caption)}
+                >
+                  <span className="quick-action-icon">🔍</span>
+                  <span className="quick-action-text">
+                    <strong>{tr('editor.media.quickActions.detectLanguageTitle')}</strong>
+                    <small>{tr('editor.media.quickActions.detectLanguageDescription')}</small>
+                  </span>
+                </button>
+                <div className="quick-actions-divider" />
+                <button
+                  className="quick-action-item"
+                  onClick={handleOpenMediaTranslationModal}
+                  disabled={isTranslating || !mediaLanguage || availableTranslationLanguages.length === 0}
+                >
+                  <span className="quick-action-icon">🌍</span>
+                  <span className="quick-action-text">
+                    <strong>{tr('editor.media.quickActions.translateTitle')}</strong>
+                    <small>{tr('editor.media.quickActions.translateDescription')}</small>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
           <button onClick={handleReplaceFile} className="secondary">{tr('editor.media.replaceFile')}</button>
           <button onClick={handleSave}>{tr('common.save')}</button>
           <button onClick={handleDelete} className="secondary danger">{tr('editor.delete')}</button>
@@ -2226,57 +2270,20 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           {/* Language & Translations Section */}
           <div className="editor-field">
             <label>{tr('editor.media.field.language')}</label>
-            <div className="editor-field-row">
-              <select
-                value={mediaLanguage}
-                onChange={(e) => handleLanguageChange(e.target.value)}
-              >
-                <option value="">{tr('editor.media.field.languageNone')}</option>
-                {SUPPORTED_POST_LANGUAGES.map((lang) => (
-                  <option key={lang} value={lang}>{tr(`language.${lang}`)}</option>
-                ))}
-              </select>
-              <button
-                className="secondary"
-                onClick={handleDetectLanguage}
-                disabled={isDetectingLanguage || (!title && !alt && !caption)}
-                title={tr('editor.media.translations.detectTitle')}
-              >
-                {isDetectingLanguage ? tr('editor.media.translations.detecting') : tr('editor.media.translations.detect')}
-              </button>
-            </div>
+            <select
+              value={mediaLanguage}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+            >
+              <option value="">{tr('editor.media.field.languageNone')}</option>
+              {SUPPORTED_POST_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>{tr(`language.${lang}`)}</option>
+              ))}
+            </select>
           </div>
 
           {mediaLanguage && (
             <div className="editor-field media-translations-section">
-              <label>
-                {tr('editor.media.translations.title')}
-                {availableTranslationLanguages.length > 0 && (
-                  <div className="quick-actions-wrapper" style={{ display: 'inline-block', marginLeft: '8px' }}>
-                    <button
-                      className="add-link-btn"
-                      onClick={() => setShowTranslateDropdown(!showTranslateDropdown)}
-                      disabled={isTranslating}
-                    >
-                      {isTranslating ? tr('editor.media.translations.translating') : tr('editor.media.translations.translateButton')}
-                    </button>
-                    {showTranslateDropdown && (
-                      <div className="quick-actions-menu">
-                        {availableTranslationLanguages.map((lang) => (
-                          <button
-                            key={lang}
-                            className="quick-action-item"
-                            onClick={() => handleTranslateMedia(lang)}
-                          >
-                            <span className="quick-action-icon">{POST_LANGUAGE_FLAGS[lang]}</span>
-                            <span className="quick-action-text">{tr(`language.${lang}`)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </label>
+              <label>{tr('editor.media.translations.title')}</label>
 
               {mediaTranslations.length === 0 ? (
                 <div className="no-linked-posts">{tr('editor.media.translations.none')}</div>
@@ -2399,6 +2406,62 @@ const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         onConfirm={handleApplyAISuggestions}
         onClose={handleCloseAISuggestionsModal}
       />
+
+      {/* Translation Modal */}
+      {showMediaTranslationModal && (
+        <div className="translation-modal-backdrop" onClick={handleCloseMediaTranslationModal}>
+          <div className="translation-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="translation-modal-header">
+              <h2>{tr('editor.media.translations.title')}</h2>
+              <button className="translation-modal-close" onClick={handleCloseMediaTranslationModal} title={tr('common.cancel')}>×</button>
+            </div>
+            <div className="translation-modal-body">
+              <label className="translation-modal-label" htmlFor="media-translation-target-language">{tr('editor.media.translations.selectTarget')}</label>
+              <p className="translation-modal-copy">{tr('editor.media.translations.currentLanguage', { language: tr(`language.${mediaLanguage}`) })}</p>
+              <select
+                id="media-translation-target-language"
+                className="translation-modal-select"
+                value={translationTargetLanguage}
+                onChange={(e) => setTranslationTargetLanguage(e.target.value)}
+              >
+                {SUPPORTED_POST_LANGUAGES
+                  .filter(lang => lang !== mediaLanguage)
+                  .map((lang) => {
+                    const existing = mediaTranslations.find(t => t.language === lang);
+                    return (
+                      <option key={lang} value={lang}>
+                        {tr(`language.${lang}`)}{existing ? ` (${tr('editor.media.translations.refresh')})` : ''}
+                      </option>
+                    );
+                  })}
+              </select>
+              {translationTargetLanguage && (
+                <div className="translation-modal-status-row">
+                  <span className="translation-modal-flag" aria-hidden="true">{POST_LANGUAGE_FLAGS[translationTargetLanguage as keyof typeof POST_LANGUAGE_FLAGS] || '🏳️'}</span>
+                  <span className="translation-modal-status-copy">
+                    <strong>{tr(`language.${translationTargetLanguage}`)}</strong>
+                    <small>
+                      {mediaTranslations.find(t => t.language === translationTargetLanguage)
+                        ? tr('editor.media.translations.refresh')
+                        : tr('editor.media.translations.none')}
+                    </small>
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="translation-modal-footer">
+              <button className="secondary" onClick={handleCloseMediaTranslationModal}>{tr('common.cancel')}</button>
+              <button
+                onClick={handleConfirmMediaTranslation}
+                disabled={!translationTargetLanguage || isTranslating}
+                title={tr('editor.media.quickActions.translateDescription')}
+              >
+                {isTranslating ? tr('editor.media.translations.translating') : tr('editor.media.translations.translateButton')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
