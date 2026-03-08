@@ -157,6 +157,10 @@ describe('Media editor quick-actions', () => {
     (window as any).electronAPI.media.getTranslations = vi.fn().mockResolvedValue([]);
     (window as any).electronAPI.media.getTranslation = vi.fn().mockResolvedValue(null);
     (window as any).electronAPI.media.deleteTranslation = vi.fn().mockResolvedValue(undefined);
+    (window as any).electronAPI.media.upsertTranslation = vi.fn().mockImplementation(async (_id: string, lang: string, data: Record<string, unknown>) => ({
+      id: 'trans-1', projectId: 'project-1', translationFor: _id, language: lang, ...data,
+      createdAt: new Date(), updatedAt: new Date(),
+    }));
     (window as any).electronAPI.media.update = vi.fn().mockImplementation(async (_id: string, payload: Record<string, unknown>) => ({
       ...createMedia(),
       ...payload,
@@ -297,5 +301,102 @@ describe('Media editor quick-actions', () => {
 
     const translateButton = ui.getByText('Translate to...').closest('button');
     expect(translateButton).toBeDisabled();
+  });
+
+  describe('edit translation modal', () => {
+    const translationFixture = {
+      id: 'trans-1',
+      projectId: 'project-1',
+      translationFor: 'media-1',
+      language: 'fr',
+      title: 'Titre français',
+      alt: 'Alt français',
+      caption: 'Légende française',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('opens edit modal when clicking a translation title', async () => {
+      (window as any).electronAPI.media.getTranslations = vi.fn().mockResolvedValue([translationFixture]);
+
+      const view = render(<MediaEditor mediaId="media-1" />);
+      const ui = within(view.container);
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+      const translationTitle = ui.getByText(/Titre français/);
+      expect(translationTitle).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(translationTitle);
+      });
+
+      expect(ui.getByRole('heading', { name: /Edit Translation/ })).toBeInTheDocument();
+      expect((ui.getByDisplayValue('Titre français') as HTMLInputElement)).toBeInTheDocument();
+      expect((ui.getByDisplayValue('Alt français') as HTMLInputElement)).toBeInTheDocument();
+      expect((ui.getByDisplayValue('Légende française') as HTMLTextAreaElement)).toBeInTheDocument();
+    });
+
+    it('closes edit modal on cancel', async () => {
+      (window as any).electronAPI.media.getTranslations = vi.fn().mockResolvedValue([translationFixture]);
+
+      const view = render(<MediaEditor mediaId="media-1" />);
+      const ui = within(view.container);
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      await act(async () => { fireEvent.click(ui.getByText(/Titre français/)); });
+
+      expect(ui.getByRole('heading', { name: /Edit Translation/ })).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(ui.getByRole('button', { name: /Cancel/i }));
+      });
+
+      expect(ui.queryByRole('heading', { name: /Edit Translation/ })).toBeNull();
+    });
+
+    it('saves translation via upsertTranslation and shows success toast', async () => {
+      (window as any).electronAPI.media.getTranslations = vi.fn().mockResolvedValue([translationFixture]);
+      const { showToast } = await import('../../../src/renderer/components/Toast');
+
+      const view = render(<MediaEditor mediaId="media-1" />);
+      const ui = within(view.container);
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      await act(async () => { fireEvent.click(ui.getByText(/Titre français/)); });
+
+      const modal = ui.getByText(/Edit Translation/).closest('.translation-modal')!;
+      const modalUi = within(modal as HTMLElement);
+
+      await act(async () => {
+        fireEvent.click(modalUi.getByRole('button', { name: /Save/i }));
+      });
+
+      expect((window as any).electronAPI.media.upsertTranslation).toHaveBeenCalledWith(
+        'media-1', 'fr', { title: 'Titre français', alt: 'Alt français', caption: 'Légende française' }
+      );
+      expect(showToast.success).toHaveBeenCalled();
+    });
+
+    it('shows error toast when save fails', async () => {
+      (window as any).electronAPI.media.getTranslations = vi.fn().mockResolvedValue([translationFixture]);
+      (window as any).electronAPI.media.upsertTranslation = vi.fn().mockRejectedValue(new Error('DB Error'));
+      const { showToast } = await import('../../../src/renderer/components/Toast');
+
+      const view = render(<MediaEditor mediaId="media-1" />);
+      const ui = within(view.container);
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      await act(async () => { fireEvent.click(ui.getByText(/Titre français/)); });
+
+      const modal = ui.getByText(/Edit Translation/).closest('.translation-modal')!;
+      const modalUi = within(modal as HTMLElement);
+
+      await act(async () => {
+        fireEvent.click(modalUi.getByRole('button', { name: /Save/i }));
+      });
+
+      expect(showToast.error).toHaveBeenCalled();
+    });
   });
 });

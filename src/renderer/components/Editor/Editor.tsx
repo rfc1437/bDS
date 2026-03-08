@@ -1728,6 +1728,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
   const [showMediaTranslationModal, setShowMediaTranslationModal] = useState(false);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState('');
+  const [editingTranslation, setEditingTranslation] = useState<{ language: string; title: string; alt: string; caption: string } | null>(null);
 
   // Load project language setting
   useEffect(() => {
@@ -1829,6 +1830,34 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     if (!translationTargetLanguage) return;
     setShowMediaTranslationModal(false);
     void handleTranslateMedia(translationTargetLanguage);
+  };
+
+  // Open edit modal for an existing translation
+  const handleOpenEditTranslation = (translation: import('../../../main/shared/electronApi').MediaTranslationData) => {
+    setEditingTranslation({
+      language: translation.language,
+      title: translation.title || '',
+      alt: translation.alt || '',
+      caption: translation.caption || '',
+    });
+  };
+
+  // Save edits to a translation
+  const handleSaveEditTranslation = async () => {
+    if (!item || !editingTranslation) return;
+    try {
+      await window.electronAPI?.media.upsertTranslation(item.id, editingTranslation.language, {
+        title: editingTranslation.title || undefined,
+        alt: editingTranslation.alt || undefined,
+        caption: editingTranslation.caption || undefined,
+      });
+      await loadMediaTranslations();
+      setEditingTranslation(null);
+      showToast.success(tr('editor.media.translations.saved', { language: tr(`language.${editingTranslation.language}`) }));
+    } catch (error) {
+      console.error('Failed to save media translation:', error);
+      showToast.error(tr('editor.media.translations.saveFailed'));
+    }
   };
 
   // Delete a media translation
@@ -2291,7 +2320,12 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
                 <div className="linked-posts-list">
                   {mediaTranslations.map((translation) => (
                     <div key={translation.language} className="linked-post-item">
-                      <span className="linked-post-title">
+                      <span
+                        className="linked-post-title"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => handleOpenEditTranslation(translation)}
+                        title={tr('editor.media.translations.editTitle', { language: tr(`language.${translation.language}`) })}
+                      >
                         {POST_LANGUAGE_FLAGS[translation.language as keyof typeof POST_LANGUAGE_FLAGS] || '🏳️'}{' '}
                         {tr(`language.${translation.language}`)}
                         {translation.title && ` — ${translation.title}`}
@@ -2458,6 +2492,54 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
               >
                 {isTranslating ? tr('editor.media.translations.translating') : tr('editor.media.translations.translateButton')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Translation Modal */}
+      {editingTranslation && (
+        <div className="translation-modal-backdrop" onClick={() => setEditingTranslation(null)}>
+          <div className="translation-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="translation-modal-header">
+              <h2>{tr('editor.media.translations.editTitle', { language: tr(`language.${editingTranslation.language}`) })}</h2>
+              <button className="translation-modal-close" onClick={() => setEditingTranslation(null)} title={tr('common.cancel')}>×</button>
+            </div>
+            <div className="translation-modal-body">
+              <div className="editor-field">
+                <label htmlFor="edit-translation-title">{tr('editor.media.field.title')}</label>
+                <input
+                  id="edit-translation-title"
+                  type="text"
+                  value={editingTranslation.title}
+                  onChange={(e) => setEditingTranslation({ ...editingTranslation, title: e.target.value })}
+                  placeholder={tr('editor.media.placeholder.title')}
+                />
+              </div>
+              <div className="editor-field">
+                <label htmlFor="edit-translation-alt">{tr('editor.media.field.altText')}</label>
+                <input
+                  id="edit-translation-alt"
+                  type="text"
+                  value={editingTranslation.alt}
+                  onChange={(e) => setEditingTranslation({ ...editingTranslation, alt: e.target.value })}
+                  placeholder={tr('editor.media.placeholder.altText')}
+                />
+              </div>
+              <div className="editor-field">
+                <label htmlFor="edit-translation-caption">{tr('editor.media.field.caption')}</label>
+                <textarea
+                  id="edit-translation-caption"
+                  value={editingTranslation.caption}
+                  onChange={(e) => setEditingTranslation({ ...editingTranslation, caption: e.target.value })}
+                  placeholder={tr('editor.media.placeholder.caption')}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="translation-modal-footer">
+              <button className="secondary" onClick={() => setEditingTranslation(null)}>{tr('common.cancel')}</button>
+              <button onClick={() => void handleSaveEditTranslation()}>{tr('common.save')}</button>
             </div>
           </div>
         </div>
