@@ -506,12 +506,12 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
     }
 
     const sourceLanguage = post.language || 'en';
-    const metadataSystemPrompt = `You translate blog post metadata. Return ONLY valid JSON with keys title and excerpt. Do not add commentary. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const metadataSystemPrompt = `You translate blog post metadata. Return ONLY valid JSON with keys title and excerpt. Do not add commentary. Do not invent or add any text that is not present in the source. Only translate the given text. Translate from ${sourceLanguage} to ${targetLanguage}.`;
     const metadataUserPrompt = [
       `Title: ${post.title}`,
       `Excerpt: ${post.excerpt || ''}`,
     ].join('\n\n');
-    const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Do not invent, add, or generate any text that is not present in the source. Only translate the exact text provided. If the content contains only macro calls, shortcodes, or other non-translatable tokens, return them unchanged. If the source body is empty, return an empty string. Translate from ${sourceLanguage} to ${targetLanguage}.`;
     const contentUserPrompt = post.content;
 
     try {

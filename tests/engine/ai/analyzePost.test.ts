@@ -334,6 +334,34 @@ describe('OneShotTasks.translatePost', () => {
     });
   });
 
+  it('instructs the AI to translate only — never invent or add content', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Hello\n\nWorld',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: '# Bonjour\n\nMonde',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({ text: '{"title":"Mon Post","excerpt":"Resume"}' } as any)
+      .mockResolvedValueOnce({ text: '# Bonjour\n\nMonde' } as any);
+
+    await tasks.translatePost('post-1', 'fr');
+
+    const contentSystemPrompt = mockGenerateText.mock.calls[1][0].system as string;
+    expect(contentSystemPrompt).toMatch(/do not invent|do not add|only translate/i);
+    expect(contentSystemPrompt).toMatch(/macro|shortcode|non-translatable/i);
+  });
+
   it('falls back to source title and excerpt when metadata JSON is invalid', async () => {
     deps.postEngine.getPost.mockResolvedValue({
       id: 'post-1',
