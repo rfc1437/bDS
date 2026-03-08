@@ -20,7 +20,8 @@ This document provides context and best practices for GitHub Copilot when workin
 - UI you implement has to be tied to functionality
 - you must use drizzle to generate migrations and snapshots
 - we use an sqlite database. use sqlite semantics in snapshots and other artifacts
-- oh MacOS we use native menus and you have to hook them into the intercept for new menu items
+- on MacOS we use native menus and you have to hook them into the intercept for new menu items
+- there are two areas of localization, you sometimes need both (menus for example)
 
 ---
 
