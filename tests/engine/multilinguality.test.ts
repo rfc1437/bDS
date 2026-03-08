@@ -283,8 +283,8 @@ describe('Language switcher in templates', () => {
         page_title: 'Blog',
         language: 'en',
         blog_languages: [
-          { code: 'en', href_prefix: '', is_current: true },
-          { code: 'de', href_prefix: '/de', is_current: false },
+          { code: 'en', flag: '🇬🇧', href_prefix: '', is_current: true },
+          { code: 'de', flag: '🇩🇪', href_prefix: '/de', is_current: false },
         ],
         current_language: 'en',
         language_prefix: '',
@@ -293,9 +293,9 @@ describe('Language switcher in templates', () => {
 
     expect(html).toContain('class="language-switcher"');
     expect(html).toContain('class="language-switcher-badge language-switcher-badge-current"');
-    expect(html).toContain('>en</span>');
+    expect(html).toContain('🇬🇧');
     expect(html).toContain('href="/de"');
-    expect(html).toContain('>de</a>');
+    expect(html).toContain('🇩🇪');
   });
 
   it('does not render language switcher when blog_languages has one or zero entries', async () => {
@@ -316,7 +316,7 @@ describe('Language switcher in templates', () => {
         basePathname: '/',
         page_title: 'Blog',
         language: 'en',
-        blog_languages: [{ code: 'en', href_prefix: '', is_current: true }],
+        blog_languages: [{ code: 'en', flag: '🇬🇧', href_prefix: '', is_current: true }],
         current_language: 'en',
         language_prefix: '',
       },
@@ -341,8 +341,8 @@ describe('Language switcher in templates', () => {
         page_title: 'Blog',
         language: 'en',
         blog_languages: [
-          { code: 'en', href_prefix: '', is_current: false },
-          { code: 'de', href_prefix: '/de', is_current: true },
+          { code: 'en', flag: '🇬🇧', href_prefix: '', is_current: false },
+          { code: 'de', flag: '🇩🇪', href_prefix: '/de', is_current: true },
         ],
         current_language: 'de',
         language_prefix: '/de',
@@ -351,7 +351,7 @@ describe('Language switcher in templates', () => {
 
     expect(html).toContain('class="language-switcher"');
     expect(html).toContain('aria-current="true"');
-    expect(html).toContain('>de</span>');
+    expect(html).toContain('🇩🇪');
   });
 });
 

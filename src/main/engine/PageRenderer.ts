@@ -100,7 +100,7 @@ export type DateArchiveContext = {
 export interface PostListTemplateContext {
   page_title: string;
   language: string;
-  blog_languages: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+  blog_languages: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
   current_language: string;
   language_prefix: string;
   menu_items: TemplateMenuItem[];
@@ -146,7 +146,7 @@ export interface AlternateLinkEntry {
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
-  blog_languages: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+  blog_languages: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
   current_language: string;
   language_prefix: string;
   menu_items: TemplateMenuItem[];
@@ -1271,7 +1271,7 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
-      blog_languages?: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+      blog_languages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
       current_language?: string;
       language_prefix?: string;
       menu_items?: TemplateMenuItem[];
@@ -1502,7 +1502,7 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
-      blog_languages?: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+      blog_languages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
       current_language?: string;
       language_prefix?: string;
       menu_items?: TemplateMenuItem[];
@@ -1542,7 +1542,7 @@ export class PageRenderer {
     pageContext: {
       page_title: string;
       language: string;
-      blog_languages?: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+      blog_languages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
       current_language?: string;
       language_prefix?: string;
       menu_items?: TemplateMenuItem[];

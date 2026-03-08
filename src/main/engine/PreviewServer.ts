@@ -20,6 +20,7 @@ import {
   type PythonMacroRendererContract,
 } from './PageRenderer';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
+import { POST_LANGUAGE_FLAGS, type SupportedLanguage } from '../shared/i18n';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
 import {
   findPublishedPostBySlug,
@@ -311,11 +312,26 @@ export class PreviewServer {
       }
 
       if (pathname === '/__style-preview') {
+        const rawBlogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
+          ? (metadata as { blogLanguages: string[] }).blogLanguages
+          : [];
+        const allBlogLanguages = rawBlogLanguages.length > 0
+          ? (rawBlogLanguages.includes(mainLanguage) ? rawBlogLanguages : [mainLanguage, ...rawBlogLanguages])
+          : [];
+        const stylePreviewBlogLanguages = allBlogLanguages.length > 0
+          ? allBlogLanguages.map((lang) => ({
+              code: lang,
+              flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
+              href_prefix: lang === mainLanguage ? '' : `/${lang}`,
+              is_current: lang === mainLanguage,
+            }))
+          : [];
         const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
           pageTitle,
           language,
           menuItems,
           picoStylesheetHref,
+          blogLanguages: stylePreviewBlogLanguages,
           htmlThemeAttribute: previewThemeMode && previewThemeMode !== 'auto' ? `data-theme="${previewThemeMode}"` : undefined,
         }, categorySettings, listExcludedCategories);
         this.respond(res, 200, stylePreviewHtml);
@@ -377,7 +393,7 @@ export class PreviewServer {
 
   private async renderStylePreview(
     rewriteContext: HtmlRewriteContext,
-    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
+    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; blogLanguages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
     listExcludedCategories: string[],
   ): Promise<string> {
@@ -405,6 +421,7 @@ export class PreviewServer {
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,

@@ -1,6 +1,7 @@
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import { getPicoStylesheetHref, sanitizePicoTheme } from '../shared/picoThemes';
+import { POST_LANGUAGE_FLAGS, type SupportedLanguage } from '../shared/i18n';
 import {
   buildTemplateMenuItems,
   clampMaxPostsPerPage,
@@ -169,7 +170,7 @@ async function resolveRouteWithSharedServices(
   pageContext: {
     pageTitle: string;
     language: string;
-    blogLanguages: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+    blogLanguages: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
     currentLanguage: string;
     languagePrefix: string;
     menuItems: ReturnType<typeof buildTemplateMenuItems>;
@@ -439,13 +440,18 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const currentLanguage = languagePrefix
     ? languagePrefix.replace(/^\//, '')
     : language;
+  const mainLang = metadata?.mainLanguage?.trim().toLowerCase() || 'en';
   const rawBlogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
     ? (metadata as { blogLanguages: string[] }).blogLanguages
     : [];
-  const blogLanguages = rawBlogLanguages.length > 0
-    ? rawBlogLanguages.map((lang) => ({
+  const allBlogLanguages = rawBlogLanguages.length > 0
+    ? (rawBlogLanguages.includes(mainLang) ? rawBlogLanguages : [mainLang, ...rawBlogLanguages])
+    : [];
+  const blogLanguages = allBlogLanguages.length > 0
+    ? allBlogLanguages.map((lang) => ({
         code: lang,
-        href_prefix: lang === language ? '' : `/${lang}`,
+        flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
+        href_prefix: lang === mainLang ? '' : `/${lang}`,
         is_current: lang === currentLanguage,
       }))
     : [];

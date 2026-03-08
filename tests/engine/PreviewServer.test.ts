@@ -16,7 +16,7 @@ type PostEngineLike = {
 };
 
 type SettingsEngineLike = {
-  getProjectMetadata: () => Promise<{ maxPostsPerPage?: number; mainLanguage?: string } | null>;
+  getProjectMetadata: () => Promise<{ maxPostsPerPage?: number; mainLanguage?: string; blogLanguages?: string[] } | null>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 };
 
@@ -813,6 +813,82 @@ describe('PreviewServer', () => {
     expect(html).toContain('<html lang="en" data-theme="dark">');
     expect(html).toContain('href="/assets/pico.green.min.css"');
     expect(html).toContain('/assets/bds.css');
+  });
+
+  it('renders language switcher with flags on style preview when blogLanguages configured', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            mainLanguage: 'en',
+            blogLanguages: ['en', 'de'],
+          };
+        },
+      } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/__style-preview`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('class="language-switcher"');
+    expect(html).toContain('🇬🇧');
+    expect(html).toContain('🇩🇪');
+  });
+
+  it('includes mainLanguage in language switcher even when not listed in blogLanguages', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: {
+        setProjectContext: vi.fn(),
+        async getProjectMetadata() {
+          return {
+            maxPostsPerPage: 50,
+            mainLanguage: 'de',
+            blogLanguages: ['en'],
+          };
+        },
+      } as any,
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    // Check style-preview route
+    const styleResponse = await fetch(`${server.getBaseUrl()}/__style-preview`);
+    expect(styleResponse.status).toBe(200);
+    const styleHtml = await styleResponse.text();
+    expect(styleHtml).toContain('class="language-switcher"');
+    expect(styleHtml).toContain('🇩🇪');
+    expect(styleHtml).toContain('🇬🇧');
+
+    // Check root route
+    const rootResponse = await fetch(`${server.getBaseUrl()}/`);
+    expect(rootResponse.status).toBe(200);
+    const rootHtml = await rootResponse.text();
+    expect(rootHtml).toContain('class="language-switcher"');
+    expect(rootHtml).toContain('🇩🇪');
+    expect(rootHtml).toContain('🇬🇧');
+
+    // Check language-prefixed route (/en/)
+    const enResponse = await fetch(`${server.getBaseUrl()}/en/`);
+    expect(enResponse.status).toBe(200);
+    const enHtml = await enResponse.text();
+    expect(enHtml).toContain('class="language-switcher"');
+    expect(enHtml).toContain('🇩🇪');
+    expect(enHtml).toContain('🇬🇧');
   });
 
   it('limits list routes to 50 posts', async () => {
