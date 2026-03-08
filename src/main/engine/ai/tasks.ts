@@ -512,7 +512,7 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       `Title: ${post.title}`,
       `Excerpt: ${post.excerpt || ''}`,
     ].join('\n\n');
-    const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Do not invent, add, or generate any text that is not present in the source. Only translate the exact text provided. If the content contains only macro calls, shortcodes, or other non-translatable tokens, return them unchanged. If the source body is empty, return an empty string. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Keep markdown link text and URLs unchanged (e.g. [link text](URL) stays as-is). The body may contain mixed languages — always translate the surrounding prose from ${sourceLanguage} to ${targetLanguage}, even if some parts (like link text) are already in the target language. Do not invent, add, or generate any text that is not present in the source. Only translate the exact text provided. If the content contains only macro calls, shortcodes, or other non-translatable tokens, return them unchanged. If the source body is empty, return an empty string.`;
     const contentUserPrompt = post.content;
 
     try {

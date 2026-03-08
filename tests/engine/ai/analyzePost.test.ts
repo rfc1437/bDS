@@ -362,6 +362,36 @@ describe('OneShotTasks.translatePost', () => {
     expect(contentSystemPrompt).toMatch(/macro|shortcode|non-translatable/i);
   });
 
+  it('instructs the AI to keep markdown link text unchanged and translate surrounding prose', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'USearch Library',
+      excerpt: '',
+      content: '[unum-cloud/USearch: Fast Search](https://github.com/unum-cloud/USearch) - drin was drauf steht. Eine Library.',
+      language: 'de',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'en',
+      title: 'USearch Library',
+      excerpt: '',
+      content: '[unum-cloud/USearch: Fast Search](https://github.com/unum-cloud/USearch) - what it says on the tin. A library.',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({ text: '{"title":"USearch Library","excerpt":""}' } as any)
+      .mockResolvedValueOnce({
+        text: '[unum-cloud/USearch: Fast Search](https://github.com/unum-cloud/USearch) - what it says on the tin. A library.',
+      } as any);
+
+    await tasks.translatePost('post-1', 'en');
+
+    const contentSystemPrompt = mockGenerateText.mock.calls[1][0].system as string;
+    expect(contentSystemPrompt).toMatch(/link text/i);
+    expect(contentSystemPrompt).toMatch(/url/i);
+  });
+
   it('falls back to source title and excerpt when metadata JSON is invalid', async () => {
     deps.postEngine.getPost.mockResolvedValue({
       id: 'post-1',
