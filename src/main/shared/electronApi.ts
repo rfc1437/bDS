@@ -569,7 +569,7 @@ export interface SiteValidationReport {
 }
 
 export interface TranslationValidationIssue {
-  issue: 'same-language-as-canonical' | 'missing-source-post';
+  issue: 'same-language-as-canonical' | 'missing-source-post' | 'do-not-translate-has-translations' | 'content-in-database';
   translationId?: string;
   translationFor: string;
   canonicalLanguage?: string;
@@ -588,6 +588,7 @@ export interface TranslationValidationReport {
 export interface TranslationValidationFixResult {
   deletedDatabaseRows: number;
   deletedFiles: number;
+  flushedTranslations: number;
 }
 
 export interface SiteValidationApplyResult {

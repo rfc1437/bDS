@@ -13,6 +13,12 @@ function getIssueLabel(
   if (issue === 'same-language-as-canonical') {
     return tr('translationValidation.issue.sameLanguage');
   }
+  if (issue === 'do-not-translate-has-translations') {
+    return tr('translationValidation.issue.doNotTranslate');
+  }
+  if (issue === 'content-in-database') {
+    return tr('translationValidation.issue.contentInDatabase');
+  }
 
   return tr('translationValidation.issue.missingSource');
 }
@@ -115,6 +121,7 @@ export const TranslationValidationView: React.FC = () => {
       showToast.success(tr('translationValidation.toast.fixSuccess', {
         dbRows: result.deletedDatabaseRows,
         files: result.deletedFiles,
+        flushed: result.flushedTranslations,
       }));
       // Re-validate after fixing to refresh the report
       await handleRevalidate();

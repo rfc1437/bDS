@@ -51,7 +51,7 @@ export interface PostTranslationData {
 }
 
 export interface TranslationValidationIssue {
-  issue: 'same-language-as-canonical' | 'missing-source-post' | 'do-not-translate-has-translations';
+  issue: 'same-language-as-canonical' | 'missing-source-post' | 'do-not-translate-has-translations' | 'content-in-database';
   translationId?: string;
   translationFor: string;
   canonicalLanguage?: string;
@@ -70,6 +70,7 @@ export interface TranslationValidationReport {
 export interface TranslationValidationFixResult {
   deletedDatabaseRows: number;
   deletedFiles: number;
+  flushedTranslations: number;
 }
 
 export interface PostMetadata {
@@ -1078,6 +1079,18 @@ export class PostEngine extends EventEmitter {
         })];
       }
 
+      // Published translations should have content on disk, not in the database
+      if (row.status === 'published' && row.content) {
+        return [this.createTranslationValidationIssue({
+          issue: 'content-in-database',
+          translationId: row.id,
+          translationFor: row.translationFor,
+          translationLanguage: this.normalizeLanguageCode(row.language),
+          title: row.title,
+          filePath: row.filePath || undefined,
+        })];
+      }
+
       return [];
     }).sort((left, right) => {
       const leftKey = `${left.translationFor}:${left.translationId || ''}:${left.filePath || ''}`;
@@ -1144,9 +1157,29 @@ export class PostEngine extends EventEmitter {
     const db = getDatabase().getLocal();
     let deletedDatabaseRows = 0;
     let deletedFiles = 0;
+    let flushedTranslations = 0;
 
     for (const row of report.invalidDatabaseRows) {
       if (!row.translationId) {
+        continue;
+      }
+      if (row.issue === 'content-in-database') {
+        // Flush content to filesystem instead of deleting
+        const translation = await this.resolvePostTranslationData(
+          await this.getTranslationRow(row.translationFor, row.translationLanguage),
+        );
+        const sourcePost = await this.getPost(row.translationFor);
+        if (translation && sourcePost) {
+          try {
+            const filePath = await this.writePostTranslationFile(sourcePost, translation);
+            await db.update(postTranslations)
+              .set({ content: null, filePath })
+              .where(eq(postTranslations.id, row.translationId));
+            flushedTranslations += 1;
+          } catch {
+            // Source post or translation data may be inconsistent
+          }
+        }
         continue;
       }
       await db.delete(postTranslations).where(eq(postTranslations.id, row.translationId));
@@ -1165,7 +1198,7 @@ export class PostEngine extends EventEmitter {
       }
     }
 
-    return { deletedDatabaseRows, deletedFiles };
+    return { deletedDatabaseRows, deletedFiles, flushedTranslations };
   }
 
   async upsertPostTranslation(
@@ -1239,6 +1272,15 @@ export class PostEngine extends EventEmitter {
         })
         .where(eq(postTranslations.id, existing.id));
 
+      // Flush content to filesystem when auto-publishing a translation
+      if (updated.status === 'published' && sourcePost.status === 'published') {
+        const translationFilePath = await this.writePostTranslationFile(sourcePost, updated);
+        await db.update(postTranslations)
+          .set({ content: null, filePath: translationFilePath })
+          .where(eq(postTranslations.id, existing.id));
+        updated.filePath = translationFilePath;
+      }
+
       this.emit('postTranslationUpdated', updated);
       return updated;
     }
@@ -1275,6 +1317,16 @@ export class PostEngine extends EventEmitter {
     };
 
     await db.insert(postTranslations).values(dbTranslation);
+
+    // Flush content to filesystem when auto-publishing a new translation
+    if (created.status === 'published' && sourcePost.status === 'published') {
+      const translationFilePath = await this.writePostTranslationFile(sourcePost, created);
+      await db.update(postTranslations)
+        .set({ content: null, filePath: translationFilePath })
+        .where(eq(postTranslations.id, created.id));
+      created.filePath = translationFilePath;
+    }
+
     this.emit('postTranslationCreated', created);
     return created;
   }

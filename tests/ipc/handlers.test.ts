@@ -2834,6 +2834,7 @@ describe('IPC Handlers', () => {
         mockPostEngine.fixInvalidTranslations.mockResolvedValue({
           deletedDatabaseRows: 2,
           deletedFiles: 1,
+          flushedTranslations: 0,
         });
 
         mockTaskManager.runTask.mockImplementation(async (task: any) => {
@@ -2854,7 +2855,7 @@ describe('IPC Handlers', () => {
 
         const result = await invokeHandler('blog:fixInvalidTranslations', report);
 
-        expect(result).toEqual({ deletedDatabaseRows: 2, deletedFiles: 1 });
+        expect(result).toEqual({ deletedDatabaseRows: 2, deletedFiles: 1, flushedTranslations: 0 });
         expect(mockTaskManager.runTask).toHaveBeenCalledWith(
           expect.objectContaining({
             name: 'Fix Invalid Translations',

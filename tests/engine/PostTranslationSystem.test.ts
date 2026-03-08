@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import { PostEngine } from '../../src/main/engine/PostEngine';
+import type { TranslationValidationReport } from '../../src/main/shared/electronApi';
 import { posts, postTranslations } from '../../src/main/database/schema';
 
 const mockPosts = new Map<string, any>();
@@ -431,6 +432,131 @@ describe('Post translation system', () => {
     ]);
   });
 
+  it('reports content-in-database issues for published translations with DB content', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+      status: 'published',
+    });
+
+    // Simulate a published translation with content still in DB (the bug scenario)
+    mockTranslations.set('translation-stuck', {
+      id: 'translation-stuck',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'fr',
+      title: 'Bonjour le monde',
+      excerpt: null,
+      content: 'Contenu traduit resté en base',
+      status: 'published',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: new Date('2024-01-01T00:00:00.000Z'),
+      filePath: '',
+      checksum: 'checksum-stuck',
+    });
+
+    const report = await engine.validateTranslations();
+
+    expect(report.invalidDatabaseRows).toEqual([
+      expect.objectContaining({
+        issue: 'content-in-database',
+        translationId: 'translation-stuck',
+        translationFor: source.id,
+        translationLanguage: 'fr',
+        title: 'Bonjour le monde',
+      }),
+    ]);
+  });
+
+  it('does not report content-in-database for draft translations with DB content', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+      status: 'published',
+    });
+
+    mockTranslations.set('translation-draft', {
+      id: 'translation-draft',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'fr',
+      title: 'Bonjour',
+      excerpt: null,
+      content: 'Draft content in DB is fine',
+      status: 'draft',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: null,
+      filePath: '',
+      checksum: 'checksum-draft',
+    });
+
+    const report = await engine.validateTranslations();
+
+    expect(report.invalidDatabaseRows).toHaveLength(0);
+  });
+
+  it('fixes content-in-database by flushing translation to filesystem', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+      status: 'published',
+    });
+
+    await engine.publishPost(source.id);
+
+    // Simulate a published translation stuck in DB
+    mockTranslations.set('translation-stuck', {
+      id: 'translation-stuck',
+      projectId: 'project-1',
+      translationFor: source.id,
+      language: 'fr',
+      title: 'Bonjour le monde',
+      excerpt: 'Résumé',
+      content: 'Contenu traduit resté en base',
+      status: 'published',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      publishedAt: new Date('2024-01-01T00:00:00.000Z'),
+      filePath: '',
+      checksum: 'checksum-stuck',
+    });
+
+    const report: TranslationValidationReport = {
+      checkedDatabaseRowCount: 1,
+      checkedFilesystemFileCount: 0,
+      invalidDatabaseRows: [
+        {
+          issue: 'content-in-database',
+          translationId: 'translation-stuck',
+          translationFor: source.id,
+          translationLanguage: 'fr',
+          title: 'Bonjour le monde',
+        },
+      ],
+      invalidFilesystemFiles: [],
+    };
+
+    const result = await engine.fixInvalidTranslations(report);
+
+    expect(result.flushedTranslations).toBe(1);
+    expect(result.deletedDatabaseRows).toBe(0);
+    expect(result.deletedFiles).toBe(0);
+
+    // File should now exist
+    const translationFiles = Array.from(mockFiles.keys()).filter((p) => p.endsWith('.fr.md'));
+    expect(translationFiles).toHaveLength(1);
+
+    // DB content should be null
+    const dbRow = mockTranslations.get('translation-stuck');
+    expect(dbRow.content).toBeNull();
+    expect(dbRow.filePath).toBeTruthy();
+  });
+
     it('validates translation files by frontmatter even when the filename does not look like a translation', async () => {
       const source = await engine.createPost({
         title: 'Hallo Welt',
@@ -526,6 +652,69 @@ describe('Post translation system', () => {
     expect(updatedSource?.status).toBe('published');
     expect(translation?.status).toBe('published');
     expect(translation?.publishedAt).toBeDefined();
+  });
+
+  it('flushes content to filesystem when auto-publishing a new translation', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
+    await engine.publishPost(source.id);
+
+    const translation = await engine.upsertPostTranslation(source.id, 'fr', {
+      title: 'Bonjour',
+      excerpt: 'Résumé',
+      content: 'Contenu traduit',
+      status: 'published',
+    });
+
+    // Translation file should exist on the filesystem
+    const translationFiles = Array.from(mockFiles.keys()).filter((p) => p.endsWith('.fr.md'));
+    expect(translationFiles).toHaveLength(1);
+    expect(translationFiles[0]).toContain('hello-world.fr.md');
+
+    // DB content should be null (flushed to file)
+    const dbRow = mockTranslations.get(translation.id);
+    expect(dbRow.content).toBeNull();
+    expect(dbRow.filePath).toBe(translationFiles[0]);
+
+    // Reading the translation should still return its content (from file)
+    const readBack = await engine.getPostTranslation(source.id, 'fr');
+    expect(readBack?.content.trim()).toBe('Contenu traduit');
+  });
+
+  it('flushes content to filesystem when auto-publishing an existing draft translation', async () => {
+    const source = await engine.createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Canonical content',
+    });
+
+    // Create draft translation first
+    await engine.upsertPostTranslation(source.id, 'de', {
+      title: 'Hallo Welt',
+      content: 'Deutscher Inhalt',
+    });
+
+    await engine.publishPost(source.id);
+
+    // Now update the translation with auto-publish
+    await engine.upsertPostTranslation(source.id, 'de', {
+      title: 'Hallo Welt neu',
+      content: 'Neuer deutscher Inhalt',
+      status: 'published',
+    });
+
+    // Translation file should exist
+    const translationFiles = Array.from(mockFiles.keys()).filter((p) => p.endsWith('.de.md'));
+    expect(translationFiles).toHaveLength(1);
+
+    // DB content should be null
+    const dbRow = Array.from(mockTranslations.values()).find((t) => t.language === 'de');
+    expect(dbRow.content).toBeNull();
+    expect(dbRow.filePath).toBeTruthy();
   });
 
   it('publishes canonical and available translations together when the post is published', async () => {
