@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { ElectronAPI } from './shared/electronApi';
 import type { GitInitProgress } from './shared/electronApi';
 import type { SiteValidationReport } from './shared/electronApi';
+import type { TranslationValidationReport } from './shared/electronApi';
 
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
@@ -305,6 +306,7 @@ export const electronAPI: ElectronAPI = {
     generateSitemap: () => ipcRenderer.invoke('blog:generateSitemap'),
     validateSite: () => ipcRenderer.invoke('blog:validateSite'),
     validateTranslations: () => ipcRenderer.invoke('blog:validateTranslations'),
+    fixInvalidTranslations: (report: TranslationValidationReport) => ipcRenderer.invoke('blog:fixInvalidTranslations', report),
     applyValidation: (report: SiteValidationReport) => ipcRenderer.invoke('blog:applyValidation', report),
     regenerateCalendar: () => ipcRenderer.invoke('blog:regenerateCalendar'),
   },

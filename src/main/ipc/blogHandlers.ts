@@ -8,6 +8,7 @@ import {
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
 import type { EngineBundle } from '../engine/EngineBundle';
+import type { TranslationValidationReport } from '../shared/electronApi';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
@@ -171,6 +172,22 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         onProgress(0, 'Validating translations...');
         const result = await bundle.postEngine.validateTranslations();
         onProgress(100, 'Translation validation complete');
+        return result;
+      },
+    });
+  });
+
+  safeHandle('blog:fixInvalidTranslations', async (_event, report: TranslationValidationReport) => {
+    await resolveActiveProjectContext();
+
+    const taskTimestamp = Date.now();
+    return bundle.taskManager.runTask({
+      id: `translation-fix-${taskTimestamp}`,
+      name: 'Fix Invalid Translations',
+      execute: async (onProgress) => {
+        onProgress(0, 'Fixing invalid translations...');
+        const result = await bundle.postEngine.fixInvalidTranslations(report);
+        onProgress(100, 'Invalid translations fixed');
         return result;
       },
     });

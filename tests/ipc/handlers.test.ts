@@ -46,6 +46,7 @@ const mockPostEngine = {
   setSearchLanguage: vi.fn(),
   setMainLanguage: vi.fn(),
   validateTranslations: vi.fn(),
+  fixInvalidTranslations: vi.fn(),
   reconcilePublishedPostsFromGitChanges: vi.fn(),
   createPost: vi.fn(),
   updatePost: vi.fn(),
@@ -2816,6 +2817,49 @@ describe('IPC Handlers', () => {
           }),
         );
         expect(mockPostEngine.validateTranslations).toHaveBeenCalled();
+      });
+    });
+
+    describe('blog:fixInvalidTranslations', () => {
+      it('should run fix via taskManager.runTask', async () => {
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          name: 'Test Project',
+          publicUrl: 'https://blog.example.com',
+        });
+        mockPostEngine.fixInvalidTranslations.mockResolvedValue({
+          deletedDatabaseRows: 2,
+          deletedFiles: 1,
+        });
+
+        mockTaskManager.runTask.mockImplementation(async (task: any) => {
+          return task.execute(vi.fn());
+        });
+
+        const report = {
+          checkedDatabaseRowCount: 5,
+          checkedFilesystemFileCount: 3,
+          invalidDatabaseRows: [
+            { issue: 'same-language-as-canonical', translationFor: 'post-1', translationLanguage: 'de', translationId: 'tr-1' },
+            { issue: 'same-language-as-canonical', translationFor: 'post-2', translationLanguage: 'de', translationId: 'tr-2' },
+          ],
+          invalidFilesystemFiles: [
+            { issue: 'same-language-as-canonical', translationFor: 'post-1', translationLanguage: 'de', filePath: '/tmp/file.de.md' },
+          ],
+        };
+
+        const result = await invokeHandler('blog:fixInvalidTranslations', report);
+
+        expect(result).toEqual({ deletedDatabaseRows: 2, deletedFiles: 1 });
+        expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Fix Invalid Translations',
+            execute: expect.any(Function),
+          }),
+        );
+        expect(mockPostEngine.fixInvalidTranslations).toHaveBeenCalledWith(report);
       });
     });
 

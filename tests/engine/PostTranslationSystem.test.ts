@@ -8,11 +8,14 @@ const mockTranslations = new Map<string, any>();
 const mockFiles = new Map<string, string>();
 const mockExecuteArgs: Array<{ sql: string; args: any[] }> = [];
 
+const mockDeletedTranslationIds: string[] = [];
+
 function resetData(): void {
   mockPosts.clear();
   mockTranslations.clear();
   mockFiles.clear();
   mockExecuteArgs.length = 0;
+  mockDeletedTranslationIds.length = 0;
 }
 
 function getTableRows(table: unknown): any[] {
@@ -644,6 +647,197 @@ describe('Post translation system', () => {
         content: 'Deutsche Uebersetzung',
       });
       expect(translation.language).toBe('de');
+    });
+  });
+
+  describe('fixInvalidTranslations', () => {
+    it('deletes invalid DB translation rows by translationId', async () => {
+      const report = {
+        checkedDatabaseRowCount: 2,
+        checkedFilesystemFileCount: 0,
+        invalidDatabaseRows: [
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationId: 'translation-bad-1',
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            title: 'Hallo Welt',
+          },
+          {
+            issue: 'missing-source-post' as const,
+            translationId: 'translation-bad-2',
+            translationFor: 'missing-post',
+            translationLanguage: 'en',
+            title: 'Orphan',
+          },
+        ],
+        invalidFilesystemFiles: [],
+      };
+
+      const result = await engine.fixInvalidTranslations(report);
+
+      expect(result.deletedDatabaseRows).toBe(2);
+      expect(result.deletedFiles).toBe(0);
+      expect(mockLocalDb.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('deletes invalid translation files from disk', async () => {
+      const filePath1 = '/tmp/project-1/posts/2024/01/hello.de.md';
+      const filePath2 = '/tmp/project-1/posts/2024/01/orphan.it.md';
+      mockFiles.set(filePath1, 'content1');
+      mockFiles.set(filePath2, 'content2');
+
+      const report = {
+        checkedDatabaseRowCount: 0,
+        checkedFilesystemFileCount: 2,
+        invalidDatabaseRows: [],
+        invalidFilesystemFiles: [
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            title: 'Hallo Welt',
+            filePath: filePath1,
+          },
+          {
+            issue: 'missing-source-post' as const,
+            translationFor: 'missing-post',
+            translationLanguage: 'it',
+            title: 'Orphan',
+            filePath: filePath2,
+          },
+        ],
+      };
+
+      const result = await engine.fixInvalidTranslations(report);
+
+      expect(result.deletedDatabaseRows).toBe(0);
+      expect(result.deletedFiles).toBe(2);
+      expect(fs.unlink).toHaveBeenCalledWith(filePath1);
+      expect(fs.unlink).toHaveBeenCalledWith(filePath2);
+    });
+
+    it('handles mixed DB rows and filesystem files', async () => {
+      const filePath = '/tmp/project-1/posts/2024/01/hello.de.md';
+      mockFiles.set(filePath, 'content');
+
+      const report = {
+        checkedDatabaseRowCount: 1,
+        checkedFilesystemFileCount: 1,
+        invalidDatabaseRows: [
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationId: 'translation-bad-1',
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            title: 'Hallo Welt',
+            filePath,
+          },
+        ],
+        invalidFilesystemFiles: [
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            title: 'Hallo Welt',
+            filePath,
+          },
+        ],
+      };
+
+      const result = await engine.fixInvalidTranslations(report);
+
+      expect(result.deletedDatabaseRows).toBe(1);
+      expect(result.deletedFiles).toBe(1);
+    });
+
+    it('skips DB rows without a translationId', async () => {
+      const report = {
+        checkedDatabaseRowCount: 1,
+        checkedFilesystemFileCount: 0,
+        invalidDatabaseRows: [
+          {
+            issue: 'missing-source-post' as const,
+            translationFor: 'missing-post',
+            translationLanguage: 'en',
+            title: 'No ID',
+          },
+        ],
+        invalidFilesystemFiles: [],
+      };
+
+      const result = await engine.fixInvalidTranslations(report);
+
+      expect(result.deletedDatabaseRows).toBe(0);
+      expect(mockLocalDb.delete).not.toHaveBeenCalled();
+    });
+
+    it('skips filesystem entries without a filePath', async () => {
+      const report = {
+        checkedDatabaseRowCount: 0,
+        checkedFilesystemFileCount: 1,
+        invalidDatabaseRows: [],
+        invalidFilesystemFiles: [
+          {
+            issue: 'missing-source-post' as const,
+            translationFor: 'missing-post',
+            translationLanguage: 'en',
+            title: 'No path',
+          },
+        ],
+      };
+
+      const result = await engine.fixInvalidTranslations(report);
+
+      expect(result.deletedFiles).toBe(0);
+      expect(fs.unlink).not.toHaveBeenCalled();
+    });
+
+    it('continues when a file delete fails', async () => {
+      const filePath1 = '/tmp/project-1/posts/2024/01/missing.de.md';
+      const filePath2 = '/tmp/project-1/posts/2024/01/exists.fr.md';
+      mockFiles.set(filePath2, 'content');
+
+      // Make unlink throw for filePath1 to simulate a real fs error
+      const originalUnlink = (fs.unlink as ReturnType<typeof vi.fn>).getMockImplementation()!;
+      (fs.unlink as ReturnType<typeof vi.fn>).mockImplementation(async (p: string) => {
+        if (p === filePath1) {
+          throw new Error('ENOENT');
+        }
+        return originalUnlink(p);
+      });
+
+      const report = {
+        checkedDatabaseRowCount: 0,
+        checkedFilesystemFileCount: 2,
+        invalidDatabaseRows: [],
+        invalidFilesystemFiles: [
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            filePath: filePath1,
+          },
+          {
+            issue: 'same-language-as-canonical' as const,
+            translationFor: 'post-1',
+            canonicalLanguage: 'de',
+            translationLanguage: 'de',
+            filePath: filePath2,
+          },
+        ],
+      };
+
+      const result = await engine.fixInvalidTranslations(report);
+
+      // filePath1 failed (ENOENT), filePath2 succeeded
+      expect(result.deletedFiles).toBe(1);
+      expect(fs.unlink).toHaveBeenCalledTimes(2);
     });
   });
 });

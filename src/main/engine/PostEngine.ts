@@ -66,6 +66,11 @@ export interface TranslationValidationReport {
   invalidFilesystemFiles: TranslationValidationIssue[];
 }
 
+export interface TranslationValidationFixResult {
+  deletedDatabaseRows: number;
+  deletedFiles: number;
+}
+
 export interface PostMetadata {
   id: string;
   projectId: string;
@@ -1089,6 +1094,34 @@ export class PostEngine extends EventEmitter {
       invalidDatabaseRows,
       invalidFilesystemFiles,
     };
+  }
+
+  async fixInvalidTranslations(report: TranslationValidationReport): Promise<TranslationValidationFixResult> {
+    const db = getDatabase().getLocal();
+    let deletedDatabaseRows = 0;
+    let deletedFiles = 0;
+
+    for (const row of report.invalidDatabaseRows) {
+      if (!row.translationId) {
+        continue;
+      }
+      await db.delete(postTranslations).where(eq(postTranslations.id, row.translationId));
+      deletedDatabaseRows += 1;
+    }
+
+    for (const file of report.invalidFilesystemFiles) {
+      if (!file.filePath) {
+        continue;
+      }
+      try {
+        await fs.unlink(file.filePath);
+        deletedFiles += 1;
+      } catch {
+        // File may already be gone
+      }
+    }
+
+    return { deletedDatabaseRows, deletedFiles };
   }
 
   async upsertPostTranslation(

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { TranslationValidationIssue, TranslationValidationReport } from '../../../main/shared/electronApi';
+import type { TranslationValidationIssue, TranslationValidationReport, TranslationValidationFixResult } from '../../../main/shared/electronApi';
 import { useAppStore } from '../../store';
+import { showToast } from '../Toast';
 import { useI18n } from '../../i18n';
-import { getPersistedTranslationValidationReport } from '../../navigation/translationValidationPersistence';
+import { getPersistedTranslationValidationReport, persistTranslationValidationReport } from '../../navigation/translationValidationPersistence';
 import './TranslationValidationView.css';
 
 function getIssueLabel(
@@ -67,6 +68,8 @@ export const TranslationValidationView: React.FC = () => {
   const { t: tr } = useI18n();
   const { activeProject } = useAppStore();
   const [isLoading, setIsLoading] = useState(true);
+  const [isRevalidating, setIsRevalidating] = useState(false);
+  const [isFixing, setIsFixing] = useState(false);
   const [report, setReport] = useState<TranslationValidationReport | null>(null);
 
   const loadPersistedReport = () => {
@@ -81,6 +84,45 @@ export const TranslationValidationView: React.FC = () => {
       setReport(getPersistedTranslationValidationReport(projectId));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRevalidate = async () => {
+    setIsRevalidating(true);
+    try {
+      const freshReport = await window.electronAPI?.blog.validateTranslations();
+      const projectId = activeProject?.id;
+      if (projectId && freshReport) {
+        persistTranslationValidationReport(projectId, freshReport);
+        window.dispatchEvent(new CustomEvent('bds:translation-validation-updated', {
+          detail: { projectId },
+        }));
+      }
+    } catch (error) {
+      console.error('Translation revalidation failed:', error);
+      showToast.error(tr('translationValidation.error.validate'));
+    } finally {
+      setIsRevalidating(false);
+    }
+  };
+
+  const handleFix = async () => {
+    if (!report) return;
+
+    setIsFixing(true);
+    try {
+      const result = await window.electronAPI.blog.fixInvalidTranslations(report) as TranslationValidationFixResult;
+      showToast.success(tr('translationValidation.toast.fixSuccess', {
+        dbRows: result.deletedDatabaseRows,
+        files: result.deletedFiles,
+      }));
+      // Re-validate after fixing to refresh the report
+      await handleRevalidate();
+    } catch (error) {
+      console.error('Fixing invalid translations failed:', error);
+      showToast.error(tr('translationValidation.error.fix'));
+    } finally {
+      setIsFixing(false);
     }
   };
 
@@ -113,6 +155,11 @@ export const TranslationValidationView: React.FC = () => {
       invalidFiles: report.invalidFilesystemFiles.length,
     });
   }, [report, tr]);
+
+  const canFix = useMemo(() => {
+    if (!report) return false;
+    return report.invalidDatabaseRows.length > 0 || report.invalidFilesystemFiles.length > 0;
+  }, [report]);
 
   if (isLoading) {
     return (
@@ -162,6 +209,25 @@ export const TranslationValidationView: React.FC = () => {
           </div>
         )}
       </section>
+
+      <div className="translation-validation-actions">
+        <button
+          type="button"
+          className="translation-validation-revalidate"
+          onClick={handleRevalidate}
+          disabled={isRevalidating || isFixing}
+        >
+          {isRevalidating ? tr('translationValidation.revalidating') : tr('translationValidation.revalidate')}
+        </button>
+        <button
+          type="button"
+          className="translation-validation-fix"
+          onClick={handleFix}
+          disabled={!canFix || isFixing || isRevalidating}
+        >
+          {isFixing ? tr('translationValidation.fixing') : tr('translationValidation.fix')}
+        </button>
+      </div>
     </div>
   );
 };

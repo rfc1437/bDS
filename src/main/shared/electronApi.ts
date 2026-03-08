@@ -568,6 +568,11 @@ export interface TranslationValidationReport {
   invalidFilesystemFiles: TranslationValidationIssue[];
 }
 
+export interface TranslationValidationFixResult {
+  deletedDatabaseRows: number;
+  deletedFiles: number;
+}
+
 export interface SiteValidationApplyResult {
   renderedUrlCount: number;
   deletedUrlCount: number;
@@ -937,6 +942,7 @@ export interface ElectronAPI {
     }>;
     validateSite: () => Promise<SiteValidationReport>;
     validateTranslations: () => Promise<TranslationValidationReport>;
+    fixInvalidTranslations: (report: TranslationValidationReport) => Promise<TranslationValidationFixResult>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
     regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };
