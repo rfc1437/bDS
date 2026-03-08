@@ -1,8 +1,9 @@
 <!doctype html>
 <html lang="{{ language }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
-  {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href, alternate_links: alternate_links %}
+  {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href, alternate_links: alternate_links, language_prefix: language_prefix %}
   <body>
     <main>
+      {% render 'partials/language-switcher', blog_languages: blog_languages, language: language %}
       <h1>{{ post.title }}</h1>
       {% render 'partials/menu', menu_items: menu_items, language: language, calendar_initial_year: calendar_initial_year, calendar_initial_month: calendar_initial_month %}
       {% if post_categories.size > 0 or post_tags.size > 0 %}

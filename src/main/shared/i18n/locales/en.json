@@ -68,6 +68,7 @@
   "render.taxonomy.ariaLabel": "Taxonomy",
   "render.backlinks.label": "Linked from",
   "render.backlinks.ariaLabel": "Backlinks",
+  "render.languageSwitcher.ariaLabel": "Language",
   "render.video.youtubeTitle": "YouTube video",
   "render.video.vimeoTitle": "Vimeo video",
   "render.month.1": "January",
@@ -92,5 +93,6 @@
   "task.rebuildEmbeddingIndex.name": "Rebuild Embedding Index",
   "task.rebuildEmbeddingIndex.clearing": "Clearing index…",
   "task.duplicateSearch.name": "Find Duplicate Posts",
-  "task.duplicateSearch.searching": "Checking: {checked}/{total}"
+  "task.duplicateSearch.searching": "Checking: {checked}/{total}",
+  "menu.item.fillMissingTranslations": "Fill Missing Translations"
 }

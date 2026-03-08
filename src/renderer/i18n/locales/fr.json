@@ -551,6 +551,8 @@
   "settings.project.publicUrlPlaceholder": "https://example.com",
   "settings.project.mainLanguageLabel": "Langue principale",
   "settings.project.mainLanguageDescription": "Langue principale de votre contenu. Les titres, textes alternatifs et légendes générés par l’IA utiliseront cette langue.",
+  "settings.project.blogLanguagesLabel": "Langues du blog",
+  "settings.project.blogLanguagesDescription": "Langues dans lesquelles le blog est rendu. La langue principale est toujours incluse. Les langues supplémentaires génèrent des sous-arborescences traduites.",
   "settings.project.defaultAuthorLabel": "Auteur par défaut",
   "settings.project.defaultAuthorDescription": "Nom d’auteur par défaut pour les nouveaux articles et médias. Peut être remplacé par élément.",
   "settings.project.defaultAuthorPlaceholder": "Nom de l’auteur",
@@ -1201,5 +1203,9 @@
   "duplicatesView.checkAll": "Tout cocher",
   "duplicatesView.uncheckAll": "Tout décocher",
   "duplicatesView.dismissChecked": "Ignorer cochés ({count})",
-  "duplicatesView.notEnabled": "La similarité sémantique n'est pas activée. Activez-la dans Paramètres → Technologie."
+  "duplicatesView.notEnabled": "La similarité sémantique n'est pas activée. Activez-la dans Paramètres → Technologie.",
+  "editor.doNotTranslateLabel": "Ne pas traduire",
+  "blog.fillMissing.nothingToDo": "Toutes les traductions sont à jour.",
+  "blog.fillMissing.enqueued": "{posts} traductions d’articles et {media} traductions de médias mises en file.",
+  "blog.fillMissing.error": "Échec du remplissage des traductions manquantes."
 }

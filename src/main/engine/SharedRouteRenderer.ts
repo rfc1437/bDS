@@ -33,6 +33,7 @@ export interface SharedRouteRenderOptions {
   requestTheme?: string | null;
   htmlThemeAttribute?: string;
   allowEmptyArchiveRender?: boolean;
+  preferredLanguage?: string;
   singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string };
 }
 
@@ -168,6 +169,9 @@ async function resolveRouteWithSharedServices(
   pageContext: {
     pageTitle: string;
     language: string;
+    blogLanguages: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+    currentLanguage: string;
+    languagePrefix: string;
     menuItems: ReturnType<typeof buildTemplateMenuItems>;
     picoStylesheetHref: string;
     htmlThemeAttribute?: string;
@@ -204,6 +208,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -224,6 +231,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -245,6 +255,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -267,6 +280,9 @@ async function resolveRouteWithSharedServices(
     return services.pageRenderer.renderSinglePost(post, rewriteContext, {
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -296,6 +312,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -318,6 +337,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -338,6 +360,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -356,6 +381,9 @@ async function resolveRouteWithSharedServices(
     return services.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -396,7 +424,7 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const menuItems = buildTemplateMenuItems(menu, categoryMetadata as Record<string, { title?: string }>);
   const categorySettings = services.resolveCategorySettings(metadata ?? null);
   const listExcludedCategories = services.resolveListExcludedCategories(categorySettings);
-  const language = metadata?.mainLanguage?.trim() || 'en';
+  const language = options.preferredLanguage?.trim().toLowerCase() || metadata?.mainLanguage?.trim() || 'en';
   const pageTitle = resolvePageTitle(metadata ?? null, options.projectContext.projectName, options.projectContext.projectDescription);
   const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage ?? metadata?.maxPostsPerPage);
   const appliedTheme = sanitizePicoTheme(options.requestTheme)
@@ -407,9 +435,27 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const tagTemplateSettings = await services.resolveTagTemplateSettings?.(options.projectContext) ?? {};
   const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
 
+  const languagePrefix = htmlRewriteContext.languagePrefix ?? '';
+  const currentLanguage = languagePrefix
+    ? languagePrefix.replace(/^\//, '')
+    : language;
+  const rawBlogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
+    ? (metadata as { blogLanguages: string[] }).blogLanguages
+    : [];
+  const blogLanguages = rawBlogLanguages.length > 0
+    ? rawBlogLanguages.map((lang) => ({
+        code: lang,
+        href_prefix: lang === language ? '' : `/${lang}`,
+        is_current: lang === currentLanguage,
+      }))
+    : [];
+
   return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {
     pageTitle,
     language,
+    blogLanguages,
+    currentLanguage,
+    languagePrefix,
     menuItems,
     picoStylesheetHref,
     htmlThemeAttribute: options.htmlThemeAttribute,

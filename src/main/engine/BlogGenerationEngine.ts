@@ -15,7 +15,7 @@ import { getPicoStylesheetHref, sanitizePicoTheme, type PicoThemeName } from '..
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import { loadPublishedGenerationSets } from './GenerationPostSnapshotService';
-import { buildCalendarArchiveData, buildSitemapAndFeeds, collectSitemapArchiveMetadata } from './GenerationSitemapFeedService';
+import { buildCalendarArchiveData, buildSitemapAndFeeds, collectSitemapArchiveMetadata, buildMultiLanguageSitemap } from './GenerationSitemapFeedService';
 import { buildTargetedValidationPlan, planMissingValidationPaths } from './ValidationApplyPlannerService';
 import { compareSitemapToHtml } from './SiteValidationDiffService';
 import {
@@ -58,6 +58,7 @@ export interface BlogGenerationOptions {
   baseUrl: string;
   maxPostsPerPage?: number;
   language?: string;
+  blogLanguages?: string[];
   pageTitle?: string;
   picoTheme?: PicoThemeName;
   categoryMetadata?: Record<string, CategoryMetadata>;
@@ -524,6 +525,173 @@ export class BlogGenerationEngine {
         postsByYear: generationPostIndex.postsByYear,
         postsByYearMonth: generationPostIndex.postsByYearMonth,
         postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
+      });
+    }
+
+    // --- Alternative language subtree generation ---
+    const mainLanguage = (options.language ?? 'en').trim().toLowerCase();
+    const additionalLanguages = (options.blogLanguages ?? [])
+      .map((lang) => lang.trim().toLowerCase())
+      .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+
+    for (const lang of additionalLanguages) {
+      onProgress(85, `Generating ${lang} language subtree...`);
+
+      // Filter out doNotTranslate posts
+      const langPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+      const langListPosts = publishedListPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+
+      const langPostIndex = buildGenerationPostIndex(langListPosts);
+      const langArchiveMetadata = collectSitemapArchiveMetadata({
+        baseUrl: options.baseUrl,
+        maxPostsPerPage,
+        publishedPosts: langPosts,
+        publishedListPosts: langListPosts,
+      });
+
+      // Build per-language feeds
+      if (includeCore) {
+        const langFeedResult = buildSitemapAndFeeds({
+          baseUrl: `${options.baseUrl}/${lang}`,
+          projectName: options.projectName,
+          projectDescription: options.projectDescription,
+          maxPostsPerPage,
+          publishedPosts: langPosts,
+          publishedListPosts: langListPosts,
+          postIndex: langPostIndex,
+          includeFeeds: true,
+          feedLanguage: lang,
+        });
+
+        const langRssPath = path.join(htmlDir, lang, 'rss.xml');
+        const langAtomPath = path.join(htmlDir, lang, 'atom.xml');
+        await fs.mkdir(path.join(htmlDir, lang), { recursive: true });
+        await writeFileIfHashChanged({ projectId: options.projectId, filePath: langRssPath, relativePath: `${lang}/rss.xml`, content: langFeedResult.rssXml });
+        await writeFileIfHashChanged({ projectId: options.projectId, filePath: langAtomPath, relativePath: `${lang}/atom.xml`, content: langFeedResult.atomXml });
+      }
+
+      const langRenderRoute = createPreviewBackedGenerationRouteRenderer({
+        options: { ...options, language: lang },
+        maxPostsPerPage,
+        publishedPostsForLookup: langPosts,
+        languagePrefix: `/${lang}`,
+        engines: {
+          postEngine: this.postEngine,
+          mediaEngine: this.mediaEngine,
+          postMediaEngine: this.postMediaEngine,
+        },
+      });
+
+      const langWritePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
+        projectId,
+        htmlDir,
+        urlPath: `${lang}/${urlPath}`,
+        content,
+        knownDirectories: knownOutputDirectories,
+        hashCache: generatedHashCache,
+        refreshHashTimestampOnUnchanged: true,
+      });
+
+      const langReportProgress = (message: string) => reportUnitProgress(`[${lang}] ${message}`);
+
+      if (includeCore) {
+        pagesGenerated += await generateRootPages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated: langReportProgress,
+        });
+        pagesGenerated += await generatePageRoutes({
+          projectId: options.projectId,
+          posts: langPosts,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated: langReportProgress,
+        });
+      }
+
+      if (includeSingle) {
+        pagesGenerated += await generateSinglePostPages({
+          projectId: options.projectId,
+          posts: langPosts,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated: langReportProgress,
+        });
+      }
+
+      if (includeCategory) {
+        pagesGenerated += await generateCategoryPages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          allCategories: langArchiveMetadata.allCategories,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated: langReportProgress,
+          postsByCategory: langPostIndex.postsByCategory,
+        });
+      }
+
+      if (includeTag) {
+        pagesGenerated += await generateTagPages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          allTags: langArchiveMetadata.allTags,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated: langReportProgress,
+          postsByTag: langPostIndex.postsByTag,
+        });
+      }
+
+      if (includeDate) {
+        pagesGenerated += await generateDateArchivePages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          yearsMap: langArchiveMetadata.years,
+          yearMonthsMap: langArchiveMetadata.yearMonths,
+          yearMonthDaysMap: langArchiveMetadata.yearMonthDays,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated: langReportProgress,
+          postsByYear: langPostIndex.postsByYear,
+          postsByYearMonth: langPostIndex.postsByYearMonth,
+          postsByYearMonthDay: langPostIndex.postsByYearMonthDay,
+        });
+      }
+    }
+
+    // --- Combined sitemap with hreflang (if multiple languages) ---
+    if (includeCore && additionalLanguages.length > 0) {
+      const allLanguages = [mainLanguage, ...additionalLanguages];
+      const langFilteredPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+      const doNotTranslateIds = new Set(
+        publishedPosts
+          .filter((p) => (p as PostData & { doNotTranslate?: boolean }).doNotTranslate)
+          .map((p) => p.id),
+      );
+
+      const hreflangSitemapXml = buildMultiLanguageSitemap({
+        baseUrl: options.baseUrl,
+        mainLanguage,
+        allLanguages,
+        translatablePosts: langFilteredPosts,
+        doNotTranslatePosts: publishedPosts.filter((p) => doNotTranslateIds.has(p.id)),
+        publishedListPosts,
+        maxPostsPerPage,
+        postIndex: generationPostIndex,
+      });
+
+      sitemapWritten = await writeFileIfHashChanged({
+        projectId: options.projectId,
+        filePath: sitemapPath,
+        relativePath: 'sitemap.xml',
+        content: hreflangSitemapXml,
       });
     }
 

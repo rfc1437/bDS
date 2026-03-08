@@ -960,6 +960,31 @@ export function registerChatHandlers(): void {
 }
 
 /**
+ * Translate a post for auto-translation workflows (called from event handlers).
+ * Returns the result of translatePost or an error object if AI is not initialized.
+ */
+export async function autoTranslatePost(postId: string, targetLanguage: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await ensureInitialized();
+    return await getOneShotTasks().translatePost(postId, targetLanguage);
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Translate media metadata for auto-translation workflows (called from event handlers).
+ */
+export async function autoTranslateMediaMetadata(mediaId: string, targetLanguage: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await ensureInitialized();
+    return await getOneShotTasks().translateMediaMetadata(mediaId, targetLanguage);
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
  * Cleanup chat resources
  */
 export async function cleanupChatHandlers(): Promise<void> {

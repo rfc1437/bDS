@@ -55,6 +55,7 @@ export interface PythonMacroRendererContract {
 export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
   canonicalMediaPathBySourcePath: Map<string, string>;
+  languagePrefix?: string;
 }
 
 export interface TemplatePostEntry {
@@ -99,6 +100,9 @@ export type DateArchiveContext = {
 export interface PostListTemplateContext {
   page_title: string;
   language: string;
+  blog_languages: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+  current_language: string;
+  language_prefix: string;
   menu_items: TemplateMenuItem[];
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
@@ -142,6 +146,9 @@ export interface AlternateLinkEntry {
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
+  blog_languages: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+  current_language: string;
+  language_prefix: string;
   menu_items: TemplateMenuItem[];
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
@@ -824,6 +831,14 @@ export function rewriteRenderedHtmlUrls(html: string, rewriteContext: HtmlRewrit
     });
 }
 
+export function applyLanguagePrefixToHtml(html: string, languagePrefix: string): string {
+  if (!languagePrefix) return html;
+  return html.replace(/\bhref=(['"])(\/(?!media\/|assets\/).*?)\1/gi, (_fullMatch, quote: string, href: string) => {
+    if (href.startsWith(languagePrefix + '/') || href === languagePrefix) return `href=${quote}${href}${quote}`;
+    return `href=${quote}${languagePrefix}${href}${quote}`;
+  });
+}
+
 export function renderMacro(
   name: string,
   params: Record<string, string>,
@@ -1256,6 +1271,9 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      blog_languages?: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+      current_language?: string;
+      language_prefix?: string;
       menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
@@ -1386,6 +1404,9 @@ export class PageRenderer {
     return {
       page_title: options.page_title,
       language: options.language,
+      blog_languages: options.blog_languages ?? [],
+      current_language: options.current_language ?? options.language,
+      language_prefix: options.language_prefix ?? '',
       menu_items: options.menu_items ?? [],
       pico_stylesheet_href: options.pico_stylesheet_href,
       html_theme_attribute: options.html_theme_attribute,
@@ -1481,6 +1502,9 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      blog_languages?: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+      current_language?: string;
+      language_prefix?: string;
       menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
@@ -1508,7 +1532,8 @@ export class PageRenderer {
       routeCategory ?? undefined,
       options.categorySettings as Record<string, { listTemplateSlug?: string | null }> | undefined,
     );
-    return this.liquid.renderFile(listTemplateName, templateContext);
+    const html = await this.liquid.renderFile(listTemplateName, templateContext);
+    return rewriteContext.languagePrefix ? applyLanguagePrefixToHtml(html, rewriteContext.languagePrefix) : html;
   }
 
   async renderSinglePost(
@@ -1517,6 +1542,9 @@ export class PageRenderer {
     pageContext: {
       page_title: string;
       language: string;
+      blog_languages?: Array<{ code: string; href_prefix: string; is_current: boolean }>;
+      current_language?: string;
+      language_prefix?: string;
       menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
@@ -1547,6 +1575,9 @@ export class PageRenderer {
     const context: SinglePostTemplateContext = {
       ...pageContext,
       language: postLanguage || pageContext.language,
+      blog_languages: pageContext.blog_languages ?? [],
+      current_language: pageContext.current_language ?? pageContext.language,
+      language_prefix: pageContext.language_prefix ?? '',
       menu_items: pageContext.menu_items ?? [],
       post: {
         id: renderablePost.id,
@@ -1575,7 +1606,8 @@ export class PageRenderer {
       pageContext.tagSettings,
       pageContext.categorySettings,
     );
-    return this.liquid.renderFile(postTemplateName, context);
+    const html = await this.liquid.renderFile(postTemplateName, context);
+    return rewriteContext.languagePrefix ? applyLanguagePrefixToHtml(html, rewriteContext.languagePrefix) : html;
   }
 
   async renderNotFound(context: NotFoundTemplateContext): Promise<string> {

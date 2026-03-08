@@ -1,0 +1,1 @@
+ALTER TABLE `posts` ADD `do_not_translate` integer DEFAULT false NOT NULL;

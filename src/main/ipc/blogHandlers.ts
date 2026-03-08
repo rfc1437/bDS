@@ -9,6 +9,8 @@ import {
 import { resolvePageTitle } from '../engine/PageRenderer';
 import type { EngineBundle } from '../engine/EngineBundle';
 import type { TranslationValidationReport } from '../shared/electronApi';
+import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
+import { v4 as uuidv4 } from 'uuid';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
@@ -76,6 +78,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
       baseUrl,
       maxPostsPerPage: metadata?.maxPostsPerPage,
       language,
+      blogLanguages: Array.isArray(metadata?.blogLanguages) ? metadata.blogLanguages : [],
       pageTitle,
       picoTheme: metadata?.picoTheme,
       categoryMetadata: (metadata as any)?.categoryMetadata,
@@ -191,6 +194,105 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         return result;
       },
     });
+  });
+
+  safeHandle('blog:fillMissingTranslations', async () => {
+    const { metadata } = await resolveActiveProjectContext();
+    const blogLanguages = metadata?.blogLanguages || [];
+    const mainLang = metadata?.mainLanguage || 'en';
+    if (blogLanguages.length <= 1 && blogLanguages[0] === mainLang) {
+      return { translatedPosts: 0, translatedMedia: 0, failed: 0 };
+    }
+
+    const allPosts = await bundle.postEngine.getPostsFiltered({ status: 'published' });
+    const publishedPosts = allPosts.filter((p) => !p.doNotTranslate);
+
+    // Collect missing post translations
+    const postTasks: Array<{ postId: string; postTitle: string; targetLang: string }> = [];
+    for (const post of publishedPosts) {
+      const postLang = post.language || mainLang;
+      const translations = await bundle.postEngine.getPostTranslations(post.id);
+      const existingLangs = new Set(translations.map((t) => t.language));
+      for (const lang of blogLanguages) {
+        if (lang !== postLang && !existingLangs.has(lang)) {
+          postTasks.push({ postId: post.id, postTitle: post.title, targetLang: lang });
+        }
+      }
+    }
+
+    // Collect missing media translations
+    const mediaTaskSet = new Map<string, Set<string>>();
+    for (const post of publishedPosts) {
+      const postLang = post.language || mainLang;
+      const links = await bundle.postMediaEngine.getLinkedMediaForPost(post.id);
+      for (const link of links) {
+        const mediaTranslations = await bundle.mediaEngine.getMediaTranslations(link.mediaId);
+        const existingLangs = new Set(mediaTranslations.map((t) => t.language));
+        for (const lang of blogLanguages) {
+          if (lang !== postLang && !existingLangs.has(lang)) {
+            if (!mediaTaskSet.has(link.mediaId)) mediaTaskSet.set(link.mediaId, new Set());
+            mediaTaskSet.get(link.mediaId)!.add(lang);
+          }
+        }
+      }
+    }
+
+    let translatedPosts = 0;
+    let translatedMedia = 0;
+    let failed = 0;
+
+    if (postTasks.length > 0) {
+      const groupId = uuidv4();
+      for (const task of postTasks) {
+        bundle.taskManager.runTask({
+          id: uuidv4(),
+          name: `Translate "${task.postTitle}" → ${task.targetLang}`,
+          groupId,
+          groupName: 'Fill Missing Translations (Posts)',
+          execute: async (onProgress) => {
+            onProgress(10, `Translating to ${task.targetLang}...`);
+            const result = await autoTranslatePost(task.postId, task.targetLang);
+            if (result.success) {
+              translatedPosts++;
+            } else {
+              failed++;
+              throw new Error(result.error || 'Translation failed');
+            }
+            onProgress(100, 'Done');
+          },
+        }).catch(() => { /* errors tracked via task panel */ });
+      }
+    }
+
+    if (mediaTaskSet.size > 0) {
+      const groupId = uuidv4();
+      for (const [mediaId, languages] of mediaTaskSet) {
+        for (const lang of languages) {
+          bundle.taskManager.runTask({
+            id: uuidv4(),
+            name: `Translate media ${mediaId.slice(0, 8)}… → ${lang}`,
+            groupId,
+            groupName: 'Fill Missing Translations (Media)',
+            execute: async (onProgress) => {
+              onProgress(10, `Translating media metadata to ${lang}...`);
+              const result = await autoTranslateMediaMetadata(mediaId, lang);
+              if (result.success) {
+                translatedMedia++;
+              } else {
+                failed++;
+                throw new Error(result.error || 'Translation failed');
+              }
+              onProgress(100, 'Done');
+            },
+          }).catch(() => { /* errors tracked via task panel */ });
+        }
+      }
+    }
+
+    return {
+      enqueuedPosts: postTasks.length,
+      enqueuedMedia: Array.from(mediaTaskSet.values()).reduce((sum, s) => sum + s.size, 0),
+    };
   });
 
   safeHandle('blog:regenerateCalendar', async () => {

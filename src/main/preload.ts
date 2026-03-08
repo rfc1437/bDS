@@ -311,6 +311,7 @@ export const electronAPI: ElectronAPI = {
     validateSite: () => ipcRenderer.invoke('blog:validateSite'),
     validateTranslations: () => ipcRenderer.invoke('blog:validateTranslations'),
     fixInvalidTranslations: (report: TranslationValidationReport) => ipcRenderer.invoke('blog:fixInvalidTranslations', report),
+    fillMissingTranslations: () => ipcRenderer.invoke('blog:fillMissingTranslations'),
     applyValidation: (report: SiteValidationReport) => ipcRenderer.invoke('blog:applyValidation', report),
     regenerateCalendar: () => ipcRenderer.invoke('blog:regenerateCalendar'),
   },

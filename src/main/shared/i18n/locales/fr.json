@@ -68,6 +68,7 @@
   "render.taxonomy.ariaLabel": "Taxonomie",
   "render.backlinks.label": "Lié depuis",
   "render.backlinks.ariaLabel": "Rétroliens",
+  "render.languageSwitcher.ariaLabel": "Langue",
   "render.video.youtubeTitle": "Vidéo YouTube",
   "render.video.vimeoTitle": "Vidéo Vimeo",
   "render.month.1": "janvier",
@@ -92,5 +93,6 @@
   "task.rebuildEmbeddingIndex.name": "Reconstruire l'index d'embeddings",
   "task.rebuildEmbeddingIndex.clearing": "Vidage de l'index…",
   "task.duplicateSearch.name": "Trouver les articles en double",
-  "task.duplicateSearch.searching": "Vérification : {checked}/{total}"
+  "task.duplicateSearch.searching": "Vérification : {checked}/{total}",
+  "menu.item.fillMissingTranslations": "Compléter les traductions manquantes"
 }

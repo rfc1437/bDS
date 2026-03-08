@@ -43,6 +43,7 @@ interface PostEngineContract {
   getPost: (id: string) => Promise<PostData | null>;
   getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
   getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
+  getPublishedTranslationLanguagesByPost?: () => Promise<Map<string, string[]>>;
   hasPublishedVersion: (id: string) => Promise<boolean>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
   findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
@@ -89,6 +90,9 @@ export class PreviewServer {
   private readonly tagColorByNameCache = new Map<string, Promise<Record<string, string>>>();
   private server: Server | null = null;
   private port: number | null = null;
+  private isStopping = false;
+  private inflightRequests = 0;
+  private drainResolve: (() => void) | null = null;
 
   constructor(dependencies?: Partial<PreviewServerDependencies>) {
     if (!dependencies?.postEngine) throw new Error('PreviewServer: postEngine not provided');
@@ -144,6 +148,13 @@ export class PreviewServer {
   }
 
   async stop(): Promise<void> {
+    this.isStopping = true;
+
+    // Wait for in-flight requests to finish before closing the server.
+    if (this.inflightRequests > 0) {
+      await new Promise<void>((resolve) => { this.drainResolve = resolve; });
+    }
+
     if (!this.server) {
       this.port = null;
       return;
@@ -186,6 +197,7 @@ export class PreviewServer {
       requestTheme?: string | null;
       htmlThemeAttribute?: string;
       allowEmptyArchiveRender?: boolean;
+      preferredLanguage?: string;
       singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string };
     },
   ): Promise<string | null> {
@@ -213,6 +225,11 @@ export class PreviewServer {
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (this.isStopping) {
+      this.respond(res, 503, 'Service Unavailable');
+      return;
+    }
+
     const remoteAddress = req.socket.remoteAddress;
     const isLocal = remoteAddress === '127.0.0.1'
       || remoteAddress === '::1'
@@ -228,6 +245,7 @@ export class PreviewServer {
       return;
     }
 
+    this.inflightRequests++;
     try {
         const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
         const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
@@ -267,6 +285,25 @@ export class PreviewServer {
       const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
       const htmlRewriteContext = await this.buildHtmlRewriteContext();
 
+      // Detect language-prefixed paths for alternative language previews
+      const mainLanguage = metadata?.mainLanguage?.trim().toLowerCase() || 'en';
+      const blogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
+        ? (metadata as { blogLanguages: string[] }).blogLanguages
+        : [];
+      const alternativeLanguages = blogLanguages
+        .map((lang) => lang.trim().toLowerCase())
+        .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+      let routePathname = pathname;
+      let languagePrefix = '';
+      let routeLanguage = requestLanguage;
+      const langPrefixMatch = pathname.match(/^\/([a-z]{2})(\/.*|$)/);
+      if (langPrefixMatch && alternativeLanguages.includes(langPrefixMatch[1])) {
+        languagePrefix = `/${langPrefixMatch[1]}`;
+        routeLanguage = langPrefixMatch[1];
+        routePathname = langPrefixMatch[2] || '/';
+        htmlRewriteContext.languagePrefix = languagePrefix;
+      }
+
       if (pathname === '/calendar.json') {
         const calendarJson = await this.resolveCalendarJson(context.dataDir, listExcludedCategories);
         this.respondAsset(res, 'application/json; charset=utf-8', calendarJson);
@@ -297,17 +334,20 @@ export class PreviewServer {
         return;
       }
 
-      const result = await this.renderRouteForContext(pathname, {
+      const result = await this.renderRouteForContext(routePathname, {
         projectContext: context,
         metadata,
         menu,
+        htmlRewriteContext,
         maxPostsPerPage,
         requestTheme,
         htmlThemeAttribute: undefined,
+        preferredLanguage: routeLanguage,
         singlePostOptions: {
           useDraftContent,
           draftPostId,
           lang: requestLanguage,
+          preferredLanguage: routeLanguage,
         },
       });
       if (!result) {
@@ -326,6 +366,12 @@ export class PreviewServer {
     } catch (error) {
       console.error('[PreviewServer] Request failed:', error);
       this.respond(res, 500, 'Internal Server Error');
+    } finally {
+      this.inflightRequests--;
+      if (this.inflightRequests === 0 && this.drainResolve) {
+        this.drainResolve();
+        this.drainResolve = null;
+      }
     }
   }
 
@@ -369,14 +415,17 @@ export class PreviewServer {
     const publishedPosts = await loadPublishedSnapshots(this.postEngine, { status: 'published' });
     const canonicalPostPathBySlug = new Map<string, string>();
 
+    const translationMap = this.postEngine.getPublishedTranslationLanguagesByPost
+      ? await this.postEngine.getPublishedTranslationLanguagesByPost()
+      : new Map<string, string[]>();
+
     for (const post of publishedPosts) {
       canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
 
-      if (this.postEngine.getPostTranslations) {
-        const translations = await this.postEngine.getPostTranslations(post.id);
-        for (const translation of translations) {
-          if (translation.status !== 'published') continue;
-          const variantSlug = `${post.slug}.${translation.language}`;
+      const languages = translationMap.get(post.id);
+      if (languages) {
+        for (const lang of languages) {
+          const variantSlug = `${post.slug}.${lang}`;
           canonicalPostPathBySlug.set(variantSlug, buildCanonicalPostPath({ ...post, slug: variantSlug }));
         }
       }

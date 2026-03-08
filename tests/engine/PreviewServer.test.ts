@@ -2204,4 +2204,59 @@ describe('PreviewServer', () => {
     expect(html).toContain('data-template="not-found"');
     expect(html).toContain('class="not-found"');
   });
+
+  it('returns 503 after stop is called', async () => {
+    server = new PreviewServer({
+      postEngine: makeEngine([makePost()]),
+      settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+    const baseUrl = server.getBaseUrl();
+
+    const okResponse = await fetch(`${baseUrl}/`);
+    expect(okResponse.status).toBe(200);
+
+    await server.stop();
+
+    await expect(fetch(`${baseUrl}/`)).rejects.toThrow();
+  });
+
+  it('includes translation variant slugs in rewrite context using batch method', async () => {
+    const publishedPost = makePost({
+      id: 'post-1',
+      slug: 'hello',
+      status: 'published',
+      language: 'en',
+      createdAt: new Date('2025-02-15T10:00:00.000Z'),
+    });
+
+    const getPublishedTranslationLanguagesByPost = vi.fn(async () => {
+      const map = new Map<string, string[]>();
+      map.set('post-1', ['de', 'fr']);
+      return map;
+    });
+
+    server = new PreviewServer({
+      postEngine: {
+        ...makeEngine([publishedPost]),
+        getPublishedTranslationLanguagesByPost,
+      } as any,
+      settingsEngine: makeSettings(50),
+      mediaEngine: makeMediaEngine([]) as any,
+      postMediaEngine: makePostMediaEngine({}) as any,
+      menuEngine: makeMenuEngine({ items: [] }) as any,
+      getActiveProjectContext: async () => ({ projectId: 'default' }),
+    });
+
+    await server.start(0);
+
+    const response = await fetch(`${server.getBaseUrl()}/`);
+    expect(response.status).toBe(200);
+    expect(getPublishedTranslationLanguagesByPost).toHaveBeenCalled();
+  });
 });

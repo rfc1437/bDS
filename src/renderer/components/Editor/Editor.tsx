@@ -31,6 +31,7 @@ import { openEntityTab } from '../../navigation/tabPolicy';
 import { EditorRoute, resolveEditorRoute } from '../../navigation/editorRouting';
 import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEditor';
 import { useI18n } from '../../i18n';
+import { SUPPORTED_POST_LANGUAGES, POST_LANGUAGE_FLAGS } from '../../../main/shared/i18n';
 import documentationContent from '../../../../DOCUMENTATION.md?raw';
 import apiDocumentationContent from '../../../../API.md?raw';
 import './Editor.css';
@@ -53,14 +54,7 @@ const UI_DATE_LOCALE: Record<string, string> = {
   es: 'es-ES',
 };
 
-const SUPPORTED_POST_LANGUAGES = ['en', 'de', 'fr', 'it', 'es'] as const;
-const POST_LANGUAGE_FLAGS: Record<(typeof SUPPORTED_POST_LANGUAGES)[number], string> = {
-  en: '🇬🇧',
-  de: '🇩🇪',
-  fr: '🇫🇷',
-  it: '🇮🇹',
-  es: '🇪🇸',
-};
+
 
 /** Get display name for media: prefer title over originalName */
 function getMediaDisplayName(media: { title?: string; originalName: string }): string {
@@ -233,6 +227,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['article']);
   const [templateSlug, setTemplateSlug] = useState('');
   const [postLanguage, setPostLanguage] = useState('');
+  const [doNotTranslate, setDoNotTranslate] = useState(false);
   const [activeEditingLanguage, setActiveEditingLanguage] = useState('');
   const [canonicalDraft, setCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
   const [savedCanonicalDraft, setSavedCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
@@ -555,6 +550,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       setSelectedCategories(post.categories.length > 0 ? post.categories : ['article']);
       setTemplateSlug((post as PostData & { templateSlug?: string }).templateSlug || '');
       setPostLanguage(post.language || '');
+      setDoNotTranslate(post.doNotTranslate === true);
       setActiveEditingLanguage(post.language || projectLanguage);
       setMetadataExpanded(post.title === '');
       markClean(postId);
@@ -690,6 +686,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         || author !== (post.author || '')
         || templateSlug !== ((post as PostData & { templateSlug?: string }).templateSlug || '')
         || postLanguage !== (post.language || '')
+        || doNotTranslate !== (post.doNotTranslate === true)
         || JSON.stringify(tags.slice().sort()) !== JSON.stringify(post.tags.slice().sort())
         || JSON.stringify(selectedCategories.slice().sort()) !== JSON.stringify(post.categories.slice().sort())
       : false;
@@ -709,6 +706,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           excerpt: effectiveCanonicalDraft.excerpt || undefined,
           author: author || undefined,
           language: postLanguage || undefined,
+          doNotTranslate,
           tags,
           categories: selectedCategories.length > 0 ? selectedCategories : ['article'],
           templateSlug: templateSlug || null,
@@ -1393,6 +1391,16 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
                   {isDetectingLanguage ? tr('editor.post.quickActions.detecting') : '🤖'}
                 </button>
               </div>
+            </div>
+            <div className="editor-field">
+              <label className="editor-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={doNotTranslate}
+                  onChange={(e) => setDoNotTranslate(e.target.checked)}
+                />
+                {tr('editor.doNotTranslateLabel')}
+              </label>
             </div>
             <div className="editor-field-row">
               <div className="editor-field">

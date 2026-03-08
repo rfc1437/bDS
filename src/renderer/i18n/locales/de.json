@@ -551,6 +551,8 @@
   "settings.project.publicUrlPlaceholder": "https://example.com",
   "settings.project.mainLanguageLabel": "Hauptsprache",
   "settings.project.mainLanguageDescription": "Die primäre Sprache für deine Blog-Inhalte. KI-generierte Titel, Alt-Texte und Bildunterschriften nutzen diese Sprache.",
+  "settings.project.blogLanguagesLabel": "Blog-Sprachen",
+  "settings.project.blogLanguagesDescription": "Sprachen, in denen der Blog gerendert wird. Die Hauptsprache ist immer enthalten. Zusätzliche Sprachen erzeugen übersetzte Unterbäume.",
   "settings.project.defaultAuthorLabel": "Standardautor",
   "settings.project.defaultAuthorDescription": "Der Standard-Autorname für neue Beiträge und Medien. Kann pro Element überschrieben werden.",
   "settings.project.defaultAuthorPlaceholder": "Autorenname",
@@ -1201,5 +1203,9 @@
   "duplicatesView.checkAll": "Alle auswählen",
   "duplicatesView.uncheckAll": "Alle abwählen",
   "duplicatesView.dismissChecked": "Ausgewählte ignorieren ({count})",
-  "duplicatesView.notEnabled": "Semantische Ähnlichkeit ist nicht aktiviert. Aktivieren Sie sie unter Einstellungen → Technologie."
+  "duplicatesView.notEnabled": "Semantische Ähnlichkeit ist nicht aktiviert. Aktivieren Sie sie unter Einstellungen → Technologie.",
+  "editor.doNotTranslateLabel": "Nicht übersetzen",
+  "blog.fillMissing.nothingToDo": "Alle Übersetzungen sind aktuell.",
+  "blog.fillMissing.enqueued": "{posts} Post- und {media} Medienübersetzungen eingeplant.",
+  "blog.fillMissing.error": "Fehlende Übersetzungen konnten nicht erstellt werden."
 }

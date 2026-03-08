@@ -7,6 +7,20 @@ import esJson from './i18n/locales/es.json';
 export type SupportedLanguage = 'en' | 'de' | 'fr' | 'it' | 'es';
 export const SUPPORTED_RENDER_LANGUAGES: SupportedLanguage[] = ['en', 'de', 'fr', 'it', 'es'];
 
+/**
+ * Canonical list of languages supported for post and media translations.
+ * Used by both AI tasks and the Blog Languages UI.
+ */
+export const SUPPORTED_POST_LANGUAGES: readonly SupportedLanguage[] = SUPPORTED_RENDER_LANGUAGES;
+
+export const POST_LANGUAGE_FLAGS: Record<SupportedLanguage, string> = {
+  en: '🇬🇧',
+  de: '🇩🇪',
+  fr: '🇫🇷',
+  it: '🇮🇹',
+  es: '🇪🇸',
+};
+
 type TranslationMap = Record<string, string>;
 
 const en = enJson as TranslationMap;

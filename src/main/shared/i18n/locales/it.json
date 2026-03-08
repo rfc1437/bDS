@@ -68,6 +68,7 @@
   "render.taxonomy.ariaLabel": "Tassonomia",
   "render.backlinks.label": "Collegato da",
   "render.backlinks.ariaLabel": "Retrocollegamenti",
+  "render.languageSwitcher.ariaLabel": "Lingua",
   "render.video.youtubeTitle": "Video YouTube",
   "render.video.vimeoTitle": "Video Vimeo",
   "render.month.1": "gennaio",
@@ -92,5 +93,6 @@
   "task.rebuildEmbeddingIndex.name": "Ricostruisci indice embeddings",
   "task.rebuildEmbeddingIndex.clearing": "Svuotamento indice…",
   "task.duplicateSearch.name": "Trova post duplicati",
-  "task.duplicateSearch.searching": "Controllo: {checked}/{total}"
+  "task.duplicateSearch.searching": "Controllo: {checked}/{total}",
+  "menu.item.fillMissingTranslations": "Completa le traduzioni mancanti"
 }

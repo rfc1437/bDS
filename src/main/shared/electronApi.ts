@@ -96,6 +96,7 @@ export interface PostData {
   status: 'draft' | 'published' | 'archived';
   author?: string;
   language?: string;
+  doNotTranslate?: boolean;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -811,7 +812,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings>; semanticSimilarityEnabled?: boolean }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings>; semanticSimilarityEnabled?: boolean; blogLanguages?: string[] }) => Promise<ProjectMetadata | null>;
     getPublishingPreferences: () => Promise<PublishingPreferences | null>;
     setPublishingPreferences: (prefs: PublishingPreferences) => Promise<void>;
     clearPublishingPreferences: () => Promise<void>;
@@ -963,6 +964,7 @@ export interface ElectronAPI {
     validateSite: () => Promise<SiteValidationReport>;
     validateTranslations: () => Promise<TranslationValidationReport>;
     fixInvalidTranslations: (report: TranslationValidationReport) => Promise<TranslationValidationFixResult>;
+    fillMissingTranslations: () => Promise<{ enqueuedPosts: number; enqueuedMedia: number }>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
     regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };

@@ -26,6 +26,7 @@ export interface PostData {
   status: 'draft' | 'published' | 'archived';
   author?: string;
   language?: string;
+  doNotTranslate?: boolean;
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
@@ -50,7 +51,7 @@ export interface PostTranslationData {
 }
 
 export interface TranslationValidationIssue {
-  issue: 'same-language-as-canonical' | 'missing-source-post';
+  issue: 'same-language-as-canonical' | 'missing-source-post' | 'do-not-translate-has-translations';
   translationId?: string;
   translationFor: string;
   canonicalLanguage?: string;
@@ -522,6 +523,7 @@ export class PostEngine extends EventEmitter {
     if (post.excerpt) metadata.excerpt = post.excerpt;
     if (post.author) metadata.author = post.author;
     if (post.language) metadata.language = post.language;
+    if (post.doNotTranslate) metadata.doNotTranslate = true;
     if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
 
     // Use date-based directory structure (posts/YYYY/MM/)
@@ -701,6 +703,7 @@ export class PostEngine extends EventEmitter {
       status: data.status || 'draft',
       author: data.author,
       language: data.language,
+      doNotTranslate: data.doNotTranslate === true,
       createdAt: now,
       updatedAt: now,
       publishedAt: data.publishedAt,
@@ -729,6 +732,7 @@ export class PostEngine extends EventEmitter {
       tags: JSON.stringify(post.tags),
       categories: JSON.stringify(post.categories),
       language: post.language || null,
+      doNotTranslate: post.doNotTranslate === true,
     };
 
     await db.insert(posts).values(dbPost);
@@ -818,6 +822,7 @@ export class PostEngine extends EventEmitter {
       tags: JSON.stringify(updated.tags),
       categories: JSON.stringify(updated.categories),
       language: updated.language || null,
+      doNotTranslate: updated.doNotTranslate === true,
     };
     if (newFilePath !== undefined) {
       dbSet.filePath = newFilePath;
@@ -916,6 +921,7 @@ export class PostEngine extends EventEmitter {
       status: dbPost.status as 'draft' | 'published' | 'archived',
       author: dbPost.author || undefined,
       language: (dbPost as { language?: string | null }).language || undefined,
+      doNotTranslate: (dbPost as { doNotTranslate?: boolean | null }).doNotTranslate === true,
       createdAt: dbPost.createdAt,
       updatedAt: dbPost.updatedAt,
       publishedAt: dbPost.publishedAt || undefined,
@@ -1002,6 +1008,25 @@ export class PostEngine extends EventEmitter {
     return this.resolvePostTranslationData(translation);
   }
 
+  async getPublishedTranslationLanguagesByPost(): Promise<Map<string, string[]>> {
+    const allTranslations = await this.getAllTranslationRows();
+    const allPosts = await this.getPostsFiltered({ status: 'published' });
+    const postById = new Map(allPosts.map((p) => [p.id, p]));
+    const result = new Map<string, string[]>();
+    for (const row of allTranslations) {
+      if (row.status !== 'published') continue;
+      const sourcePost = postById.get(row.translationFor);
+      if (!sourcePost) continue;
+      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) continue;
+      const lang = row.language?.trim().toLowerCase();
+      if (!lang) continue;
+      const existing = result.get(row.translationFor) ?? [];
+      existing.push(lang);
+      result.set(row.translationFor, existing);
+    }
+    return result;
+  }
+
   async getPostTranslations(postId: string): Promise<PostTranslationData[]> {
     const sourcePost = await this.getPost(postId);
     const rows = this.filterCanonicalTranslationRows(sourcePost, await this.getTranslationRowsForPost(postId));
@@ -1036,6 +1061,17 @@ export class PostEngine extends EventEmitter {
           translationId: row.id,
           translationFor: row.translationFor,
           canonicalLanguage: this.effectiveCanonicalLanguage(sourcePost),
+          translationLanguage: this.normalizeLanguageCode(row.language),
+          title: row.title,
+          filePath: row.filePath || undefined,
+        })];
+      }
+
+      if (sourcePost.doNotTranslate) {
+        return [this.createTranslationValidationIssue({
+          issue: 'do-not-translate-has-translations',
+          translationId: row.id,
+          translationFor: row.translationFor,
           translationLanguage: this.normalizeLanguageCode(row.language),
           title: row.title,
           filePath: row.filePath || undefined,
@@ -1079,6 +1115,14 @@ export class PostEngine extends EventEmitter {
           issue: 'same-language-as-canonical',
           translationFor: fileData.translationFor,
           canonicalLanguage: this.effectiveCanonicalLanguage(sourcePost),
+          translationLanguage: normalizedLanguage,
+          title: fileData.title,
+          filePath,
+        }));
+      } else if (sourcePost.doNotTranslate) {
+        invalidFilesystemFiles.push(this.createTranslationValidationIssue({
+          issue: 'do-not-translate-has-translations',
+          translationFor: fileData.translationFor,
           translationLanguage: normalizedLanguage,
           title: fileData.title,
           filePath,
@@ -2256,6 +2300,7 @@ export class PostEngine extends EventEmitter {
       publishedAt: publishedData.publishedAt,
       tags: publishedData.tags || [],
       categories: publishedData.categories || [],
+      doNotTranslate: publishedData.doNotTranslate === true,
       availableLanguages: publishedData.language ? [publishedData.language] : [],
     };
 
@@ -2299,6 +2344,7 @@ export class PostEngine extends EventEmitter {
       publishedAt: fileData.publishedAt ?? dbPost.publishedAt ?? undefined,
       tags: fileData.tags,
       categories: fileData.categories,
+      doNotTranslate: fileData.doNotTranslate === true,
       availableLanguages: fileData.language ? [fileData.language] : [],
     };
   }
@@ -2412,6 +2458,7 @@ export class PostEngine extends EventEmitter {
             status: 'published',
             author: fileData.author,
             language: fileData.language || null,
+            doNotTranslate: fileData.doNotTranslate === true,
             createdAt: fileData.createdAt,
             updatedAt: fileData.updatedAt,
             publishedAt: nextPublishedAt,
@@ -2447,6 +2494,7 @@ export class PostEngine extends EventEmitter {
           publishedAt: nextPublishedAt || undefined,
           tags: fileData.tags,
           categories: fileData.categories,
+          doNotTranslate: fileData.doNotTranslate === true,
           availableLanguages: fileData.language ? [fileData.language] : [],
         };
 
@@ -2495,6 +2543,7 @@ export class PostEngine extends EventEmitter {
         status: 'published',
         author: fileData.author,
         language: fileData.language || null,
+        doNotTranslate: fileData.doNotTranslate === true,
         createdAt: fileData.createdAt,
         updatedAt: fileData.updatedAt,
         publishedAt,
@@ -2529,6 +2578,7 @@ export class PostEngine extends EventEmitter {
         publishedAt: publishedAt || undefined,
         tags: fileData.tags,
         categories: fileData.categories,
+        doNotTranslate: fileData.doNotTranslate === true,
         availableLanguages: fileData.language ? [fileData.language] : [],
       };
 

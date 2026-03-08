@@ -41,6 +41,7 @@ export type AppMenuAction =
   | 'uploadSite'
   | 'openDocumentation'
   | 'openApiDocumentation'
+  | 'fillMissingTranslations'
   | 'findDuplicates'
   | 'about'
   | 'viewOnGitHub'
@@ -136,6 +137,7 @@ export const APP_MENU_GROUPS: AppMenuGroupDefinition[] = [
       { label: 'menu.item.metadataDiff', action: 'metadataDiff' },
       { label: 'menu.item.regenerateCalendar', action: 'regenerateCalendar' },
       { label: 'menu.item.validateTranslations', action: 'validateTranslations' },
+      { label: 'menu.item.fillMissingTranslations', action: 'fillMissingTranslations' },
       { label: 'menu.item.findDuplicates', action: 'findDuplicates' },
       { label: '', action: 'blog-separator-4', separator: true },
       { label: 'menu.item.generateSitemap', action: 'generateSitemap', accelerator: 'CmdOrCtrl+R' },
@@ -180,6 +182,7 @@ export const APP_MENU_ACTION_EVENT_MAP: Partial<Record<AppMenuAction, string>> =
   regenerateCalendar: 'menu:regenerateCalendar',
   validateSite: 'menu:validateSite',
   validateTranslations: 'menu:validateTranslations',
+  fillMissingTranslations: 'menu:fillMissingTranslations',
   findDuplicates: 'menu:findDuplicates',
   uploadSite: 'menu:uploadSite',
   openDocumentation: 'menu:openDocumentation',

@@ -551,6 +551,8 @@
   "settings.project.publicUrlPlaceholder": "https://example.com",
   "settings.project.mainLanguageLabel": "Main Language",
   "settings.project.mainLanguageDescription": "The primary language for your blog content. AI-generated titles, alt text, and captions will use this language.",
+  "settings.project.blogLanguagesLabel": "Blog Languages",
+  "settings.project.blogLanguagesDescription": "Languages the blog is rendered in. The main language is always included. Additional languages generate translated subtrees.",
   "settings.project.defaultAuthorLabel": "Default Author",
   "settings.project.defaultAuthorDescription": "The default author name for new posts and media. Can be overridden per item.",
   "settings.project.defaultAuthorPlaceholder": "Author Name",
@@ -1201,5 +1203,9 @@
   "duplicatesView.checkAll": "Check All",
   "duplicatesView.uncheckAll": "Uncheck All",
   "duplicatesView.dismissChecked": "Dismiss Checked ({count})",
-  "duplicatesView.notEnabled": "Semantic similarity is not enabled. Enable it in Settings → Technology."
+  "duplicatesView.notEnabled": "Semantic similarity is not enabled. Enable it in Settings → Technology.",
+  "editor.doNotTranslateLabel": "Do not translate",
+  "blog.fillMissing.nothingToDo": "All translations are up to date.",
+  "blog.fillMissing.enqueued": "Enqueued {posts} post and {media} media translations.",
+  "blog.fillMissing.error": "Failed to fill missing translations."
 }

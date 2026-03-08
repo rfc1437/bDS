@@ -532,6 +532,28 @@ const App: React.FC = () => {
     );
 
     unsubscribers.push(
+      window.electronAPI?.on('menu:fillMissingTranslations', () => {
+        const fillMissing = async () => {
+          try {
+            const result = await window.electronAPI?.blog.fillMissingTranslations();
+            if (result) {
+              const total = result.enqueuedPosts + result.enqueuedMedia;
+              if (total === 0) {
+                showToast.info(tr('blog.fillMissing.nothingToDo'));
+              } else {
+                showToast.success(tr('blog.fillMissing.enqueued', { posts: String(result.enqueuedPosts), media: String(result.enqueuedMedia) }));
+              }
+            }
+          } catch (error) {
+            console.error('Fill missing translations failed:', error);
+            showToast.error(tr('blog.fillMissing.error'));
+          }
+        };
+        void fillMissing();
+      }) || (() => {})
+    );
+
+    unsubscribers.push(
       window.electronAPI?.on('menu:previewPost', async () => {
         try {
           const selectedPostId = useAppStore.getState().selectedPostId;

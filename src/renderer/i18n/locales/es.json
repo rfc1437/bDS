@@ -551,6 +551,8 @@
   "settings.project.publicUrlPlaceholder": "https://example.com",
   "settings.project.mainLanguageLabel": "Idioma principal",
   "settings.project.mainLanguageDescription": "Idioma principal del contenido del blog. Los títulos, textos alternativos y pies generados por IA usarán este idioma.",
+  "settings.project.blogLanguagesLabel": "Idiomas del blog",
+  "settings.project.blogLanguagesDescription": "Idiomas en los que se genera el blog. El idioma principal siempre está incluido. Los idiomas adicionales generan subárboles traducidos.",
   "settings.project.defaultAuthorLabel": "Autor predeterminado",
   "settings.project.defaultAuthorDescription": "Nombre de autor predeterminado para nuevas entradas y medios. Se puede reemplazar por elemento.",
   "settings.project.defaultAuthorPlaceholder": "Nombre del autor",
@@ -1201,5 +1203,9 @@
   "duplicatesView.checkAll": "Seleccionar todo",
   "duplicatesView.uncheckAll": "Deseleccionar todo",
   "duplicatesView.dismissChecked": "Descartar seleccionados ({count})",
-  "duplicatesView.notEnabled": "La similitud semántica no está activada. Actívela en Configuración → Tecnología."
+  "duplicatesView.notEnabled": "La similitud semántica no está activada. Actívela en Configuración → Tecnología.",
+  "editor.doNotTranslateLabel": "No traducir",
+  "blog.fillMissing.nothingToDo": "Todas las traducciones están al día.",
+  "blog.fillMissing.enqueued": "{posts} traducciones de publicaciones y {media} traducciones de medios en cola.",
+  "blog.fillMissing.error": "Error al rellenar las traducciones faltantes."
 }

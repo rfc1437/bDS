@@ -1,0 +1,11 @@
+{% if blog_languages.size > 1 %}
+<nav class="language-switcher" aria-label="{{ 'render.languageSwitcher.ariaLabel' | i18n: language }}">
+  {% for lang in blog_languages %}
+    {% if lang.is_current %}
+      <span class="language-switcher-badge language-switcher-badge-current" aria-current="true">{{ lang.code }}</span>
+    {% else %}
+      <a class="language-switcher-badge" href="{{ lang.href_prefix | default: '/' }}">{{ lang.code }}</a>
+    {% endif %}
+  {% endfor %}
+</nav>
+{% endif %}

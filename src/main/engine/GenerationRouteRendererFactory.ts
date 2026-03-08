@@ -56,6 +56,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
   };
   maxPostsPerPage: number;
   publishedPostsForLookup: PostData[];
+  languagePrefix?: string;
   engines: {
     postEngine: {
       getPostsFiltered: (filter: Parameters<PreviewServer['renderRouteForContext']>[1] extends never ? never : any) => Promise<PostData[]>;
@@ -223,7 +224,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     userTemplatesDir: path.join(params.options.dataDir, 'templates'),
   });
 
-  const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string> }> = (async () => {
+  const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string>; languagePrefix?: string }> = (async () => {
     const canonicalPostPathBySlug = new Map<string, string>();
     for (const post of params.publishedPostsForLookup) {
       canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
@@ -246,6 +247,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     return {
       canonicalPostPathBySlug,
       canonicalMediaPathBySourcePath,
+      languagePrefix: params.languagePrefix,
     };
   })();
 
