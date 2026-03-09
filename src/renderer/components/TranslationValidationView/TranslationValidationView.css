@@ -1,0 +1,103 @@
+.translation-validation-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  height: 100%;
+  overflow: auto;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+.translation-validation-summary h2 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.translation-validation-summary p {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.translation-validation-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+}
+
+.translation-validation-empty,
+.translation-validation-status {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.translation-validation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.translation-validation-card {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-editorWidget-background) 18%);
+}
+
+.translation-validation-card.translation-validation-card-db {
+  border-left: 4px solid var(--vscode-notificationsWarningIcon-foreground);
+}
+
+.translation-validation-card.translation-validation-card-file {
+  border-left: 4px solid var(--vscode-notificationsErrorIcon-foreground);
+}
+
+.translation-validation-card-title {
+  margin: 0 0 6px 0;
+  font-weight: 600;
+}
+
+.translation-validation-card-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+
+.translation-validation-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.translation-validation-revalidate,
+.translation-validation-fix {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.translation-validation-revalidate:hover:not(:disabled),
+.translation-validation-fix:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.translation-validation-revalidate:disabled,
+.translation-validation-fix:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.translation-validation-card-meta dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+.translation-validation-card-meta dd {
+  margin: 0;
+  word-break: break-word;
+  font-family: var(--vscode-editor-font-family);
+}

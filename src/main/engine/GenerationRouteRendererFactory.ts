@@ -7,6 +7,7 @@ import type { PostData } from './PostEngine';
 import type { PicoThemeName } from '../shared/picoThemes';
 import type { CategoryMetadata } from './BlogGenerationEngine';
 import { PreviewServer } from './PreviewServer';
+import type { PostTranslationData } from './PostEngine';
 
 interface RenderContext {
   projectContext: {
@@ -55,12 +56,14 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
   };
   maxPostsPerPage: number;
   publishedPostsForLookup: PostData[];
+  languagePrefix?: string;
   engines: {
     postEngine: {
       getPostsFiltered: (filter: Parameters<PreviewServer['renderRouteForContext']>[1] extends never ? never : any) => Promise<PostData[]>;
       getPublishedVersion: (postId: string) => Promise<PostData | null>;
       findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
       getPost: (postId: string) => Promise<PostData | null>;
+      getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
       hasPublishedVersion: (postId: string) => Promise<boolean>;
       getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
       setProjectContext: (projectId: string, dataDir?: string) => void;
@@ -176,6 +179,9 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       return match ?? null;
     },
     getPost: (postId: string) => params.engines.postEngine.getPost(postId),
+    getPostTranslation: params.engines.postEngine.getPostTranslation
+      ? (postId: string, language: string) => params.engines.postEngine.getPostTranslation!(postId, language)
+      : undefined,
     hasPublishedVersion: (postId: string) => params.engines.postEngine.hasPublishedVersion(postId),
     getLinkedBy: params.engines.postEngine.getLinkedBy
       ? (postId: string) => params.engines.postEngine.getLinkedBy!(postId)
@@ -218,7 +224,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     userTemplatesDir: path.join(params.options.dataDir, 'templates'),
   });
 
-  const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string> }> = (async () => {
+  const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string>; languagePrefix?: string }> = (async () => {
     const canonicalPostPathBySlug = new Map<string, string>();
     for (const post of params.publishedPostsForLookup) {
       canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
@@ -241,6 +247,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     return {
       canonicalPostPathBySlug,
       canonicalMediaPathBySourcePath,
+      languagePrefix: params.languagePrefix,
     };
   })();
 

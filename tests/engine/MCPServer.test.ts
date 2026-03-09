@@ -27,6 +27,8 @@ function createMockPostEngine() {
     getLinksTo: vi.fn().mockResolvedValue([]),
     getPostsFiltered: vi.fn().mockResolvedValue([]),
     getPostCounts: vi.fn().mockResolvedValue({ groups: [], totalPosts: 0 }),
+    getPostTranslation: vi.fn().mockResolvedValue(null),
+    getPostTranslations: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -1197,6 +1199,81 @@ describe('MCPServer', () => {
       expect(result.isError).toBe(true);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.error).toContain('not found');
+    });
+
+    it('read_post_by_slug with language returns translation content', async () => {
+      const post = { id: 'p1', title: 'Hallo Welt', slug: 'hallo-welt', content: 'Deutscher Inhalt', language: 'de', status: 'published', tags: [], categories: [], availableLanguages: ['de', 'en'], createdAt: new Date(), updatedAt: new Date() };
+      const translation = { id: 't1', translationFor: 'p1', language: 'en', title: 'Hello World', content: 'English content', excerpt: 'English excerpt', status: 'published', createdAt: new Date(), updatedAt: new Date() };
+      mockPostEngine.getPostBySlug.mockResolvedValue(post);
+      mockPostEngine.getPostTranslation.mockResolvedValue(translation);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
+      mockPostEngine.getLinksTo.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'read_post_by_slug');
+      const result = await tool.handler({ slug: 'hallo-welt', language: 'en' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.post.title).toBe('Hello World');
+      expect(parsed.post.content).toBe('English content');
+      expect(mockPostEngine.getPostTranslation).toHaveBeenCalledWith('p1', 'en');
+    });
+
+    it('read_post_by_slug with canonical language returns original post', async () => {
+      const post = { id: 'p1', title: 'Hallo Welt', slug: 'hallo-welt', content: 'Deutscher Inhalt', language: 'de', status: 'published', tags: [], categories: [], availableLanguages: ['de', 'en'], createdAt: new Date(), updatedAt: new Date() };
+      mockPostEngine.getPostBySlug.mockResolvedValue(post);
+      mockPostEngine.getLinkedBy.mockResolvedValue([]);
+      mockPostEngine.getLinksTo.mockResolvedValue([]);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'read_post_by_slug');
+      const result = await tool.handler({ slug: 'hallo-welt', language: 'de' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.post.title).toBe('Hallo Welt');
+      expect(parsed.post.content).toBe('Deutscher Inhalt');
+      expect(mockPostEngine.getPostTranslation).not.toHaveBeenCalled();
+    });
+
+    it('read_post_by_slug returns error when translation not found', async () => {
+      const post = { id: 'p1', title: 'Hallo Welt', slug: 'hallo-welt', content: 'Deutsch', language: 'de', status: 'published', tags: [], categories: [], availableLanguages: ['de'], createdAt: new Date(), updatedAt: new Date() };
+      mockPostEngine.getPostBySlug.mockResolvedValue(post);
+      mockPostEngine.getPostTranslation.mockResolvedValue(null);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'read_post_by_slug');
+      const result = await tool.handler({ slug: 'hallo-welt', language: 'fr' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('fr');
+    });
+
+    // ── get_post_translations tool ──────────────────────────────────
+
+    it('registers get_post_translations tool', () => {
+      const mcpServer = server.createMcpServer();
+      expect(hasRegistered(mcpServer, '_registeredTools', 'get_post_translations')).toBe(true);
+    });
+
+    it('get_post_translations returns all translations for a post', async () => {
+      const post = { id: 'p1', title: 'Hallo Welt', slug: 'hallo-welt', language: 'de', status: 'published', tags: [], categories: [], createdAt: new Date(), updatedAt: new Date() };
+      const translations = [
+        { id: 't1', translationFor: 'p1', language: 'en', title: 'Hello World', content: 'English', status: 'published', createdAt: new Date(), updatedAt: new Date() },
+        { id: 't2', translationFor: 'p1', language: 'fr', title: 'Bonjour le Monde', content: 'French', status: 'published', createdAt: new Date(), updatedAt: new Date() },
+      ];
+      mockPostEngine.getPostBySlug.mockResolvedValue(post);
+      mockPostEngine.getPostTranslations.mockResolvedValue(translations);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'get_post_translations');
+      const result = await tool.handler({ slug: 'hallo-welt' }, {}) as { content: Array<{ text: string }> };
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.translations).toHaveLength(2);
+      expect(parsed.translations[0].language).toBe('en');
+      expect(parsed.translations[1].language).toBe('fr');
+      expect(mockPostEngine.getPostTranslations).toHaveBeenCalledWith('p1');
+    });
+
+    it('get_post_translations returns error for nonexistent slug', async () => {
+      mockPostEngine.getPostBySlug.mockResolvedValue(null);
+      const mcpServer = server.createMcpServer();
+      const tool = getTool(mcpServer, 'get_post_translations');
+      const result = await tool.handler({ slug: 'no-such-slug' }, {}) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
     });
   });
 

@@ -21,6 +21,7 @@ describe('editorRouting', () => {
       documentation: 'documentation',
       'api-documentation': 'api-documentation',
       'site-validation': 'site-validation',
+      'translation-validation': 'translation-validation',
       scripts: 'scripts',
       templates: 'templates',
       'find-duplicates': 'find-duplicates',

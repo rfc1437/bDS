@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { ElectronAPI } from './shared/electronApi';
 import type { GitInitProgress } from './shared/electronApi';
 import type { SiteValidationReport } from './shared/electronApi';
+import type { TranslationValidationReport } from './shared/electronApi';
 
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
@@ -55,7 +56,11 @@ export const electronAPI: ElectronAPI = {
     delete: (id: string) => ipcRenderer.invoke('posts:delete', id),
     get: (id: string) => ipcRenderer.invoke('posts:get', id),
     getBySlug: (slug: string) => ipcRenderer.invoke('posts:getBySlug', slug),
-    getPreviewUrl: (id: string, options?: { draft?: boolean }) => ipcRenderer.invoke('posts:getPreviewUrl', id, options),
+    getTranslation: (postId: string, language: string) => ipcRenderer.invoke('posts:getTranslation', postId, language),
+    getTranslations: (postId: string) => ipcRenderer.invoke('posts:getTranslations', postId),
+    upsertTranslation: (postId: string, language: string, data: unknown) => ipcRenderer.invoke('posts:upsertTranslation', postId, language, data),
+    publishTranslation: (postId: string, language: string) => ipcRenderer.invoke('posts:publishTranslation', postId, language),
+    getPreviewUrl: (id: string, options?: { draft?: boolean; lang?: string }) => ipcRenderer.invoke('posts:getPreviewUrl', id, options),
     getAll: (options?: { limit?: number; offset?: number }) => ipcRenderer.invoke('posts:getAll', options),
     getByStatus: (status: string) => ipcRenderer.invoke('posts:getByStatus', status),
     publish: (id: string) => ipcRenderer.invoke('posts:publish', id),
@@ -100,6 +105,10 @@ export const electronAPI: ElectronAPI = {
     getThumbnail: (id: string, size?: 'small' | 'medium' | 'large') => ipcRenderer.invoke('media:getThumbnail', id, size),
     regenerateThumbnails: (id: string) => ipcRenderer.invoke('media:regenerateThumbnails', id),
     regenerateMissingThumbnails: () => ipcRenderer.invoke('media:regenerateMissingThumbnails'),
+    getTranslation: (mediaId: string, language: string) => ipcRenderer.invoke('media:getTranslation', mediaId, language),
+    getTranslations: (mediaId: string) => ipcRenderer.invoke('media:getTranslations', mediaId),
+    upsertTranslation: (mediaId: string, language: string, data: unknown) => ipcRenderer.invoke('media:upsertTranslation', mediaId, language, data),
+    deleteTranslation: (mediaId: string, language: string) => ipcRenderer.invoke('media:deleteTranslation', mediaId, language),
   },
 
   // Scripts
@@ -300,6 +309,9 @@ export const electronAPI: ElectronAPI = {
   blog: {
     generateSitemap: () => ipcRenderer.invoke('blog:generateSitemap'),
     validateSite: () => ipcRenderer.invoke('blog:validateSite'),
+    validateTranslations: () => ipcRenderer.invoke('blog:validateTranslations'),
+    fixInvalidTranslations: (report: TranslationValidationReport) => ipcRenderer.invoke('blog:fixInvalidTranslations', report),
+    fillMissingTranslations: () => ipcRenderer.invoke('blog:fillMissingTranslations'),
     applyValidation: (report: SiteValidationReport) => ipcRenderer.invoke('blog:applyValidation', report),
     regenerateCalendar: () => ipcRenderer.invoke('blog:regenerateCalendar'),
   },
@@ -395,6 +407,15 @@ export const electronAPI: ElectronAPI = {
 
     // Post Analysis (title, excerpt, slug suggestions)
     analyzePost: (postId: string, language?: string) => ipcRenderer.invoke('chat:analyzePost', postId, language),
+
+    // Post Translation
+    translatePost: (postId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translatePost', postId, targetLanguage),
+
+    // Media Language Detection
+    detectMediaLanguage: (mediaId: string) => ipcRenderer.invoke('chat:detectMediaLanguage', mediaId),
+
+    // Media Metadata Translation
+    translateMediaMetadata: (mediaId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translateMediaMetadata', mediaId, targetLanguage),
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: { conversationId: string; delta: string }) => void) => {

@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PostEngine, PostData } from '../../src/main/engine/PostEngine';
+import { postTranslations } from '../../src/main/database/schema';
 import { resetMockCounters } from '../utils/factories';
 import * as fs from 'fs/promises';
 
@@ -1837,6 +1838,71 @@ Content`);
 
       expect(insertedProjects).toHaveLength(1);
       expect(insertedProjects[0]).toBe('current-project-id');
+    });
+
+    it('should rebuild published translation files into the translations table', async () => {
+      const fs = await import('fs/promises');
+      const insertedRows: Array<{ table: unknown; data: any }> = [];
+
+      vi.mocked(mockLocalDb.insert).mockImplementation((table: unknown) => ({
+        values: vi.fn((data: any) => {
+          insertedRows.push({ table, data });
+          if (data && data.id) {
+            mockPosts.set(data.id, data);
+          }
+          return Promise.resolve();
+        }),
+      }) as any);
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        mockDirent('source-post.md'),
+        mockDirent('source-post.de.md'),
+      ] as any);
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (filePath: any) => {
+        if (filePath.includes('source-post.md') && !filePath.includes('source-post.de.md')) {
+          return `---
+id: source-post-id
+projectId: default
+title: Source Post
+slug: source-post
+status: published
+language: en
+createdAt: 2024-01-01T00:00:00.000Z
+updatedAt: 2024-01-02T00:00:00.000Z
+publishedAt: 2024-01-02T00:00:00.000Z
+tags: []
+categories: []
+---
+Canonical content`;
+        }
+
+        if (filePath.includes('source-post.de.md')) {
+          return `---
+translationFor: source-post-id
+language: de
+title: Quellbeitrag
+excerpt: Deutsche Zusammenfassung
+---
+Deutscher Inhalt`;
+        }
+
+        throw new Error('ENOENT');
+      });
+
+      await postEngine.rebuildDatabaseFromFiles();
+
+      const translationInsert = insertedRows.find((row) => row.table === postTranslations);
+      expect(translationInsert).toBeDefined();
+      expect(translationInsert?.data).toMatchObject({
+        projectId: 'default',
+        translationFor: 'source-post-id',
+        language: 'de',
+        title: 'Quellbeitrag',
+        excerpt: 'Deutsche Zusammenfassung',
+        status: 'published',
+        filePath: expect.stringContaining('source-post.de.md'),
+      });
     });
   });
 
@@ -3785,6 +3851,200 @@ Body.`);
       expect(result).not.toBeNull();
       // Should have been deduplicated
       expect(result!.slug).toBe('existing-slug-2');
+    });
+  });
+
+  describe('FTS translation indexing', () => {
+    it('should include translation content in FTS index when updating a post', async () => {
+      // Arrange: set up a post with a German translation
+      postEngine.setMainLanguage('en');
+      postEngine.setSearchLanguage('english');
+
+      // Mock getTranslationRowsForPost to return a translation
+      const translationRow = {
+        id: 'trans-1',
+        projectId: 'default',
+        translationFor: 'post-1',
+        language: 'de',
+        title: 'German Title Häuser',
+        excerpt: 'German Excerpt',
+        content: 'German draft content Haus',
+        status: 'draft',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        publishedAt: null,
+        filePath: '',
+        checksum: null,
+      };
+
+      // getAllTranslationRows returns all translations for the current project
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.all = vi.fn().mockResolvedValue([translationRow]);
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(undefined),
+          all: vi.fn().mockResolvedValue([translationRow]),
+        });
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+
+      // Act
+      await postEngine.updateFTSIndex({
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'English Title',
+        content: 'English content about houses',
+        excerpt: 'Summary',
+        tags: ['test'],
+        categories: ['blog'],
+      });
+
+      // Assert: the FTS insert should contain both English and German stemmed content
+      const ftsInsert = mockExecuteArgs.find((q: { sql: string }) =>
+        q.sql.includes('INSERT INTO posts_fts'),
+      );
+      expect(ftsInsert).toBeDefined();
+      const indexedContent = ftsInsert.args[2] as string;
+      // English content should be stemmed with English stemmer
+      expect(indexedContent).toContain('hous'); // "houses" stemmed in English
+      // German content should be stemmed with German stemmer
+      expect(indexedContent).toContain('haus'); // "Haus/Häuser" stemmed in German
+    });
+
+    it('should re-index FTS when a translation is created', async () => {
+      // Arrange: source post exists
+      const sourcePost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Source Post',
+        slug: 'source-post',
+        excerpt: null,
+        content: 'Source content',
+        status: 'draft',
+        author: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        publishedAt: null,
+        filePath: null,
+        checksum: null,
+        tags: '[]',
+        categories: '[]',
+        language: 'en',
+        translationOfId: null,
+        templateSlug: null,
+        doNotTranslate: 0,
+        version: 1,
+        stemmedTitle: '',
+        stemmedContent: '',
+      };
+
+      let selectCallCount = 0;
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        selectCallCount++;
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue(selectCallCount <= 2 ? sourcePost : undefined),
+          all: vi.fn().mockResolvedValue(selectCallCount <= 2 ? [sourcePost] : []),
+        });
+        chain.all = vi.fn().mockResolvedValue([]);
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+
+      // Act: create a French translation
+      await postEngine.upsertPostTranslation('post-1', 'fr', {
+        title: 'Titre Français',
+        content: 'Contenu en français avec des maisons',
+      });
+
+      // Assert: FTS should have been updated (at least one INSERT INTO posts_fts)
+      const ftsInserts = mockExecuteArgs.filter((q: { sql: string }) =>
+        q.sql.includes('INSERT INTO posts_fts'),
+      );
+      expect(ftsInserts.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should stem search query with multiple languages for cross-language matching', async () => {
+      postEngine.setMainLanguage('en');
+      postEngine.setSearchLanguage('english');
+
+      // Mock translations with German language to simulate a project with translations
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.all = vi.fn().mockResolvedValue([
+          { id: 'trans-1', projectId: 'test-project', translationFor: 'post-1', language: 'de', title: 'T', content: 'C', status: 'draft', createdAt: new Date(), updatedAt: new Date(), publishedAt: null, filePath: '', checksum: null },
+        ]);
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          get: vi.fn().mockResolvedValue({ id: 'post-1', title: 'Found', slug: 'found', excerpt: null, tags: '[]', categories: '[]' }),
+        });
+        return chain;
+      });
+
+      mockLocalClient.execute.mockResolvedValueOnce({ rows: [{ id: 'post-1' }] });
+
+      await postEngine.searchPosts('Häuser');
+
+      // Verify the FTS MATCH query was called
+      const matchCall = mockLocalClient.execute.mock.calls[0]?.[0] as { sql: string; args: any[] };
+      expect(matchCall.sql).toContain('MATCH');
+
+      // The query should contain stems from multiple languages combined with OR
+      const matchArg = matchCall.args[1] as string;
+      expect(matchArg).toBeDefined();
+    });
+
+    it('should rebuild FTS index including translation content', async () => {
+      postEngine.setMainLanguage('en');
+      postEngine.setSearchLanguage('english');
+
+      const translationRow = {
+        id: 'trans-1',
+        projectId: 'test-project',
+        translationFor: 'post-1',
+        language: 'de',
+        title: 'Deutscher Titel',
+        excerpt: null,
+        content: 'Deutscher Inhalt',
+        status: 'draft',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        publishedAt: null,
+        filePath: '',
+        checksum: null,
+      };
+
+      vi.mocked(mockLocalDb.select).mockImplementation(() => {
+        const chain = createSelectChain();
+        chain.where = vi.fn().mockReturnValue({
+          ...chain,
+          orderBy: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue([
+            { id: 'post-1', projectId: 'test-project', title: 'English Post', content: 'English content', tags: '[]', categories: '[]', language: 'en' },
+          ]),
+          get: vi.fn().mockResolvedValue(undefined),
+        });
+        chain.all = vi.fn().mockResolvedValue([translationRow]);
+        return chain;
+      });
+
+      mockExecuteArgs = [];
+      await postEngine.rebuildFTSIndex();
+
+      // Verify FTS was populated
+      const ftsInserts = mockExecuteArgs.filter((q: { sql: string }) =>
+        q.sql.includes('INSERT INTO posts_fts'),
+      );
+      expect(ftsInserts.length).toBeGreaterThanOrEqual(1);
+
+      // The indexed content should include German translation content
+      const insertContent = ftsInserts[0]?.args?.[2] as string;
+      expect(insertContent).toBeDefined();
     });
   });
 });

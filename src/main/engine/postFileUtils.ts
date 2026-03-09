@@ -15,6 +15,8 @@ export interface PostFileData {
   status: 'draft' | 'published' | 'archived';
   author?: string;
   language?: string;
+  doNotTranslate?: boolean;
+  templateSlug?: string;
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
@@ -30,6 +32,8 @@ interface PostFileMetadata {
   status: 'draft' | 'published' | 'archived';
   author?: string;
   language?: string;
+  doNotTranslate?: boolean;
+  templateSlug?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -65,6 +69,8 @@ export async function readPostFile(filePath: string): Promise<PostFileData | nul
       status: metadata.status,
       author: metadata.author,
       language: metadata.language || undefined,
+      doNotTranslate: metadata.doNotTranslate === true,
+      templateSlug: metadata.templateSlug || undefined,
       createdAt: new Date(metadata.createdAt),
       updatedAt: new Date(metadata.updatedAt),
       publishedAt: metadata.publishedAt ? new Date(metadata.publishedAt) : undefined,

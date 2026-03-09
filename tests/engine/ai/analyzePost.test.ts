@@ -43,6 +43,7 @@ function createMockDeps() {
 
   const postEngine = {
     getPost: vi.fn(),
+    upsertPostTranslation: vi.fn(),
   } as any;
 
   return { chatEngine, providers, mediaEngine, postEngine };
@@ -180,5 +181,285 @@ describe('OneShotTasks.analyzePost', () => {
 
     expect(deps.chatEngine.getSetting).toHaveBeenCalledWith('chat_title_model');
     expect(deps.providers.resolveModel).toHaveBeenCalledWith('custom-model-id');
+  });
+});
+
+describe('OneShotTasks.translatePost', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let tasks: OneShotTasks;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deps = createMockDeps();
+    tasks = new OneShotTasks(deps.providers, deps.chatEngine, deps.mediaEngine, deps.postEngine);
+  });
+
+  it('instructs the AI to leave fenced code blocks untranslated', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Intro\n\n```ts\nconst label = "Hello";\n```',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: 'Intro\n\n```ts\nconst label = "Hello";\n```',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"Mon Post","excerpt":"Resume"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Intro\n\n```ts\nconst label = "Hello";\n```',
+      } as any);
+
+    await tasks.translatePost('post-1', 'fr');
+
+    expect(mockGenerateText).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      system: expect.stringContaining('Leave text inside fenced code blocks untranslated.'),
+    }));
+  });
+
+  it('translates markdown body outside a JSON envelope', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Intro\n\n```ts\nconst config = { hello: "world" };\n```\n\nEnd.',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: 'Bonjour',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"Mon Post","excerpt":"Resume"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Introduction\n\n```ts\nconst config = { hello: "world" };\n```\n\nFin.',
+      } as any);
+
+    const result = await tasks.translatePost('post-1', 'fr');
+
+    expect(result.success).toBe(true);
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+    expect(mockGenerateText).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      system: expect.stringContaining('keys title and excerpt'),
+    }));
+    expect(mockGenerateText).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      system: expect.stringContaining('Return ONLY the translated Markdown body'),
+    }));
+    expect(deps.postEngine.upsertPostTranslation).toHaveBeenCalledWith('post-1', 'fr', {
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: 'Introduction\n\n```ts\nconst config = { hello: "world" };\n```\n\nFin.',
+    });
+  });
+
+  it('passes the raw markdown body without a leading content label', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Heading\n\nBody text',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: '# Titre\n\nTexte',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"Mon Post","excerpt":"Resume"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: '# Titre\n\nTexte',
+      } as any);
+
+    await tasks.translatePost('post-1', 'fr');
+
+    expect(mockGenerateText).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      prompt: '# Heading\n\nBody text',
+    }));
+  });
+
+  it('strips an accidental leading content label from translated markdown', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'Mein Beitrag',
+      excerpt: 'Zusammenfassung',
+      content: '# Uberschrift\n\nText',
+      language: 'de',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'en',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Heading\n\nText',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"My Post","excerpt":"Summary"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'content:\n\n# Heading\n\nText',
+      } as any);
+
+    await tasks.translatePost('post-1', 'en');
+
+    expect(deps.postEngine.upsertPostTranslation).toHaveBeenCalledWith('post-1', 'en', {
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Heading\n\nText',
+    });
+  });
+
+  it('instructs the AI to translate only — never invent or add content', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: '# Hello\n\nWorld',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Resume',
+      content: '# Bonjour\n\nMonde',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({ text: '{"title":"Mon Post","excerpt":"Resume"}' } as any)
+      .mockResolvedValueOnce({ text: '# Bonjour\n\nMonde' } as any);
+
+    await tasks.translatePost('post-1', 'fr');
+
+    const contentSystemPrompt = mockGenerateText.mock.calls[1][0].system as string;
+    expect(contentSystemPrompt).toMatch(/do not invent|do not add|only translate/i);
+    expect(contentSystemPrompt).toMatch(/macro|shortcode|non-translatable/i);
+  });
+
+  it('instructs the AI to keep markdown link text unchanged and translate surrounding prose', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'USearch Library',
+      excerpt: '',
+      content: '[unum-cloud/USearch: Fast Search](https://github.com/unum-cloud/USearch) - drin was drauf steht. Eine Library.',
+      language: 'de',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'en',
+      title: 'USearch Library',
+      excerpt: '',
+      content: '[unum-cloud/USearch: Fast Search](https://github.com/unum-cloud/USearch) - what it says on the tin. A library.',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({ text: '{"title":"USearch Library","excerpt":""}' } as any)
+      .mockResolvedValueOnce({
+        text: '[unum-cloud/USearch: Fast Search](https://github.com/unum-cloud/USearch) - what it says on the tin. A library.',
+      } as any);
+
+    await tasks.translatePost('post-1', 'en');
+
+    const contentSystemPrompt = mockGenerateText.mock.calls[1][0].system as string;
+    expect(contentSystemPrompt).toMatch(/link text/i);
+    expect(contentSystemPrompt).toMatch(/url/i);
+  });
+
+  it('falls back to source title and excerpt when metadata JSON is invalid', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Intro',
+      language: 'en',
+      status: 'draft',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Bonjour',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: 'not valid json',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Bonjour',
+      } as any);
+
+    const result = await tasks.translatePost('post-1', 'fr');
+
+    expect(result.success).toBe(true);
+    expect(deps.postEngine.upsertPostTranslation).toHaveBeenCalledWith('post-1', 'fr', {
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Bonjour',
+    });
+  });
+
+  it('passes status published when autoPublish is set', async () => {
+    deps.postEngine.getPost.mockResolvedValue({
+      id: 'post-1',
+      title: 'My Post',
+      excerpt: 'Summary',
+      content: 'Hello world',
+      language: 'en',
+      status: 'published',
+    });
+    deps.postEngine.upsertPostTranslation.mockResolvedValue({
+      id: 'translation-1',
+      translationFor: 'post-1',
+      language: 'fr',
+      title: 'Mon Post',
+      excerpt: 'Résumé',
+      content: 'Bonjour le monde',
+    });
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: '{"title":"Mon Post","excerpt":"Résumé"}',
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Bonjour le monde',
+      } as any);
+
+    const result = await tasks.translatePost('post-1', 'fr', { autoPublish: true });
+
+    expect(result.success).toBe(true);
+    expect(deps.postEngine.upsertPostTranslation).toHaveBeenCalledWith('post-1', 'fr', {
+      title: 'Mon Post',
+      excerpt: 'Résumé',
+      content: 'Bonjour le monde',
+      status: 'published',
+    });
   });
 });

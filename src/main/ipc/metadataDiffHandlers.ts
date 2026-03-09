@@ -47,7 +47,7 @@ export function registerMetadataDiffHandlers(safeHandle: SafeHandle, bundle: Eng
 
   safeHandle('metadataDiff:syncFileToDb', async (_, postIds: string[], field: string, groupLabel: string) => {
     await withProjectContext(bundle);
-    return engine().runSyncFileToDbTask(postIds, field as 'tags' | 'categories' | 'title' | 'excerpt' | 'author', groupLabel);
+    return engine().runSyncFileToDbTask(postIds, field as 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language' | 'translationFor', groupLabel);
   });
 
   // ── Media ──

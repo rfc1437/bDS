@@ -10,6 +10,7 @@ import { SecureKeyStore } from '../engine/SecureKeyStore';
 import { ProviderRegistry } from '../engine/ai/providers';
 import { ChatService } from '../engine/ai/chat';
 import { OneShotTasks } from '../engine/ai/tasks';
+import { retryWithBackoff } from '../engine/ai/retry';
 import { getDatabase } from '../database';
 import type { EngineBundle } from '../engine/EngineBundle';
 import type { BlogToolDeps } from '../engine/ai/blog-tools';
@@ -907,6 +908,43 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // Translate a post and persist/update its translation record
+  ipcMain.handle('chat:translatePost', async (_, postId: string, targetLanguage: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().translatePost(postId, targetLanguage || 'en');
+    } catch (error) {
+      console.error('[Chat IPC] Error translating post:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Media Language Detection ============
+
+  // Detect the language of media metadata (title, alt, caption)
+  ipcMain.handle('chat:detectMediaLanguage', async (_, title: string, alt: string, caption: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().detectMediaLanguage(title, alt, caption);
+    } catch (error) {
+      console.error('[Chat IPC] Error detecting media language:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // ============ Media Metadata Translation ============
+
+  // Translate media metadata (title, alt, caption) into a target language
+  ipcMain.handle('chat:translateMediaMetadata', async (_, mediaId: string, targetLanguage: string) => {
+    try {
+      await ensureInitialized();
+      return await getOneShotTasks().translateMediaMetadata(mediaId, targetLanguage);
+    } catch (error) {
+      console.error('[Chat IPC] Error translating media metadata:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // ============ A2UI Actions ============
 
   ipcMain.handle('a2ui:dispatch', async (_, action: { surfaceId: string; componentId: string; action: string; payload?: Record<string, unknown> }) => {
@@ -920,6 +958,31 @@ export function registerChatHandlers(): void {
       return { success: false, error: (error as Error).message };
     }
   });
+}
+
+/**
+ * Translate a post for auto-translation workflows (called from event handlers).
+ * Returns the result of translatePost or an error object if AI is not initialized.
+ */
+export async function autoTranslatePost(postId: string, targetLanguage: string, options?: { autoPublish?: boolean }): Promise<{ success: boolean; error?: string; warning?: string }> {
+  try {
+    await ensureInitialized();
+    return await retryWithBackoff(() => getOneShotTasks().translatePost(postId, targetLanguage, options));
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Translate media metadata for auto-translation workflows (called from event handlers).
+ */
+export async function autoTranslateMediaMetadata(mediaId: string, targetLanguage: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await ensureInitialized();
+    return await retryWithBackoff(() => getOneShotTasks().translateMediaMetadata(mediaId, targetLanguage));
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
 }
 
 /**

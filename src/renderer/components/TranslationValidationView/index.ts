@@ -1,0 +1,1 @@
+export { TranslationValidationView } from './TranslationValidationView';

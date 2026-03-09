@@ -85,6 +85,10 @@ Object.defineProperty(globalThis, 'window', {
         search: vi.fn(),
         getUrl: vi.fn(),
         getFilePath: vi.fn(),
+        getTranslation: vi.fn(),
+        getTranslations: vi.fn(),
+        upsertTranslation: vi.fn(),
+        deleteTranslation: vi.fn(),
       },
       sync: {
         checkAvailability: vi.fn(),

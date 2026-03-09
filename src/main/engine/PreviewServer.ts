@@ -4,7 +4,7 @@ import path from 'node:path';
 import { type CategoryMetadata, type ProjectMetadata } from './MetaEngine';
 import { type MediaData } from './MediaEngine';
 import { type MenuDocument } from './MenuEngine';
-import { type PostData, type PostFilter } from './PostEngine';
+import { type PostData, type PostFilter, type PostTranslationData } from './PostEngine';
 import {
   PageRenderer,
   PREVIEW_ASSETS,
@@ -20,8 +20,10 @@ import {
   type PythonMacroRendererContract,
 } from './PageRenderer';
 import { getPicoStylesheetHref, sanitizePicoTheme, sanitizePicoThemeMode } from '../shared/picoThemes';
+import { POST_LANGUAGE_FLAGS, type SupportedLanguage } from '../shared/i18n';
 import { renderRouteWithSharedContext } from './SharedRouteRenderer';
 import {
+  findPublishedPostBySlug,
   findSinglePostBySlug,
   loadPostsForDayPage,
   loadPublishedSnapshots,
@@ -40,6 +42,9 @@ interface ActiveProjectContext {
 interface PostEngineContract {
   getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
   getPost: (id: string) => Promise<PostData | null>;
+  getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
+  getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
+  getPublishedTranslationLanguagesByPost?: () => Promise<Map<string, string[]>>;
   hasPublishedVersion: (id: string) => Promise<boolean>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
   findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
@@ -86,6 +91,9 @@ export class PreviewServer {
   private readonly tagColorByNameCache = new Map<string, Promise<Record<string, string>>>();
   private server: Server | null = null;
   private port: number | null = null;
+  private isStopping = false;
+  private inflightRequests = 0;
+  private drainResolve: (() => void) | null = null;
 
   constructor(dependencies?: Partial<PreviewServerDependencies>) {
     if (!dependencies?.postEngine) throw new Error('PreviewServer: postEngine not provided');
@@ -141,6 +149,13 @@ export class PreviewServer {
   }
 
   async stop(): Promise<void> {
+    this.isStopping = true;
+
+    // Wait for in-flight requests to finish before closing the server.
+    if (this.inflightRequests > 0) {
+      await new Promise<void>((resolve) => { this.drainResolve = resolve; });
+    }
+
     if (!this.server) {
       this.port = null;
       return;
@@ -183,7 +198,8 @@ export class PreviewServer {
       requestTheme?: string | null;
       htmlThemeAttribute?: string;
       allowEmptyArchiveRender?: boolean;
-      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
+      preferredLanguage?: string;
+      singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string };
     },
   ): Promise<string | null> {
     return renderRouteWithSharedContext(pathname, options, {
@@ -203,12 +219,18 @@ export class PreviewServer {
       loadPublishedSnapshotsPage: (filter, pagination) => loadPublishedSnapshotsPage(this.postEngine, filter, pagination),
       loadPublishedSnapshots: (filter, pagination) => loadPublishedSnapshots(this.postEngine, filter, pagination),
       loadPostsForDayPage: (year, month, day, pagination) => loadPostsForDayPage(this.postEngine, year, month, day, pagination),
+      findPublishedPostBySlug: (slug, dateFilter) => findPublishedPostBySlug(this.postEngine, slug, dateFilter),
       findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => findSinglePostBySlug(this.postEngine, slug, singlePostOptions, dateFilter),
       getLinkedBy: this.postEngine.getLinkedBy ? (postId) => this.postEngine.getLinkedBy!(postId) : undefined,
     });
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (this.isStopping) {
+      this.respond(res, 503, 'Service Unavailable');
+      return;
+    }
+
     const remoteAddress = req.socket.remoteAddress;
     const isLocal = remoteAddress === '127.0.0.1'
       || remoteAddress === '::1'
@@ -224,6 +246,7 @@ export class PreviewServer {
       return;
     }
 
+    this.inflightRequests++;
     try {
         const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
         const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
@@ -251,7 +274,8 @@ export class PreviewServer {
       const menuItems = buildTemplateMenuItems(menu, categoryMetadata);
       const categorySettings = this.resolveCategorySettings(metadata);
       const listExcludedCategories = this.resolveListExcludedCategories(categorySettings);
-      const language = metadata?.mainLanguage?.trim() || 'en';
+      const requestLanguage = requestUrl.searchParams.get('lang')?.trim().toLowerCase() || undefined;
+      const language = requestLanguage || metadata?.mainLanguage?.trim() || 'en';
       const pageTitle = resolvePageTitle(metadata, context.projectName, context.projectDescription);
       const maxPostsPerPage = clampMaxPostsPerPage(metadata?.maxPostsPerPage);
       const requestTheme = sanitizePicoTheme(requestUrl.searchParams.get('theme'));
@@ -262,18 +286,52 @@ export class PreviewServer {
       const picoStylesheetHref = getPicoStylesheetHref(appliedTheme);
       const htmlRewriteContext = await this.buildHtmlRewriteContext();
 
-      if (pathname === '/calendar.json') {
+      // Detect language-prefixed paths for alternative language previews
+      const mainLanguage = metadata?.mainLanguage?.trim().toLowerCase() || 'en';
+      const blogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
+        ? (metadata as { blogLanguages: string[] }).blogLanguages
+        : [];
+      const alternativeLanguages = blogLanguages
+        .map((lang) => lang.trim().toLowerCase())
+        .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+      let routePathname = pathname;
+      let languagePrefix = '';
+      let routeLanguage = requestLanguage;
+      const langPrefixMatch = pathname.match(/^\/([a-z]{2})(\/.*|$)/);
+      if (langPrefixMatch && alternativeLanguages.includes(langPrefixMatch[1])) {
+        languagePrefix = `/${langPrefixMatch[1]}`;
+        routeLanguage = langPrefixMatch[1];
+        routePathname = langPrefixMatch[2] || '/';
+        htmlRewriteContext.languagePrefix = languagePrefix;
+      }
+
+      if (pathname === '/calendar.json' || routePathname === '/calendar.json') {
         const calendarJson = await this.resolveCalendarJson(context.dataDir, listExcludedCategories);
         this.respondAsset(res, 'application/json; charset=utf-8', calendarJson);
         return;
       }
 
       if (pathname === '/__style-preview') {
+        const rawBlogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
+          ? (metadata as { blogLanguages: string[] }).blogLanguages
+          : [];
+        const allBlogLanguages = rawBlogLanguages.length > 0
+          ? (rawBlogLanguages.includes(mainLanguage) ? rawBlogLanguages : [mainLanguage, ...rawBlogLanguages])
+          : [];
+        const stylePreviewBlogLanguages = allBlogLanguages.length > 0
+          ? allBlogLanguages.map((lang) => ({
+              code: lang,
+              flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
+              href_prefix: lang === mainLanguage ? '' : `/${lang}`,
+              is_current: lang === mainLanguage,
+            }))
+          : [];
         const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
           pageTitle,
           language,
           menuItems,
           picoStylesheetHref,
+          blogLanguages: stylePreviewBlogLanguages,
           htmlThemeAttribute: previewThemeMode && previewThemeMode !== 'auto' ? `data-theme="${previewThemeMode}"` : undefined,
         }, categorySettings, listExcludedCategories);
         this.respond(res, 200, stylePreviewHtml);
@@ -292,16 +350,20 @@ export class PreviewServer {
         return;
       }
 
-      const result = await this.renderRouteForContext(pathname, {
+      const result = await this.renderRouteForContext(routePathname, {
         projectContext: context,
         metadata,
         menu,
+        htmlRewriteContext,
         maxPostsPerPage,
         requestTheme,
         htmlThemeAttribute: undefined,
+        preferredLanguage: routeLanguage,
         singlePostOptions: {
           useDraftContent,
           draftPostId,
+          lang: requestLanguage,
+          preferredLanguage: routeLanguage,
         },
       });
       if (!result) {
@@ -320,12 +382,18 @@ export class PreviewServer {
     } catch (error) {
       console.error('[PreviewServer] Request failed:', error);
       this.respond(res, 500, 'Internal Server Error');
+    } finally {
+      this.inflightRequests--;
+      if (this.inflightRequests === 0 && this.drainResolve) {
+        this.drainResolve();
+        this.drainResolve = null;
+      }
     }
   }
 
   private async renderStylePreview(
     rewriteContext: HtmlRewriteContext,
-    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; htmlThemeAttribute?: string },
+    pageContext: { pageTitle: string; language: string; menuItems: ReturnType<typeof buildTemplateMenuItems>; picoStylesheetHref: string; blogLanguages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>; htmlThemeAttribute?: string },
     categorySettings: Record<string, CategoryRenderSettings>,
     listExcludedCategories: string[],
   ): Promise<string> {
@@ -353,6 +421,7 @@ export class PreviewServer {
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -363,8 +432,20 @@ export class PreviewServer {
     const publishedPosts = await loadPublishedSnapshots(this.postEngine, { status: 'published' });
     const canonicalPostPathBySlug = new Map<string, string>();
 
+    const translationMap = this.postEngine.getPublishedTranslationLanguagesByPost
+      ? await this.postEngine.getPublishedTranslationLanguagesByPost()
+      : new Map<string, string[]>();
+
     for (const post of publishedPosts) {
       canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
+
+      const languages = translationMap.get(post.id);
+      if (languages) {
+        for (const lang of languages) {
+          const variantSlug = `${post.slug}.${lang}`;
+          canonicalPostPathBySlug.set(variantSlug, buildCanonicalPostPath({ ...post, slug: variantSlug }));
+        }
+      }
     }
 
     const canonicalMediaPathBySourcePath = new Map<string, string>();

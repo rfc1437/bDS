@@ -1,6 +1,6 @@
 # API Documentation
 
-Contract version: 1.13.0
+Contract version: 1.15.0
 
 This reference documents all Python runtime API calls available through `bds_api` in embedded Pyodide.
 
@@ -331,6 +331,9 @@ None  # or
 - [posts.getAll](#postsgetall)
 - [posts.getByStatus](#postsgetbystatus)
 - [posts.publish](#postspublish)
+- [posts.getTranslation](#postsgettranslation)
+- [posts.getTranslations](#postsgettranslations)
+- [posts.publishTranslation](#postspublishtranslation)
 - [posts.discard](#postsdiscard)
 - [posts.hasPublishedVersion](#postshaspublishedversion)
 - [posts.rebuildFromFiles](#postsrebuildfromfiles)
@@ -386,7 +389,8 @@ result = await bds.posts.create(data={})
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -430,7 +434,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -498,7 +503,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -541,13 +547,14 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
 ### posts.getPreviewUrl
 
-Get preview URL for post.
+Get preview URL for post. options may include draft=true and lang=<language-code>.
 
 **Parameters**
 
@@ -635,7 +642,8 @@ result = await bds.posts.get_by_status(status='status')
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -679,7 +687,133 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
+}
+```
+
+### posts.getTranslation
+
+Get a single translation for a post by language.
+
+**Parameters**
+
+- postId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `PostTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.get_translation(post_id='post-1', language='language')
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'translationFor': 'value',
+    'language': 'value',
+    'title': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'filePath': 'value'
+}
+```
+
+### posts.getTranslations
+
+Get all translations for a post.
+
+**Parameters**
+
+- postId (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationData[]`
+- Data structures: `PostTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.get_translations(post_id='post-1')
+```
+
+**Example response**
+
+```python
+[
+{
+    'id': 'value',
+    'projectId': 'value',
+    'translationFor': 'value',
+    'language': 'value',
+    'title': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'filePath': 'value'
+}
+]
+```
+
+### posts.publishTranslation
+
+Publish a specific translation of a post.
+
+**Parameters**
+
+- postId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationData | null`
+- Nullability: Returns `None` when no matching value exists.
+- Data structures: `PostTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.posts.publish_translation(post_id='post-1', language='language')
+```
+
+**Example response**
+
+```python
+None  # or
+{
+    'id': 'value',
+    'projectId': 'value',
+    'translationFor': 'value',
+    'language': 'value',
+    'title': 'value',
+    'excerpt': 'value',
+    'content': 'value',
+    'status': 'draft',
+    'createdAt': 'value',
+    'updatedAt': 'value',
+    'publishedAt': 'value',
+    'filePath': 'value'
 }
 ```
 
@@ -722,7 +856,8 @@ None  # or
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ```
 
@@ -828,7 +963,7 @@ result = await bds.posts.search(query='search phrase')
 
 ### posts.filter
 
-Filter posts by criteria.
+Filter posts by criteria, including optional language and missingTranslationLanguage filters.
 
 **Parameters**
 
@@ -864,7 +999,8 @@ result = await bds.posts.filter(filter={})
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -1057,7 +1193,8 @@ result = await bds.posts.get_links_to(id='id-1')
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -1100,7 +1237,8 @@ result = await bds.posts.get_linked_by(id='id-1')
     'updatedAt': 'value',
     'publishedAt': 'value',
     'tags': 'value',
-    'categories': 'value'
+    'categories': 'value',
+    'availableLanguages': 'value'
 }
 ]
 ```
@@ -1206,6 +1344,10 @@ result = await bds.posts.generate_unique_slug(title='title')
 - [media.getByYearMonth](#mediagetbyyearmonth)
 - [media.getTags](#mediagettags)
 - [media.getTagsWithCounts](#mediagettagswithcounts)
+- [media.getTranslation](#mediagettranslation)
+- [media.getTranslations](#mediagettranslations)
+- [media.upsertTranslation](#mediaupserttranslation)
+- [media.deleteTranslation](#mediadeletetranslation)
 
 ### media.import
 
@@ -1775,6 +1917,111 @@ result = await bds.media.get_tags_with_counts()
 
 ```python
 []
+```
+
+### media.getTranslation
+
+Get a single translation for a media item by language.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationData | null`
+- Nullability: Returns `None` when no matching value exists.
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.get_translation(media_id='media-1', language='language')
+```
+
+**Example response**
+
+```python
+None  # or dict-like object when found
+```
+
+### media.getTranslations
+
+Get all translations for a media item.
+
+**Parameters**
+
+- mediaId (str, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationData[]`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.get_translations(media_id='media-1')
+```
+
+**Example response**
+
+```python
+[]
+```
+
+### media.upsertTranslation
+
+Create or update a media translation for a specific language.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, required)
+- data (dict, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationData`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.upsert_translation(media_id='media-1', language='language', data={})
+```
+
+**Example response**
+
+```python
+{}
+```
+
+### media.deleteTranslation
+
+Delete a media translation by language.
+
+**Parameters**
+
+- mediaId (str, required)
+- language (str, required)
+
+**Response specification**
+
+- Return type: `boolean`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.media.delete_translation(media_id='media-1', language='language')
+```
+
+**Example response**
+
+```python
+True
 ```
 
 [↑ Back to Table of contents](#table-of-contents)
@@ -3514,6 +3761,9 @@ result = await bds.tags.sync_from_posts()
 - [chat.analyzeMediaImage](#chatanalyzemediaimage)
 - [chat.detectPostLanguage](#chatdetectpostlanguage)
 - [chat.analyzePost](#chatanalyzepost)
+- [chat.translatePost](#chattranslatepost)
+- [chat.detectMediaLanguage](#chatdetectmedialanguage)
+- [chat.translateMediaMetadata](#chattranslatemediametadata)
 
 ### chat.analyzeMediaImage
 
@@ -3605,6 +3855,90 @@ result = await bds.chat.analyze_post(post_id='post-1')
     'slug': 'value',
     'error': 'value'
 }
+```
+
+### chat.translatePost
+
+Translate a post into a target language and save it as a translation draft.
+
+**Parameters**
+
+- postId (str, required)
+- targetLanguage (str, required)
+
+**Response specification**
+
+- Return type: `PostTranslationResult`
+- Data structures: `PostTranslationResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.translate_post(post_id='post-1', target_language='target_language')
+```
+
+**Example response**
+
+```python
+{
+    'success': False,
+    'translation': None,
+    'error': 'value'
+}
+```
+
+### chat.detectMediaLanguage
+
+Detect the language of media metadata from its title, alt text, and caption.
+
+**Parameters**
+
+- title (str, required)
+- alt (str, required)
+- caption (str, required)
+
+**Response specification**
+
+- Return type: `{ success: boolean; language?: string; error?: string }`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.detect_media_language(title='title', alt='alt', caption='caption')
+```
+
+**Example response**
+
+```python
+{}
+```
+
+### chat.translateMediaMetadata
+
+Translate media metadata (title, alt, caption) into a target language using AI.
+
+**Parameters**
+
+- mediaId (str, required)
+- targetLanguage (str, required)
+
+**Response specification**
+
+- Return type: `MediaTranslationResult`
+
+**Example call**
+
+```python
+from bds_api import bds
+result = await bds.chat.translate_media_metadata(media_id='media-1', target_language='target_language')
+```
+
+**Example response**
+
+```python
+{}
 ```
 
 [↑ Back to Table of contents](#table-of-contents)
@@ -4200,6 +4534,7 @@ Canonical post object used across editor and generation flows.
 - publishedAt (`string`, optional): Publication timestamp for published posts.
 - tags (`string[]`, required): List of tag names.
 - categories (`string[]`, required): List of category names.
+- availableLanguages (`string[]`, required): Canonical language plus all available translation language codes for this post.
 
 [↑ Back to Table of contents](#table-of-contents)
 
@@ -4420,6 +4755,39 @@ Result from AI post analysis containing suggested title, excerpt, and slug.
 - excerpt (`string`, optional): Suggested plain-text excerpt summarizing the post.
 - slug (`string`, optional): Suggested URL-friendly slug.
 - error (`string`, optional): Error message when analysis failed.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### PostTranslationData
+
+Stored translation draft or published translation for a post.
+
+**Fields**
+
+- id (`string`, required): Translation identifier.
+- projectId (`string`, required): Owning project identifier.
+- translationFor (`string`, required): Source post identifier this translation belongs to.
+- language (`string`, required): Target language code for the translation.
+- title (`string`, required): Translated title.
+- excerpt (`string`, optional): Translated excerpt.
+- content (`string`, required): Translated Markdown content.
+- status (`'draft' | 'published' | 'archived'`, required): Translation lifecycle state.
+- createdAt (`string`, required): Creation timestamp.
+- updatedAt (`string`, required): Last update timestamp.
+- publishedAt (`string`, optional): Publish timestamp when the translation is published.
+- filePath (`string`, required): Translation file path on disk.
+
+[↑ Back to Table of contents](#table-of-contents)
+
+### PostTranslationResult
+
+Result from AI post translation containing the saved translation draft.
+
+**Fields**
+
+- success (`boolean`, required): Whether the translation succeeded.
+- translation (`PostTranslationData`, optional): Saved translation draft when successful.
+- error (`string`, optional): Error message when translation failed.
 
 [↑ Back to Table of contents](#table-of-contents)
 

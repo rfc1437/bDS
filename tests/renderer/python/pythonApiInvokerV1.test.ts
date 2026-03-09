@@ -55,6 +55,27 @@ describe('invokePythonApiMethodV1', () => {
     expect(getProjectMetadata).toHaveBeenCalledWith();
   });
 
+  it('invokes chat.translatePost via electronAPI with validated args', async () => {
+    const translatePost = vi.fn().mockResolvedValue({
+      success: true,
+      translation: { id: 'tr-1', language: 'de' },
+    });
+
+    vi.stubGlobal('window', {
+      electronAPI: {
+        chat: {
+          translatePost,
+        },
+      },
+    });
+
+    await expect(invokePythonApiMethodV1('chat.translatePost', { postId: 'p1', targetLanguage: 'de' })).resolves.toEqual({
+      success: true,
+      translation: { id: 'tr-1', language: 'de' },
+    });
+    expect(translatePost).toHaveBeenCalledWith('p1', 'de');
+  });
+
   it('rejects unknown methods and malformed args', async () => {
     vi.stubGlobal('window', {
       electronAPI: {

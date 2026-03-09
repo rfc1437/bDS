@@ -46,6 +46,33 @@ export interface PostAnalysisResult {
   error?: string;
 }
 
+export interface PostTranslationResult {
+  success: boolean;
+  translation?: Awaited<ReturnType<PostEngine['upsertPostTranslation']>>;
+  error?: string;
+  warning?: string;
+}
+
+export interface MediaTranslationResult {
+  success: boolean;
+  translation?: Awaited<ReturnType<MediaEngine['upsertMediaTranslation']>>;
+  error?: string;
+}
+
+export function normalizeTranslatedMarkdownBody(content: string, sourceContent: string): string {
+  const normalizedContent = content.trim();
+  if (!normalizedContent) {
+    return '';
+  }
+
+  const leadingLabelPattern = /^(content|inhalt|contenu|contenuto|contenido):\s*\n\s*\n/i;
+  if (!leadingLabelPattern.test(normalizedContent) || leadingLabelPattern.test(sourceContent.trim())) {
+    return normalizedContent;
+  }
+
+  return normalizedContent.replace(leadingLabelPattern, '');
+}
+
 // ---------------------------------------------------------------------------
 // OneShotTasks
 // ---------------------------------------------------------------------------
@@ -438,6 +465,273 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
         excerpt: result.excerpt || undefined,
         slug: resultSlug,
       };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  async translatePost(postId: string, targetLanguage: string, options?: { autoPublish?: boolean }): Promise<PostTranslationResult> {
+    if (!this.postEngine) {
+      return { success: false, error: 'Post engine not available' };
+    }
+
+    const post = await this.postEngine.getPost(postId);
+    if (!post) {
+      return { success: false, error: 'Post not found' };
+    }
+    if (!post.content || post.content.trim().length === 0) {
+      return { success: false, error: 'Post has no content to translate' };
+    }
+
+    let modelId = await this.chatEngine.getSetting('chat_title_model');
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
+      modelId = this.providers.getOpencodeKey()
+        ? 'claude-sonnet-4-5'
+        : this.providers.getMistralKey()
+          ? 'mistral-large-latest'
+          : null;
+    }
+
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+
+    // Auto-detect source language if not explicitly set on the post
+    let sourceLanguage = post.language || '';
+    if (!sourceLanguage) {
+      const detection = await this.detectPostLanguage(post.title, post.content || '');
+      if (detection.success && detection.language) {
+        sourceLanguage = detection.language;
+        await this.postEngine.updatePost(postId, { language: sourceLanguage });
+      } else {
+        sourceLanguage = 'en';
+      }
+    }
+    const metadataSystemPrompt = `You translate blog post metadata. Return ONLY valid JSON with keys title and excerpt. Do not add commentary. Do not invent or add any text that is not present in the source. Only translate the given text. Translate from ${sourceLanguage} to ${targetLanguage}.`;
+    const metadataUserPrompt = [
+      `Title: ${post.title}`,
+      `Excerpt: ${post.excerpt || ''}`,
+    ].join('\n\n');
+    const contentSystemPrompt = `You translate blog post Markdown bodies. Return ONLY the translated Markdown body, with no JSON envelope and no commentary. Preserve Markdown structure. Leave text inside fenced code blocks untranslated. Keep markdown link text and URLs unchanged (e.g. [link text](URL) stays as-is). The body may contain mixed languages — always translate the surrounding prose from ${sourceLanguage} to ${targetLanguage}, even if some parts (like link text) are already in the target language. Do not invent, add, or generate any text that is not present in the source. Only translate the exact text provided. If the content contains only macro calls, shortcodes, or other non-translatable tokens, return them unchanged. If the source body is empty, return an empty string.`;
+    const contentUserPrompt = post.content;
+
+    try {
+      const model = this.providers.resolveModel(modelId);
+      const { text: metadataText } = await generateText({
+        model,
+        system: metadataSystemPrompt,
+        prompt: metadataUserPrompt,
+        maxOutputTokens: 500,
+        maxRetries: 2,
+      });
+
+      const { text: translatedContent } = await generateText({
+        model,
+        system: contentSystemPrompt,
+        prompt: contentUserPrompt,
+        maxOutputTokens: 4000,
+        maxRetries: 2,
+      });
+
+      let parsed: { title?: string; excerpt?: string } | null = null;
+      const jsonMatch = metadataText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch {
+          parsed = null;
+        }
+      }
+
+      const normalizedTranslatedContent = normalizeTranslatedMarkdownBody(translatedContent || '', post.content);
+
+      // Collect warnings for partial failures
+      const warnings: string[] = [];
+      if (!parsed) {
+        warnings.push('metadata JSON parsing failed, title/excerpt kept as original');
+      }
+      if (normalizedTranslatedContent.trim() === post.content.trim()) {
+        warnings.push('translated content is identical to source');
+      }
+
+      const translation = await this.postEngine.upsertPostTranslation(postId, targetLanguage, {
+        title: parsed?.title || post.title,
+        excerpt: parsed?.excerpt || post.excerpt || undefined,
+        content: normalizedTranslatedContent,
+        status: options?.autoPublish ? 'published' : undefined,
+      });
+
+      return {
+        success: true,
+        translation,
+        warning: warnings.length > 0 ? warnings.join('; ') : undefined,
+      };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Detect the language of media metadata (title, alt, caption).
+   * Uses the configured title model (lightweight, text-only).
+   */
+  async detectMediaLanguage(
+    title: string,
+    alt: string,
+    caption: string,
+  ): Promise<LanguageDetectionResult> {
+    const combined = [title, alt, caption].filter(Boolean).join('\n');
+    if (!combined.trim()) {
+      return { success: false, error: 'No metadata text provided for language detection' };
+    }
+
+    let modelId = await this.chatEngine.getSetting('chat_title_model');
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
+      modelId = this.providers.getOpencodeKey()
+        ? 'claude-sonnet-4-5'
+        : this.providers.getMistralKey()
+          ? 'mistral-large-latest'
+          : null;
+    }
+
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+
+    const supportedLanguages = ['en', 'de', 'fr', 'it', 'es'];
+    const systemPrompt = `You are a language detection assistant. Given image metadata (title, alt text, caption), determine the language. Respond with ONLY a JSON object: { "language": "<code>" } where <code> is one of: ${supportedLanguages.join(', ')}. If the language is not in the list, pick the closest match. No other text.`;
+    const userPrompt = `Title: ${title}\nAlt: ${alt}\nCaption: ${caption}`;
+
+    try {
+      const model = this.providers.resolveModel(modelId);
+      const { text } = await generateText({
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 50,
+        maxRetries: 2,
+      });
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+
+      const result = JSON.parse(jsonMatch[0]);
+      const detected = (result.language || '').toLowerCase().trim();
+      if (!supportedLanguages.includes(detected)) {
+        return { success: false, error: `Unsupported language detected: ${detected}` };
+      }
+
+      return { success: true, language: detected };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Translate media metadata (title, alt, caption) into a target language.
+   * Persists the result as a media translation via MediaEngine.
+   */
+  async translateMediaMetadata(
+    mediaId: string,
+    targetLanguage: string,
+  ): Promise<MediaTranslationResult> {
+    const mediaItem = await this.mediaEngine.getMedia(mediaId);
+    if (!mediaItem) {
+      return { success: false, error: 'Media item not found' };
+    }
+
+    const hasMetadata = mediaItem.title || mediaItem.alt || mediaItem.caption;
+    if (!hasMetadata) {
+      return { success: false, error: 'Media item has no metadata to translate' };
+    }
+
+    let modelId = await this.chatEngine.getSetting('chat_title_model');
+    if (!modelId || !this.providers.isProviderKeySet(this.providers.detectModelProvider(modelId))) {
+      modelId = this.providers.getOpencodeKey()
+        ? 'claude-sonnet-4-5'
+        : this.providers.getMistralKey()
+          ? 'mistral-large-latest'
+          : null;
+    }
+
+    if (this.providers.isOfflineMode()) {
+      const offlineModel = await this.chatEngine.getSetting('offline_title_model')
+        || this.providers.getFirstKnownLocalModelId();
+      if (offlineModel) {
+        modelId = offlineModel;
+      } else if (!modelId || (!this.providers.isOllamaModel(modelId) && !this.providers.isLmstudioModel(modelId))) {
+        return { success: false, error: 'No offline model configured. Set one in Settings → AI → Airplane Mode.' };
+      }
+    }
+
+    if (!modelId) {
+      return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
+    }
+
+    // Auto-detect source language if not explicitly set on the media
+    let sourceLanguage = mediaItem.language || '';
+    if (!sourceLanguage) {
+      const detection = await this.detectMediaLanguage(
+        mediaItem.title || '',
+        mediaItem.alt || '',
+        mediaItem.caption || '',
+      );
+      if (detection.success && detection.language) {
+        sourceLanguage = detection.language;
+        await this.mediaEngine.updateMedia(mediaId, { language: sourceLanguage });
+      } else {
+        sourceLanguage = 'en';
+      }
+    }
+    const systemPrompt = `You translate image metadata. Return ONLY valid JSON with keys title, alt, caption. Do not add commentary. Translate from ${sourceLanguage} to ${targetLanguage}. If a field is null or empty, return it as null.`;
+    const userPrompt = [
+      `Title: ${mediaItem.title || ''}`,
+      `Alt: ${mediaItem.alt || ''}`,
+      `Caption: ${mediaItem.caption || ''}`,
+    ].join('\n');
+
+    try {
+      const model = this.providers.resolveModel(modelId);
+      const { text } = await generateText({
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 300,
+        maxRetries: 2,
+      });
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      const translation = await this.mediaEngine.upsertMediaTranslation(mediaId, targetLanguage, {
+        title: parsed.title || undefined,
+        alt: parsed.alt || undefined,
+        caption: parsed.caption || undefined,
+      });
+
+      return { success: true, translation };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }

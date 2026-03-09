@@ -8,11 +8,18 @@ import {
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
 import type { EngineBundle } from '../engine/EngineBundle';
+import type { TranslationValidationReport } from '../shared/electronApi';
+import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
+import { v4 as uuidv4 } from 'uuid';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
 export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
-  const resolveBlogGenerationBaseOptions = async (): Promise<BlogGenerationOptions> => {
+  const resolveActiveProjectContext = async (): Promise<{
+    project: NonNullable<Awaited<ReturnType<EngineBundle['projectEngine']['getActiveProject']>>>;
+    dataDir: string;
+    metadata: Awaited<ReturnType<EngineBundle['metaEngine']['getProjectMetadata']>>;
+  }> => {
     const projectEngine = bundle.projectEngine;
     const postEngine = bundle.postEngine;
     const metaEngine = bundle.metaEngine;
@@ -37,6 +44,17 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
     }
 
     const metadata = await metaEngine.getProjectMetadata();
+
+    return {
+      project,
+      dataDir,
+      metadata,
+    };
+  };
+
+  const resolveBlogGenerationBaseOptions = async (): Promise<BlogGenerationOptions> => {
+    const menuEngine = bundle.menuEngine;
+    const { project, dataDir, metadata } = await resolveActiveProjectContext();
     const menu = await menuEngine.getMenu();
     const baseUrl = resolvePublicBaseUrl(metadata?.publicUrl);
     if (!baseUrl) {
@@ -60,6 +78,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
       baseUrl,
       maxPostsPerPage: metadata?.maxPostsPerPage,
       language,
+      blogLanguages: Array.isArray(metadata?.blogLanguages) ? metadata.blogLanguages : [],
       pageTitle,
       picoTheme: metadata?.picoTheme,
       categoryMetadata: (metadata as any)?.categoryMetadata,
@@ -143,6 +162,142 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         });
       },
     });
+  });
+
+  safeHandle('blog:validateTranslations', async () => {
+    await resolveActiveProjectContext();
+
+    const taskTimestamp = Date.now();
+    return bundle.taskManager.runTask({
+      id: `translation-validate-${taskTimestamp}`,
+      name: 'Validate Translations',
+      execute: async (onProgress) => {
+        onProgress(0, 'Validating translations...');
+        const result = await bundle.postEngine.validateTranslations();
+        onProgress(100, 'Translation validation complete');
+        return result;
+      },
+    });
+  });
+
+  safeHandle('blog:fixInvalidTranslations', async (_event, report: TranslationValidationReport) => {
+    await resolveActiveProjectContext();
+
+    const taskTimestamp = Date.now();
+    return bundle.taskManager.runTask({
+      id: `translation-fix-${taskTimestamp}`,
+      name: 'Fix Invalid Translations',
+      execute: async (onProgress) => {
+        onProgress(0, 'Fixing invalid translations...');
+        const result = await bundle.postEngine.fixInvalidTranslations(report);
+        onProgress(100, 'Invalid translations fixed');
+        return result;
+      },
+    });
+  });
+
+  safeHandle('blog:fillMissingTranslations', async () => {
+    const { metadata } = await resolveActiveProjectContext();
+    const blogLanguages = metadata?.blogLanguages || [];
+    const mainLang = metadata?.mainLanguage || 'en';
+    if (blogLanguages.length === 0 || (blogLanguages.length === 1 && blogLanguages[0] === mainLang)) {
+      return { taskStarted: false };
+    }
+
+    // Start the task immediately — scanning happens inside with progress
+    bundle.taskManager.runTask({
+      id: uuidv4(),
+      name: 'Fill missing translations',
+      execute: async (onProgress) => {
+        onProgress(0, 'Scanning posts…');
+
+        // Use missingTranslationLanguage filter per language instead of N+1 queries
+        const postItems: Array<{ postId: string; postTitle: string; targetLang: string }> = [];
+        for (let i = 0; i < blogLanguages.length; i++) {
+          const lang = blogLanguages[i];
+          const postsNeedingLang = await bundle.postEngine.getPostsFiltered({
+            status: 'published',
+            missingTranslationLanguage: lang,
+          });
+          for (const post of postsNeedingLang) {
+            if (!post.doNotTranslate) {
+              postItems.push({ postId: post.id, postTitle: post.title, targetLang: lang });
+            }
+          }
+          onProgress(
+            Math.round(((i + 1) / blogLanguages.length) * 10),
+            `Scanning posts… (${i + 1}/${blogLanguages.length} languages)`,
+          );
+        }
+
+        onProgress(10, 'Scanning media…');
+
+        // Collect missing media translations
+        const allPublished = await bundle.postEngine.getPostsFiltered({ status: 'published' });
+        const publishedPosts = allPublished.filter((p) => !p.doNotTranslate);
+        const mediaItems: Array<{ mediaId: string; targetLang: string }> = [];
+        const seenMediaLang = new Set<string>();
+        for (let i = 0; i < publishedPosts.length; i++) {
+          const post = publishedPosts[i];
+          const postLang = post.language || mainLang;
+          const links = await bundle.postMediaEngine.getLinkedMediaForPost(post.id);
+          for (const link of links) {
+            const mediaTranslations = await bundle.mediaEngine.getMediaTranslations(link.mediaId);
+            const existingLangs = new Set(mediaTranslations.map((t) => t.language));
+            for (const lang of blogLanguages) {
+              const key = `${link.mediaId}:${lang}`;
+              if (lang !== postLang && !existingLangs.has(lang) && !seenMediaLang.has(key)) {
+                seenMediaLang.add(key);
+                mediaItems.push({ mediaId: link.mediaId, targetLang: lang });
+              }
+            }
+          }
+          onProgress(10 + Math.round(((i + 1) / publishedPosts.length) * 5), `Scanning media… (${i + 1}/${publishedPosts.length})`);
+        }
+
+        const totalItems = postItems.length + mediaItems.length;
+        if (totalItems === 0) {
+          onProgress(100, 'All translations are up to date');
+          return;
+        }
+
+        onProgress(15, `Found ${postItems.length} posts and ${mediaItems.length} media to translate`);
+
+        let completed = 0;
+        let failed = 0;
+        let warned = 0;
+
+        for (const item of postItems) {
+          onProgress(15 + Math.round((completed / totalItems) * 85), `Translating "${item.postTitle}" → ${item.targetLang}…`);
+          const result = await autoTranslatePost(item.postId, item.targetLang, { autoPublish: true });
+          if (!result.success) {
+            failed++;
+            console.error(`[FillMissing] post "${item.postTitle}" → ${item.targetLang} failed:`, result.error);
+          } else if (result.warning) {
+            warned++;
+            console.warn(`[FillMissing] post "${item.postTitle}" → ${item.targetLang}: ${result.warning}`);
+          }
+          completed++;
+        }
+
+        for (const item of mediaItems) {
+          onProgress(15 + Math.round((completed / totalItems) * 85), `Translating media ${item.mediaId.slice(0, 8)}… → ${item.targetLang}…`);
+          const result = await autoTranslateMediaMetadata(item.mediaId, item.targetLang);
+          if (!result.success) {
+            failed++;
+            console.error(`[FillMissing] media ${item.mediaId.slice(0, 8)}… → ${item.targetLang} failed:`, result.error);
+          }
+          completed++;
+        }
+
+        const parts: string[] = ['Done'];
+        if (failed > 0) parts.push(`${failed} failed`);
+        if (warned > 0) parts.push(`${warned} warnings`);
+        onProgress(100, parts.length > 1 ? `${parts[0]} (${parts.slice(1).join(', ')})` : parts[0]);
+      },
+    }).catch(() => { /* errors tracked via task panel */ });
+
+    return { taskStarted: true };
   });
 
   safeHandle('blog:regenerateCalendar', async () => {

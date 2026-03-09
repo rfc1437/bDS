@@ -167,12 +167,14 @@ export function createBlogTools(deps: BlogToolDeps) {
         query: z.string().describe('The search query text to find in posts'),
         category: z.string().optional().describe('Optional category to filter by'),
         tags: z.array(z.string()).optional().describe('Optional array of tags to filter by (all must match)'),
+        language: z.string().optional().describe('Require posts that are available in this language'),
+        missingTranslationLanguage: z.string().optional().describe('Require posts that are missing this translation language'),
         year: z.number().optional().describe('Filter to posts created in this year'),
         month: z.number().optional().describe('Filter to posts created in this month (1-12). Requires year.'),
         limit: z.number().optional().describe('Maximum number of results to return (default: 10)'),
         offset: z.number().optional().describe('Offset for pagination (default: 0)'),
       }),
-      execute: async ({ query, category, tags, year, month, limit: lim, offset: off }) => {
+      execute: async ({ query, category, tags, language, missingTranslationLanguage, year, month, limit: lim, offset: off }) => {
         if (month !== undefined && year === undefined) {
           return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
         }
@@ -180,6 +182,8 @@ export function createBlogTools(deps: BlogToolDeps) {
         const filter: PostFilter = {};
         if (category) filter.categories = [category];
         if (tags && tags.length > 0) filter.tags = tags;
+        if (language) filter.language = language;
+        if (missingTranslationLanguage) filter.missingTranslationLanguage = missingTranslationLanguage;
         if (year !== undefined) filter.year = year;
         if (month !== undefined && year !== undefined) filter.month = month;
 
@@ -194,6 +198,7 @@ export function createBlogTools(deps: BlogToolDeps) {
             id: p.id, title: p.title, slug: p.slug,
             excerpt: p.excerpt, status: p.status,
             categories: p.categories, tags: p.tags,
+            availableLanguages: p.availableLanguages,
             createdAt: p.createdAt, updatedAt: p.updatedAt,
           })),
           postEngine,
@@ -232,6 +237,7 @@ export function createBlogTools(deps: BlogToolDeps) {
             content: post.content, excerpt: post.excerpt,
             status: post.status, author: post.author,
             categories: post.categories, tags: post.tags,
+            availableLanguages: post.availableLanguages,
             createdAt: post.createdAt, updatedAt: post.updatedAt,
             publishedAt: post.publishedAt,
             backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
@@ -260,6 +266,7 @@ export function createBlogTools(deps: BlogToolDeps) {
             content: post.content, excerpt: post.excerpt,
             status: post.status, author: post.author,
             categories: post.categories, tags: post.tags,
+            availableLanguages: post.availableLanguages,
             createdAt: post.createdAt, updatedAt: post.updatedAt,
             publishedAt: post.publishedAt,
             backlinks: backlinks.map(b => ({ id: b.id, title: b.title, slug: b.slug })),
@@ -275,12 +282,14 @@ export function createBlogTools(deps: BlogToolDeps) {
         status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter by post status'),
         category: z.string().optional().describe('Filter by category'),
         tags: z.array(z.string()).optional().describe('Filter by tags (posts must have all specified tags)'),
+        language: z.string().optional().describe('Require posts that are available in this language'),
+        missingTranslationLanguage: z.string().optional().describe('Require posts that are missing this translation language'),
         year: z.number().optional().describe('Filter to posts created in this year'),
         month: z.number().optional().describe('Filter to posts created in this month (1-12). Requires year.'),
         limit: z.number().optional().describe('Maximum number of results (default: 20)'),
         offset: z.number().optional().describe('Offset for pagination (default: 0)'),
       }),
-      execute: async ({ status, category, tags, year, month, limit: lim, offset: off }) => {
+      execute: async ({ status, category, tags, language, missingTranslationLanguage, year, month, limit: lim, offset: off }) => {
         if (month !== undefined && year === undefined) {
           return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
         }
@@ -289,6 +298,8 @@ export function createBlogTools(deps: BlogToolDeps) {
         if (status) filter.status = status;
         if (tags) filter.tags = tags;
         if (category) filter.categories = [category];
+        if (language) filter.language = language;
+        if (missingTranslationLanguage) filter.missingTranslationLanguage = missingTranslationLanguage;
         if (year !== undefined) filter.year = year;
         if (month !== undefined && year !== undefined) filter.month = month;
 
@@ -317,7 +328,7 @@ export function createBlogTools(deps: BlogToolDeps) {
           pageItems.map(p => ({
             id: p.id, title: p.title, slug: p.slug,
             status: p.status, categories: p.categories,
-            tags: p.tags, createdAt: p.createdAt, updatedAt: p.updatedAt,
+            tags: p.tags, availableLanguages: p.availableLanguages, createdAt: p.createdAt, updatedAt: p.updatedAt,
           })),
           postEngine,
         );

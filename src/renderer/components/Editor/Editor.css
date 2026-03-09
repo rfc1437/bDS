@@ -115,11 +115,16 @@
   gap: 16px;
 }
 
+.metadata-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .metadata-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
   padding: 6px 4px;
   background: none;
   border: none;
@@ -130,6 +135,7 @@
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: color 0.15s;
+  flex-shrink: 0;
 }
 
 .metadata-toggle:hover {
@@ -202,10 +208,12 @@
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: nowrap;
 }
 
 .editor-language-row select {
   flex: 1;
+  min-width: 0;
 }
 
 .editor-language-row button.compact {
@@ -213,6 +221,53 @@
   font-size: 13px;
   min-width: unset;
   line-height: 1;
+}
+
+.editor-translations-flags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.editor-translation-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.editor-translation-flag.status-published {
+  opacity: 1;
+}
+
+.editor-translation-flag.status-draft {
+  opacity: 0.82;
+}
+
+.editor-translation-flag.status-archived {
+  opacity: 0.45;
+  filter: grayscale(0.35);
+}
+
+.editor-translation-flag.active {
+  border-color: var(--vscode-testing-iconQueued, #cca700);
+  background: color-mix(in srgb, var(--vscode-testing-iconQueued, #cca700) 14%, transparent);
+}
+
+.editor-translation-flag:hover {
+  background: color-mix(in srgb, var(--vscode-list-hoverBackground) 75%, transparent);
 }
 
 .editor-body {
@@ -1037,6 +1092,11 @@
   overflow: hidden;
 }
 
+.quick-actions-divider {
+  height: 1px;
+  background: var(--vscode-dropdown-border, #454545);
+}
+
 .quick-action-item {
   display: flex;
   align-items: flex-start;
@@ -1080,4 +1140,116 @@
 .quick-action-text small {
   font-size: 11px;
   opacity: 0.7;
+}
+
+.translation-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+}
+
+.translation-modal {
+  width: min(460px, calc(100vw - 32px));
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.translation-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.translation-modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.translation-modal-close {
+  background: none;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.translation-modal-close:hover {
+  color: var(--vscode-foreground);
+}
+
+.translation-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+}
+
+.translation-modal-copy {
+  margin: 0;
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.translation-modal-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.translation-modal-select {
+  width: 100%;
+}
+
+.translation-modal-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 88%, transparent);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.translation-modal-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-panel-border);
+  font-size: 16px;
+}
+
+.translation-modal-status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.translation-modal-status-copy strong {
+  font-size: 13px;
+}
+
+.translation-modal-status-copy small {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.translation-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 18px 18px;
+  border-top: 1px solid var(--vscode-panel-border);
 }

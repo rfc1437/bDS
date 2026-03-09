@@ -109,7 +109,7 @@ describe('replaceAllMacrosAsync', () => {
     expect(result).toContain('<aside class="custom-box">Custom Content</aside>');
   });
 
-  it('returns empty string for unknown macros without Python renderer', async () => {
+  it('preserves unknown macros without Python renderer', async () => {
     const result = await replaceAllMacrosAsync(
       'Before [[unknown_macro]] After',
       'post-1',
@@ -120,10 +120,10 @@ describe('replaceAllMacrosAsync', () => {
       null,
     );
 
-    expect(result).toBe('Before  After');
+    expect(result).toBe('Before [[unknown_macro]] After');
   });
 
-  it('returns empty string for unmatched Python macros', async () => {
+  it('preserves unmatched Python macros', async () => {
     const mockRenderer: PythonMacroRendererContract = {
       getEnabledMacroScripts: vi.fn().mockResolvedValue([]),
       renderMacro: vi.fn(),
@@ -139,7 +139,7 @@ describe('replaceAllMacrosAsync', () => {
       mockRenderer,
     );
 
-    expect(result).toBe('Before  After');
+    expect(result).toBe('Before [[nonexistent_macro]] After');
     expect(mockRenderer.renderMacro).not.toHaveBeenCalled();
   });
 
@@ -186,7 +186,21 @@ describe('replaceAllMacrosAsync', () => {
       mockRenderer,
     );
 
-    expect(result).toBe('Before  After');
+    expect(result).toBe('Before [[my_macro]] After');
+  });
+
+  it('preserves the original unknown macro tag including params', async () => {
+    const result = await replaceAllMacrosAsync(
+      'Before [[unknown_macro title="Hello" count="2"]] After',
+      'post-1',
+      [],
+      null,
+      [],
+      'en',
+      null,
+    );
+
+    expect(result).toBe('Before [[unknown_macro title="Hello" count="2"]] After');
   });
 
   it('does not look up Python scripts when all macros are built-in', async () => {
@@ -242,6 +256,73 @@ describe('replaceAllMacrosAsync', () => {
     expect(parsedContext.params).toEqual({ name: 'Alice', count: '5' });
     expect(call.entrypoint).toBe('run');
     expect(call.cacheKey).toBe('ctx-script:2');
+  });
+
+  it('passes languagePrefix and translations in Python macro context', async () => {
+    const mockRenderer: PythonMacroRendererContract = {
+      getEnabledMacroScripts: vi.fn().mockResolvedValue([
+        {
+          id: 'lang-script',
+          slug: 'lang_test',
+          entrypoint: 'render',
+          content: 'def render(ctx, post): return {"html": "ok"}',
+          version: 1,
+        },
+      ] satisfies PythonMacroScript[]),
+      renderMacro: vi.fn().mockResolvedValue({ html: 'ok' }),
+    };
+
+    await replaceAllMacrosAsync(
+      '[[lang_test]]',
+      'post-1',
+      [],
+      null,
+      [],
+      'fr',
+      mockRenderer,
+      null,
+      '/fr',
+    );
+
+    const call = (mockRenderer.renderMacro as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const parsedContext = JSON.parse(call.contextJson);
+
+    expect(parsedContext.env.languagePrefix).toBe('/fr');
+    expect(parsedContext.env.mainLanguage).toBe('fr');
+    expect(parsedContext.env.translations).toBeDefined();
+    expect(typeof parsedContext.env.translations).toBe('object');
+    expect(parsedContext.env.translations['render.archive']).toBe('Archives');
+  });
+
+  it('passes empty languagePrefix when not provided', async () => {
+    const mockRenderer: PythonMacroRendererContract = {
+      getEnabledMacroScripts: vi.fn().mockResolvedValue([
+        {
+          id: 'no-prefix-script',
+          slug: 'no_prefix',
+          entrypoint: 'render',
+          content: 'def render(ctx, post): return {"html": "ok"}',
+          version: 1,
+        },
+      ] satisfies PythonMacroScript[]),
+      renderMacro: vi.fn().mockResolvedValue({ html: 'ok' }),
+    };
+
+    await replaceAllMacrosAsync(
+      '[[no_prefix]]',
+      'post-1',
+      [],
+      null,
+      [],
+      'en',
+      mockRenderer,
+    );
+
+    const call = (mockRenderer.renderMacro as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const parsedContext = JSON.parse(call.contextJson);
+
+    expect(parsedContext.env.languagePrefix).toBe('');
+    expect(parsedContext.env.translations).toBeDefined();
   });
 
   it('returns unchanged text when there are no macros', async () => {

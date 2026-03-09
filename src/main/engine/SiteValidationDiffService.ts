@@ -20,6 +20,7 @@ interface CompareSitemapToHtmlParams {
   baseUrl: string;
   htmlDir: string;
   postTimestampChecks?: PostTimestampCheck[];
+  additionalExpectedPaths?: string[];
 }
 
 function normalizeUrlPath(urlPath: string): string {
@@ -122,6 +123,12 @@ export async function compareSitemapToHtml(params: CompareSitemapToHtmlParams): 
       .map((loc) => sitemapLocToProjectPath(loc, params.baseUrl))
       .map((value) => normalizeUrlPath(value)),
   );
+
+  if (Array.isArray(params.additionalExpectedPaths)) {
+    for (const p of params.additionalExpectedPaths) {
+      expectedPathSet.add(normalizeUrlPath(p));
+    }
+  }
 
   const { existingHtmlPathSet, zeroByteHtmlPathSet } = await collectHtmlIndexPaths(params.htmlDir);
 

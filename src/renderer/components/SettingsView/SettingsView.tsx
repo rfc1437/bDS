@@ -223,6 +223,7 @@ export const SettingsView: React.FC = () => {
   const [defaultProjectPath, setDefaultProjectPath] = useState('');
   const [projectMainLanguage, setProjectMainLanguage] = useState<SupportedLanguage>('en');
   const [projectDefaultAuthor, setProjectDefaultAuthor] = useState('');
+  const [projectBlogLanguages, setProjectBlogLanguages] = useState<string[]>([]);
   const [projectMaxPostsPerPage, setProjectMaxPostsPerPage] = useState(50);
   const [projectBlogmarkCategory, setProjectBlogmarkCategory] = useState('article');
   const [projectPythonRuntimeMode, setProjectPythonRuntimeMode] = useState<'webworker' | 'main-thread'>('webworker');
@@ -317,6 +318,11 @@ export const SettingsView: React.FC = () => {
 
         const incomingSemanticSimilarity = (metadata as { semanticSimilarityEnabled?: unknown } | null)?.semanticSimilarityEnabled;
         setSemanticSimilarityEnabled(incomingSemanticSimilarity === true);
+
+        const incomingBlogLanguages = (metadata as { blogLanguages?: unknown } | null)?.blogLanguages;
+        setProjectBlogLanguages(Array.isArray(incomingBlogLanguages)
+          ? incomingBlogLanguages.filter((l): l is string => typeof l === 'string')
+          : []);
 
         const incomingCategoryMetadata = (metadata as any)?.categoryMetadata as Record<string, CategoryMetadata> | undefined;
         const incomingLegacyCategorySettings = (metadata as any)?.categorySettings as Record<string, { renderInLists: boolean; showTitle: boolean }> | undefined;
@@ -550,6 +556,7 @@ export const SettingsView: React.FC = () => {
           blogmarkCategory: normalizeBlogmarkCategory(projectBlogmarkCategory) || undefined,
           pythonRuntimeMode: projectPythonRuntimeMode,
           semanticSimilarityEnabled,
+          blogLanguages: projectBlogLanguages.length > 0 ? projectBlogLanguages : undefined,
           categoryMetadata,
         });
       }
@@ -689,6 +696,37 @@ export const SettingsView: React.FC = () => {
             <option key={language} value={language}>{t(RENDER_LANGUAGE_LABEL_KEY[language])}</option>
           ))}
         </select>
+      </SettingRow>
+
+      <SettingRow
+        id="project-blog-languages"
+        label={t('settings.project.blogLanguagesLabel')}
+        description={t('settings.project.blogLanguagesDescription')}
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {SUPPORTED_RENDER_LANGUAGES.map((language) => {
+            const isMain = language === projectMainLanguage;
+            const isChecked = isMain || projectBlogLanguages.includes(language);
+            return (
+              <label key={language} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', opacity: isMain ? 0.7 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  disabled={isMain}
+                  onChange={(e) => {
+                    if (isMain) return;
+                    setProjectBlogLanguages((prev) =>
+                      e.target.checked
+                        ? [...prev.filter((l) => l !== language), language]
+                        : prev.filter((l) => l !== language),
+                    );
+                  }}
+                />
+                {t(RENDER_LANGUAGE_LABEL_KEY[language])}
+              </label>
+            );
+          })}
+        </div>
       </SettingRow>
 
       <SettingRow

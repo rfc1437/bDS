@@ -4,7 +4,8 @@ export const BDS_EVENT_TEMPLATES_CHANGED = 'bds:templates-changed' as const;
 export type BdsWindowEventName =
   | typeof BDS_EVENT_SCRIPTS_CHANGED
   | typeof BDS_EVENT_TEMPLATES_CHANGED
-  | 'bds:site-validation-updated';
+  | 'bds:site-validation-updated'
+  | 'bds:translation-validation-updated';
 
 export function addWindowEventListener<TDetail = unknown>(
   eventName: BdsWindowEventName,

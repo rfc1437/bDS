@@ -96,18 +96,37 @@ export interface PostData {
   status: 'draft' | 'published' | 'archived';
   author?: string;
   language?: string;
+  doNotTranslate?: boolean;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
   tags: string[];
   categories: string[];
+  availableLanguages: string[];
   templateSlug?: string;
+}
+
+export interface PostTranslationData {
+  id: string;
+  projectId: string;
+  translationFor: string;
+  language: string;
+  title: string;
+  excerpt?: string;
+  content: string;
+  status: 'draft' | 'published' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  filePath: string;
 }
 
 export interface PostFilter {
   status?: 'draft' | 'published' | 'archived';
   tags?: string[];
   categories?: string[];
+  language?: string;
+  missingTranslationLanguage?: string;
   year?: number;
   month?: number;
   from?: string;
@@ -134,15 +153,31 @@ export interface MediaData {
   alt?: string;
   caption?: string;
   author?: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  availableLanguages: string[];
+}
+
+export interface MediaTranslationData {
+  id: string;
+  projectId: string;
+  translationFor: string;
+  language: string;
+  title?: string;
+  alt?: string;
+  caption?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MediaFilter {
   tags?: string[];
   year?: number;
   month?: number;
+  language?: string;
+  missingTranslationLanguage?: string;
 }
 
 export interface MediaSearchResult {
@@ -533,6 +568,29 @@ export interface SiteValidationReport {
   existingHtmlUrlCount: number;
 }
 
+export interface TranslationValidationIssue {
+  issue: 'same-language-as-canonical' | 'missing-source-post' | 'do-not-translate-has-translations' | 'content-in-database';
+  translationId?: string;
+  translationFor: string;
+  canonicalLanguage?: string;
+  translationLanguage: string;
+  title?: string;
+  filePath?: string;
+}
+
+export interface TranslationValidationReport {
+  checkedDatabaseRowCount: number;
+  checkedFilesystemFileCount: number;
+  invalidDatabaseRows: TranslationValidationIssue[];
+  invalidFilesystemFiles: TranslationValidationIssue[];
+}
+
+export interface TranslationValidationFixResult {
+  deletedDatabaseRows: number;
+  deletedFiles: number;
+  flushedTranslations: number;
+}
+
 export interface SiteValidationApplyResult {
   renderedUrlCount: number;
   deletedUrlCount: number;
@@ -596,7 +654,11 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>;
     get: (id: string) => Promise<PostData | null>;
     getBySlug: (slug: string) => Promise<PostData | null>;
-    getPreviewUrl: (id: string, options?: { draft?: boolean }) => Promise<string | null>;
+    getTranslation: (postId: string, language: string) => Promise<PostTranslationData | null>;
+    getTranslations: (postId: string) => Promise<PostTranslationData[]>;
+    upsertTranslation: (postId: string, language: string, data: Partial<PostTranslationData>) => Promise<PostTranslationData>;
+    publishTranslation: (postId: string, language: string) => Promise<PostTranslationData | null>;
+    getPreviewUrl: (id: string, options?: { draft?: boolean; lang?: string }) => Promise<string | null>;
     getAll: (options?: { limit?: number; offset?: number }) => Promise<PaginatedPostsResult>;
     getByStatus: (status: string) => Promise<PostData[]>;
     publish: (id: string) => Promise<PostData | null>;
@@ -639,6 +701,10 @@ export interface ElectronAPI {
     getByYearMonth: () => Promise<{ year: number; month: number; count: number }[]>;
     getTags: () => Promise<string[]>;
     getTagsWithCounts: () => Promise<TagCount[]>;
+    getTranslation: (mediaId: string, language: string) => Promise<MediaTranslationData | null>;
+    getTranslations: (mediaId: string) => Promise<MediaTranslationData[]>;
+    upsertTranslation: (mediaId: string, language: string, data: Partial<MediaTranslationData>) => Promise<MediaTranslationData>;
+    deleteTranslation: (mediaId: string, language: string) => Promise<boolean>;
   };
   scripts: {
     create: (data: {
@@ -747,7 +813,7 @@ export interface ElectronAPI {
     syncOnStartup: () => Promise<{ tags: string[]; categories: string[]; projectMetadata: ProjectMetadata | null }>;
     getProjectMetadata: () => Promise<ProjectMetadata | null>;
     setProjectMetadata: (metadata: { name: string; description?: string }) => Promise<ProjectMetadata | null>;
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings>; semanticSimilarityEnabled?: boolean }) => Promise<ProjectMetadata | null>;
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./picoThemes').PicoThemeName; categoryMetadata?: Record<string, CategoryMetadata>; categorySettings?: Record<string, CategoryRenderSettings>; semanticSimilarityEnabled?: boolean; blogLanguages?: string[] }) => Promise<ProjectMetadata | null>;
     getPublishingPreferences: () => Promise<PublishingPreferences | null>;
     setPublishingPreferences: (prefs: PublishingPreferences) => Promise<void>;
     clearPublishingPreferences: () => Promise<void>;
@@ -897,6 +963,9 @@ export interface ElectronAPI {
       pagesGenerated: number;
     }>;
     validateSite: () => Promise<SiteValidationReport>;
+    validateTranslations: () => Promise<TranslationValidationReport>;
+    fixInvalidTranslations: (report: TranslationValidationReport) => Promise<TranslationValidationFixResult>;
+    fillMissingTranslations: () => Promise<{ taskStarted: boolean }>;
     applyValidation: (report: SiteValidationReport) => Promise<SiteValidationApplyResult>;
     regenerateCalendar: () => Promise<CalendarRegenerationResult>;
   };
@@ -996,6 +1065,15 @@ export interface ElectronAPI {
 
     // Post Analysis (title, excerpt, slug suggestions)
     analyzePost: (postId: string, language?: string) => Promise<{ success: boolean; title?: string; excerpt?: string; slug?: string; error?: string }>;
+
+    // Post Translation
+    translatePost: (postId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: PostTranslationData; error?: string }>;
+
+    // Media Language Detection
+    detectMediaLanguage: (mediaId: string) => Promise<{ success: boolean; language?: string; error?: string }>;
+
+    // Media Metadata Translation
+    translateMediaMetadata: (mediaId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: MediaTranslationData; error?: string }>;
 
     // Event listeners for streaming/progress
     onStreamDelta: (callback: (data: ChatStreamDelta) => void) => () => void;

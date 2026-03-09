@@ -522,6 +522,7 @@ async function initializeActiveProjectContext(): Promise<void> {
     const postEngine = bundle!.postEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
       setSearchLanguage?: (language: string) => void;
+      setMainLanguage?: (language: string) => void;
     };
     const mediaEngine = bundle!.mediaEngine as {
       setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
@@ -553,6 +554,7 @@ async function initializeActiveProjectContext(): Promise<void> {
       const stemmerLang = isoToStemmerLanguage(metadata.mainLanguage);
       postEngine.setSearchLanguage?.(stemmerLang);
       mediaEngine.setSearchLanguage?.(stemmerLang);
+      postEngine.setMainLanguage?.(metadata.mainLanguage);
     }
   } catch (error) {
     console.error('Failed to initialize active project context:', error);
@@ -684,15 +686,16 @@ function createApplicationMenu(): Menu {
       };
     }
 
-    return {
+    const item: MenuItemConstructorOptions = {
       label: translatedLabel,
-      accelerator: definition.accelerator,
-      id: definition.id,
-      enabled: definition.enabled,
       click: async () => {
         await triggerMenuAction(action);
       },
     };
+    if (definition.accelerator) item.accelerator = definition.accelerator;
+    if (definition.id) item.id = definition.id;
+    if (definition.enabled !== undefined) item.enabled = definition.enabled;
+    return item;
   };
 
   const buildSharedGroupMenuItems = (groupLabel: string): MenuItemConstructorOptions[] => {

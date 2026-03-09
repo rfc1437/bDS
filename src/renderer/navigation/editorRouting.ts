@@ -16,6 +16,7 @@ export type EditorRoute =
   | 'documentation'
   | 'api-documentation'
   | 'site-validation'
+  | 'translation-validation'
   | 'scripts'
   | 'templates'
   | 'find-duplicates';
@@ -34,6 +35,7 @@ export const EDITOR_TAB_ROUTE_REGISTRY: Record<TabType, Exclude<EditorRoute, 'da
   documentation: 'documentation',
   'api-documentation': 'api-documentation',
   'site-validation': 'site-validation',
+  'translation-validation': 'translation-validation',
   scripts: 'scripts',
   templates: 'templates',
   'find-duplicates': 'find-duplicates',

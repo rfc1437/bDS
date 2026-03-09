@@ -42,6 +42,7 @@
   "menu.item.generateSitemap": "Render Site",
   "menu.item.regenerateCalendar": "Regenerate Calendar",
   "menu.item.validateSite": "Validate Site",
+  "menu.item.validateTranslations": "Validate Translations",
   "menu.item.findDuplicates": "Find Duplicate Posts",
   "menu.item.uploadSite": "Upload Site",
   "menu.item.about": "About Blogging Desktop Server",
@@ -67,6 +68,7 @@
   "render.taxonomy.ariaLabel": "Taxonomy",
   "render.backlinks.label": "Linked from",
   "render.backlinks.ariaLabel": "Backlinks",
+  "render.languageSwitcher.ariaLabel": "Language",
   "render.video.youtubeTitle": "YouTube video",
   "render.video.vimeoTitle": "Vimeo video",
   "render.month.1": "January",
@@ -91,5 +93,6 @@
   "task.rebuildEmbeddingIndex.name": "Rebuild Embedding Index",
   "task.rebuildEmbeddingIndex.clearing": "Clearing index…",
   "task.duplicateSearch.name": "Find Duplicate Posts",
-  "task.duplicateSearch.searching": "Checking: {checked}/{total}"
+  "task.duplicateSearch.searching": "Checking: {checked}/{total}",
+  "menu.item.fillMissingTranslations": "Fill Missing Translations"
 }

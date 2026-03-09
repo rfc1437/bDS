@@ -42,6 +42,7 @@
   "menu.item.generateSitemap": "Site rendern",
   "menu.item.regenerateCalendar": "Kalender neu erzeugen",
   "menu.item.validateSite": "Website validieren",
+  "menu.item.validateTranslations": "Übersetzungen validieren",
   "menu.item.findDuplicates": "Doppelte Beiträge finden",
   "menu.item.uploadSite": "Website hochladen",
   "menu.item.about": "Über Blogging Desktop Server",
@@ -67,6 +68,7 @@
   "render.taxonomy.ariaLabel": "Taxonomie",
   "render.backlinks.label": "Verlinkt von",
   "render.backlinks.ariaLabel": "Rückverweise",
+  "render.languageSwitcher.ariaLabel": "Sprache",
   "render.video.youtubeTitle": "YouTube-Video",
   "render.video.vimeoTitle": "Vimeo-Video",
   "render.month.1": "Januar",
@@ -91,5 +93,6 @@
   "task.rebuildEmbeddingIndex.name": "Embedding-Index neu aufbauen",
   "task.rebuildEmbeddingIndex.clearing": "Index wird geleert…",
   "task.duplicateSearch.name": "Doppelte Beiträge finden",
-  "task.duplicateSearch.searching": "Prüfe: {checked}/{total}"
+  "task.duplicateSearch.searching": "Prüfe: {checked}/{total}",
+  "menu.item.fillMissingTranslations": "Fehlende Übersetzungen ausfüllen"
 }

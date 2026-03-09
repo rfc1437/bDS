@@ -20,7 +20,12 @@ This document provides context and best practices for GitHub Copilot when workin
 - UI you implement has to be tied to functionality
 - you must use drizzle to generate migrations and snapshots
 - we use an sqlite database. use sqlite semantics in snapshots and other artifacts
-- oh MacOS we use native menus and you have to hook them into the intercept for new menu items
+- on MacOS we use native menus and you have to hook them into the intercept for new menu items
+- there are two areas of localization, you sometimes need both (menus for example)
+- all automatic AI activities must be gated by airplane (offline) mode of the app and either use the local model or inform the user via toast
+- metadata needs to be flushed to the filesystem and needs to be included in metadata diff tool and in rebuild from filesystem. All three aspects have to be in sync with each other.
+- if you add new metadata, add them to publishing, metadata-diff and rebuild-from-database
+- HEREDOCs don't work most of the time. Don't use them. Use editor tools to create proper scripots
 
 ---
 

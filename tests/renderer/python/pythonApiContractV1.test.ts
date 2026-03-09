@@ -59,10 +59,10 @@ describe('pythonApiContractV1', () => {
     });
   });
 
-  it('exposes analyzeMediaImage and detectPostLanguage from chat namespace', () => {
+  it('exposes one-shot translation from chat namespace', () => {
     const methodNames = listPythonApiMethodNames();
     const chatMethods = methodNames.filter((m) => m.startsWith('chat.'));
-    expect(chatMethods).toEqual(['chat.analyzeMediaImage', 'chat.detectPostLanguage', 'chat.analyzePost']);
+    expect(chatMethods).toEqual(['chat.analyzeMediaImage', 'chat.detectPostLanguage', 'chat.analyzePost', 'chat.translatePost', 'chat.detectMediaLanguage', 'chat.translateMediaMetadata']);
   });
 
   it('documents chat.analyzeMediaImage contract with mediaId and language params', () => {
@@ -77,9 +77,21 @@ describe('pythonApiContractV1', () => {
     });
   });
 
+  it('documents chat.translatePost contract with postId and targetLanguage params', () => {
+    expect(getPythonApiMethodContract('chat.translatePost')).toEqual({
+      method: 'chat.translatePost',
+      description: 'Translate a post into a target language and save it as a translation draft.',
+      params: [
+        { name: 'postId', type: 'string', required: true },
+        { name: 'targetLanguage', type: 'string', required: true },
+      ],
+      returns: 'PostTranslationResult',
+    });
+  });
+
   it('contains semantic version metadata for compatibility checks', () => {
     expect(BDS_PYTHON_API_CONTRACT_V1).toMatchObject({
-      version: '1.13.0',
+      version: '1.15.0',
       generatedAt: expect.any(String),
     });
   });
@@ -116,6 +128,7 @@ describe('generatePythonApiModuleV1', () => {
     expect(moduleCode).toContain('class ChatApi:');
     expect(moduleCode).toContain('async def analyze_media_image(self, media_id, language=None):');
     expect(moduleCode).toContain('async def detect_post_language(self, title, content):');
+    expect(moduleCode).toContain('async def translate_post(self, post_id, target_language):');
   });
 
   it('escapes python keyword method names to valid identifiers', () => {

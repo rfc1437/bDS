@@ -1221,6 +1221,7 @@ describe('main bootstrap preview behavior', () => {
         createPost,
         setProjectContext: vi.fn(),
         setSearchLanguage: vi.fn(),
+        setMainLanguage: vi.fn(),
       }; }),
     }));
 

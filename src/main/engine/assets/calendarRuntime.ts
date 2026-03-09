@@ -9,6 +9,8 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
     return;
   }
 
+  const languagePrefix = document.documentElement.getAttribute('data-language-prefix') || '';
+
   const labels = {
     loading: panel.getAttribute('data-i18n-loading') || 'Loading calendar…',
     error: panel.getAttribute('data-i18n-error') || 'Calendar data could not be loaded.',
@@ -70,7 +72,7 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
     if (!pathname) {
       return;
     }
-    window.location.assign(pathname);
+    window.location.assign(languagePrefix + pathname);
   }
 
   function parseInitialYearMonth() {
@@ -86,7 +88,10 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
       : null;
 
     if (!Number.isInteger(selectedYear) || !Number.isInteger(selectedMonth)) {
-      const pathname = window.location.pathname || '';
+      const rawPathname = window.location.pathname || '';
+      const pathname = languagePrefix && rawPathname.startsWith(languagePrefix + '/')
+        ? rawPathname.slice(languagePrefix.length)
+        : rawPathname;
       const parts = pathname.split('/').filter(Boolean);
       const pathYear = Number(parts[0]);
       const pathMonth = Number(parts[1]);
@@ -104,7 +109,7 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
   }
 
   async function loadCalendarData() {
-    const response = await fetch('/calendar.json', { cache: 'no-store' });
+    const response = await fetch(languagePrefix + '/calendar.json', { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('calendar.json request failed');
     }

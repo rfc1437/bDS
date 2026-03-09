@@ -17,6 +17,7 @@ interface BuildSitemapAndFeedsParams {
   publishedListPosts: PostData[];
   postIndex: GenerationPostIndexLike;
   includeFeeds: boolean;
+  feedLanguage?: string;
 }
 
 export interface SitemapFeedBuildResult {
@@ -419,13 +420,14 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     `    <title>${escapeXml(feedTitle)}</title>`,
     `    <link>${escapeXml(baseLink)}</link>`,
     `    <description>${escapeXml(feedDescription)}</description>`,
+    params.feedLanguage ? `    <language>${escapeXml(params.feedLanguage)}</language>` : null,
     `    <lastBuildDate>${feedUpdatedAt.toUTCString()}</lastBuildDate>`,
     '    <generator>bDS</generator>',
     ...rssItems,
     '  </channel>',
     '</rss>',
     '',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const atomEntries = feedPosts.map((post) => {
     const createdAt = resolvePostCreatedAt(post);
@@ -455,9 +457,11 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     ].filter(Boolean).join('\n');
   });
 
+  const atomFeedLangAttr = params.feedLanguage ? ` xml:lang="${escapeXml(params.feedLanguage)}"` : '';
+
   const atomXml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<feed xmlns="http://www.w3.org/2005/Atom">',
+    `<feed xmlns="http://www.w3.org/2005/Atom"${atomFeedLangAttr}>`,
     `  <title>${escapeXml(feedTitle)}</title>`,
     `  <subtitle>${escapeXml(feedDescription)}</subtitle>`,
     `  <id>${escapeXml(baseLink)}</id>`,
@@ -481,4 +485,171 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
     atomXml,
     feedPosts,
   };
+}
+
+interface MultiLanguageSitemapParams {
+  baseUrl: string;
+  mainLanguage: string;
+  allLanguages: string[];
+  translatablePosts: PostData[];
+  doNotTranslatePosts: PostData[];
+  publishedListPosts: PostData[];
+  maxPostsPerPage: number;
+  postIndex: GenerationPostIndexLike;
+}
+
+function buildHreflangLinks(baseUrl: string, urlPath: string, mainLanguage: string, languages: string[]): string[] {
+  const links: string[] = [];
+  for (const lang of languages) {
+    const prefix = lang === mainLanguage ? '' : `/${lang}`;
+    const href = `${baseUrl}${prefix}${urlPath}`;
+    const canonicalHref = href.endsWith('/') ? href : `${href}/`;
+    links.push(`    <xhtml:link rel="alternate" hreflang="${escapeXml(lang)}" href="${escapeXml(canonicalHref)}" />`);
+  }
+  const xDefaultHref = `${baseUrl}${urlPath}`;
+  const canonicalXDefault = xDefaultHref.endsWith('/') ? xDefaultHref : `${xDefaultHref}/`;
+  links.push(`    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(canonicalXDefault)}" />`);
+  return links;
+}
+
+function buildMultiLanguageSitemapUrl(
+  loc: string,
+  lastmod: string,
+  changefreq: string,
+  priority: string,
+  hreflangLinks: string[],
+): string {
+  const canonicalLoc = (() => {
+    try {
+      const parsed = new URL(loc);
+      if (!parsed.pathname.endsWith('/')) {
+        parsed.pathname = `${parsed.pathname}/`;
+      }
+      return parsed.toString();
+    } catch {
+      return loc.endsWith('/') ? loc : `${loc}/`;
+    }
+  })();
+
+  return [
+    '  <url>',
+    `    <loc>${escapeXml(canonicalLoc)}</loc>`,
+    `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+    `    <changefreq>${changefreq}</changefreq>`,
+    `    <priority>${priority}</priority>`,
+    ...hreflangLinks,
+    '  </url>',
+  ].join('\n');
+}
+
+export function buildMultiLanguageSitemap(params: MultiLanguageSitemapParams): string {
+  const {
+    baseUrl,
+    mainLanguage,
+    allLanguages,
+    translatablePosts,
+    doNotTranslatePosts,
+    publishedListPosts,
+    maxPostsPerPage,
+    postIndex,
+  } = params;
+
+  const now = new Date().toISOString();
+  const latestPostUpdatedAt = publishedListPosts[0]?.updatedAt.toISOString() || now;
+  const urls: string[] = [];
+
+  // Root page — all languages
+  urls.push(buildMultiLanguageSitemapUrl(
+    `${baseUrl}/`, latestPostUpdatedAt, 'daily', '1.0',
+    buildHreflangLinks(baseUrl, '/', mainLanguage, allLanguages),
+  ));
+
+  // Root pagination
+  const totalListPages = Math.max(1, Math.ceil(publishedListPosts.length / maxPostsPerPage));
+  for (let page = 2; page <= totalListPages; page++) {
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/page/${page}`, latestPostUpdatedAt, 'daily', '0.9',
+      buildHreflangLinks(baseUrl, `/page/${page}`, mainLanguage, allLanguages),
+    ));
+  }
+
+  // Translatable posts — all languages
+  for (const post of translatablePosts) {
+    const createdAt = resolvePostCreatedAt(post);
+    const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}${canonicalPath}`, post.updatedAt.toISOString(), 'monthly', '0.8',
+      buildHreflangLinks(baseUrl, canonicalPath, mainLanguage, allLanguages),
+    ));
+  }
+
+  // Do-not-translate posts — main language only
+  for (const post of doNotTranslatePosts) {
+    const createdAt = resolvePostCreatedAt(post);
+    const canonicalPath = buildCanonicalPreviewPath(createdAt, post.slug);
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}${canonicalPath}`, post.updatedAt.toISOString(), 'monthly', '0.8',
+      buildHreflangLinks(baseUrl, canonicalPath, mainLanguage, [mainLanguage]),
+    ));
+  }
+
+  // Page posts (category 'page') — respecting doNotTranslate
+  const allPublishedPosts = [...translatablePosts, ...doNotTranslatePosts];
+  for (const post of allPublishedPosts) {
+    const categories = Array.isArray(post.categories) ? post.categories : [];
+    if (!categories.includes('page')) continue;
+    const trimmedSlug = (post.slug || '').replace(/^\/+|\/+$/g, '');
+    if (trimmedSlug.length === 0) continue;
+    const isTranslatable = !(post as PostData & { doNotTranslate?: boolean }).doNotTranslate;
+    const langs = isTranslatable ? allLanguages : [mainLanguage];
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/${trimmedSlug}`, post.updatedAt.toISOString(), 'weekly', '0.7',
+      buildHreflangLinks(baseUrl, `/${trimmedSlug}`, mainLanguage, langs),
+    ));
+  }
+
+  // Archives — all languages
+  for (const [year, lastmod] of Array.from(postIndex.postsByYear.entries()).sort((a, b) => b[0] - a[0])) {
+    const lastmodStr = lastmod instanceof Date ? lastmod.toISOString() : latestPostUpdatedAt;
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/${year}`, lastmodStr, 'monthly', '0.5',
+      buildHreflangLinks(baseUrl, `/${year}`, mainLanguage, allLanguages),
+    ));
+  }
+  for (const [ym] of Array.from(postIndex.postsByYearMonth.entries()).sort().reverse()) {
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/${ym}`, latestPostUpdatedAt, 'monthly', '0.5',
+      buildHreflangLinks(baseUrl, `/${ym}`, mainLanguage, allLanguages),
+    ));
+  }
+  for (const [ymd] of Array.from(postIndex.postsByYearMonthDay.entries()).sort().reverse()) {
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/${ymd}`, latestPostUpdatedAt, 'monthly', '0.4',
+      buildHreflangLinks(baseUrl, `/${ymd}`, mainLanguage, allLanguages),
+    ));
+  }
+
+  // Categories — all languages
+  for (const category of Array.from(postIndex.postsByCategory.keys()).sort()) {
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/category/${encodeURIComponent(category)}`, latestPostUpdatedAt, 'weekly', '0.6',
+      buildHreflangLinks(baseUrl, `/category/${encodeURIComponent(category)}`, mainLanguage, allLanguages),
+    ));
+  }
+
+  // Tags — all languages
+  for (const tag of Array.from(postIndex.postsByTag.keys()).sort()) {
+    urls.push(buildMultiLanguageSitemapUrl(
+      `${baseUrl}/tag/${encodeURIComponent(tag)}`, latestPostUpdatedAt, 'weekly', '0.6',
+      buildHreflangLinks(baseUrl, `/tag/${encodeURIComponent(tag)}`, mainLanguage, allLanguages),
+    ));
+  }
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+    ...urls,
+    '</urlset>',
+    '',
+  ].join('\n');
 }

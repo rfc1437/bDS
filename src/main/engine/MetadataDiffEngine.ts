@@ -11,8 +11,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { eq, and } from 'drizzle-orm';
 import { getDatabase } from '../database';
-import { posts, media, scripts, templates } from '../database/schema';
+import { posts, postTranslations, media, scripts, templates } from '../database/schema';
 import { readPostFile, PostFileData } from './postFileUtils';
+import { readPostTranslationFile } from './postTranslationFileUtils';
 import { taskManager } from './TaskManager';
 import type { PostEngine } from './PostEngine';
 import type { MediaEngine } from './MediaEngine';
@@ -32,7 +33,7 @@ export interface FieldDifference<T = unknown> {
 /**
  * The fields that can have differences for posts
  */
-export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language';
+export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language' | 'translationFor' | 'doNotTranslate' | 'status' | 'templateSlug' | 'createdAt' | 'updatedAt' | 'publishedAt';
 
 /**
  * Metadata differences for a single post
@@ -41,6 +42,8 @@ export interface PostMetadataDiff {
   postId: string;
   title: string;
   slug: string;
+  variant?: 'post' | 'translation';
+  translationLanguage?: string;
   filePath?: string;
   hasDifferences: boolean;
   fileMissing?: boolean;
@@ -70,6 +73,9 @@ export interface OrphanFile {
   slug: string;
   title?: string;
   id?: string;
+  variant?: 'post' | 'translation';
+  translationFor?: string;
+  language?: string;
 }
 
 /**
@@ -85,7 +91,7 @@ export interface ScanResult {
 
 // ── Media diff types ──
 
-export type MediaDiffField = 'title' | 'alt' | 'caption' | 'author' | 'tags';
+export type MediaDiffField = 'title' | 'alt' | 'caption' | 'author' | 'tags' | 'language';
 
 export interface MediaMetadataDiff {
   mediaId: string;
@@ -354,7 +360,80 @@ export class MetadataDiffEngine extends EventEmitter {
       .get();
 
     if (!dbPost) {
-      return null;
+      const dbTranslation = await db
+        .select()
+        .from(postTranslations)
+        .where(and(eq(postTranslations.id, postId), eq(postTranslations.projectId, this.currentProjectId)))
+        .get();
+
+      if (!dbTranslation) {
+        return null;
+      }
+
+      if (!dbTranslation.filePath || dbTranslation.status === 'draft') {
+        return null;
+      }
+
+      const sourcePost = await db
+        .select()
+        .from(posts)
+        .where(and(eq(posts.id, dbTranslation.translationFor), eq(posts.projectId, this.currentProjectId)))
+        .get();
+
+      const translationSlug = sourcePost?.slug
+        ? `${sourcePost.slug}.${dbTranslation.language}`
+        : path.basename(dbTranslation.filePath, path.extname(dbTranslation.filePath));
+      const translationTitle = `${dbTranslation.title} [${dbTranslation.language}]`;
+      const translationFileData = await readPostTranslationFile(dbTranslation.filePath);
+
+      if (!translationFileData) {
+        const missingDiffs: Partial<Record<DiffField, FieldDifference>> = {
+          translationFor: { dbValue: dbTranslation.translationFor, fileValue: null },
+          language: { dbValue: dbTranslation.language, fileValue: null },
+          title: { dbValue: dbTranslation.title, fileValue: null },
+        };
+        if (dbTranslation.excerpt) {
+          missingDiffs.excerpt = { dbValue: dbTranslation.excerpt, fileValue: null };
+        }
+
+        return {
+          postId: dbTranslation.id,
+          title: translationTitle,
+          slug: translationSlug,
+          variant: 'translation',
+          translationLanguage: dbTranslation.language,
+          filePath: dbTranslation.filePath,
+          hasDifferences: true,
+          fileMissing: true,
+          differences: missingDiffs,
+        };
+      }
+
+      const translationDiffs: Partial<Record<DiffField, FieldDifference>> = {};
+
+      if (dbTranslation.translationFor !== translationFileData.translationFor) {
+        translationDiffs.translationFor = { dbValue: dbTranslation.translationFor, fileValue: translationFileData.translationFor };
+      }
+      if (dbTranslation.language !== translationFileData.language) {
+        translationDiffs.language = { dbValue: dbTranslation.language, fileValue: translationFileData.language };
+      }
+      if (dbTranslation.title !== translationFileData.title) {
+        translationDiffs.title = { dbValue: dbTranslation.title, fileValue: translationFileData.title };
+      }
+      if ((dbTranslation.excerpt || '') !== (translationFileData.excerpt || '')) {
+        translationDiffs.excerpt = { dbValue: dbTranslation.excerpt || '', fileValue: translationFileData.excerpt || '' };
+      }
+
+      return {
+        postId: dbTranslation.id,
+        title: translationTitle,
+        slug: translationSlug,
+        variant: 'translation',
+        translationLanguage: dbTranslation.language,
+        filePath: dbTranslation.filePath,
+        hasDifferences: Object.keys(translationDiffs).length > 0,
+        differences: translationDiffs,
+      };
     }
 
     // Skip drafts - they don't have files
@@ -375,6 +454,8 @@ export class MetadataDiffEngine extends EventEmitter {
       if (dbPost.excerpt) missingDiffs.excerpt = { dbValue: dbPost.excerpt, fileValue: null };
       if (dbPost.author) missingDiffs.author = { dbValue: dbPost.author, fileValue: null };
       if (dbPost.language) missingDiffs.language = { dbValue: dbPost.language, fileValue: null };
+      if (dbPost.doNotTranslate) missingDiffs.doNotTranslate = { dbValue: true, fileValue: null };
+      if (dbPost.templateSlug) missingDiffs.templateSlug = { dbValue: dbPost.templateSlug, fileValue: null };
       return {
         postId: dbPost.id,
         title: dbPost.title,
@@ -425,6 +506,35 @@ export class MetadataDiffEngine extends EventEmitter {
       differences.language = { dbValue: dbPost.language || '', fileValue: fileData.language || '' };
     }
 
+    // Compare doNotTranslate
+    const dbDoNotTranslate = Boolean(dbPost.doNotTranslate);
+    const fileDoNotTranslate = Boolean(fileData.doNotTranslate);
+    if (dbDoNotTranslate !== fileDoNotTranslate) {
+      differences.doNotTranslate = { dbValue: dbDoNotTranslate, fileValue: fileDoNotTranslate };
+    }
+
+    // Compare status
+    const fileStatus = fileData.status || 'published';
+    if (dbPost.status !== fileStatus) {
+      differences.status = { dbValue: dbPost.status, fileValue: fileStatus };
+    }
+
+    // Compare templateSlug
+    if ((dbPost.templateSlug || '') !== (fileData.templateSlug || '')) {
+      differences.templateSlug = { dbValue: dbPost.templateSlug || '', fileValue: fileData.templateSlug || '' };
+    }
+
+    // Compare timestamps (second precision — DB stores integer seconds)
+    if (!this.datesEqualSeconds(dbPost.createdAt, fileData.createdAt)) {
+      differences.createdAt = { dbValue: dbPost.createdAt?.toISOString() || '', fileValue: fileData.createdAt?.toISOString() || '' };
+    }
+    if (!this.datesEqualSeconds(dbPost.updatedAt, fileData.updatedAt)) {
+      differences.updatedAt = { dbValue: dbPost.updatedAt?.toISOString() || '', fileValue: fileData.updatedAt?.toISOString() || '' };
+    }
+    if (!this.datesEqualSeconds(dbPost.publishedAt, fileData.publishedAt)) {
+      differences.publishedAt = { dbValue: dbPost.publishedAt?.toISOString() || '', fileValue: fileData.publishedAt?.toISOString() || '' };
+    }
+
     return {
       postId: dbPost.id,
       title: dbPost.title,
@@ -443,6 +553,13 @@ export class MetadataDiffEngine extends EventEmitter {
     const sortedA = [...a].sort();
     const sortedB = [...b].sort();
     return sortedA.every((val, idx) => val === sortedB[idx]);
+  }
+
+  /** Compare two dates at second precision (SQLite stores integer seconds). */
+  private datesEqualSeconds(a: Date | null | undefined, b: Date | null | undefined): boolean {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return Math.floor(a.getTime() / 1000) === Math.floor(b.getTime() / 1000);
   }
 
   /**
@@ -468,8 +585,19 @@ export class MetadataDiffEngine extends EventEmitter {
       args: [this.currentProjectId],
     });
 
+    const translationResult = await client.execute({
+      sql: `SELECT id, translation_for, language, title, excerpt, file_path
+            FROM post_translations
+            WHERE project_id = ?
+              AND status = 'published'
+              AND file_path IS NOT NULL
+              AND file_path != ''`,
+      args: [this.currentProjectId],
+    });
+
     const publishedPosts = result.rows;
-    const total = publishedPosts.length;
+    const publishedTranslations = translationResult.rows;
+    const total = publishedPosts.length + publishedTranslations.length;
     const differences: PostMetadataDiff[] = [];
 
     onProgress(0, total, `Scanning ${total} published posts...`);
@@ -488,8 +616,25 @@ export class MetadataDiffEngine extends EventEmitter {
         differences.push(diff);
       }
 
-      if ((i + 1) % 10 === 0 || i === total - 1) {
+      if ((i + 1) % 10 === 0 || i === publishedPosts.length - 1) {
         onProgress(i + 1, total, `Scanned ${i + 1}/${total} posts, found ${differences.length} with differences`);
+      }
+    }
+
+    for (let i = 0; i < publishedTranslations.length; i++) {
+      const row = publishedTranslations[i];
+      const translationId = row.id as string;
+      const filePath = row.file_path as string;
+      if (filePath) knownFilePaths.add(filePath);
+
+      const diff = await this.comparePostMetadata(translationId);
+      if (diff && diff.hasDifferences) {
+        differences.push(diff);
+      }
+
+      const processed = publishedPosts.length + i + 1;
+      if (processed % 10 === 0 || processed === total) {
+        onProgress(processed, total, `Scanned ${processed}/${total} posts, found ${differences.length} with differences`);
       }
     }
 
@@ -499,6 +644,14 @@ export class MetadataDiffEngine extends EventEmitter {
       args: [this.currentProjectId],
     });
     for (const row of allPostsResult.rows) {
+      knownFilePaths.add(row.file_path as string);
+    }
+
+    const allTranslationsResult = await client.execute({
+      sql: `SELECT file_path FROM post_translations WHERE project_id = ? AND file_path IS NOT NULL AND file_path != ''`,
+      args: [this.currentProjectId],
+    });
+    for (const row of allTranslationsResult.rows) {
       knownFilePaths.add(row.file_path as string);
     }
 
@@ -564,19 +717,31 @@ export class MetadataDiffEngine extends EventEmitter {
       const slug = path.basename(filePath, path.extname(filePath));
       let title: string | undefined;
       let id: string | undefined;
+      let variant: 'post' | 'translation' | undefined;
+      let translationFor: string | undefined;
+      let language: string | undefined;
 
       // Try to read frontmatter for metadata
       try {
-        const fileData = await readPostFile(filePath);
-        if (fileData) {
-          title = fileData.title;
-          id = fileData.id;
+        const translationData = await readPostTranslationFile(filePath);
+        if (translationData) {
+          title = translationData.title;
+          variant = 'translation';
+          translationFor = translationData.translationFor;
+          language = translationData.language;
+        } else {
+          const fileData = await readPostFile(filePath);
+          if (fileData) {
+            title = fileData.title;
+            id = fileData.id;
+            variant = 'post';
+          }
         }
       } catch {
         // Couldn't parse file, still report it as orphan
       }
 
-      orphanFiles.push({ filePath, slug, title, id });
+      orphanFiles.push({ filePath, slug, title, id, variant, translationFor, language });
 
       if ((i + 1) % 10 === 0 || i === orphanPaths.length - 1) {
         onProgress(scannedSoFar + i + 1, scannedSoFar + orphanPaths.length,
@@ -600,6 +765,13 @@ export class MetadataDiffEngine extends EventEmitter {
       excerpt: 'Excerpt',
       author: 'Author',
       language: 'Language',
+      translationFor: 'Translation Source',
+      doNotTranslate: 'Do Not Translate',
+      status: 'Status',
+      templateSlug: 'Template',
+      createdAt: 'Created At',
+      updatedAt: 'Updated At',
+      publishedAt: 'Published At',
     };
 
     for (const diff of diffs) {
@@ -641,7 +813,16 @@ export class MetadataDiffEngine extends EventEmitter {
     return this.runSyncLoop(
       postIds,
       onProgress,
-      async (postId) => postEngine.syncPublishedPostFile(postId),
+      async (postId) => {
+        const syncedPost = await postEngine.syncPublishedPostFile(postId);
+        if (syncedPost) {
+          return true;
+        }
+        if (typeof postEngine.syncPublishedPostTranslationFile === 'function') {
+          return postEngine.syncPublishedPostTranslationFile(postId);
+        }
+        return false;
+      },
       (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to file:`
     );
   }
@@ -667,45 +848,99 @@ export class MetadataDiffEngine extends EventEmitter {
           .where(and(eq(posts.id, postId), eq(posts.projectId, this.currentProjectId)))
           .get();
 
-        if (!dbPost || !dbPost.filePath) {
+        if (dbPost?.filePath) {
+          const fileData = await readPostFile(dbPost.filePath);
+          if (!fileData) {
+            return false;
+          }
+
+          const updateData: Record<string, unknown> = {};
+
+          if (!field || field === 'tags') {
+            updateData.tags = JSON.stringify(fileData.tags || []);
+          }
+          if (!field || field === 'categories') {
+            updateData.categories = JSON.stringify(fileData.categories || []);
+          }
+          if (!field || field === 'title') {
+            updateData.title = fileData.title;
+          }
+          if (!field || field === 'excerpt') {
+            updateData.excerpt = fileData.excerpt || null;
+          }
+          if (!field || field === 'author') {
+            updateData.author = fileData.author || null;
+          }
+          if (!field || field === 'language') {
+            updateData.language = fileData.language || null;
+          }
+          if (!field || field === 'doNotTranslate') {
+            updateData.doNotTranslate = fileData.doNotTranslate === true;
+          }
+          if (!field || field === 'status') {
+            updateData.status = fileData.status || 'published';
+          }
+          if (!field || field === 'templateSlug') {
+            updateData.templateSlug = fileData.templateSlug || null;
+          }
+          if (!field || field === 'createdAt') {
+            updateData.createdAt = fileData.createdAt;
+          }
+          if (!field || field === 'updatedAt') {
+            updateData.updatedAt = fileData.updatedAt;
+          }
+          if (!field || field === 'publishedAt') {
+            updateData.publishedAt = fileData.publishedAt || null;
+          }
+          // For single-field syncs of non-timestamp fields, mark record as recently modified
+          if (field && field !== 'createdAt' && field !== 'updatedAt' && field !== 'publishedAt') {
+            updateData.updatedAt = new Date();
+          }
+
+          await db
+            .update(posts)
+            .set(updateData)
+            .where(eq(posts.id, postId));
+
+          return true;
+        }
+
+        const dbTranslation = await db
+          .select()
+          .from(postTranslations)
+          .where(and(eq(postTranslations.id, postId), eq(postTranslations.projectId, this.currentProjectId)))
+          .get();
+
+        if (!dbTranslation?.filePath) {
           return false;
         }
 
-        // Read file metadata
-        const fileData = await readPostFile(dbPost.filePath);
-        if (!fileData) {
+        const translationFileData = await readPostTranslationFile(dbTranslation.filePath);
+        if (!translationFileData) {
           return false;
         }
 
-        // Build update object based on field or all fields
-        const updateData: Record<string, unknown> = {
+        const translationUpdateData: Record<string, unknown> = {
           updatedAt: new Date(),
         };
 
-        if (!field || field === 'tags') {
-          updateData.tags = JSON.stringify(fileData.tags || []);
-        }
-        if (!field || field === 'categories') {
-          updateData.categories = JSON.stringify(fileData.categories || []);
-        }
-        if (!field || field === 'title') {
-          updateData.title = fileData.title;
-        }
-        if (!field || field === 'excerpt') {
-          updateData.excerpt = fileData.excerpt || null;
-        }
-        if (!field || field === 'author') {
-          updateData.author = fileData.author || null;
+        if (!field || field === 'translationFor') {
+          translationUpdateData.translationFor = translationFileData.translationFor;
         }
         if (!field || field === 'language') {
-          updateData.language = fileData.language || null;
+          translationUpdateData.language = translationFileData.language || null;
+        }
+        if (!field || field === 'title') {
+          translationUpdateData.title = translationFileData.title;
+        }
+        if (!field || field === 'excerpt') {
+          translationUpdateData.excerpt = translationFileData.excerpt || null;
         }
 
-        // Update database
         await db
-          .update(posts)
-          .set(updateData)
-          .where(eq(posts.id, postId));
+          .update(postTranslations)
+          .set(translationUpdateData)
+          .where(eq(postTranslations.id, postId));
 
         return true;
       },
@@ -738,6 +973,7 @@ export class MetadataDiffEngine extends EventEmitter {
       if (dbMedia.alt) missingDiffs.alt = { dbValue: dbMedia.alt, fileValue: null };
       if (dbMedia.caption) missingDiffs.caption = { dbValue: dbMedia.caption, fileValue: null };
       if (dbMedia.author) missingDiffs.author = { dbValue: dbMedia.author, fileValue: null };
+      if (dbMedia.language) missingDiffs.language = { dbValue: dbMedia.language, fileValue: null };
       const dbTags: string[] = JSON.parse(dbMedia.tags || '[]');
       if (dbTags.length > 0) missingDiffs.tags = { dbValue: dbTags, fileValue: null };
       return {
@@ -763,6 +999,9 @@ export class MetadataDiffEngine extends EventEmitter {
     }
     if ((dbMedia.author || '') !== (sidecar.author || '')) {
       differences.author = { dbValue: dbMedia.author || '', fileValue: sidecar.author || '' };
+    }
+    if ((dbMedia.language || '') !== (sidecar.language || '')) {
+      differences.language = { dbValue: dbMedia.language || '', fileValue: sidecar.language || '' };
     }
 
     const dbTags: string[] = JSON.parse(dbMedia.tags || '[]');
@@ -829,6 +1068,7 @@ export class MetadataDiffEngine extends EventEmitter {
       caption: 'Caption',
       author: 'Author',
       tags: 'Tags',
+      language: 'Language',
     };
 
     for (const diff of diffs) {
@@ -910,6 +1150,7 @@ export class MetadataDiffEngine extends EventEmitter {
         if (!field || field === 'alt') updateData.alt = sidecar.alt || null;
         if (!field || field === 'caption') updateData.caption = sidecar.caption || null;
         if (!field || field === 'author') updateData.author = sidecar.author || null;
+        if (!field || field === 'language') updateData.language = sidecar.language || null;
         if (!field || field === 'tags') updateData.tags = JSON.stringify(sidecar.tags || []);
 
         await db.update(media).set(updateData).where(eq(media.id, mediaId));
@@ -1506,7 +1747,10 @@ export class MetadataDiffEngine extends EventEmitter {
 
     for (let i = 0; i < filePaths.length; i++) {
       try {
-        const imported = await postEngine.importOrphanFile(filePaths[i]);
+        const translationData = await readPostTranslationFile(filePaths[i]);
+        const imported = translationData && typeof postEngine.importOrphanTranslationFile === 'function'
+          ? await postEngine.importOrphanTranslationFile(filePaths[i])
+          : await postEngine.importOrphanFile(filePaths[i]);
         if (imported) {
           success++;
         } else {

@@ -82,16 +82,19 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('posts.delete', 'Delete a post by id.', [requiredString('id')], 'boolean'),
   method('posts.get', 'Fetch one post by id.', [requiredString('postId')], 'PostData | null'),
   method('posts.getBySlug', 'Fetch one post by slug.', [requiredString('slug')], 'PostData | null'),
-  method('posts.getPreviewUrl', 'Get preview URL for post.', [requiredString('id'), optionalObject('options')], 'string | null'),
+  method('posts.getPreviewUrl', 'Get preview URL for post. options may include draft=true and lang=<language-code>.', [requiredString('id'), optionalObject('options')], 'string | null'),
   method('posts.getAll', 'Fetch posts with pagination.', [optionalObject('options')], 'PaginatedPostsResult'),
   method('posts.getByStatus', 'Fetch posts by status.', [requiredString('status')], 'PostData[]'),
   method('posts.publish', 'Publish a post by id.', [requiredString('id')], 'PostData | null'),
+  method('posts.getTranslation', 'Get a single translation for a post by language.', [requiredString('postId'), requiredString('language')], 'PostTranslationData | null'),
+  method('posts.getTranslations', 'Get all translations for a post.', [requiredString('postId')], 'PostTranslationData[]'),
+  method('posts.publishTranslation', 'Publish a specific translation of a post.', [requiredString('postId'), requiredString('language')], 'PostTranslationData | null'),
   method('posts.discard', 'Discard draft changes for post.', [requiredString('id')], 'PostData | null'),
   method('posts.hasPublishedVersion', 'Check if post has published version.', [requiredString('id')], 'boolean'),
   method('posts.rebuildFromFiles', 'Rebuild posts database from files.', [], 'void'),
   method('posts.reindexText', 'Reindex post search text.', [], 'void'),
   method('posts.search', 'Search posts by free-text query.', [requiredString('query')], 'SearchResult[]'),
-  method('posts.filter', 'Filter posts by criteria.', [requiredObject('filter')], 'PostData[]'),
+  method('posts.filter', 'Filter posts by criteria, including optional language and missingTranslationLanguage filters.', [requiredObject('filter')], 'PostData[]'),
   method('posts.getTags', 'Get all post tags.', [], 'string[]'),
   method('posts.getCategories', 'Get all post categories.', [], 'string[]'),
   method('posts.getByYearMonth', 'Get post counts grouped by year/month.', [], 'Array<{ year: number; month: number; count: number } >'),
@@ -122,6 +125,11 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('media.getByYearMonth', 'Get media counts grouped by year/month.', [], 'Array<{ year: number; month: number; count: number } >'),
   method('media.getTags', 'Get all media tags.', [], 'string[]'),
   method('media.getTagsWithCounts', 'Get media tags with counts.', [], 'TagCount[]'),
+
+  method('media.getTranslation', 'Get a single translation for a media item by language.', [requiredString('mediaId'), requiredString('language')], 'MediaTranslationData | null'),
+  method('media.getTranslations', 'Get all translations for a media item.', [requiredString('mediaId')], 'MediaTranslationData[]'),
+  method('media.upsertTranslation', 'Create or update a media translation for a specific language.', [requiredString('mediaId'), requiredString('language'), requiredObject('data')], 'MediaTranslationData'),
+  method('media.deleteTranslation', 'Delete a media translation by language.', [requiredString('mediaId'), requiredString('language')], 'boolean'),
 
   method('scripts.create', 'Create script. data must include: title (str), kind ("macro"|"utility"|"transform"), content (str). Optional: slug (str), entrypoint (str, defaults to "render"), enabled (bool).', [requiredObject('data')], 'ScriptData'),
   method('scripts.update', 'Update script by id. data may include any of: title, kind, content, slug, entrypoint, enabled.', [requiredString('id'), requiredObject('data')], 'ScriptData | null'),
@@ -192,6 +200,9 @@ const METHODS_V1: PythonApiMethodContractV1[] = [
   method('chat.analyzeMediaImage', 'Analyze an image and generate title, alt text, and caption using AI.', [requiredString('mediaId'), optionalString('language')], 'ImageAnalysisResult'),
   method('chat.detectPostLanguage', 'Detect the language of a post from its title and content.', [requiredString('title'), requiredString('content')], '{ success: boolean; language?: string; error?: string }'),
   method('chat.analyzePost', 'Analyze a post and generate suggested title, excerpt, and slug using AI.', [requiredString('postId'), optionalString('language')], 'PostAnalysisResult'),
+  method('chat.translatePost', 'Translate a post into a target language and save it as a translation draft.', [requiredString('postId'), requiredString('targetLanguage')], 'PostTranslationResult'),
+  method('chat.detectMediaLanguage', 'Detect the language of media metadata from its title, alt text, and caption.', [requiredString('title'), requiredString('alt'), requiredString('caption')], '{ success: boolean; language?: string; error?: string }'),
+  method('chat.translateMediaMetadata', 'Translate media metadata (title, alt, caption) into a target language using AI.', [requiredString('mediaId'), requiredString('targetLanguage')], 'MediaTranslationResult'),
 
   method('sync.checkAvailability', 'Check if git is available.', [], 'GitAvailability'),
   method('sync.getRepoState', 'Get repository state for active project.', [], 'RepoState'),
@@ -257,6 +268,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
       { name: 'publishedAt', type: 'string', required: false, description: 'Publication timestamp for published posts.' },
       { name: 'tags', type: 'string[]', required: true, description: 'List of tag names.' },
       { name: 'categories', type: 'string[]', required: true, description: 'List of category names.' },
+      { name: 'availableLanguages', type: 'string[]', required: true, description: 'Canonical language plus all available translation language codes for this post.' },
     ],
   },
   {
@@ -438,6 +450,33 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
     ],
   },
   {
+    name: 'PostTranslationData',
+    description: 'Stored translation draft or published translation for a post.',
+    fields: [
+      { name: 'id', type: 'string', required: true, description: 'Translation identifier.' },
+      { name: 'projectId', type: 'string', required: true, description: 'Owning project identifier.' },
+      { name: 'translationFor', type: 'string', required: true, description: 'Source post identifier this translation belongs to.' },
+      { name: 'language', type: 'string', required: true, description: 'Target language code for the translation.' },
+      { name: 'title', type: 'string', required: true, description: 'Translated title.' },
+      { name: 'excerpt', type: 'string', required: false, description: 'Translated excerpt.' },
+      { name: 'content', type: 'string', required: true, description: 'Translated Markdown content.' },
+      { name: 'status', type: "'draft' | 'published' | 'archived'", required: true, description: 'Translation lifecycle state.' },
+      { name: 'createdAt', type: 'string', required: true, description: 'Creation timestamp.' },
+      { name: 'updatedAt', type: 'string', required: true, description: 'Last update timestamp.' },
+      { name: 'publishedAt', type: 'string', required: false, description: 'Publish timestamp when the translation is published.' },
+      { name: 'filePath', type: 'string', required: true, description: 'Translation file path on disk.' },
+    ],
+  },
+  {
+    name: 'PostTranslationResult',
+    description: 'Result from AI post translation containing the saved translation draft.',
+    fields: [
+      { name: 'success', type: 'boolean', required: true, description: 'Whether the translation succeeded.' },
+      { name: 'translation', type: 'PostTranslationData', required: false, description: 'Saved translation draft when successful.' },
+      { name: 'error', type: 'string', required: false, description: 'Error message when translation failed.' },
+    ],
+  },
+  {
     name: 'SimilarPost',
     description: 'A post with its semantic similarity score relative to a reference post.',
     fields: [
@@ -465,7 +504,7 @@ const DATA_STRUCTURES_V1: PythonApiDataStructureContractV1[] = [
 ];
 
 export const BDS_PYTHON_API_CONTRACT_V1: PythonApiContractV1 = {
-  version: '1.13.0',
+  version: '1.15.0',
   generatedAt: '2026-03-07T00:00:00.000Z',
   methods: METHODS_V1,
   dataStructures: DATA_STRUCTURES_V1,

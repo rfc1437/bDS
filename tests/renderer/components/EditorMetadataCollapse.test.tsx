@@ -115,7 +115,7 @@ vi.mock('../../../src/renderer/components/Toast', () => ({
   },
 }));
 
-import { PostEditor } from '../../../src/renderer/components/Editor/Editor';
+import { PostEditor } from '../../../src/renderer/components/Editor/PostEditor';
 import { useAppStore } from '../../../src/renderer/store';
 
 const createPost = (overrides: Record<string, unknown> = {}) => ({
@@ -261,5 +261,27 @@ describe('Editor metadata collapse', () => {
     });
 
     expect(container.querySelector('.editor-excerpt-panel')).toBeNull();
+  });
+
+  it('shows translation flags in the metadata toggle header even when collapsed', async () => {
+    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({ title: 'Existing Post' }));
+
+    const { container } = render(<PostEditor postId="post-1" />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Metadata is collapsed for existing posts
+    expect(container.querySelector('.editor-header-row')).toBeNull();
+
+    // Translation flags should be visible in the header line, not inside metadata
+    const toggleHeader = container.querySelector('.metadata-toggle-header');
+    expect(toggleHeader).not.toBeNull();
+
+    const flagsInHeader = toggleHeader!.querySelector('.editor-translations-flags');
+    expect(flagsInHeader).not.toBeNull();
   });
 });

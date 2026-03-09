@@ -3,13 +3,14 @@ import fs from 'node:fs';
 import { marked } from 'marked';
 import { Liquid } from 'liquidjs';
 import type { MediaData } from './MediaEngine';
+import type { PostTranslationData } from './PostEngine';
 import type { PostData } from './PostEngine';
 import type { MenuDocument, MenuItemData } from './MenuEngine';
 import { PICO_THEME_NAMES } from '../shared/picoThemes';
 import { CODE_ENHANCEMENTS_RUNTIME_JS } from './assets/codeEnhancementsRuntime';
 import { CALENDAR_RUNTIME_JS } from './assets/calendarRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
-import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
+import { resolveRenderLanguageFromProjectPreferences, translateRender, getRenderTranslations } from '../shared/i18n';
 
 function readLocalAsset(filename: string): string {
   const candidates = [
@@ -54,6 +55,7 @@ export interface PythonMacroRendererContract {
 export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
   canonicalMediaPathBySourcePath: Map<string, string>;
+  languagePrefix?: string;
 }
 
 export interface TemplatePostEntry {
@@ -98,6 +100,9 @@ export type DateArchiveContext = {
 export interface PostListTemplateContext {
   page_title: string;
   language: string;
+  blog_languages: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
+  current_language: string;
+  language_prefix: string;
   menu_items: TemplateMenuItem[];
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
@@ -133,9 +138,17 @@ export interface BacklinkEntry {
   path: string;
 }
 
+export interface AlternateLinkEntry {
+  href: string;
+  hreflang: string;
+}
+
 export interface SinglePostTemplateContext {
   page_title: string;
   language: string;
+  blog_languages: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
+  current_language: string;
+  language_prefix: string;
   menu_items: TemplateMenuItem[];
   pico_stylesheet_href?: string;
   html_theme_attribute?: string;
@@ -149,6 +162,7 @@ export interface SinglePostTemplateContext {
   canonical_media_path_by_source_path: Record<string, string>;
   post_data_json_by_id: Record<string, string>;
   backlinks: BacklinkEntry[];
+  alternate_links: AlternateLinkEntry[];
 }
 
 export interface NotFoundTemplateContext {
@@ -175,6 +189,7 @@ export interface RoutePagination {
 
 export interface MediaEngineContract {
   getAllMedia: () => Promise<MediaData[]>;
+  getMediaTranslation?: (mediaId: string, language: string) => Promise<{ title?: string; alt?: string; caption?: string } | null>;
   setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
 }
 
@@ -185,6 +200,7 @@ export interface PostMediaEngineContract {
 
 export interface PostEngineContract {
   getPost: (id: string) => Promise<PostData | null>;
+  getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
   getPostsFiltered?: (filter: { status?: 'draft' | 'published' | 'archived' }) => Promise<PostData[]>;
 }
 
@@ -815,6 +831,14 @@ export function rewriteRenderedHtmlUrls(html: string, rewriteContext: HtmlRewrit
     });
 }
 
+export function applyLanguagePrefixToHtml(html: string, languagePrefix: string): string {
+  if (!languagePrefix) return html;
+  return html.replace(/\bhref=(['"])(\/(?!media\/|assets\/).*?)\1/gi, (_fullMatch, quote: string, href: string) => {
+    if (href.startsWith(languagePrefix + '/') || href === languagePrefix) return `href=${quote}${href}${quote}`;
+    return `href=${quote}${languagePrefix}${href}${quote}`;
+  });
+}
+
 export function renderMacro(
   name: string,
   params: Record<string, string>,
@@ -890,6 +914,7 @@ export async function replaceAllMacrosAsync(
   renderLanguage: string,
   pythonMacroRenderer?: PythonMacroRendererContract | null,
   postDataJson?: string | null,
+  languagePrefix?: string,
 ): Promise<string> {
   const macroRegex = /\[\[(\w+)(?:\s+([^\]]+))?\]\]/g;
   const matches: Array<{ fullMatch: string; name: string; rawParams: string | undefined; start: number; end: number }> = [];
@@ -942,12 +967,15 @@ export async function replaceAllMacrosAsync(
     const pythonScript = scriptsBySlug.get(normalizeMacroName(m.name));
     if (pythonScript && pythonMacroRenderer) {
       try {
+        const resolvedLang = resolveRenderLanguageFromProjectPreferences(renderLanguage);
         const context = {
           env: {
             isPreview: false,
             mainLanguage: renderLanguage,
+            languagePrefix: languagePrefix ?? '',
             hook: m.name,
             source: { kind: 'macro', id: pythonScript.id },
+            translations: getRenderTranslations(resolvedLang),
           },
           params: params,
         };
@@ -967,7 +995,7 @@ export async function replaceAllMacrosAsync(
         rendered.push('');
       }
     } else {
-      rendered.push('');
+      rendered.push(m.fullMatch);
     }
   }
 
@@ -1172,10 +1200,11 @@ export class PageRenderer {
       return translateRender(resolved, key);
     });
 
-    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, postDataJsonByIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown) => {
+    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, postDataJsonByIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown, languagePrefixArg: unknown) => {
       const content = typeof value === 'string' ? value : '';
       const postId = typeof postIdArg === 'string' ? postIdArg : '';
       const renderLanguage = typeof renderLanguageArg === 'string' ? renderLanguageArg : 'en';
+      const langPrefix = typeof languagePrefixArg === 'string' ? languagePrefixArg : '';
       const postDataJsonById = (postDataJsonByIdArg && typeof postDataJsonByIdArg === 'object' && !Array.isArray(postDataJsonByIdArg))
         ? postDataJsonByIdArg as Record<string, string>
         : {};
@@ -1202,7 +1231,7 @@ export class PageRenderer {
         : null;
 
       const withMacros = await replaceAllMacrosAsync(
-        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer, postDataJson,
+        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer, postDataJson, langPrefix,
       );
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });
@@ -1247,6 +1276,9 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      blog_languages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
+      current_language?: string;
+      language_prefix?: string;
       menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
@@ -1377,6 +1409,9 @@ export class PageRenderer {
     return {
       page_title: options.page_title,
       language: options.language,
+      blog_languages: options.blog_languages ?? [],
+      current_language: options.current_language ?? options.language,
+      language_prefix: options.language_prefix ?? '',
       menu_items: options.menu_items ?? [],
       pico_stylesheet_href: options.pico_stylesheet_href,
       html_theme_attribute: options.html_theme_attribute,
@@ -1419,13 +1454,47 @@ export class PageRenderer {
     };
   }
 
-  async resolveRenderablePost(post: PostData, postEngine: PostEngineContract): Promise<PostData> {
-    if (post.status === 'published' && !post.content) {
-      const fullPost = await postEngine.getPost(post.id);
-      return fullPost ?? post;
+  async resolveRenderablePost(post: PostData, postEngine: PostEngineContract, preferredLanguage?: string): Promise<PostData> {
+    // Pre-built translation variants (from blog generation) already have content and
+    // translationSourceSlug set — skip hydration and language resolution entirely.
+    const variantPost = post as PostData & { translationSourceSlug?: string };
+    if (variantPost.translationSourceSlug) {
+      return post;
     }
 
-    return post;
+    const hydratedPost = post.status === 'published' && !post.content
+      ? (await postEngine.getPost(post.id)) ?? post
+      : post;
+
+    const requestedLanguage = preferredLanguage?.trim().toLowerCase();
+    const canonicalLanguage = hydratedPost.language?.trim().toLowerCase();
+    if (!requestedLanguage || requestedLanguage === canonicalLanguage || !postEngine.getPostTranslation) {
+      return hydratedPost;
+    }
+
+    const translation = await postEngine.getPostTranslation(hydratedPost.id, requestedLanguage);
+    if (!translation || !translation.content) {
+      return hydratedPost;
+    }
+
+    const availableLanguages = Array.from(new Set([
+      ...(Array.isArray(hydratedPost.availableLanguages) ? hydratedPost.availableLanguages : []),
+      requestedLanguage,
+      canonicalLanguage,
+    ].filter((language): language is string => typeof language === 'string' && language.length > 0)));
+
+    return {
+      ...hydratedPost,
+      title: translation.title,
+      excerpt: translation.excerpt,
+      content: translation.content,
+      language: translation.language,
+      updatedAt: translation.updatedAt,
+      publishedAt: translation.publishedAt ?? hydratedPost.publishedAt,
+      availableLanguages,
+      translationSourceSlug: hydratedPost.slug,
+      translationCanonicalLanguage: canonicalLanguage || undefined,
+    } as PostData;
   }
 
   async renderPostList(
@@ -1438,6 +1507,9 @@ export class PageRenderer {
       basePathname: string;
       page_title: string;
       language: string;
+      blog_languages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
+      current_language?: string;
+      language_prefix?: string;
       menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
@@ -1452,7 +1524,7 @@ export class PageRenderer {
     }
 
     const renderablePosts = postEngine
-      ? await Promise.all(posts.map(async (post) => this.resolveRenderablePost(post, postEngine)))
+      ? await Promise.all(posts.map(async (post) => this.resolveRenderablePost(post, postEngine, options.language)))
       : posts;
     const templateContext = this.buildListTemplateContext(
       renderablePosts,
@@ -1465,7 +1537,8 @@ export class PageRenderer {
       routeCategory ?? undefined,
       options.categorySettings as Record<string, { listTemplateSlug?: string | null }> | undefined,
     );
-    return this.liquid.renderFile(listTemplateName, templateContext);
+    const html = await this.liquid.renderFile(listTemplateName, templateContext);
+    return rewriteContext.languagePrefix ? applyLanguagePrefixToHtml(html, rewriteContext.languagePrefix) : html;
   }
 
   async renderSinglePost(
@@ -1474,6 +1547,9 @@ export class PageRenderer {
     pageContext: {
       page_title: string;
       language: string;
+      blog_languages?: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
+      current_language?: string;
+      language_prefix?: string;
       menu_items?: TemplateMenuItem[];
       pico_stylesheet_href?: string;
       html_theme_attribute?: string;
@@ -1481,11 +1557,12 @@ export class PageRenderer {
       tagSettings?: Record<string, { postTemplateSlug?: string | null }>;
       categorySettings?: Record<string, { postTemplateSlug?: string | null }>;
       backlinks?: BacklinkEntry[];
+      alternate_links?: AlternateLinkEntry[];
     },
     postEngine?: PostEngineContract,
   ): Promise<string> {
     const renderablePost = postEngine
-      ? await this.resolveRenderablePost(post, postEngine)
+      ? await this.resolveRenderablePost(post, postEngine, pageContext.language)
       : post;
 
     const postCategories = Array.isArray(renderablePost.categories)
@@ -1503,6 +1580,9 @@ export class PageRenderer {
     const context: SinglePostTemplateContext = {
       ...pageContext,
       language: postLanguage || pageContext.language,
+      blog_languages: pageContext.blog_languages ?? [],
+      current_language: pageContext.current_language ?? pageContext.language,
+      language_prefix: pageContext.language_prefix ?? '',
       menu_items: pageContext.menu_items ?? [],
       post: {
         id: renderablePost.id,
@@ -1523,6 +1603,7 @@ export class PageRenderer {
         [renderablePost.id]: JSON.stringify(serializePostDataForMacro(renderablePost)),
       },
       backlinks: pageContext.backlinks ?? [],
+      alternate_links: pageContext.alternate_links ?? [],
     };
 
     const postTemplateName = resolvePostTemplateName(
@@ -1530,7 +1611,8 @@ export class PageRenderer {
       pageContext.tagSettings,
       pageContext.categorySettings,
     );
-    return this.liquid.renderFile(postTemplateName, context);
+    const html = await this.liquid.renderFile(postTemplateName, context);
+    return rewriteContext.languagePrefix ? applyLanguagePrefixToHtml(html, rewriteContext.languagePrefix) : html;
   }
 
   async renderNotFound(context: NotFoundTemplateContext): Promise<string> {

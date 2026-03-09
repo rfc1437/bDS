@@ -42,6 +42,7 @@
   "menu.item.generateSitemap": "Rendre le site",
   "menu.item.regenerateCalendar": "Régénérer le calendrier",
   "menu.item.validateSite": "Valider le site",
+  "menu.item.validateTranslations": "Valider les traductions",
   "menu.item.findDuplicates": "Trouver les articles en double",
   "menu.item.uploadSite": "Publier le site",
   "menu.item.about": "À propos de Blogging Desktop Server",
@@ -67,6 +68,7 @@
   "render.taxonomy.ariaLabel": "Taxonomie",
   "render.backlinks.label": "Lié depuis",
   "render.backlinks.ariaLabel": "Rétroliens",
+  "render.languageSwitcher.ariaLabel": "Langue",
   "render.video.youtubeTitle": "Vidéo YouTube",
   "render.video.vimeoTitle": "Vidéo Vimeo",
   "render.month.1": "janvier",
@@ -91,5 +93,6 @@
   "task.rebuildEmbeddingIndex.name": "Reconstruire l'index d'embeddings",
   "task.rebuildEmbeddingIndex.clearing": "Vidage de l'index…",
   "task.duplicateSearch.name": "Trouver les articles en double",
-  "task.duplicateSearch.searching": "Vérification : {checked}/{total}"
+  "task.duplicateSearch.searching": "Vérification : {checked}/{total}",
+  "menu.item.fillMissingTranslations": "Compléter les traductions manquantes"
 }

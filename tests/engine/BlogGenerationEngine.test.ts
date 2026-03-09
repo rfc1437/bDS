@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, readdir, stat, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import type { PostData } from '../../src/main/engine/PostEngine';
+import type { PostData, PostTranslationData } from '../../src/main/engine/PostEngine';
 import { resolveUiLanguageFromSystemLocale } from '../../src/main/shared/i18n';
 import type { MenuDocument } from '../../src/main/engine/MenuEngine';
+import { createPreviewBackedGenerationRouteRenderer } from '../../src/main/engine/GenerationRouteRendererFactory';
 
 const generatedFileHashes = new Map<string, string>();
 const generatedFileUpdatedAt = new Map<string, number>();
@@ -72,6 +73,8 @@ vi.mock('../../src/main/engine/PostEngine', async (importOriginal) => {
     getPostsFiltered: vi.fn(async () => []),
     getPublishedVersion: vi.fn(async () => null),
     getPost: vi.fn(async () => null),
+    getPostTranslation: vi.fn(async () => null),
+    getPostTranslations: vi.fn(async () => []),
     setProjectContext: vi.fn(),
   };
   return {
@@ -115,11 +118,13 @@ function makePost(overrides: Partial<PostData> = {}): PostData {
     content: overrides.content ?? '# Test\n\nBody text',
     status: overrides.status ?? 'published',
     author: overrides.author,
+    language: overrides.language,
     createdAt,
     updatedAt,
     publishedAt: overrides.publishedAt ?? createdAt,
     tags: overrides.tags ?? [],
     categories: overrides.categories ?? [],
+    availableLanguages: overrides.availableLanguages ?? (overrides.language ? [overrides.language] : []),
   };
 }
 
@@ -197,6 +202,8 @@ describe('BlogGenerationEngine', () => {
     mockPostEngine.getPost.mockImplementation(async (id: string) => {
       return posts.find((p) => p.id === id) ?? null;
     });
+    mockPostEngine.getPostTranslation.mockResolvedValue(null);
+    mockPostEngine.getPostTranslations.mockResolvedValue([]);
   }
 
   async function generate(
@@ -682,9 +689,120 @@ describe('BlogGenerationEngine', () => {
     const monthArchivePath = path.join(tempDir, 'html', '2020', '02', 'index.html');
     const monthHtml = await readFile(monthArchivePath, 'utf-8');
 
-    expect(monthHtml).toContain('<html lang="fr">');
+    expect(monthHtml).toContain('<html lang="fr"');
     expect(monthHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
     expect(monthHtml).not.toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
+  });
+
+  it('renders canonical single-post route with project main language content when available', async () => {
+    const canonicalPost = makePost({
+      id: 'post-1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nCanonical body',
+      language: 'en',
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+    });
+
+    setupPosts([canonicalPost]);
+    mockPostEngine.getPostTranslation.mockImplementation(async (postId: string, language: string) => {
+      if (postId === 'post-1' && language === 'fr') {
+        return {
+          id: 'translation-1-fr',
+          projectId: 'default',
+          translationFor: 'post-1',
+          language: 'fr',
+          title: 'Bonjour le monde',
+          excerpt: 'Resume FR',
+          content: '# Bonjour le monde\n\nCorps FR',
+          status: 'published',
+          createdAt: new Date('2025-01-15T10:05:00Z'),
+          updatedAt: new Date('2025-01-15T10:05:00Z'),
+          publishedAt: new Date('2025-01-15T10:06:00Z'),
+          filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+        };
+      }
+      return null;
+    });
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'fr',
+    }, vi.fn());
+
+    const canonicalHtml = await readFile(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world', 'index.html'), 'utf-8');
+
+    expect(mockPostEngine.getPostTranslation).toHaveBeenCalledWith('post-1', 'fr');
+    expect(canonicalHtml).toContain('<html lang="fr"');
+    expect(canonicalHtml).toContain('Bonjour le monde');
+    expect(canonicalHtml).toContain('Corps FR');
+    expect(canonicalHtml).not.toContain('Canonical body');
+  });
+
+  it('preview-backed generation route renderer prefers project main language content on canonical single-post routes', async () => {
+    const canonicalPost = makePost({
+      id: 'post-1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nCanonical body',
+      language: 'en',
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+    });
+
+    const renderRoute = createPreviewBackedGenerationRouteRenderer({
+      options: {
+        projectId: 'test',
+        dataDir: tempDir,
+        projectName: 'Test Blog',
+        language: 'fr',
+      },
+      maxPostsPerPage: 50,
+      publishedPostsForLookup: [canonicalPost],
+      engines: {
+        postEngine: {
+          getPostsFiltered: mockPostEngine.getPostsFiltered,
+          getPublishedVersion: mockPostEngine.getPublishedVersion,
+          getPost: mockPostEngine.getPost,
+          getPostTranslation: vi.fn(async (postId: string, language: string) => {
+            if (postId === 'post-1' && language === 'fr') {
+              return {
+                id: 'translation-1-fr',
+                projectId: 'default',
+                translationFor: 'post-1',
+                language: 'fr',
+                title: 'Bonjour le monde',
+                excerpt: 'Resume FR',
+                content: '# Bonjour le monde\n\nCorps FR',
+                status: 'published',
+                createdAt: new Date('2025-01-15T10:05:00Z'),
+                updatedAt: new Date('2025-01-15T10:05:00Z'),
+                publishedAt: new Date('2025-01-15T10:06:00Z'),
+                filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+              } satisfies PostTranslationData;
+            }
+            return null;
+          }),
+          hasPublishedVersion: mockPostEngine.hasPublishedVersion,
+          setProjectContext: mockPostEngine.setProjectContext,
+        },
+        mediaEngine: mockMediaEngine,
+        postMediaEngine: mockPostMediaEngine,
+      },
+    });
+
+    const html = await renderRoute('/2025/01/15/hello-world');
+
+    expect(html).not.toBeNull();
+    expect(html).toContain('<html lang="fr"');
+    expect(html).toContain('Bonjour le monde');
+    expect(html).toContain('Corps FR');
+    expect(html).not.toContain('Canonical body');
   });
 
   it('excludes draft-only posts from generated pages', async () => {
@@ -1221,6 +1339,121 @@ describe('BlogGenerationEngine', () => {
     expect(sitemap).toContain('<loc>https://example.com/page/2/</loc>');
   });
 
+  it('generates published translation pages with alternate links and sitemap entries', async () => {
+    const sourcePost = makePost({
+      id: '1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nEnglish body',
+      language: 'en',
+      availableLanguages: ['en', 'fr'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const translationsByPostId = new Map<string, PostTranslationData[]>([
+      ['1', [{
+        id: 'translation-1-fr',
+        projectId: 'default',
+        translationFor: '1',
+        language: 'fr',
+        title: 'Bonjour le monde',
+        excerpt: 'Resume FR',
+        content: '# Bonjour le monde\n\nCorps FR',
+        status: 'published',
+        createdAt: new Date('2025-01-15T10:05:00Z'),
+        updatedAt: new Date('2025-01-15T10:05:00Z'),
+        publishedAt: new Date('2025-01-15T10:06:00Z'),
+        filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+      }]],
+    ]);
+
+    setupPosts([sourcePost]);
+    mockPostEngine.getPostTranslations.mockImplementation(async (postId: string) => translationsByPostId.get(postId) ?? []);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn());
+
+    const canonicalHtml = await readFile(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world', 'index.html'), 'utf-8');
+    const translationHtml = await readFile(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world.fr', 'index.html'), 'utf-8');
+    const sitemap = await readFile(path.join(tempDir, 'html', 'sitemap.xml'), 'utf-8');
+
+    expect(canonicalHtml).toContain('hreflang="fr"');
+    expect(canonicalHtml).toContain('href="/2025/01/15/hello-world.fr"');
+    expect(translationHtml).toContain('<html lang="fr"');
+    expect(translationHtml).toContain('Bonjour le monde');
+    expect(sitemap).toContain('<loc>https://example.com/2025/01/15/hello-world/</loc>');
+    expect(sitemap).toContain('<loc>https://example.com/2025/01/15/hello-world.fr/</loc>');
+  });
+
+  it('preserves post engine method binding when loading published translations', async () => {
+    const sourcePost = makePost({
+      id: '1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nEnglish body',
+      language: 'en',
+      availableLanguages: ['en', 'fr'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const translationsByPostId = new Map<string, PostTranslationData[]>([
+      ['1', [{
+        id: 'translation-1-fr',
+        projectId: 'default',
+        translationFor: '1',
+        language: 'fr',
+        title: 'Bonjour le monde',
+        excerpt: 'Resume FR',
+        content: '# Bonjour le monde\n\nCorps FR',
+        status: 'published',
+        createdAt: new Date('2025-01-15T10:05:00Z'),
+        updatedAt: new Date('2025-01-15T10:05:00Z'),
+        publishedAt: new Date('2025-01-15T10:06:00Z'),
+        filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+      }]],
+    ]);
+
+    const postEngine = {
+      translationsByPostId,
+      setProjectContext: vi.fn(),
+      async getPostsFiltered(filter: { status?: string }) {
+        return filter.status === 'published' ? [sourcePost] : [];
+      },
+      async getPublishedVersion() {
+        return null;
+      },
+      async getPost(postId: string) {
+        return postId === sourcePost.id ? sourcePost : null;
+      },
+      async getPostTranslations(postId: string) {
+        return this.translationsByPostId.get(postId) ?? [];
+      },
+    };
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(postEngine as any, mockMediaEngine, mockPostMediaEngine);
+
+    await expect(engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn())).resolves.toMatchObject({
+      postCount: 1,
+    });
+
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world.fr', 'index.html'))).toBe(true);
+  });
+
   it('applies validation by generating only missing category and tag routes', async () => {
     const posts = [
       makePost({ id: '1', slug: 'ordered-post', categories: ['news'], tags: ['ordered-tag'], createdAt: new Date('2025-01-15T10:00:00Z') }),
@@ -1617,6 +1850,49 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', 'hello-world', 'index.html'))).toBe(false);
   });
 
+  it('generates translated static page routes for published page translations', async () => {
+    const pagePost = makePost({
+      id: 'page-1',
+      slug: 'tag-cloud',
+      title: 'Tag Cloud',
+      categories: ['page'],
+      language: 'en',
+      availableLanguages: ['en', 'de'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+
+    setupPosts([pagePost]);
+    mockPostEngine.getPostTranslations.mockResolvedValue([{
+      id: 'translation-page-1-de',
+      projectId: 'default',
+      translationFor: 'page-1',
+      language: 'de',
+      title: 'Schlagwortwolke',
+      excerpt: 'Zusammenfassung DE',
+      content: '# Schlagwortwolke\n\nInhalt DE',
+      status: 'published',
+      createdAt: new Date('2025-01-15T10:05:00Z'),
+      updatedAt: new Date('2025-01-15T10:05:00Z'),
+      publishedAt: new Date('2025-01-15T10:06:00Z'),
+      filePath: path.join(tempDir, 'posts', 'tag-cloud.de.md'),
+    }]);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn());
+
+    expect(await fileExists(path.join(tempDir, 'html', 'tag-cloud', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'tag-cloud.de', 'index.html'))).toBe(true);
+  });
+
   it('generates canonical post routes only and does not generate aliases', async () => {
     const posts = [
       makePost({ id: '1', slug: 'alias-test', createdAt: new Date('2025-03-15T10:00:00Z') }),
@@ -1703,6 +1979,167 @@ describe('BlogGenerationEngine', () => {
     await generate(posts);
 
     expect(await fileExists(path.join(tempDir, 'html', 'media'))).toBe(false);
+  });
+
+  it('validateSite reports missing language subtree pages and does not flag them as extra', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'lang-post',
+        title: 'Language Post',
+        categories: ['news'],
+        tags: ['lang-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    // Generate only main language pages
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn());
+
+    // Validate with blogLanguages including fr - should report missing fr pages
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toContain('/fr');
+    expect(report.missingUrlPaths).toContain('/fr/2025/01/15/lang-post');
+    expect(report.missingUrlPaths).toContain('/fr/category/news');
+    expect(report.missingUrlPaths).toContain('/fr/tag/lang-tag');
+    expect(report.extraUrlPaths).not.toContain('/fr');
+  });
+
+  it('validateSite reports no missing language pages after full multi-language generation', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'multilang-post',
+        title: 'Multi Lang Post',
+        categories: ['news'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toEqual([]);
+    expect(report.extraUrlPaths).toEqual([]);
+  });
+
+  it('applyValidation renders missing language subtree pages', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'apply-lang-post',
+        title: 'Apply Lang Post',
+        categories: ['news'],
+        tags: ['apply-lang-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    const result = await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/fr/category/news', '/fr/tag/apply-lang-tag'],
+      extraUrlPaths: [],
+      updatedPostUrlPaths: [],
+      expectedUrlCount: 2,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    expect(result.renderedUrlCount).toBeGreaterThan(0);
+    expect(await fileExists(path.join(tempDir, 'html', 'fr', 'category', 'news', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'fr', 'tag', 'apply-lang-tag', 'index.html'))).toBe(true);
+  });
+
+  it('validateSite excludes doNotTranslate posts from language subtree expected urls', async () => {
+    const translatablePost = makePost({
+      id: '1',
+      slug: 'translatable',
+      title: 'Translatable',
+      categories: ['news'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const dntPost = makePost({
+      id: '2',
+      slug: 'no-translate',
+      title: 'Do Not Translate',
+      categories: ['news'],
+      createdAt: new Date('2025-01-16T10:00:00Z'),
+      doNotTranslate: true,
+    } as any);
+    setupPosts([translatablePost, dntPost]);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toEqual([]);
+    // The dnt post's single page should NOT be expected in /fr/ subtree
+    expect(report.extraUrlPaths).not.toContain('/fr/2025/01/16/no-translate');
   });
 
   it('generates zero pages when there are no published posts', async () => {

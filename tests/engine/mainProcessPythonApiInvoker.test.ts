@@ -12,6 +12,9 @@ const mockPostEngine: Record<string, ReturnType<typeof vi.fn>> = {
   updatePost: vi.fn().mockResolvedValue(null),
   deletePost: vi.fn().mockResolvedValue(true),
   publishPost: vi.fn().mockResolvedValue(null),
+  publishPostTranslation: vi.fn().mockResolvedValue({ id: 'tr1', language: 'fr' }),
+  getPostTranslation: vi.fn().mockResolvedValue({ id: 'tr1', language: 'en', content: 'hello' }),
+  getPostTranslations: vi.fn().mockResolvedValue([{ id: 'tr1', language: 'en' }]),
   discardChanges: vi.fn().mockResolvedValue(null),
   hasPublishedVersion: vi.fn().mockResolvedValue(false),
   rebuildDatabaseFromFiles: vi.fn().mockResolvedValue(undefined),
@@ -429,6 +432,21 @@ describe('invokeMainProcessPythonApi', () => {
     it('allows optional params to be omitted', async () => {
       await invokeMainProcessPythonApi('posts.isSlugAvailable', { slug: 'test' });
       expect(mockPostEngine.isSlugAvailable).toHaveBeenCalledWith('test', undefined);
+    });
+
+    it('routes posts.publishTranslation to postEngine.publishPostTranslation', async () => {
+      await invokeMainProcessPythonApi('posts.publishTranslation', { postId: 'p1', language: 'fr' });
+      expect(mockPostEngine.publishPostTranslation).toHaveBeenCalledWith('p1', 'fr');
+    });
+
+    it('routes posts.getTranslation to postEngine.getPostTranslation', async () => {
+      await invokeMainProcessPythonApi('posts.getTranslation', { postId: 'p1', language: 'en' });
+      expect(mockPostEngine.getPostTranslation).toHaveBeenCalledWith('p1', 'en');
+    });
+
+    it('routes posts.getTranslations to postEngine.getPostTranslations', async () => {
+      await invokeMainProcessPythonApi('posts.getTranslations', { postId: 'p1' });
+      expect(mockPostEngine.getPostTranslations).toHaveBeenCalledWith('p1');
     });
 
     it('handles null args gracefully (normalizes to empty record)', async () => {

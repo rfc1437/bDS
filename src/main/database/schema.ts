@@ -35,6 +35,7 @@ export const posts = sqliteTable('posts', {
   categories: text('categories'), // JSON array stored as text
   templateSlug: text('template_slug'), // Optional user template override for this post
   language: text('language'), // Optional per-post language override (ISO code, e.g. 'en', 'de')
+  doNotTranslate: integer('do_not_translate', { mode: 'boolean' }).notNull().default(false), // Exclude from translation
   // Legacy columns (kept for migration compatibility, no longer written)
   publishedTitle: text('published_title'),
   publishedContent: text('published_content'),
@@ -44,6 +45,24 @@ export const posts = sqliteTable('posts', {
 }, (table) => ({
   // Composite unique index: slug must be unique within each project
   projectSlugIdx: uniqueIndex('posts_project_slug_idx').on(table.projectId, table.slug),
+}));
+
+export const postTranslations = sqliteTable('post_translations', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  translationFor: text('translation_for').notNull(),
+  language: text('language').notNull(),
+  title: text('title').notNull(),
+  excerpt: text('excerpt'),
+  content: text('content'),
+  status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull().default('draft'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  publishedAt: integer('published_at', { mode: 'timestamp' }),
+  filePath: text('file_path').notNull().default(''),
+  checksum: text('checksum'),
+}, (table) => ({
+  translationLanguageIdx: uniqueIndex('post_translations_translation_language_idx').on(table.translationFor, table.language),
 }));
 
 // Media table - stores metadata for images and other media
@@ -66,7 +85,27 @@ export const media = sqliteTable('media', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   checksum: text('checksum'),
   tags: text('tags'), // JSON array stored as text
+  language: text('language'), // Optional per-media language override (ISO code, e.g. 'en', 'de')
 });
+
+// Media translations table - stores localized metadata for media items
+// The binary asset remains shared; only title, alt, and caption vary by language.
+export const mediaTranslations = sqliteTable('media_translations', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  translationFor: text('translation_for').notNull(),
+  language: text('language').notNull(),
+  title: text('title'),
+  alt: text('alt'),
+  caption: text('caption'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  translationLanguageIdx: uniqueIndex('media_translations_translation_language_idx').on(table.translationFor, table.language),
+}));
+
+export type MediaTranslation = typeof mediaTranslations.$inferSelect;
+export type NewMediaTranslation = typeof mediaTranslations.$inferInsert;
 
 // App settings - stores application configuration
 export const settings = sqliteTable('settings', {
@@ -294,6 +333,8 @@ export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
+export type PostTranslation = typeof postTranslations.$inferSelect;
+export type NewPostTranslation = typeof postTranslations.$inferInsert;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
 export type Setting = typeof settings.$inferSelect;

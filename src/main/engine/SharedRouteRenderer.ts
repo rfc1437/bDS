@@ -1,11 +1,13 @@
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import { getPicoStylesheetHref, sanitizePicoTheme } from '../shared/picoThemes';
+import { POST_LANGUAGE_FLAGS, type SupportedLanguage } from '../shared/i18n';
 import {
   buildTemplateMenuItems,
   clampMaxPostsPerPage,
   parseRoutePagination,
   resolvePageTitle,
+  type AlternateLinkEntry,
   type BacklinkEntry,
   type PostEngineContract,
   type CategoryRenderSettings,
@@ -32,7 +34,8 @@ export interface SharedRouteRenderOptions {
   requestTheme?: string | null;
   htmlThemeAttribute?: string;
   allowEmptyArchiveRender?: boolean;
-  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string };
+  preferredLanguage?: string;
+  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string };
 }
 
 export interface SharedRouteRenderServices<TCategoryMetadata> {
@@ -77,9 +80,13 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
     day: number,
     pagination?: { maxPostsPerPage: number; page?: number; excludeCategories?: string[] },
   ) => Promise<{ posts: PostData[]; totalPosts: number }>;
+  findPublishedPostBySlug: (
+    slug: string,
+    dateFilter?: { year: number; month: number },
+  ) => Promise<PostData | null>;
   findSinglePostBySlug: (
     slug: string,
-    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+    singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string },
     dateFilter?: { year: number; month: number; day?: number },
   ) => Promise<PostData | null>;
   getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
@@ -114,6 +121,48 @@ async function resolveBacklinks(
     .filter((entry): entry is BacklinkEntry => entry !== null);
 }
 
+function resolveAlternateLinks(
+  post: PostData,
+  rewriteContext: HtmlRewriteContext,
+): AlternateLinkEntry[] {
+  const variantPost = post as PostData & {
+    translationSourceSlug?: string;
+    translationCanonicalLanguage?: string;
+  };
+  const sourceSlug = typeof variantPost.translationSourceSlug === 'string' && variantPost.translationSourceSlug.trim().length > 0
+    ? variantPost.translationSourceSlug.trim()
+    : post.slug;
+  const canonicalLanguage = typeof variantPost.translationCanonicalLanguage === 'string' && variantPost.translationCanonicalLanguage.trim().length > 0
+    ? variantPost.translationCanonicalLanguage.trim()
+    : (post.language || '').trim();
+  const linkByLanguage = new Map<string, string>();
+  const currentLanguage = (post.language || canonicalLanguage).trim();
+  const currentHref = rewriteContext.canonicalPostPathBySlug.get(post.slug);
+  if (currentLanguage && currentHref) {
+    linkByLanguage.set(currentLanguage, currentHref);
+  }
+
+  const canonicalHref = rewriteContext.canonicalPostPathBySlug.get(sourceSlug);
+  if (canonicalLanguage && canonicalHref) {
+    linkByLanguage.set(canonicalLanguage, canonicalHref);
+  }
+
+  const languages = Array.from(new Set((Array.isArray(post.availableLanguages) ? post.availableLanguages : [])
+    .filter((language) => typeof language === 'string' && language.trim().length > 0)));
+  for (const language of languages) {
+    if (linkByLanguage.has(language)) {
+      continue;
+    }
+
+    const href = rewriteContext.canonicalPostPathBySlug.get(`${sourceSlug}.${language}`);
+    if (href) {
+      linkByLanguage.set(language, href);
+    }
+  }
+
+  return Array.from(linkByLanguage.entries()).map(([hreflang, href]) => ({ hreflang, href }));
+}
+
 async function resolveRouteWithSharedServices(
   pathname: string,
   maxPostsPerPage: number,
@@ -121,6 +170,9 @@ async function resolveRouteWithSharedServices(
   pageContext: {
     pageTitle: string;
     language: string;
+    blogLanguages: Array<{ code: string; flag: string; href_prefix: string; is_current: boolean }>;
+    currentLanguage: string;
+    languagePrefix: string;
     menuItems: ReturnType<typeof buildTemplateMenuItems>;
     picoStylesheetHref: string;
     htmlThemeAttribute?: string;
@@ -132,7 +184,7 @@ async function resolveRouteWithSharedServices(
   listExcludedCategories: string[],
   services: SharedRouteRenderServices<CategoryMetadata>,
   allowEmptyArchiveRender: boolean,
-  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string },
+  singlePostOptions?: { useDraftContent?: boolean; draftPostId?: string; lang?: string; preferredLanguage?: string },
 ): Promise<string | null> {
   const routePagination = parseRoutePagination(pathname);
   if (!routePagination) {
@@ -157,6 +209,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -177,6 +232,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -198,6 +256,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -211,12 +272,18 @@ async function resolveRouteWithSharedServices(
     const month = Number(daySlugMatch[2]);
     const day = Number(daySlugMatch[3]);
     const slug = daySlugMatch[4];
-    const post = await services.findSinglePostBySlug(slug, singlePostOptions, { year, month, day });
+    const post = await services.findSinglePostBySlug(slug, {
+      ...singlePostOptions,
+      preferredLanguage: singlePostOptions?.preferredLanguage ?? pageContext.language,
+    }, { year, month, day });
     if (!post) return null;
     const backlinks = await resolveBacklinks(post.id, rewriteContext, services.getLinkedBy);
     return services.pageRenderer.renderSinglePost(post, rewriteContext, {
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -224,6 +291,7 @@ async function resolveRouteWithSharedServices(
       tagSettings: tagTemplateSettings,
       categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
       backlinks,
+      alternate_links: resolveAlternateLinks(post, rewriteContext),
     }, services.postEngineForMacros);
   }
 
@@ -245,6 +313,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -267,6 +338,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -287,6 +361,9 @@ async function resolveRouteWithSharedServices(
       categorySettings,
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -297,13 +374,17 @@ async function resolveRouteWithSharedServices(
   const pageSlugMatch = pagedPathname.match(/^\/([^/]+)$/);
   if (pageSlugMatch) {
     const slug = pageSlugMatch[1];
-    const pages = await services.loadPublishedSnapshots({ status: 'published', categories: ['page'] }, { maxPostsPerPage });
-    const pagePost = pages.find((candidate) => candidate.slug === slug) || null;
-    if (!pagePost) return null;
+    const pagePost = await services.findPublishedPostBySlug(slug);
+    if (!pagePost || !(Array.isArray(pagePost.categories) && pagePost.categories.includes('page'))) {
+      return null;
+    }
     const backlinks = await resolveBacklinks(pagePost.id, rewriteContext, services.getLinkedBy);
     return services.pageRenderer.renderSinglePost(pagePost, rewriteContext, {
       page_title: pageContext.pageTitle,
       language: pageContext.language,
+      blog_languages: pageContext.blogLanguages,
+      current_language: pageContext.currentLanguage,
+      language_prefix: pageContext.languagePrefix,
       menu_items: pageContext.menuItems,
       pico_stylesheet_href: pageContext.picoStylesheetHref,
       html_theme_attribute: pageContext.htmlThemeAttribute,
@@ -311,6 +392,7 @@ async function resolveRouteWithSharedServices(
       tagSettings: tagTemplateSettings,
       categorySettings: categorySettings as Record<string, { postTemplateSlug?: string | null }>,
       backlinks,
+      alternate_links: resolveAlternateLinks(pagePost, rewriteContext),
     }, services.postEngineForMacros);
   }
 
@@ -343,7 +425,7 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const menuItems = buildTemplateMenuItems(menu, categoryMetadata as Record<string, { title?: string }>);
   const categorySettings = services.resolveCategorySettings(metadata ?? null);
   const listExcludedCategories = services.resolveListExcludedCategories(categorySettings);
-  const language = metadata?.mainLanguage?.trim() || 'en';
+  const language = options.preferredLanguage?.trim().toLowerCase() || metadata?.mainLanguage?.trim() || 'en';
   const pageTitle = resolvePageTitle(metadata ?? null, options.projectContext.projectName, options.projectContext.projectDescription);
   const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage ?? metadata?.maxPostsPerPage);
   const appliedTheme = sanitizePicoTheme(options.requestTheme)
@@ -354,9 +436,32 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
   const tagTemplateSettings = await services.resolveTagTemplateSettings?.(options.projectContext) ?? {};
   const normalizedPathname = decodeURIComponent(pathname.replace(/\/+$/, '') || '/');
 
+  const languagePrefix = htmlRewriteContext.languagePrefix ?? '';
+  const currentLanguage = languagePrefix
+    ? languagePrefix.replace(/^\//, '')
+    : language;
+  const mainLang = metadata?.mainLanguage?.trim().toLowerCase() || 'en';
+  const rawBlogLanguages: string[] = Array.isArray((metadata as { blogLanguages?: unknown })?.blogLanguages)
+    ? (metadata as { blogLanguages: string[] }).blogLanguages
+    : [];
+  const allBlogLanguages = rawBlogLanguages.length > 0
+    ? (rawBlogLanguages.includes(mainLang) ? rawBlogLanguages : [mainLang, ...rawBlogLanguages])
+    : [];
+  const blogLanguages = allBlogLanguages.length > 0
+    ? allBlogLanguages.map((lang) => ({
+        code: lang,
+        flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
+        href_prefix: lang === mainLang ? '' : `/${lang}`,
+        is_current: lang === currentLanguage,
+      }))
+    : [];
+
   return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {
     pageTitle,
     language,
+    blogLanguages,
+    currentLanguage,
+    languagePrefix,
     menuItems,
     picoStylesheetHref,
     htmlThemeAttribute: options.htmlThemeAttribute,

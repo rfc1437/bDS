@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, projects } from '../database/schema';
 import { sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
+import { SUPPORTED_RENDER_LANGUAGES, type SupportedLanguage } from '../shared/i18n';
 import {
   normalizeTaxonomyTerm,
   normalizeNonEmptyTaxonomyTerm,
@@ -29,6 +30,7 @@ export interface ProjectMetadata {
   categoryMetadata?: Record<string, CategoryMetadata>; // Per-category metadata for UI/rendering
   categorySettings?: Record<string, CategoryRenderSettings>; // Per-category list rendering preferences
   semanticSimilarityEnabled?: boolean; // Enable local ONNX embedding-based semantic similarity
+  blogLanguages?: string[]; // Languages the blog is rendered in (mainLanguage is always included)
 }
 
 export interface CategoryRenderSettings {
@@ -103,6 +105,19 @@ function sanitizeCategoryTitle(value: unknown, fallback: string): string {
 
 type RawCategoryMetadataInput = Record<string, CategoryMetadata | CategoryRenderSettings>;
 
+const supportedLanguageSet = new Set<string>(SUPPORTED_RENDER_LANGUAGES);
+
+function sanitizeBlogLanguages(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const filtered = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0 && supportedLanguageSet.has(item));
+  return filtered.length > 0 ? [...new Set(filtered)] : undefined;
+}
+
 function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
   const publicUrl = sanitizePublicUrl(metadata.publicUrl);
@@ -112,6 +127,7 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const pythonRuntimeMode = metadata.pythonRuntimeMode === 'main-thread' ? 'main-thread' : 'webworker';
   const picoTheme = sanitizePicoTheme(metadata.picoTheme);
   const categoryMetadata = normalizeCategoryMetadata(metadata.categoryMetadata ?? metadata.categorySettings);
+  const blogLanguages = sanitizeBlogLanguages(metadata.blogLanguages);
   return {
     ...metadata,
     publicUrl,
@@ -121,6 +137,7 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
     picoTheme,
     categoryMetadata,
     categorySettings: undefined,
+    blogLanguages,
   };
 }
 
@@ -349,6 +366,7 @@ export class MetaEngine extends EventEmitter {
         picoTheme: normalizedUpdates.picoTheme,
         categoryMetadata: normalizedUpdates.categoryMetadata,
         semanticSimilarityEnabled: normalizedUpdates.semanticSimilarityEnabled,
+        blogLanguages: normalizedUpdates.blogLanguages,
       });
     } else {
       this.projectMetadata = normalizeProjectMetadata({

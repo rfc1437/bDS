@@ -195,6 +195,13 @@ import json as _json
 import inspect as _inspect
 
 _macro_ctx = _json.loads(__bds_macro_context_json)
+_bds_translations = _macro_ctx.get('env', {}).get('translations', {})
+def T(key, **kwargs):
+    val = _bds_translations.get(key, key)
+    if kwargs:
+        for k, v in kwargs.items():
+            val = val.replace('{' + k + '}', str(v))
+    return val
 _macro_ep = __bds_macro_entrypoint
 _macro_fn = globals().get(_macro_ep)
 if _macro_fn is None or not callable(_macro_fn):

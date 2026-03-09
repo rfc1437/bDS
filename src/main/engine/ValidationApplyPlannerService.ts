@@ -17,6 +17,7 @@ export interface MissingPathPlan {
   requestedPageSlugs: Set<string>;
   requestRootRoutes: boolean;
   requiresFallbackSectionRender: boolean;
+  languagePlans: Map<string, MissingPathPlan>;
 }
 
 export interface TargetedValidationPlan {
@@ -58,35 +59,32 @@ function decodePathSegment(value: string): string {
   }
 }
 
-export function planMissingValidationPaths(missingPaths: string[]): MissingPathPlan {
-  const requestedCategories = new Set<string>();
-  const requestedTags = new Set<string>();
-  const requestedYears = new Set<number>();
-  const requestedYearMonths = new Set<string>();
-  const requestedYearMonthDays = new Set<string>();
-  const requestedPostRoutes: RequestedPostRoute[] = [];
-  const requestedPageSlugs = new Set<string>();
-  let requestRootRoutes = false;
-  let requiresFallbackSectionRender = false;
-
-  for (const missingPath of missingPaths) {
-    const normalizedPath = normalizeUrlPath(missingPath);
-
-    if (normalizedPath === '/' || /^\/page\/\d+$/.test(normalizedPath)) {
-      requestRootRoutes = true;
-      continue;
+function classifyPath(
+  normalizedPath: string,
+  requestedCategories: Set<string>,
+  requestedTags: Set<string>,
+  requestedYears: Set<number>,
+  requestedYearMonths: Set<string>,
+  requestedYearMonthDays: Set<string>,
+  requestedPostRoutes: RequestedPostRoute[],
+  requestedPageSlugs: Set<string>,
+  state: { requestRootRoutes: boolean; requiresFallbackSectionRender: boolean },
+): void {
+    if (normalizedPath === '/' || /^\/(page\/\d+)$/.test(normalizedPath)) {
+      state.requestRootRoutes = true;
+      return;
     }
 
     const categoryMatch = normalizedPath.match(/^\/category\/([^/]+)(?:\/page\/\d+)?$/);
     if (categoryMatch) {
       requestedCategories.add(decodePathSegment(categoryMatch[1]));
-      continue;
+      return;
     }
 
     const tagMatch = normalizedPath.match(/^\/tag\/([^/]+)(?:\/page\/\d+)?$/);
     if (tagMatch) {
       requestedTags.add(decodePathSegment(tagMatch[1]));
-      continue;
+      return;
     }
 
     const singleMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})\/([^/]+)$/);
@@ -97,48 +95,131 @@ export function planMissingValidationPaths(missingPaths: string[]): MissingPathP
         day: Number(singleMatch[3]),
         slug: decodePathSegment(singleMatch[4]),
       });
-      continue;
+      return;
     }
 
     const yearMatch = normalizedPath.match(/^\/(\d{4})(?:\/page\/\d+)?$/);
     if (yearMatch) {
       requestedYears.add(Number(yearMatch[1]));
-      continue;
+      return;
     }
 
     const monthMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})(?:\/page\/\d+)?$/);
     if (monthMatch) {
       requestedYearMonths.add(`${monthMatch[1]}/${monthMatch[2]}`);
-      continue;
+      return;
     }
 
     const dayMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})(?:\/page\/\d+)?$/);
     if (dayMatch) {
       requestedYearMonthDays.add(`${dayMatch[1]}/${dayMatch[2]}/${dayMatch[3]}`);
-      continue;
+      return;
     }
 
     const pageMatch = normalizedPath.match(/^\/([^/]+)$/);
     if (pageMatch) {
       requestedPageSlugs.add(decodePathSegment(pageMatch[1]));
+      return;
+    }
+
+    state.requiresFallbackSectionRender = true;
+}
+
+function createEmptyPlan(): {
+  requestedCategories: Set<string>;
+  requestedTags: Set<string>;
+  requestedYears: Set<number>;
+  requestedYearMonths: Set<string>;
+  requestedYearMonthDays: Set<string>;
+  requestedPostRoutes: RequestedPostRoute[];
+  requestedPageSlugs: Set<string>;
+  state: { requestRootRoutes: boolean; requiresFallbackSectionRender: boolean };
+} {
+  return {
+    requestedCategories: new Set<string>(),
+    requestedTags: new Set<string>(),
+    requestedYears: new Set<number>(),
+    requestedYearMonths: new Set<string>(),
+    requestedYearMonthDays: new Set<string>(),
+    requestedPostRoutes: [],
+    requestedPageSlugs: new Set<string>(),
+    state: { requestRootRoutes: false, requiresFallbackSectionRender: false },
+  };
+}
+
+function finalizePlan(plan: ReturnType<typeof createEmptyPlan>, languagePlans: Map<string, MissingPathPlan>): MissingPathPlan {
+  return {
+    requestedCategories: plan.requestedCategories,
+    requestedTags: plan.requestedTags,
+    requestedYears: plan.requestedYears,
+    requestedYearMonths: plan.requestedYearMonths,
+    requestedYearMonthDays: plan.requestedYearMonthDays,
+    requestedPostRoutes: plan.requestedPostRoutes,
+    requestedPageSlugs: plan.requestedPageSlugs,
+    requestRootRoutes: plan.state.requestRootRoutes,
+    requiresFallbackSectionRender: plan.state.requiresFallbackSectionRender,
+    languagePlans,
+  };
+}
+
+export function planMissingValidationPaths(missingPaths: string[], additionalLanguages?: string[]): MissingPathPlan {
+  const mainPlan = createEmptyPlan();
+  const langPlanMap = new Map<string, ReturnType<typeof createEmptyPlan>>();
+  const knownLanguages = new Set((additionalLanguages ?? []).map((l) => l.trim().toLowerCase()).filter((l) => l.length > 0));
+
+  for (const missingPath of missingPaths) {
+    const normalizedPath = normalizeUrlPath(missingPath);
+
+    // Check for language prefix
+    const langPrefixMatch = normalizedPath.match(/^\/([a-z]{2,3})(?:(\/.+))?$/);
+    if (langPrefixMatch && knownLanguages.has(langPrefixMatch[1])) {
+      const lang = langPrefixMatch[1];
+      const strippedPath = langPrefixMatch[2] ? normalizeUrlPath(langPrefixMatch[2]) : '/';
+
+      if (!langPlanMap.has(lang)) {
+        langPlanMap.set(lang, createEmptyPlan());
+      }
+      const lp = langPlanMap.get(lang)!;
+      classifyPath(
+        strippedPath,
+        lp.requestedCategories,
+        lp.requestedTags,
+        lp.requestedYears,
+        lp.requestedYearMonths,
+        lp.requestedYearMonthDays,
+        lp.requestedPostRoutes,
+        lp.requestedPageSlugs,
+        lp.state,
+      );
+      if (lp.state.requiresFallbackSectionRender) {
+        mainPlan.state.requiresFallbackSectionRender = true;
+        break;
+      }
       continue;
     }
 
-    requiresFallbackSectionRender = true;
-    break;
+    classifyPath(
+      normalizedPath,
+      mainPlan.requestedCategories,
+      mainPlan.requestedTags,
+      mainPlan.requestedYears,
+      mainPlan.requestedYearMonths,
+      mainPlan.requestedYearMonthDays,
+      mainPlan.requestedPostRoutes,
+      mainPlan.requestedPageSlugs,
+      mainPlan.state,
+    );
+    if (mainPlan.state.requiresFallbackSectionRender) {
+      break;
+    }
   }
 
-  return {
-    requestedCategories,
-    requestedTags,
-    requestedYears,
-    requestedYearMonths,
-    requestedYearMonthDays,
-    requestedPostRoutes,
-    requestedPageSlugs,
-    requestRootRoutes,
-    requiresFallbackSectionRender,
-  };
+  const languagePlans = new Map<string, MissingPathPlan>();
+  for (const [lang, lp] of langPlanMap) {
+    languagePlans.set(lang, finalizePlan(lp, new Map()));
+  }
+
+  return finalizePlan(mainPlan, languagePlans);
 }
 
 interface BuildTargetedValidationPlanParams {

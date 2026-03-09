@@ -1,0 +1,18 @@
+{% if blog_languages.size > 1 %}
+<nav class="language-switcher" aria-label="{{ 'render.languageSwitcher.ariaLabel' | i18n: language }}">
+  {% for lang in blog_languages %}
+    {% if lang.is_current %}
+      <span class="language-switcher-badge language-switcher-badge-current" aria-current="true" title="{{ lang.code }}">{{ lang.flag }}</span>
+    {% else %}
+      <a class="language-switcher-badge" href="{{ lang.href_prefix | default: '/' }}" data-lang-prefix="{{ lang.href_prefix }}" title="{{ lang.code }}">{{ lang.flag }}</a>
+    {% endif %}
+  {% endfor %}
+</nav>
+<script>
+(function(){
+  var links=document.querySelectorAll('.language-switcher-badge[data-lang-prefix]');
+  var path=location.pathname.replace(/^\/[a-z]{2}(?=\/|$)/,'') || '/';
+  links.forEach(function(a){a.href=(a.dataset.langPrefix||'')+path;});
+}());
+</script>
+{% endif %}

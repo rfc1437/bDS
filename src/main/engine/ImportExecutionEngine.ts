@@ -622,6 +622,7 @@ export class ImportExecutionEngine extends EventEmitter {
       publishedAt,
       tags: resolvedTags,
       categories: resolvedCategories,
+      availableLanguages: [],
     };
 
     // Write to filesystem first (for published posts)

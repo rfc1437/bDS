@@ -92,4 +92,49 @@ describe('ValidationApplyPlannerService', () => {
     expect(targeted.requestedPageSlugs.has('about')).toBe(true);
     expect(targeted.requestRootRoutes).toBe(true);
   });
+
+  it('classifies language-prefixed missing paths into per-language plans', () => {
+    const plan = planMissingValidationPaths(
+      [
+        '/fr/',
+        '/fr/page/2',
+        '/fr/category/news',
+        '/fr/tag/dev',
+        '/fr/2025/01/15/my-post',
+        '/fr/2025',
+        '/fr/2025/01',
+        '/fr/about',
+        '/de/',
+        '/de/category/tech',
+      ],
+      ['fr', 'de'],
+    );
+
+    expect(plan.requiresFallbackSectionRender).toBe(false);
+    expect(plan.requestRootRoutes).toBe(false);
+
+    const frPlan = plan.languagePlans.get('fr');
+    expect(frPlan).toBeDefined();
+    expect(frPlan!.requestRootRoutes).toBe(true);
+    expect(Array.from(frPlan!.requestedCategories)).toEqual(['news']);
+    expect(Array.from(frPlan!.requestedTags)).toEqual(['dev']);
+    expect(frPlan!.requestedPostRoutes).toEqual([
+      { year: 2025, month: 1, day: 15, slug: 'my-post' },
+    ]);
+    expect(Array.from(frPlan!.requestedYears)).toContain(2025);
+    expect(Array.from(frPlan!.requestedYearMonths)).toContain('2025/01');
+    expect(Array.from(frPlan!.requestedPageSlugs)).toEqual(['about']);
+
+    const dePlan = plan.languagePlans.get('de');
+    expect(dePlan).toBeDefined();
+    expect(dePlan!.requestRootRoutes).toBe(true);
+    expect(Array.from(dePlan!.requestedCategories)).toEqual(['tech']);
+  });
+
+  it('treats unknown prefixes as page slugs when no languages specified', () => {
+    const plan = planMissingValidationPaths(['/fr/category/news', '/fr/']);
+
+    expect(plan.languagePlans.size).toBe(0);
+    expect(plan.requiresFallbackSectionRender).toBe(true);
+  });
 });
