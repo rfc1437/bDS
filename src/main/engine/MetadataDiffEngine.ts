@@ -33,7 +33,7 @@ export interface FieldDifference<T = unknown> {
 /**
  * The fields that can have differences for posts
  */
-export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language' | 'translationFor';
+export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language' | 'translationFor' | 'doNotTranslate' | 'status' | 'templateSlug';
 
 /**
  * Metadata differences for a single post
@@ -454,6 +454,8 @@ export class MetadataDiffEngine extends EventEmitter {
       if (dbPost.excerpt) missingDiffs.excerpt = { dbValue: dbPost.excerpt, fileValue: null };
       if (dbPost.author) missingDiffs.author = { dbValue: dbPost.author, fileValue: null };
       if (dbPost.language) missingDiffs.language = { dbValue: dbPost.language, fileValue: null };
+      if (dbPost.doNotTranslate) missingDiffs.doNotTranslate = { dbValue: true, fileValue: null };
+      if (dbPost.templateSlug) missingDiffs.templateSlug = { dbValue: dbPost.templateSlug, fileValue: null };
       return {
         postId: dbPost.id,
         title: dbPost.title,
@@ -502,6 +504,24 @@ export class MetadataDiffEngine extends EventEmitter {
     // Compare language
     if ((dbPost.language || '') !== (fileData.language || '')) {
       differences.language = { dbValue: dbPost.language || '', fileValue: fileData.language || '' };
+    }
+
+    // Compare doNotTranslate
+    const dbDoNotTranslate = Boolean(dbPost.doNotTranslate);
+    const fileDoNotTranslate = Boolean(fileData.doNotTranslate);
+    if (dbDoNotTranslate !== fileDoNotTranslate) {
+      differences.doNotTranslate = { dbValue: dbDoNotTranslate, fileValue: fileDoNotTranslate };
+    }
+
+    // Compare status
+    const fileStatus = fileData.status || 'published';
+    if (dbPost.status !== fileStatus) {
+      differences.status = { dbValue: dbPost.status, fileValue: fileStatus };
+    }
+
+    // Compare templateSlug
+    if ((dbPost.templateSlug || '') !== (fileData.templateSlug || '')) {
+      differences.templateSlug = { dbValue: dbPost.templateSlug || '', fileValue: fileData.templateSlug || '' };
     }
 
     return {
@@ -728,6 +748,9 @@ export class MetadataDiffEngine extends EventEmitter {
       author: 'Author',
       language: 'Language',
       translationFor: 'Translation Source',
+      doNotTranslate: 'Do Not Translate',
+      status: 'Status',
+      templateSlug: 'Template',
     };
 
     for (const diff of diffs) {
@@ -831,6 +854,15 @@ export class MetadataDiffEngine extends EventEmitter {
           }
           if (!field || field === 'language') {
             updateData.language = fileData.language || null;
+          }
+          if (!field || field === 'doNotTranslate') {
+            updateData.doNotTranslate = fileData.doNotTranslate === true;
+          }
+          if (!field || field === 'status') {
+            updateData.status = fileData.status || 'published';
+          }
+          if (!field || field === 'templateSlug') {
+            updateData.templateSlug = fileData.templateSlug || null;
           }
 
           await db

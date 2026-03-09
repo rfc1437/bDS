@@ -123,11 +123,18 @@ vi.mock('gray-matter', () => ({
       const colonIndex = line.indexOf(':');
       if (colonIndex > 0) {
         const key = line.slice(0, colonIndex).trim();
-        let value = line.slice(colonIndex + 1).trim();
+        let value: any = line.slice(colonIndex + 1).trim();
         
         // Parse arrays
         if (value.startsWith('[') && value.endsWith(']')) {
           value = JSON.parse(value.replace(/'/g, '"'));
+        }
+        // Parse booleans
+        else if (value === 'true') {
+          value = true;
+        }
+        else if (value === 'false') {
+          value = false;
         }
         // Parse strings
         else if (value.startsWith('"') && value.endsWith('"')) {
@@ -1568,6 +1575,308 @@ Translated content`);
         totalTemplates: 7,
         publishedTemplates: 6,
       });
+    });
+  });
+
+  describe('comparePostMetadata – new fields', () => {
+    it('should detect doNotTranslate differences between DB and file', async () => {
+      const dbPost = {
+        id: 'post-dnt',
+        projectId: 'test-project',
+        title: 'DNT Post',
+        slug: 'dnt-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/dnt-post.md',
+        tags: '[]',
+        categories: '[]',
+        doNotTranslate: true,
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-dnt', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/dnt-post.md', `---
+id: post-dnt
+projectId: test-project
+title: "DNT Post"
+slug: dnt-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-dnt');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.doNotTranslate).toBeDefined();
+      expect(result?.differences.doNotTranslate?.dbValue).toBe(true);
+      expect(result?.differences.doNotTranslate?.fileValue).toBe(false);
+    });
+
+    it('should detect templateSlug differences between DB and file', async () => {
+      const dbPost = {
+        id: 'post-tpl',
+        projectId: 'test-project',
+        title: 'Template Post',
+        slug: 'template-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/template-post.md',
+        tags: '[]',
+        categories: '[]',
+        templateSlug: 'blog-default',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-tpl', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/template-post.md', `---
+id: post-tpl
+projectId: test-project
+title: "Template Post"
+slug: template-post
+status: published
+templateSlug: old-template
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-tpl');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.templateSlug).toBeDefined();
+      expect(result?.differences.templateSlug?.dbValue).toBe('blog-default');
+      expect(result?.differences.templateSlug?.fileValue).toBe('old-template');
+    });
+
+    it('should detect status differences between DB and file', async () => {
+      const dbPost = {
+        id: 'post-status',
+        projectId: 'test-project',
+        title: 'Archived Post',
+        slug: 'archived-post',
+        status: 'archived',
+        filePath: '/mock/userData/posts/2024/01/archived-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-status', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/archived-post.md', `---
+id: post-status
+projectId: test-project
+title: "Archived Post"
+slug: archived-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-status');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.status).toBeDefined();
+      expect(result?.differences.status?.dbValue).toBe('archived');
+      expect(result?.differences.status?.fileValue).toBe('published');
+    });
+
+    it('should show no differences when new fields match', async () => {
+      const dbPost = {
+        id: 'post-match',
+        projectId: 'test-project',
+        title: 'Matching Post',
+        slug: 'matching-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/matching-post.md',
+        tags: '[]',
+        categories: '[]',
+        doNotTranslate: false,
+        templateSlug: null,
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-match', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/matching-post.md', `---
+id: post-match
+projectId: test-project
+title: "Matching Post"
+slug: matching-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-match');
+      expect(result?.hasDifferences).toBe(false);
+    });
+  });
+
+  describe('syncFileToDb – new fields', () => {
+    it('should sync doNotTranslate from file to database', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+doNotTranslate: true
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      await engine.syncFileToDb(['post-1'], 'doNotTranslate');
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      expect(setCall.doNotTranslate).toBe(true);
+    });
+
+    it('should sync templateSlug from file to database', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+templateSlug: my-template
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      await engine.syncFileToDb(['post-1'], 'templateSlug');
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      expect(setCall.templateSlug).toBe('my-template');
+    });
+
+    it('should sync status from file to database', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: archived
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      await engine.syncFileToDb(['post-1'], 'status');
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      expect(setCall.status).toBe('archived');
+    });
+  });
+
+  describe('groupDifferencesByField – new fields', () => {
+    it('should include new fields in group labels', () => {
+      const diffs: PostMetadataDiff[] = [
+        {
+          postId: 'p1',
+          title: 'Post 1',
+          slug: 'post-1',
+          hasDifferences: true,
+          differences: {
+            doNotTranslate: { dbValue: true, fileValue: false },
+            templateSlug: { dbValue: 'tpl-a', fileValue: 'tpl-b' },
+            status: { dbValue: 'published', fileValue: 'archived' },
+          },
+        },
+      ];
+
+      const groups = engine.groupDifferencesByField(diffs);
+
+      const fieldNames = groups.map(g => g.field);
+      expect(fieldNames).toContain('doNotTranslate');
+      expect(fieldNames).toContain('templateSlug');
+      expect(fieldNames).toContain('status');
+
+      const dntGroup = groups.find(g => g.field === 'doNotTranslate');
+      expect(dntGroup?.label).toBe('Do Not Translate');
+      const tplGroup = groups.find(g => g.field === 'templateSlug');
+      expect(tplGroup?.label).toBe('Template');
+      const statusGroup = groups.find(g => g.field === 'status');
+      expect(statusGroup?.label).toBe('Status');
     });
   });
 });

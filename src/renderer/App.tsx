@@ -417,7 +417,9 @@ const App: React.FC = () => {
             window.electronAPI?.posts.rebuildFromFiles(),
             window.electronAPI?.media.rebuildFromFiles(),
             window.electronAPI?.scripts.rebuildFromFiles(),
+            window.electronAPI?.templates.rebuildFromFiles(),
           ]);
+          await window.electronAPI?.posts.rebuildLinks();
           await window.electronAPI?.media.regenerateMissingThumbnails();
         } catch (error) {
           console.error('Database rebuild failed:', error);

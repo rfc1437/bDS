@@ -27,6 +27,7 @@ export interface PostData {
   author?: string;
   language?: string;
   doNotTranslate?: boolean;
+  templateSlug?: string;
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
@@ -525,6 +526,7 @@ export class PostEngine extends EventEmitter {
     if (post.author) metadata.author = post.author;
     if (post.language) metadata.language = post.language;
     if (post.doNotTranslate) metadata.doNotTranslate = true;
+    if (post.templateSlug) metadata.templateSlug = post.templateSlug;
     if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
 
     // Use date-based directory structure (posts/YYYY/MM/)
@@ -809,7 +811,7 @@ export class PostEngine extends EventEmitter {
 
     const checksum = this.calculateChecksum(updated.content);
 
-    // All updates go to DB only — no file writes
+    // All updates go to DB only — no file writes (except templateSlug-only changes on published posts)
     const dbSet: Record<string, unknown> = {
       title: updated.title,
       slug: updated.slug,
@@ -824,6 +826,7 @@ export class PostEngine extends EventEmitter {
       categories: JSON.stringify(updated.categories),
       language: updated.language || null,
       doNotTranslate: updated.doNotTranslate === true,
+      templateSlug: updated.templateSlug || null,
     };
     if (newFilePath !== undefined) {
       dbSet.filePath = newFilePath;
@@ -831,6 +834,11 @@ export class PostEngine extends EventEmitter {
     await db.update(posts)
       .set(dbSet)
       .where(eq(posts.id, id));
+
+    // If templateSlug changed on a published post, rewrite the file to persist it
+    if (data.templateSlug !== undefined && existing.status === 'published') {
+      await this.syncPublishedPostFile(id);
+    }
 
     // Update FTS index
     await this.updateFTSIndex(updated);
@@ -923,6 +931,7 @@ export class PostEngine extends EventEmitter {
       author: dbPost.author || undefined,
       language: (dbPost as { language?: string | null }).language || undefined,
       doNotTranslate: (dbPost as { doNotTranslate?: boolean | null }).doNotTranslate === true,
+      templateSlug: (dbPost as { templateSlug?: string | null }).templateSlug || undefined,
       createdAt: dbPost.createdAt,
       updatedAt: dbPost.updatedAt,
       publishedAt: dbPost.publishedAt || undefined,
@@ -2843,9 +2852,11 @@ export class PostEngine extends EventEmitter {
               slug,
               excerpt: postData.excerpt,
               content: null,
-              status: 'published',
+              status: postData.status || 'published',
               author: postData.author,
               language: postData.language || null,
+              doNotTranslate: postData.doNotTranslate === true,
+              templateSlug: postData.templateSlug || null,
               createdAt: postData.createdAt,
               updatedAt: postData.updatedAt,
               publishedAt: postData.publishedAt || postData.updatedAt,

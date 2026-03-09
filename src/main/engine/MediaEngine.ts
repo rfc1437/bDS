@@ -1088,6 +1088,10 @@ export class MediaEngine extends EventEmitter {
         await db.delete(postMedia).where(eq(postMedia.projectId, this.currentProjectId));
         console.log(`Deleted post-media links for project ${this.currentProjectId}`);
 
+        // Delete all media translations for the current project
+        await db.delete(mediaTranslations).where(eq(mediaTranslations.projectId, this.currentProjectId));
+        console.log(`Deleted media translations for project ${this.currentProjectId}`);
+
         // Delete all FTS entries for the current project
         const client = getDatabase().getLocalClient();
         if (client) {
@@ -1101,7 +1105,14 @@ export class MediaEngine extends EventEmitter {
         onProgress(5, 'Scanning media directory...');
 
         // Recursively find all .meta files in the media directory tree
+        // Canonical sidecars: <file>.meta   Translation sidecars: <file>.<lang>.meta
         const metaFiles: string[] = [];
+        const translationMetaFiles: string[] = [];
+        const isTranslationSidecar = (name: string) => {
+          // e.g. photo.jpg.fr.meta  →  parts = ['photo', 'jpg', 'fr', 'meta']
+          const parts = name.split('.');
+          return parts.length >= 4 && parts[parts.length - 1] === 'meta' && parts[parts.length - 2].length <= 5;
+        };
         const scanDir = async (dir: string) => {
           try {
             const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -1110,7 +1121,11 @@ export class MediaEngine extends EventEmitter {
               if (entry.isDirectory()) {
                 await scanDir(fullPath);
               } else if (entry.name.endsWith('.meta')) {
-                metaFiles.push(fullPath);
+                if (isTranslationSidecar(entry.name)) {
+                  translationMetaFiles.push(fullPath);
+                } else {
+                  metaFiles.push(fullPath);
+                }
               }
             }
           } catch {
@@ -1156,6 +1171,8 @@ export class MediaEngine extends EventEmitter {
                 title: metadata.title,
                 alt: metadata.alt,
                 caption: metadata.caption,
+                author: metadata.author || null,
+                language: metadata.language || null,
                 filePath: mediaFilePath,
                 sidecarPath,
                 createdAt: new Date(metadata.createdAt),
@@ -1196,6 +1213,33 @@ export class MediaEngine extends EventEmitter {
           // Yield to event loop periodically so the window stays responsive
           if (i % 10 === 0) {
             await new Promise(resolve => setImmediate(resolve));
+          }
+        }
+
+        // Import media translation sidecars
+        if (translationMetaFiles.length > 0) {
+          onProgress(92, `Importing ${translationMetaFiles.length} media translation(s)...`);
+          for (const tPath of translationMetaFiles) {
+            const tData = await this.readTranslatedSidecarFile(tPath);
+            if (tData?.translationFor && tData?.language) {
+              // Find the canonical media by id
+              const canonical = await db.select({ id: media.id }).from(media)
+                .where(eq(media.id, tData.translationFor))
+                .get();
+              if (canonical) {
+                await db.insert(mediaTranslations).values({
+                  id: uuidv4(),
+                  projectId: this.currentProjectId,
+                  translationFor: tData.translationFor,
+                  language: tData.language,
+                  title: tData.title || null,
+                  alt: tData.alt || null,
+                  caption: tData.caption || null,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                });
+              }
+            }
           }
         }
 
