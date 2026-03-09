@@ -10,6 +10,7 @@ import { SecureKeyStore } from '../engine/SecureKeyStore';
 import { ProviderRegistry } from '../engine/ai/providers';
 import { ChatService } from '../engine/ai/chat';
 import { OneShotTasks } from '../engine/ai/tasks';
+import { retryWithBackoff } from '../engine/ai/retry';
 import { getDatabase } from '../database';
 import type { EngineBundle } from '../engine/EngineBundle';
 import type { BlogToolDeps } from '../engine/ai/blog-tools';
@@ -966,7 +967,7 @@ export function registerChatHandlers(): void {
 export async function autoTranslatePost(postId: string, targetLanguage: string, options?: { autoPublish?: boolean }): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
     await ensureInitialized();
-    return await getOneShotTasks().translatePost(postId, targetLanguage, options);
+    return await retryWithBackoff(() => getOneShotTasks().translatePost(postId, targetLanguage, options));
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
@@ -978,7 +979,7 @@ export async function autoTranslatePost(postId: string, targetLanguage: string, 
 export async function autoTranslateMediaMetadata(mediaId: string, targetLanguage: string): Promise<{ success: boolean; error?: string }> {
   try {
     await ensureInitialized();
-    return await getOneShotTasks().translateMediaMetadata(mediaId, targetLanguage);
+    return await retryWithBackoff(() => getOneShotTasks().translateMediaMetadata(mediaId, targetLanguage));
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
