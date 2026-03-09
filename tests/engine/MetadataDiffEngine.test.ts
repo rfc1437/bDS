@@ -579,6 +579,7 @@ Content here`);
           categories: '["cat1"]',
           createdAt: new Date('2024-01-15'),
           updatedAt: new Date('2024-01-15'),
+          publishedAt: new Date('2024-01-15'),
         },
         {
           id: 'post-2',
@@ -591,6 +592,7 @@ Content here`);
           categories: '["cat1"]',
           createdAt: new Date('2024-01-15'),
           updatedAt: new Date('2024-01-15'),
+          publishedAt: new Date('2024-01-15'),
         },
       ];
 
@@ -1877,6 +1879,295 @@ Content here`);
       expect(tplGroup?.label).toBe('Template');
       const statusGroup = groups.find(g => g.field === 'status');
       expect(statusGroup?.label).toBe('Status');
+    });
+
+    it('should include timestamp fields in group labels', () => {
+      const diffs: PostMetadataDiff[] = [
+        {
+          postId: 'p1',
+          title: 'Post 1',
+          slug: 'post-1',
+          hasDifferences: true,
+          differences: {
+            createdAt: { dbValue: '2024-01-15T00:00:00.000Z', fileValue: '2024-02-15T00:00:00.000Z' },
+            updatedAt: { dbValue: '2024-01-15T00:00:00.000Z', fileValue: '2024-03-01T00:00:00.000Z' },
+            publishedAt: { dbValue: '2024-01-15T00:00:00.000Z', fileValue: '' },
+          },
+        },
+      ];
+
+      const groups = engine.groupDifferencesByField(diffs);
+
+      const fieldNames = groups.map(g => g.field);
+      expect(fieldNames).toContain('createdAt');
+      expect(fieldNames).toContain('updatedAt');
+      expect(fieldNames).toContain('publishedAt');
+
+      expect(groups.find(g => g.field === 'createdAt')?.label).toBe('Created At');
+      expect(groups.find(g => g.field === 'updatedAt')?.label).toBe('Updated At');
+      expect(groups.find(g => g.field === 'publishedAt')?.label).toBe('Published At');
+    });
+  });
+
+  describe('comparePostMetadata – timestamp diffs', () => {
+    it('should detect createdAt differences between DB and file', async () => {
+      const dbPost = {
+        id: 'post-ts',
+        projectId: 'test-project',
+        title: 'Timestamp Post',
+        slug: 'timestamp-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/timestamp-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-15T00:00:00.000Z'),
+        publishedAt: new Date('2024-01-15T00:00:00.000Z'),
+      };
+      mockPosts.set('post-ts', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/timestamp-post.md', `---
+id: post-ts
+projectId: test-project
+title: "Timestamp Post"
+slug: timestamp-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-06-01T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-ts');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.createdAt).toBeDefined();
+      expect(result?.differences.createdAt?.fileValue).toContain('2024-06-01');
+    });
+
+    it('should detect publishedAt differences when DB has it but file does not', async () => {
+      const dbPost = {
+        id: 'post-pa',
+        projectId: 'test-project',
+        title: 'Published At Post',
+        slug: 'published-at-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-at-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-15T00:00:00.000Z'),
+        publishedAt: new Date('2024-01-15T00:00:00.000Z'),
+      };
+      mockPosts.set('post-pa', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-at-post.md', `---
+id: post-pa
+projectId: test-project
+title: "Published At Post"
+slug: published-at-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-pa');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.publishedAt).toBeDefined();
+    });
+
+    it('should show no timestamp differences when they match at second precision', async () => {
+      const dbPost = {
+        id: 'post-eq',
+        projectId: 'test-project',
+        title: 'Equal Post',
+        slug: 'equal-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/equal-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15T12:30:00.000Z'),
+        updatedAt: new Date('2024-01-15T12:30:00.000Z'),
+        publishedAt: new Date('2024-01-15T12:30:00.000Z'),
+      };
+      mockPosts.set('post-eq', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/equal-post.md', `---
+id: post-eq
+projectId: test-project
+title: "Equal Post"
+slug: equal-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-01-15T12:30:00.000Z
+updatedAt: 2024-01-15T12:30:00.000Z
+publishedAt: 2024-01-15T12:30:00.000Z
+---
+Content here`);
+
+      const result = await engine.comparePostMetadata('post-eq');
+      expect(result?.hasDifferences).toBe(false);
+      expect(result?.differences.createdAt).toBeUndefined();
+      expect(result?.differences.updatedAt).toBeUndefined();
+      expect(result?.differences.publishedAt).toBeUndefined();
+    });
+  });
+
+  describe('syncFileToDb – timestamp fields', () => {
+    it('should sync createdAt from file to database using file value', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+tags: []
+categories: []
+createdAt: 2024-06-01T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      await engine.syncFileToDb(['post-1'], 'createdAt');
+
+      expect(mockLocalDb.update).toHaveBeenCalled();
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      expect(setCall.createdAt).toBeInstanceOf(Date);
+      expect(setCall.createdAt.toISOString()).toContain('2024-06-01');
+      // Should NOT auto-set updatedAt when syncing a timestamp field
+      expect(setCall.updatedAt).toBeUndefined();
+    });
+
+    it('should auto-set updatedAt when syncing a non-timestamp field', async () => {
+      const dbPost = {
+        id: 'post-1',
+        projectId: 'test-project',
+        title: 'Published Post',
+        slug: 'published-post',
+        status: 'published',
+        filePath: '/mock/userData/posts/2024/01/published-post.md',
+        tags: '[]',
+        categories: '[]',
+        createdAt: new Date('2024-01-15'),
+        updatedAt: new Date('2024-01-15'),
+        publishedAt: new Date('2024-01-15'),
+      };
+      mockPosts.set('post-1', dbPost);
+
+      mockFileData.set('/mock/userData/posts/2024/01/published-post.md', `---
+id: post-1
+projectId: test-project
+title: "Published Post"
+slug: published-post
+status: published
+tags: ["new-tag"]
+categories: []
+createdAt: 2024-01-15T00:00:00.000Z
+updatedAt: 2024-01-15T00:00:00.000Z
+publishedAt: 2024-01-15T00:00:00.000Z
+---
+Content here`);
+
+      await engine.syncFileToDb(['post-1'], 'tags');
+
+      const updateResult = mockLocalDb.update.mock.results[0].value;
+      const setCall = updateResult.set.mock.calls[0][0];
+      // Should auto-set updatedAt for non-timestamp field syncs
+      expect(setCall.updatedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('compareMediaMetadata – language diff', () => {
+    let mediaEngine: MetadataDiffEngine;
+    const mockReadSidecarFile = vi.fn();
+
+    beforeEach(() => {
+      mediaEngine = new MetadataDiffEngine(
+        undefined,
+        { readSidecarFile: mockReadSidecarFile, getMedia: vi.fn(), updateMedia: vi.fn() } as any,
+      );
+      mediaEngine.setProjectContext('test-project');
+    });
+
+    it('should detect media language differences', async () => {
+      mockPostsGetQueue = [{
+        id: 'media-1',
+        projectId: 'test-project',
+        originalName: 'photo.jpg',
+        filePath: '/mock/media/photo.jpg',
+        title: 'Photo',
+        alt: 'A photo',
+        caption: '',
+        author: '',
+        language: 'en',
+        tags: '[]',
+      }];
+
+      mockReadSidecarFile.mockResolvedValueOnce({
+        id: 'media-1',
+        originalName: 'photo.jpg',
+        title: 'Photo',
+        alt: 'A photo',
+        caption: '',
+        author: '',
+        language: 'fr',
+        tags: [],
+      });
+
+      const result = await mediaEngine.compareMediaMetadata('media-1');
+      expect(result?.hasDifferences).toBe(true);
+      expect(result?.differences.language).toBeDefined();
+      expect(result?.differences.language?.dbValue).toBe('en');
+      expect(result?.differences.language?.fileValue).toBe('fr');
+    });
+
+    it('should not flag language when both are empty', async () => {
+      mockPostsGetQueue = [{
+        id: 'media-2',
+        projectId: 'test-project',
+        originalName: 'photo.jpg',
+        filePath: '/mock/media/photo.jpg',
+        title: 'Photo',
+        alt: '',
+        caption: '',
+        author: '',
+        language: null,
+        tags: '[]',
+      }];
+
+      mockReadSidecarFile.mockResolvedValueOnce({
+        title: 'Photo',
+        alt: '',
+        caption: '',
+        author: '',
+        language: '',
+        tags: [],
+      });
+
+      const result = await mediaEngine.compareMediaMetadata('media-2');
+      expect(result?.differences.language).toBeUndefined();
     });
   });
 });

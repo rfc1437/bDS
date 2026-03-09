@@ -33,7 +33,7 @@ export interface FieldDifference<T = unknown> {
 /**
  * The fields that can have differences for posts
  */
-export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language' | 'translationFor' | 'doNotTranslate' | 'status' | 'templateSlug';
+export type DiffField = 'tags' | 'categories' | 'title' | 'excerpt' | 'author' | 'language' | 'translationFor' | 'doNotTranslate' | 'status' | 'templateSlug' | 'createdAt' | 'updatedAt' | 'publishedAt';
 
 /**
  * Metadata differences for a single post
@@ -91,7 +91,7 @@ export interface ScanResult {
 
 // ── Media diff types ──
 
-export type MediaDiffField = 'title' | 'alt' | 'caption' | 'author' | 'tags';
+export type MediaDiffField = 'title' | 'alt' | 'caption' | 'author' | 'tags' | 'language';
 
 export interface MediaMetadataDiff {
   mediaId: string;
@@ -524,6 +524,17 @@ export class MetadataDiffEngine extends EventEmitter {
       differences.templateSlug = { dbValue: dbPost.templateSlug || '', fileValue: fileData.templateSlug || '' };
     }
 
+    // Compare timestamps (second precision — DB stores integer seconds)
+    if (!this.datesEqualSeconds(dbPost.createdAt, fileData.createdAt)) {
+      differences.createdAt = { dbValue: dbPost.createdAt?.toISOString() || '', fileValue: fileData.createdAt?.toISOString() || '' };
+    }
+    if (!this.datesEqualSeconds(dbPost.updatedAt, fileData.updatedAt)) {
+      differences.updatedAt = { dbValue: dbPost.updatedAt?.toISOString() || '', fileValue: fileData.updatedAt?.toISOString() || '' };
+    }
+    if (!this.datesEqualSeconds(dbPost.publishedAt, fileData.publishedAt)) {
+      differences.publishedAt = { dbValue: dbPost.publishedAt?.toISOString() || '', fileValue: fileData.publishedAt?.toISOString() || '' };
+    }
+
     return {
       postId: dbPost.id,
       title: dbPost.title,
@@ -542,6 +553,13 @@ export class MetadataDiffEngine extends EventEmitter {
     const sortedA = [...a].sort();
     const sortedB = [...b].sort();
     return sortedA.every((val, idx) => val === sortedB[idx]);
+  }
+
+  /** Compare two dates at second precision (SQLite stores integer seconds). */
+  private datesEqualSeconds(a: Date | null | undefined, b: Date | null | undefined): boolean {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return Math.floor(a.getTime() / 1000) === Math.floor(b.getTime() / 1000);
   }
 
   /**
@@ -751,6 +769,9 @@ export class MetadataDiffEngine extends EventEmitter {
       doNotTranslate: 'Do Not Translate',
       status: 'Status',
       templateSlug: 'Template',
+      createdAt: 'Created At',
+      updatedAt: 'Updated At',
+      publishedAt: 'Published At',
     };
 
     for (const diff of diffs) {
@@ -833,9 +854,7 @@ export class MetadataDiffEngine extends EventEmitter {
             return false;
           }
 
-          const updateData: Record<string, unknown> = {
-            updatedAt: new Date(),
-          };
+          const updateData: Record<string, unknown> = {};
 
           if (!field || field === 'tags') {
             updateData.tags = JSON.stringify(fileData.tags || []);
@@ -863,6 +882,19 @@ export class MetadataDiffEngine extends EventEmitter {
           }
           if (!field || field === 'templateSlug') {
             updateData.templateSlug = fileData.templateSlug || null;
+          }
+          if (!field || field === 'createdAt') {
+            updateData.createdAt = fileData.createdAt;
+          }
+          if (!field || field === 'updatedAt') {
+            updateData.updatedAt = fileData.updatedAt;
+          }
+          if (!field || field === 'publishedAt') {
+            updateData.publishedAt = fileData.publishedAt || null;
+          }
+          // For single-field syncs of non-timestamp fields, mark record as recently modified
+          if (field && field !== 'createdAt' && field !== 'updatedAt' && field !== 'publishedAt') {
+            updateData.updatedAt = new Date();
           }
 
           await db
@@ -941,6 +973,7 @@ export class MetadataDiffEngine extends EventEmitter {
       if (dbMedia.alt) missingDiffs.alt = { dbValue: dbMedia.alt, fileValue: null };
       if (dbMedia.caption) missingDiffs.caption = { dbValue: dbMedia.caption, fileValue: null };
       if (dbMedia.author) missingDiffs.author = { dbValue: dbMedia.author, fileValue: null };
+      if (dbMedia.language) missingDiffs.language = { dbValue: dbMedia.language, fileValue: null };
       const dbTags: string[] = JSON.parse(dbMedia.tags || '[]');
       if (dbTags.length > 0) missingDiffs.tags = { dbValue: dbTags, fileValue: null };
       return {
@@ -966,6 +999,9 @@ export class MetadataDiffEngine extends EventEmitter {
     }
     if ((dbMedia.author || '') !== (sidecar.author || '')) {
       differences.author = { dbValue: dbMedia.author || '', fileValue: sidecar.author || '' };
+    }
+    if ((dbMedia.language || '') !== (sidecar.language || '')) {
+      differences.language = { dbValue: dbMedia.language || '', fileValue: sidecar.language || '' };
     }
 
     const dbTags: string[] = JSON.parse(dbMedia.tags || '[]');
@@ -1032,6 +1068,7 @@ export class MetadataDiffEngine extends EventEmitter {
       caption: 'Caption',
       author: 'Author',
       tags: 'Tags',
+      language: 'Language',
     };
 
     for (const diff of diffs) {
@@ -1113,6 +1150,7 @@ export class MetadataDiffEngine extends EventEmitter {
         if (!field || field === 'alt') updateData.alt = sidecar.alt || null;
         if (!field || field === 'caption') updateData.caption = sidecar.caption || null;
         if (!field || field === 'author') updateData.author = sidecar.author || null;
+        if (!field || field === 'language') updateData.language = sidecar.language || null;
         if (!field || field === 'tags') updateData.tags = JSON.stringify(sidecar.tags || []);
 
         await db.update(media).set(updateData).where(eq(media.id, mediaId));
