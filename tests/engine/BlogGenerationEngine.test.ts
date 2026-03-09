@@ -77,7 +77,7 @@ vi.mock('../../src/main/engine/PostEngine', async (importOriginal) => {
     getPostTranslation: vi.fn(async () => null),
     getPostTranslations: vi.fn(async () => []),
     setProjectContext: vi.fn(),
-  };
+  } as Record<string, any>;
   return {
     ...actual,
     getPostEngine: vi.fn(() => mockPostEngine),
@@ -212,6 +212,7 @@ describe('BlogGenerationEngine', () => {
     options?: Partial<{
       maxPostsPerPage: number;
       language: string;
+      blogLanguages: string[];
       pageTitle: string;
       picoTheme: string;
       categorySettings: Record<string, { renderInLists: boolean; showTitle: boolean }>;
@@ -230,6 +231,7 @@ describe('BlogGenerationEngine', () => {
       baseUrl: 'https://example.com',
       maxPostsPerPage: options?.maxPostsPerPage,
       language: options?.language,
+      blogLanguages: options?.blogLanguages,
       pageTitle: options?.pageTitle,
       picoTheme: options?.picoTheme as any,
       categorySettings: options?.categorySettings,
@@ -2147,6 +2149,98 @@ describe('BlogGenerationEngine', () => {
     const result = await generate([]);
     expect(result.pagesGenerated).toBe(0);
     expect(result.postCount).toBe(0);
+  });
+
+  it('language subtree list pages show translated title and excerpt, not canonical language', async () => {
+    const posts = [
+      makePost({
+        id: 'de-post-1',
+        slug: 'german-post',
+        title: 'Deutscher Titel',
+        excerpt: 'Deutscher Auszug',
+        content: '# Deutscher Inhalt',
+        language: 'de',
+        categories: ['tech'],
+        createdAt: new Date('2025-06-10T10:00:00Z'),
+        availableLanguages: ['de', 'en'],
+      }),
+    ];
+
+    const translationMap = new Map<string, PostTranslationData[]>();
+    translationMap.set('de-post-1', [{
+      id: 'en-trans-1',
+      projectId: 'test',
+      translationFor: 'de-post-1',
+      language: 'en',
+      title: 'English Title',
+      excerpt: 'English excerpt',
+      content: '# English Content',
+      status: 'published',
+      createdAt: new Date('2025-06-10T10:00:00Z'),
+      updatedAt: new Date('2025-06-10T10:00:00Z'),
+      publishedAt: new Date('2025-06-10T10:00:00Z'),
+      filePath: '',
+    }]);
+    mockPostEngine.getPublishedTranslationsForRoutePosts = vi.fn().mockResolvedValue(translationMap);
+
+    await generate(posts, { language: 'de', blogLanguages: ['de', 'en'] });
+
+    // /en/ subtree list page should show English title and excerpt
+    const enIndex = await readFile(path.join(tempDir, 'html', 'en', 'index.html'), 'utf-8');
+    expect(enIndex).toContain('English Title');
+    expect(enIndex).toContain('English excerpt');
+    expect(enIndex).not.toContain('Deutscher Titel');
+    expect(enIndex).not.toContain('Deutscher Auszug');
+
+    // Main blog list page should still show German
+    const deIndex = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
+    expect(deIndex).toContain('Deutscher Titel');
+    expect(deIndex).not.toContain('English Title');
+  });
+
+  it('main blog list pages show translated content when canonical language differs from project language', async () => {
+    const posts = [
+      makePost({
+        id: 'en-post-1',
+        slug: 'english-post',
+        title: 'English Title',
+        excerpt: 'English excerpt',
+        content: '# English Content',
+        language: 'en',
+        categories: ['tech'],
+        createdAt: new Date('2025-06-10T10:00:00Z'),
+        availableLanguages: ['en', 'de'],
+      }),
+    ];
+
+    const translationMap = new Map<string, PostTranslationData[]>();
+    translationMap.set('en-post-1', [{
+      id: 'de-trans-1',
+      projectId: 'test',
+      translationFor: 'en-post-1',
+      language: 'de',
+      title: 'Deutscher Titel',
+      excerpt: 'Deutscher Auszug',
+      content: '# Deutscher Inhalt',
+      status: 'published',
+      createdAt: new Date('2025-06-10T10:00:00Z'),
+      updatedAt: new Date('2025-06-10T10:00:00Z'),
+      publishedAt: new Date('2025-06-10T10:00:00Z'),
+      filePath: '',
+    }]);
+    mockPostEngine.getPublishedTranslationsForRoutePosts = vi.fn().mockResolvedValue(translationMap);
+
+    await generate(posts, { language: 'de', blogLanguages: ['de', 'en'] });
+
+    // Main blog (de) should show German translated title, not English canonical
+    const deIndex = await readFile(path.join(tempDir, 'html', 'index.html'), 'utf-8');
+    expect(deIndex).toContain('Deutscher Titel');
+    expect(deIndex).not.toContain('English Title');
+
+    // /en/ subtree should show English canonical title
+    const enIndex = await readFile(path.join(tempDir, 'html', 'en', 'index.html'), 'utf-8');
+    expect(enIndex).toContain('English Title');
+    expect(enIndex).not.toContain('Deutscher Titel');
   });
 
   it('generates pagination links in list pages', async () => {

@@ -2558,6 +2558,25 @@ export class PostEngine extends EventEmitter {
   }
 
   /**
+   * Bulk-load file paths for all published posts in the current project.
+   * Returns a Map from postId → absolute filePath.
+   */
+  async getPublishedPostFilePaths(): Promise<Map<string, string>> {
+    const db = getDatabase().getLocal();
+    const dbPosts = await db.select().from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    const result = new Map<string, string>();
+    for (const dbPost of dbPosts) {
+      if (dbPost.filePath) {
+        result.set(dbPost.id, dbPost.filePath);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Rebuild the FTS index for all posts in the current project.
    * Call this after changing the search language or after migration.
    */

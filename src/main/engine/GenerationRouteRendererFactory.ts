@@ -50,11 +50,14 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     projectName: string;
     projectDescription?: string;
     language?: string;
+    blogLanguages?: string[];
     picoTheme?: PicoThemeName;
     categoryMetadata?: Record<string, CategoryMetadata>;
     categorySettings?: Record<string, CategoryRenderSettings>;
     menu?: MenuDocument;
   };
+  /** The project's actual main language (for href_prefix computation). Defaults to options.language. */
+  projectMainLanguage?: string;
   maxPostsPerPage: number;
   publishedPostsForLookup: PostData[];
   languagePrefix?: string;
@@ -81,10 +84,13 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     };
   };
 }): (pathname: string) => Promise<string | null> {
+  const projectMainLanguage = params.projectMainLanguage ?? params.options.language;
+
   const metadata: ProjectMetadata = {
     name: params.options.projectName,
     description: params.options.projectDescription,
-    mainLanguage: params.options.language,
+    mainLanguage: projectMainLanguage,
+    blogLanguages: params.options.blogLanguages,
     maxPostsPerPage: params.maxPostsPerPage,
     picoTheme: params.options.picoTheme,
     categoryMetadata: params.options.categoryMetadata,
@@ -286,6 +292,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     renderWithContext: async (pathname, context) => previewServer.renderRouteForContext(pathname, {
       ...context,
       htmlRewriteContext: await htmlRewriteContextPromise,
+      preferredLanguage: params.options.language,
     }),
     context: {
       projectContext,
