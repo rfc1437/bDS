@@ -1,6 +1,6 @@
 import path from 'node:path';
-import type { CategoryRenderSettings } from './PageRenderer';
-import { buildCanonicalPostPath } from './PageRenderer';
+import type { CategoryRenderSettings, HtmlRewriteContext } from './PageRenderer';
+import { buildCanonicalPostPath, mapToRecord } from './PageRenderer';
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
 import type { PostData } from './PostEngine';
@@ -8,6 +8,7 @@ import type { PicoThemeName } from '../shared/picoThemes';
 import type { CategoryMetadata } from './BlogGenerationEngine';
 import { PreviewServer } from './PreviewServer';
 import type { PostTranslationData } from './PostEngine';
+import { readPostTranslationFile } from './postTranslationFileUtils';
 
 interface RenderContext {
   projectContext: {
@@ -49,11 +50,14 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     projectName: string;
     projectDescription?: string;
     language?: string;
+    blogLanguages?: string[];
     picoTheme?: PicoThemeName;
     categoryMetadata?: Record<string, CategoryMetadata>;
     categorySettings?: Record<string, CategoryRenderSettings>;
     menu?: MenuDocument;
   };
+  /** The project's actual main language (for href_prefix computation). Defaults to options.language. */
+  projectMainLanguage?: string;
   maxPostsPerPage: number;
   publishedPostsForLookup: PostData[];
   languagePrefix?: string;
@@ -66,6 +70,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       getPostTranslation?: (postId: string, language: string) => Promise<PostTranslationData | null>;
       hasPublishedVersion: (postId: string) => Promise<boolean>;
       getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
+      getAllBacklinks?: () => Promise<Map<string, { id: string; title: string; slug: string }[]>>;
       setProjectContext: (projectId: string, dataDir?: string) => void;
     };
     mediaEngine: {
@@ -79,10 +84,13 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     };
   };
 }): (pathname: string) => Promise<string | null> {
+  const projectMainLanguage = params.projectMainLanguage ?? params.options.language;
+
   const metadata: ProjectMetadata = {
     name: params.options.projectName,
     description: params.options.projectDescription,
-    mainLanguage: params.options.language,
+    mainLanguage: projectMainLanguage,
+    blogLanguages: params.options.blogLanguages,
     maxPostsPerPage: params.maxPostsPerPage,
     picoTheme: params.options.picoTheme,
     categoryMetadata: params.options.categoryMetadata,
@@ -166,26 +174,53 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
         return null;
       }
 
+      let match: PostData | undefined;
       if (!dateFilter) {
-        return candidates[0] ?? null;
+        match = candidates[0];
+      } else {
+        match = candidates.find((candidate) => {
+          const createdAt = candidate.createdAt;
+          return createdAt.getFullYear() === dateFilter.year
+            && createdAt.getMonth() === dateFilter.month - 1;
+        });
       }
 
-      const match = candidates.find((candidate) => {
-        const createdAt = candidate.createdAt;
-        return createdAt.getFullYear() === dateFilter.year
-          && createdAt.getMonth() === dateFilter.month - 1;
-      });
+      if (!match) return null;
 
-      return match ?? null;
+      // Lazily resolve content from file when needed
+      if (!match.content) {
+        const variant = match as PostData & { translationFilePath?: string };
+        if (variant.translationFilePath) {
+          const fileData = await readPostTranslationFile(variant.translationFilePath);
+          if (fileData) {
+            match.content = fileData.content;
+          }
+        } else {
+          const full = await cachedPostEngine.getPublishedVersion(match.id);
+          if (full) {
+            match.content = full.content;
+          }
+        }
+      }
+
+      return match;
     },
     getPost: (postId: string) => params.engines.postEngine.getPost(postId),
     getPostTranslation: params.engines.postEngine.getPostTranslation
       ? (postId: string, language: string) => params.engines.postEngine.getPostTranslation!(postId, language)
       : undefined,
     hasPublishedVersion: (postId: string) => params.engines.postEngine.hasPublishedVersion(postId),
-    getLinkedBy: params.engines.postEngine.getLinkedBy
-      ? (postId: string) => params.engines.postEngine.getLinkedBy!(postId)
-      : undefined,
+    getLinkedBy: params.engines.postEngine.getAllBacklinks
+      ? (() => {
+          const backlinksCachePromise = params.engines.postEngine.getAllBacklinks!();
+          return async (postId: string) => {
+            const backlinksMap = await backlinksCachePromise;
+            return backlinksMap.get(postId) ?? [];
+          };
+        })()
+      : params.engines.postEngine.getLinkedBy
+        ? (postId: string) => params.engines.postEngine.getLinkedBy!(postId)
+        : undefined,
     setProjectContext: (projectId: string, dataDir?: string) => {
       params.engines.postEngine.setProjectContext(projectId, dataDir);
     },
@@ -224,7 +259,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     userTemplatesDir: path.join(params.options.dataDir, 'templates'),
   });
 
-  const htmlRewriteContextPromise: Promise<{ canonicalPostPathBySlug: Map<string, string>; canonicalMediaPathBySourcePath: Map<string, string>; languagePrefix?: string }> = (async () => {
+  const htmlRewriteContextPromise: Promise<HtmlRewriteContext> = (async () => {
     const canonicalPostPathBySlug = new Map<string, string>();
     for (const post of params.publishedPostsForLookup) {
       canonicalPostPathBySlug.set(post.slug, buildCanonicalPostPath(post));
@@ -247,6 +282,8 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     return {
       canonicalPostPathBySlug,
       canonicalMediaPathBySourcePath,
+      canonicalPostPathBySlugRecord: mapToRecord(canonicalPostPathBySlug),
+      canonicalMediaPathBySourcePathRecord: mapToRecord(canonicalMediaPathBySourcePath),
       languagePrefix: params.languagePrefix,
     };
   })();
@@ -255,6 +292,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
     renderWithContext: async (pathname, context) => previewServer.renderRouteForContext(pathname, {
       ...context,
       htmlRewriteContext: await htmlRewriteContextPromise,
+      preferredLanguage: params.options.language,
     }),
     context: {
       projectContext,

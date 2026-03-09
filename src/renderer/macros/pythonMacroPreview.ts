@@ -1,4 +1,4 @@
-import type { PythonMacroInfo, PythonMacroResolver, PythonMacroRendererFn } from './types';
+import type { PythonMacroResolver, PythonMacroRendererFn } from './types';
 import { setPythonMacroResolver } from './registry';
 import { getPythonRuntimeManager } from '../python/runtimeManagerInstance';
 

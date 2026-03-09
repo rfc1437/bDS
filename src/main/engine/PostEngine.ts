@@ -1077,6 +1077,40 @@ export class PostEngine extends EventEmitter {
     return result;
   }
 
+  async getPublishedTranslationsForRoutePosts(publishedPosts: PostData[]): Promise<Map<string, PostTranslationData[]>> {
+    const allRows = await this.getAllTranslationRows();
+    const postById = new Map(publishedPosts.map((p) => [p.id, p]));
+    const result = new Map<string, PostTranslationData[]>();
+
+    for (const row of allRows) {
+      if (row.status !== 'published') continue;
+      const sourcePost = postById.get(row.translationFor);
+      if (!sourcePost) continue;
+      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) continue;
+
+      const translationData: PostTranslationData = {
+        id: row.id,
+        projectId: row.projectId,
+        translationFor: row.translationFor,
+        language: row.language,
+        title: row.title,
+        excerpt: row.excerpt || undefined,
+        content: '',
+        status: row.status as 'draft' | 'published' | 'archived',
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        publishedAt: row.publishedAt || undefined,
+        filePath: row.filePath,
+      };
+
+      const arr = result.get(row.translationFor) || [];
+      arr.push(translationData);
+      result.set(row.translationFor, arr);
+    }
+
+    return result;
+  }
+
   async getPostTranslations(postId: string): Promise<PostTranslationData[]> {
     const sourcePost = await this.getPost(postId);
     const rows = this.filterCanonicalTranslationRows(sourcePost, await this.getTranslationRowsForPost(postId));
@@ -2504,6 +2538,44 @@ export class PostEngine extends EventEmitter {
     };
   }
 
+  async getPublishedVersionsBulk(ids: string[]): Promise<Map<string, PostData>> {
+    const result = new Map<string, PostData>();
+    if (ids.length === 0) return result;
+
+    const db = getDatabase().getLocal();
+    const idSet = new Set(ids);
+
+    const dbPosts = await db.select().from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    for (const dbPost of dbPosts) {
+      if (!idSet.has(dbPost.id) || !dbPost.filePath) continue;
+      result.set(dbPost.id, this.dbRowToPostData(dbPost, ''));
+    }
+
+    return result;
+  }
+
+  /**
+   * Bulk-load file paths for all published posts in the current project.
+   * Returns a Map from postId → absolute filePath.
+   */
+  async getPublishedPostFilePaths(): Promise<Map<string, string>> {
+    const db = getDatabase().getLocal();
+    const dbPosts = await db.select().from(posts)
+      .where(eq(posts.projectId, this.currentProjectId))
+      .all();
+
+    const result = new Map<string, string>();
+    for (const dbPost of dbPosts) {
+      if (dbPost.filePath) {
+        result.set(dbPost.id, dbPost.filePath);
+      }
+    }
+    return result;
+  }
+
   /**
    * Rebuild the FTS index for all posts in the current project.
    * Call this after changing the search language or after migration.
@@ -3087,6 +3159,48 @@ export class PostEngine extends EventEmitter {
       .where(eq(posts.projectId, this.currentProjectId));
     
     return sourcePosts.filter(p => sourceIds.includes(p.id));
+  }
+
+  /**
+   * Bulk-load all backlinks for all posts in the current project.
+   * Returns a Map from targetPostId → array of source posts that link to it.
+   * Much more efficient than calling getLinkedBy per post during generation.
+   */
+  async getAllBacklinks(): Promise<Map<string, { id: string; title: string; slug: string }[]>> {
+    const db = getDatabase().getLocal();
+
+    const allLinks = await db
+      .select({
+        sourcePostId: postLinks.sourcePostId,
+        targetPostId: postLinks.targetPostId,
+      })
+      .from(postLinks);
+
+    if (allLinks.length === 0) return new Map();
+
+    const sourceIds = new Set(allLinks.map(l => l.sourcePostId));
+    const allSourcePosts = await db
+      .select({ id: posts.id, title: posts.title, slug: posts.slug })
+      .from(posts)
+      .where(eq(posts.projectId, this.currentProjectId));
+
+    const sourcePostById = new Map(
+      allSourcePosts.filter(p => sourceIds.has(p.id)).map(p => [p.id, p]),
+    );
+
+    const result = new Map<string, { id: string; title: string; slug: string }[]>();
+    for (const link of allLinks) {
+      const sourcePost = sourcePostById.get(link.sourcePostId);
+      if (!sourcePost) continue;
+      const existing = result.get(link.targetPostId);
+      if (existing) {
+        existing.push(sourcePost);
+      } else {
+        result.set(link.targetPostId, [sourcePost]);
+      }
+    }
+
+    return result;
   }
 
   /**

@@ -346,7 +346,7 @@ export const WindowTitleBar: React.FC = () => {
     };
   }, [isMac, mnemonicByKey, showMnemonics]);
 
-  const handleMenuButtonClick = (event: React.MouseEvent<HTMLButtonElement>, label: string) => {
+  const handleMenuButtonClick = (_event: React.MouseEvent<HTMLButtonElement>, label: string) => {
     const left = getMenuLeft(label);
     if (left === null) {
       return;

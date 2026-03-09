@@ -155,7 +155,7 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
       headingSlugCounts.set(baseId, nextCount);
       const headingId = existingCount === 0 ? baseId : `${baseId}-${nextCount}`;
 
-      return React.createElement(`h${levelNumber}` as keyof JSX.IntrinsicElements, { id: headingId, key: getRendererKey('heading') }, children);
+      return React.createElement(`h${levelNumber}` as 'h1', { id: headingId, key: getRendererKey('heading') }, children);
     },
     link(href: string, text: ReactNode) {
       if (!href.startsWith('#')) {

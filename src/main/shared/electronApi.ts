@@ -1070,7 +1070,7 @@ export interface ElectronAPI {
     translatePost: (postId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: PostTranslationData; error?: string }>;
 
     // Media Language Detection
-    detectMediaLanguage: (mediaId: string) => Promise<{ success: boolean; language?: string; error?: string }>;
+    detectMediaLanguage: (title: string, alt: string, caption: string) => Promise<{ success: boolean; language?: string; error?: string }>;
 
     // Media Metadata Translation
     translateMediaMetadata: (mediaId: string, targetLanguage: string) => Promise<{ success: boolean; translation?: MediaTranslationData; error?: string }>;

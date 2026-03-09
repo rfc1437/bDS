@@ -1,4 +1,4 @@
-import { openEntityTab } from './tabPolicy';
+import { openEntityTab, type CanonicalTabSpec } from './tabPolicy';
 import type { SidebarView } from './sidebarViewRegistry';
 
 interface BlogmarkStateSnapshot {
@@ -14,7 +14,7 @@ interface BlogmarkHandlers {
   setActiveView: (view: SidebarView) => void;
   toggleSidebar: () => void;
   setSelectedPost: (id: string) => void;
-  openTab: (tab: { type: 'post'; id: string; isTransient: boolean }) => void;
+  openTab: (tab: CanonicalTabSpec) => void;
 }
 
 export function handleBlogmarkCreatedEvent(

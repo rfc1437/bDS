@@ -83,13 +83,13 @@ export function parseBlogmarkCreatedEventPayload(payload: unknown): BlogmarkCrea
 
   if (isRecord(payload.post)) {
     return {
-      post: payload.post as PostData,
+      post: payload.post as unknown as PostData,
       transform: parseTransformDebugInfo(payload.transform),
     };
   }
 
   return {
-    post: payload as PostData,
+    post: payload as unknown as PostData,
     transform: undefined,
   };
 }

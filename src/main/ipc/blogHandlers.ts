@@ -11,6 +11,7 @@ import type { EngineBundle } from '../engine/EngineBundle';
 import type { TranslationValidationReport } from '../shared/electronApi';
 import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
 import { v4 as uuidv4 } from 'uuid';
+import { getDatabase } from '../database/connection';
 
 type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
 
@@ -84,12 +85,16 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
       categoryMetadata: (metadata as any)?.categoryMetadata,
       categorySettings: (metadata as any)?.categorySettings,
       menu,
+      dbPath: getDatabase().getDbPath(),
     };
   };
 
   safeHandle('blog:generateSitemap', async () => {
     const blogGenerationEngine = bundle.blogGenerationEngine;
     const baseOptions = await resolveBlogGenerationBaseOptions();
+
+    // Pre-load post data ONCE before parallel tasks
+    const preloadedData = await blogGenerationEngine.preloadGenerationData(baseOptions);
 
     const taskTimestamp = Date.now();
     const taskGroupId = `site-render-${taskTimestamp}`;
@@ -109,6 +114,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
           return blogGenerationEngine.generate({
             ...baseOptions,
             sections: [section],
+            preloadedData,
           }, (progress, message) => onProgress(progress, message || ''));
         },
       });

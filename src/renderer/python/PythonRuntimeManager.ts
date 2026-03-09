@@ -1,7 +1,7 @@
 import { createPythonRuntimeWorker } from './createPythonRuntimeWorker';
 import type { PythonWorkerMessage, PythonWorkerRequest } from './runtimeProtocol';
 import type { PythonSyntaxError } from './runtimeProtocol';
-import { parseMacroContextV1, parseMacroResultV1, type MacroContextV1, type MacroResultV1 } from './abiV1';
+import { parseMacroContextV1, parseMacroResultV1, type MacroResultV1 } from './abiV1';
 import { invokePythonApiMethodV1 } from './pythonApiInvokerV1';
 import { showToast } from '../components/Toast';
 

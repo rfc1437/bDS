@@ -56,6 +56,10 @@ export interface HtmlRewriteContext {
   canonicalPostPathBySlug: Map<string, string>;
   canonicalMediaPathBySourcePath: Map<string, string>;
   languagePrefix?: string;
+  /** Pre-computed Record version of canonicalPostPathBySlug (avoids repeated Map→Object conversion) */
+  canonicalPostPathBySlugRecord?: Record<string, string>;
+  /** Pre-computed Record version of canonicalMediaPathBySourcePath */
+  canonicalMediaPathBySourcePathRecord?: Record<string, string>;
 }
 
 export interface TemplatePostEntry {
@@ -1445,8 +1449,8 @@ export class PageRenderer {
       has_next_page: hasNextPage,
       prev_page_href: prevPageHref,
       next_page_href: nextPageHref,
-      canonical_post_path_by_slug: mapToRecord(rewriteContext.canonicalPostPathBySlug),
-      canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
+      canonical_post_path_by_slug: rewriteContext.canonicalPostPathBySlugRecord ?? mapToRecord(rewriteContext.canonicalPostPathBySlug),
+      canonical_media_path_by_source_path: rewriteContext.canonicalMediaPathBySourcePathRecord ?? mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
       post_data_json_by_id: Object.fromEntries(
         posts.map((post) => [post.id, JSON.stringify(serializePostDataForMacro(post))]),
       ),
@@ -1572,7 +1576,7 @@ export class PageRenderer {
       ? Array.from(new Set(renderablePost.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)))
       : [];
 
-    const canonicalPostPathBySlug = mapToRecord(rewriteContext.canonicalPostPathBySlug);
+    const canonicalPostPathBySlug = rewriteContext.canonicalPostPathBySlugRecord ?? mapToRecord(rewriteContext.canonicalPostPathBySlug);
 
     // Per-post language overrides the page-level language when present
     const postLanguage = (renderablePost as { language?: string }).language;
@@ -1598,7 +1602,7 @@ export class PageRenderer {
       calendar_initial_year: renderablePost.createdAt.getFullYear(),
       calendar_initial_month: renderablePost.createdAt.getMonth() + 1,
       canonical_post_path_by_slug: canonicalPostPathBySlug,
-      canonical_media_path_by_source_path: mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
+      canonical_media_path_by_source_path: rewriteContext.canonicalMediaPathBySourcePathRecord ?? mapToRecord(rewriteContext.canonicalMediaPathBySourcePath),
       post_data_json_by_id: {
         [renderablePost.id]: JSON.stringify(serializePostDataForMacro(renderablePost)),
       },

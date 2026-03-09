@@ -109,7 +109,7 @@ export const CALENDAR_RUNTIME_JS = String.raw`(() => {
   }
 
   async function loadCalendarData() {
-    const response = await fetch(languagePrefix + '/calendar.json', { cache: 'no-store' });
+    const response = await fetch('/calendar.json', { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('calendar.json request failed');
     }

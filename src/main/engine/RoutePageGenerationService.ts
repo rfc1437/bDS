@@ -72,18 +72,22 @@ export async function generateSinglePostPages(params: BaseParams & {
   posts: PostData[];
 }): Promise<number> {
   let count = 0;
+  const BATCH_SIZE = 10;
 
-  for (const post of params.posts) {
-    const createdAt = resolvePostCreatedAt(post);
-    const year = createdAt.getFullYear();
-    const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-    const day = String(createdAt.getDate()).padStart(2, '0');
+  for (let i = 0; i < params.posts.length; i += BATCH_SIZE) {
+    const batch = params.posts.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(batch.map(async (post) => {
+      const createdAt = resolvePostCreatedAt(post);
+      const year = createdAt.getFullYear();
+      const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+      const day = String(createdAt.getDate()).padStart(2, '0');
 
-    const urlPath = `${year}/${month}/${day}/${post.slug}`;
-    const html = await renderRequiredRoute(params.renderRoute, `/${urlPath}`);
-    await params.writePage(params.projectId, urlPath, html);
-    count++;
-    params.onPageGenerated(`Generated /${urlPath}`);
+      const urlPath = `${year}/${month}/${day}/${post.slug}`;
+      const html = await renderRequiredRoute(params.renderRoute, `/${urlPath}`);
+      await params.writePage(params.projectId, urlPath, html);
+      params.onPageGenerated(`Generated /${urlPath}`);
+    }));
+    count += results.length;
   }
 
   return count;

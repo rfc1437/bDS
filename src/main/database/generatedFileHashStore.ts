@@ -66,3 +66,27 @@ export async function setGeneratedFileHash(projectId: string, relativePath: stri
     args: [projectId, relativePath, hash, Date.now()],
   });
 }
+
+/**
+ * Bulk-load all file hashes for a project in a single query.
+ * Returns a Map from relativePath → contentHash.
+ */
+export async function getAllGeneratedFileHashes(projectId: string): Promise<Map<string, string>> {
+  const client = getDatabase().getLocalClient();
+  if (!client) {
+    throw new Error('Database client not available');
+  }
+
+  const result = await client.execute({
+    sql: 'SELECT relative_path, content_hash FROM generated_file_hashes WHERE project_id = ?',
+    args: [projectId],
+  });
+
+  const map = new Map<string, string>();
+  for (const row of result.rows) {
+    if (typeof row.relative_path === 'string' && typeof row.content_hash === 'string') {
+      map.set(row.relative_path, row.content_hash);
+    }
+  }
+  return map;
+}

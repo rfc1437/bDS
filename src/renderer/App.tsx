@@ -39,7 +39,6 @@ const App: React.FC = () => {
     toggleSidebar,
     togglePanel,
     toggleAssistantSidebar,
-    setActiveView,
     setSelectedPost,
     setActiveProject,
     setPicoTheme,

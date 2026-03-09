@@ -183,4 +183,59 @@ describe('GenerationRouteRendererFactory', () => {
     expect(html).toContain('youtube.com/embed/dQw4w9WgXcQ?rel=0');
     expect(html).toContain('/assets/bds.css');
   });
+
+  it('produces correct language flags for subtree pages when projectMainLanguage is set', async () => {
+    const post = makePost({
+      id: 'lang-1',
+      slug: 'lang-post',
+      title: 'Sprachbeitrag',
+      content: 'Inhalt des Beitrags.',
+      createdAt: new Date('2025-01-15T10:00:00.000Z'),
+    });
+
+    const postEngine = {
+      getPostsFiltered: vi.fn(async () => [post]),
+      getPublishedVersion: vi.fn(async () => null),
+      findPublishedBySlug: vi.fn(async (slug: string) => (slug === post.slug ? post : null)),
+      getPost: vi.fn(async (id: string) => (id === post.id ? post : null)),
+      hasPublishedVersion: vi.fn(async () => false),
+      setProjectContext: vi.fn(),
+    };
+
+    const renderRoute = createPreviewBackedGenerationRouteRenderer({
+      options: {
+        projectId: 'project',
+        dataDir: '/tmp',
+        projectName: 'Project',
+        language: 'en',
+        blogLanguages: ['de', 'en'],
+      },
+      projectMainLanguage: 'de',
+      maxPostsPerPage: 50,
+      publishedPostsForLookup: [post],
+      languagePrefix: '/en',
+      engines: {
+        postEngine,
+        mediaEngine: {
+          getAllMedia: vi.fn(async () => []),
+          setProjectContext: vi.fn(),
+        },
+        postMediaEngine: {
+          setProjectContext: vi.fn(),
+          getLinkedMediaForPost: vi.fn(async () => []),
+          getLinkedMediaDataForPost: vi.fn(async () => []),
+        },
+      },
+    });
+
+    const html = await renderRoute('/');
+
+    // German flag should point to root (main language), not /de/
+    expect(html).toContain('🇩🇪');
+    expect(html).toContain('🇬🇧');
+    // Main language link should have no prefix (root)
+    expect(html).not.toContain('href="/de');
+    // English flag should show /en prefix
+    expect(html).toContain('/en');
+  });
 });

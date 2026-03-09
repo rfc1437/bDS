@@ -395,6 +395,32 @@ export class PostMediaEngine extends EventEmitter {
   }
 
   /**
+   * Get all post-media links for the current project, grouped by post ID.
+   * Used to pre-load data for generation workers.
+   */
+  async getAllPostMediaLinks(): Promise<Map<string, Array<{ mediaId: string; sortOrder: number }>>> {
+    const db = this.getDb();
+
+    const links = await db
+      .select()
+      .from(postMedia)
+      .where(eq(postMedia.projectId, this.currentProjectId))
+      .orderBy(asc(postMedia.sortOrder));
+
+    const result = new Map<string, Array<{ mediaId: string; sortOrder: number }>>();
+    for (const link of links) {
+      const existing = result.get(link.postId);
+      const entry = { mediaId: link.mediaId, sortOrder: link.sortOrder };
+      if (existing) {
+        existing.push(entry);
+      } else {
+        result.set(link.postId, [entry]);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Map database row to PostMediaLinkData
    */
   private mapToLinkData(row: PostMediaLink): PostMediaLinkData {
