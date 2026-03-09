@@ -2243,6 +2243,62 @@ describe('BlogGenerationEngine', () => {
     expect(enIndex).not.toContain('Deutscher Titel');
   });
 
+  it('language subtree RSS and Atom feeds use translated titles and content', async () => {
+    const posts = [
+      makePost({
+        id: 'de-post-1',
+        slug: 'german-post',
+        title: 'Deutscher Titel',
+        content: '# Deutscher Inhalt\n\nDeutscher Body Text',
+        language: 'de',
+        categories: ['tech'],
+        createdAt: new Date('2025-06-10T10:00:00Z'),
+        availableLanguages: ['de', 'en'],
+      }),
+    ];
+
+    const translationFilePath = path.join(tempDir, 'posts', 'german-post.en.md');
+    await mkdir(path.join(tempDir, 'posts'), { recursive: true });
+    await writeFile(translationFilePath, '---\ntranslationFor: de-post-1\nlanguage: en\ntitle: English Title\n---\n# English Content\n\nEnglish Body Text');
+
+    const translationMap = new Map<string, PostTranslationData[]>();
+    translationMap.set('de-post-1', [{
+      id: 'en-trans-1',
+      projectId: 'test',
+      translationFor: 'de-post-1',
+      language: 'en',
+      title: 'English Title',
+      content: '# English Content\n\nEnglish Body Text',
+      status: 'published',
+      createdAt: new Date('2025-06-10T10:00:00Z'),
+      updatedAt: new Date('2025-06-10T10:00:00Z'),
+      publishedAt: new Date('2025-06-10T10:00:00Z'),
+      filePath: translationFilePath,
+    }]);
+    mockPostEngine.getPublishedTranslationsForRoutePosts = vi.fn().mockResolvedValue(translationMap);
+
+    await generate(posts, { language: 'de', blogLanguages: ['de', 'en'] });
+
+    // /en/ RSS feed should use English translated title and content
+    const enRss = await readFile(path.join(tempDir, 'html', 'en', 'rss.xml'), 'utf-8');
+    expect(enRss).toContain('English Title');
+    expect(enRss).not.toContain('Deutscher Titel');
+    expect(enRss).toContain('English Body Text');
+    expect(enRss).not.toContain('Deutscher Body Text');
+
+    // /en/ Atom feed should use English translated title and content
+    const enAtom = await readFile(path.join(tempDir, 'html', 'en', 'atom.xml'), 'utf-8');
+    expect(enAtom).toContain('English Title');
+    expect(enAtom).not.toContain('Deutscher Titel');
+    expect(enAtom).toContain('English Body Text');
+    expect(enAtom).not.toContain('Deutscher Body Text');
+
+    // Root RSS should keep German canonical content
+    const deRss = await readFile(path.join(tempDir, 'html', 'rss.xml'), 'utf-8');
+    expect(deRss).toContain('Deutscher Titel');
+    expect(deRss).not.toContain('English Title');
+  });
+
   it('generates pagination links in list pages', async () => {
     const posts: PostData[] = [];
     for (let i = 0; i < 4; i++) {

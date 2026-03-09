@@ -291,6 +291,27 @@ export class BlogGenerationEngine {
   }
 
   /**
+   * Load content for posts that may be resolved translations.
+   * For resolved posts with translationFilePath, reads from the translation file.
+   * For canonical posts, falls back to getPublishedVersion.
+   */
+  private async resolveTranslatedPostContents(postList: PostData[]): Promise<void> {
+    const postsNeedingContent = postList.filter((p) => !p.content);
+    if (postsNeedingContent.length === 0) return;
+
+    await Promise.all(postsNeedingContent.map(async (post) => {
+      const variant = post as PostData & { translationFilePath?: string };
+      if (variant.translationFilePath) {
+        const fileData = await readPostTranslationFile(variant.translationFilePath);
+        if (fileData) post.content = fileData.content;
+      } else {
+        const full = await this.postEngine.getPublishedVersion(post.id);
+        if (full) post.content = full.content;
+      }
+    }));
+  }
+
+  /**
    * Create post copies with translated title/excerpt for a target language.
    * Posts already in the target language are returned as-is (same reference).
    * Translation variant posts (with translationSourceSlug) are never resolved.
@@ -870,10 +891,14 @@ export class BlogGenerationEngine {
         publishedListPosts: langListPosts,
       });
 
+      const resolvedLangPosts = this.resolvePostsForLanguage(langPosts, lang, translationsByPost, mainLanguage);
+      const resolvedLangListPosts = this.resolvePostsForLanguage(langListPosts, lang, translationsByPost, mainLanguage);
+      const resolvedLangPostIndex = buildGenerationPostIndex(resolvedLangListPosts);
+
       // Write per-language feeds in main thread (small I/O work)
       if (includeCore) {
-        const langFeedSlice = langListPosts.slice(0, maxPostsPerPage);
-        await this.resolvePostContents(langFeedSlice);
+        const langFeedSlice = resolvedLangListPosts.slice(0, maxPostsPerPage);
+        await this.resolveTranslatedPostContents(langFeedSlice);
 
         const langFeedResult = buildSitemapAndFeeds({
           baseUrl: `${options.baseUrl}/${lang}`,
@@ -881,7 +906,7 @@ export class BlogGenerationEngine {
           projectDescription: options.projectDescription,
           maxPostsPerPage,
           publishedPosts: langPosts,
-          publishedListPosts: langListPosts,
+          publishedListPosts: resolvedLangListPosts,
           postIndex: langPostIndex,
           includeFeeds: true,
           feedLanguage: lang,
@@ -894,9 +919,6 @@ export class BlogGenerationEngine {
         await writeFileIfHashChanged({ projectId: options.projectId, filePath: langAtomPath, relativePath: `${lang}/atom.xml`, content: langFeedResult.atomXml });
       }
 
-      const resolvedLangPosts = this.resolvePostsForLanguage(langPosts, lang, translationsByPost, mainLanguage);
-      const resolvedLangListPosts = this.resolvePostsForLanguage(langListPosts, lang, translationsByPost, mainLanguage);
-      const resolvedLangPostIndex = buildGenerationPostIndex(resolvedLangListPosts);
       const serializedLangPosts = resolvedLangPosts.map(serializePostData);
       const serializedLangListPosts = resolvedLangListPosts.map(serializePostData);
 
@@ -1184,9 +1206,13 @@ export class BlogGenerationEngine {
         publishedListPosts: langListPosts,
       });
 
+      const resolvedLangPosts = this.resolvePostsForLanguage(langPosts, lang, translationsByPost, mainLanguage);
+      const resolvedLangListPosts = this.resolvePostsForLanguage(langListPosts, lang, translationsByPost, mainLanguage);
+      const resolvedLangPostIndex = buildGenerationPostIndex(resolvedLangListPosts);
+
       if (includeCore) {
-        const langFeedSlice = langListPosts.slice(0, maxPostsPerPage);
-        await this.resolvePostContents(langFeedSlice);
+        const langFeedSlice = resolvedLangListPosts.slice(0, maxPostsPerPage);
+        await this.resolveTranslatedPostContents(langFeedSlice);
 
         const langFeedResult = buildSitemapAndFeeds({
           baseUrl: `${options.baseUrl}/${lang}`,
@@ -1194,7 +1220,7 @@ export class BlogGenerationEngine {
           projectDescription: options.projectDescription,
           maxPostsPerPage,
           publishedPosts: langPosts,
-          publishedListPosts: langListPosts,
+          publishedListPosts: resolvedLangListPosts,
           postIndex: langPostIndex,
           includeFeeds: true,
           feedLanguage: lang,
@@ -1206,10 +1232,6 @@ export class BlogGenerationEngine {
         await writeFileIfHashChanged({ projectId: options.projectId, filePath: langRssPath, relativePath: `${lang}/rss.xml`, content: langFeedResult.rssXml });
         await writeFileIfHashChanged({ projectId: options.projectId, filePath: langAtomPath, relativePath: `${lang}/atom.xml`, content: langFeedResult.atomXml });
       }
-
-      const resolvedLangPosts = this.resolvePostsForLanguage(langPosts, lang, translationsByPost, mainLanguage);
-      const resolvedLangListPosts = this.resolvePostsForLanguage(langListPosts, lang, translationsByPost, mainLanguage);
-      const resolvedLangPostIndex = buildGenerationPostIndex(resolvedLangListPosts);
 
       const langRenderRoute = createPreviewBackedGenerationRouteRenderer({
         options: { ...options, language: lang },
