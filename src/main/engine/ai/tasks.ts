@@ -506,7 +506,17 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
     }
 
-    const sourceLanguage = post.language || 'en';
+    // Auto-detect source language if not explicitly set on the post
+    let sourceLanguage = post.language || '';
+    if (!sourceLanguage) {
+      const detection = await this.detectPostLanguage(post.title, post.content || '');
+      if (detection.success && detection.language) {
+        sourceLanguage = detection.language;
+        await this.postEngine.updatePost(postId, { language: sourceLanguage });
+      } else {
+        sourceLanguage = 'en';
+      }
+    }
     const metadataSystemPrompt = `You translate blog post metadata. Return ONLY valid JSON with keys title and excerpt. Do not add commentary. Do not invent or add any text that is not present in the source. Only translate the given text. Translate from ${sourceLanguage} to ${targetLanguage}.`;
     const metadataUserPrompt = [
       `Title: ${post.title}`,
@@ -678,7 +688,21 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       return { success: false, error: 'API key not configured. Please set an API key in Settings.' };
     }
 
-    const sourceLanguage = mediaItem.language || 'en';
+    // Auto-detect source language if not explicitly set on the media
+    let sourceLanguage = mediaItem.language || '';
+    if (!sourceLanguage) {
+      const detection = await this.detectMediaLanguage(
+        mediaItem.title || '',
+        mediaItem.alt || '',
+        mediaItem.caption || '',
+      );
+      if (detection.success && detection.language) {
+        sourceLanguage = detection.language;
+        await this.mediaEngine.updateMedia(mediaId, { language: sourceLanguage });
+      } else {
+        sourceLanguage = 'en';
+      }
+    }
     const systemPrompt = `You translate image metadata. Return ONLY valid JSON with keys title, alt, caption. Do not add commentary. Translate from ${sourceLanguage} to ${targetLanguage}. If a field is null or empty, return it as null.`;
     const userPrompt = [
       `Title: ${mediaItem.title || ''}`,
