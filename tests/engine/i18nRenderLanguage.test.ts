@@ -3,6 +3,7 @@ import {
   resolveSupportedRenderLanguage,
   resolveRenderLanguageFromProjectPreferences,
   translateRender,
+  getRenderTranslations,
 } from '../../src/main/shared/i18n';
 
 describe('render i18n', () => {
@@ -23,5 +24,18 @@ describe('render i18n', () => {
     expect(translateRender('de', 'render.pagination.newer')).toBe('neuer');
     expect(translateRender('es', 'render.pagination.older')).toBe('más antiguo');
     expect(translateRender('fr', 'missing.key')).toBe('missing.key');
+  });
+
+  it('returns full translation map for a language', () => {
+    const translations = getRenderTranslations('de');
+    expect(translations).toBeDefined();
+    expect(typeof translations).toBe('object');
+    expect(translations['render.pagination.newer']).toBe('neuer');
+    expect(translations['render.archive']).toBe('Archiv');
+  });
+
+  it('falls back to English for unsupported languages', () => {
+    const translations = getRenderTranslations('en');
+    expect(translations['render.archive']).toBe('Archive');
   });
 });

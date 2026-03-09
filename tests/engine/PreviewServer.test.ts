@@ -810,7 +810,7 @@ describe('PreviewServer', () => {
     expect(response.status).toBe(200);
     const html = await response.text();
 
-    expect(html).toContain('<html lang="en" data-theme="dark">');
+    expect(html).toContain('<html lang="en" data-language-prefix="" data-theme="dark">');
     expect(html).toContain('href="/assets/pico.green.min.css"');
     expect(html).toContain('/assets/bds.css');
   });
@@ -1391,7 +1391,7 @@ describe('PreviewServer', () => {
     await server.start(0);
 
     const monthPageHtml = await (await fetch(`${server.getBaseUrl()}/2020/2/`)).text();
-    expect(monthPageHtml).toContain('<html lang="fr">');
+    expect(monthPageHtml).toContain('<html lang="fr"');
     expect(monthPageHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
     expect(monthPageHtml).not.toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
   });
@@ -1791,7 +1791,7 @@ describe('PreviewServer', () => {
     const response = await fetch(`${server.getBaseUrl()}/`);
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('<html lang="de">');
+    expect(html).toContain('<html lang="de"');
   });
 
   it('initializes metadata before reading language when supported by settings engine', async () => {
@@ -1822,7 +1822,7 @@ describe('PreviewServer', () => {
     const response = await fetch(`${server.getBaseUrl()}/`);
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('<html lang="fr">');
+    expect(html).toContain('<html lang="fr"');
   });
 
   it('falls back to active project name in page title when metadata is unavailable', async () => {

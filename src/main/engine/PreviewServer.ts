@@ -305,7 +305,7 @@ export class PreviewServer {
         htmlRewriteContext.languagePrefix = languagePrefix;
       }
 
-      if (pathname === '/calendar.json') {
+      if (pathname === '/calendar.json' || routePathname === '/calendar.json') {
         const calendarJson = await this.resolveCalendarJson(context.dataDir, listExcludedCategories);
         this.respondAsset(res, 'application/json; charset=utf-8', calendarJson);
         return;

@@ -106,6 +106,80 @@ describe('applyLanguagePrefixToHtml', () => {
   });
 });
 
+describe('data-language-prefix on html tag', () => {
+  it('renders data-language-prefix on post-list html tag', async () => {
+    const renderer = new PageRenderer(
+      { getAllMedia: async () => [] },
+      { getLinkedMediaDataForPost: async () => [], setProjectContext: () => {} },
+    );
+
+    const html = await renderer.renderPostList(
+      [makePost()],
+      {
+        canonicalPostPathBySlug: new Map(),
+        canonicalMediaPathBySourcePath: new Map(),
+      },
+      {
+        archiveGrouping: false,
+        routeKind: 'date',
+        basePathname: '/',
+        page_title: 'Blog',
+        language: 'fr',
+        language_prefix: '/fr',
+      },
+    );
+
+    expect(html).toContain('data-language-prefix="/fr"');
+  });
+
+  it('renders empty data-language-prefix for main language', async () => {
+    const renderer = new PageRenderer(
+      { getAllMedia: async () => [] },
+      { getLinkedMediaDataForPost: async () => [], setProjectContext: () => {} },
+    );
+
+    const html = await renderer.renderPostList(
+      [makePost()],
+      {
+        canonicalPostPathBySlug: new Map(),
+        canonicalMediaPathBySourcePath: new Map(),
+      },
+      {
+        archiveGrouping: false,
+        routeKind: 'date',
+        basePathname: '/',
+        page_title: 'Blog',
+        language: 'en',
+        language_prefix: '',
+      },
+    );
+
+    expect(html).toContain('data-language-prefix=""');
+  });
+
+  it('renders data-language-prefix on single-post html tag', async () => {
+    const renderer = new PageRenderer(
+      { getAllMedia: async () => [] },
+      { getLinkedMediaDataForPost: async () => [], setProjectContext: () => {} },
+    );
+
+    const html = await renderer.renderSinglePost(
+      makePost({ content: 'Hello world' }),
+      {
+        canonicalPostPathBySlug: new Map(),
+        canonicalMediaPathBySourcePath: new Map(),
+      },
+      {
+        page_title: 'Blog',
+        language: 'de',
+        language_prefix: '/de',
+      },
+    );
+
+    expect(html).toContain('data-language-prefix="/de"');
+  });
+});
+
 describe('Feed language filtering', () => {
   it('includes feedLanguage element in RSS when specified', () => {
     const posts = [makePost({ id: '1', slug: 'a', title: 'Post A' })];

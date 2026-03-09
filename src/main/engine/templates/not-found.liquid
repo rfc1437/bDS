@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ language }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
+<html lang="{{ language }}" data-language-prefix="{{ language_prefix }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
   {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href %}
   <body>
     <main>

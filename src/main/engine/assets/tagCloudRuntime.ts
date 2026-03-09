@@ -174,6 +174,7 @@ export const TAG_CLOUD_RUNTIME_JS = String.raw`(function () {
       return;
     }
 
+    const langPrefix = document.documentElement.getAttribute('data-language-prefix') || '';
     const rawWords = container.getAttribute('data-tag-cloud-words');
     const words = parseWords(rawWords);
     if (words.length === 0) {
@@ -246,7 +247,7 @@ export const TAG_CLOUD_RUNTIME_JS = String.raw`(function () {
 
           textNode.addEventListener('click', () => {
             if (word && typeof word.url === 'string' && word.url.length > 0) {
-              window.location.assign(word.url);
+              window.location.assign(langPrefix + word.url);
             }
           });
 

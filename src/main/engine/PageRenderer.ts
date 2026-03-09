@@ -10,7 +10,7 @@ import { PICO_THEME_NAMES } from '../shared/picoThemes';
 import { CODE_ENHANCEMENTS_RUNTIME_JS } from './assets/codeEnhancementsRuntime';
 import { CALENDAR_RUNTIME_JS } from './assets/calendarRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
-import { resolveRenderLanguageFromProjectPreferences, translateRender } from '../shared/i18n';
+import { resolveRenderLanguageFromProjectPreferences, translateRender, getRenderTranslations } from '../shared/i18n';
 
 function readLocalAsset(filename: string): string {
   const candidates = [
@@ -914,6 +914,7 @@ export async function replaceAllMacrosAsync(
   renderLanguage: string,
   pythonMacroRenderer?: PythonMacroRendererContract | null,
   postDataJson?: string | null,
+  languagePrefix?: string,
 ): Promise<string> {
   const macroRegex = /\[\[(\w+)(?:\s+([^\]]+))?\]\]/g;
   const matches: Array<{ fullMatch: string; name: string; rawParams: string | undefined; start: number; end: number }> = [];
@@ -966,12 +967,15 @@ export async function replaceAllMacrosAsync(
     const pythonScript = scriptsBySlug.get(normalizeMacroName(m.name));
     if (pythonScript && pythonMacroRenderer) {
       try {
+        const resolvedLang = resolveRenderLanguageFromProjectPreferences(renderLanguage);
         const context = {
           env: {
             isPreview: false,
             mainLanguage: renderLanguage,
+            languagePrefix: languagePrefix ?? '',
             hook: m.name,
             source: { kind: 'macro', id: pythonScript.id },
+            translations: getRenderTranslations(resolvedLang),
           },
           params: params,
         };
@@ -1196,10 +1200,11 @@ export class PageRenderer {
       return translateRender(resolved, key);
     });
 
-    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, postDataJsonByIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown) => {
+    this.liquid.registerFilter('markdown', async (value: unknown, postIdArg: unknown, postDataJsonByIdArg: unknown, canonicalPostsArg: unknown, canonicalMediaArg: unknown, renderLanguageArg: unknown, languagePrefixArg: unknown) => {
       const content = typeof value === 'string' ? value : '';
       const postId = typeof postIdArg === 'string' ? postIdArg : '';
       const renderLanguage = typeof renderLanguageArg === 'string' ? renderLanguageArg : 'en';
+      const langPrefix = typeof languagePrefixArg === 'string' ? languagePrefixArg : '';
       const postDataJsonById = (postDataJsonByIdArg && typeof postDataJsonByIdArg === 'object' && !Array.isArray(postDataJsonByIdArg))
         ? postDataJsonByIdArg as Record<string, string>
         : {};
@@ -1226,7 +1231,7 @@ export class PageRenderer {
         : null;
 
       const withMacros = await replaceAllMacrosAsync(
-        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer, postDataJson,
+        content, postId, mediaItems, linkedMediaIds, tagUsage, renderLanguage, this.pythonMacroRenderer, postDataJson, langPrefix,
       );
 
       const markdownHtml = await marked.parse(withMacros, { async: true, gfm: true, breaks: false });

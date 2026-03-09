@@ -61,6 +61,10 @@ export function resolveUiLanguageFromSystemLocale(systemLocale: string | undefin
   return normalizeLanguage(systemLocale);
 }
 
+export function getRenderTranslations(language: SupportedLanguage): Record<string, string> {
+  return catalog[language] ?? catalog.en;
+}
+
 export function translateRender(language: SupportedLanguage, key: string): string {
   return catalog[language]?.[key] ?? key;
 }

@@ -689,7 +689,7 @@ describe('BlogGenerationEngine', () => {
     const monthArchivePath = path.join(tempDir, 'html', '2020', '02', 'index.html');
     const monthHtml = await readFile(monthArchivePath, 'utf-8');
 
-    expect(monthHtml).toContain('<html lang="fr">');
+    expect(monthHtml).toContain('<html lang="fr"');
     expect(monthHtml).toContain('<h1 class="archive-heading">Archives février 2020</h1>');
     expect(monthHtml).not.toContain('<h1 class="archive-heading">Archiv Februar 2020</h1>');
   });

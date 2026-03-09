@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ language }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
+<html lang="{{ language }}" data-language-prefix="{{ language_prefix }}"{% if html_theme_attribute %} {{ html_theme_attribute }}{% endif %}>
   {% render 'partials/head', page_title: page_title, pico_stylesheet_href: pico_stylesheet_href, language_prefix: language_prefix %}
   <body>
     <main>
@@ -45,7 +45,7 @@
                       {% endif %}
                       <h2 class="post-title"><a href="{{ canonical_post_href }}">{{ post.title }}</a></h2>
                     {% endif %}
-                    {{ post.content | markdown: post.id, post_data_json_by_id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}
+                    {{ post.content | markdown: post.id, post_data_json_by_id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language, language_prefix }}
                   </div>
                 {% endfor %}
               </div>
@@ -60,7 +60,7 @@
                   {% endif %}
                   <h2 class="post-title"><a href="{{ canonical_post_href }}">{{ post.title }}</a></h2>
                 {% endif %}
-                {{ post.content | markdown: post.id, post_data_json_by_id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language }}
+                {{ post.content | markdown: post.id, post_data_json_by_id, canonical_post_path_by_slug, canonical_media_path_by_source_path, language, language_prefix }}
               </div>
             {% endfor %}
           {% endif %}

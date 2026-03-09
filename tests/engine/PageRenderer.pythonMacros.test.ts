@@ -258,6 +258,73 @@ describe('replaceAllMacrosAsync', () => {
     expect(call.cacheKey).toBe('ctx-script:2');
   });
 
+  it('passes languagePrefix and translations in Python macro context', async () => {
+    const mockRenderer: PythonMacroRendererContract = {
+      getEnabledMacroScripts: vi.fn().mockResolvedValue([
+        {
+          id: 'lang-script',
+          slug: 'lang_test',
+          entrypoint: 'render',
+          content: 'def render(ctx, post): return {"html": "ok"}',
+          version: 1,
+        },
+      ] satisfies PythonMacroScript[]),
+      renderMacro: vi.fn().mockResolvedValue({ html: 'ok' }),
+    };
+
+    await replaceAllMacrosAsync(
+      '[[lang_test]]',
+      'post-1',
+      [],
+      null,
+      [],
+      'fr',
+      mockRenderer,
+      null,
+      '/fr',
+    );
+
+    const call = (mockRenderer.renderMacro as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const parsedContext = JSON.parse(call.contextJson);
+
+    expect(parsedContext.env.languagePrefix).toBe('/fr');
+    expect(parsedContext.env.mainLanguage).toBe('fr');
+    expect(parsedContext.env.translations).toBeDefined();
+    expect(typeof parsedContext.env.translations).toBe('object');
+    expect(parsedContext.env.translations['render.archive']).toBe('Archives');
+  });
+
+  it('passes empty languagePrefix when not provided', async () => {
+    const mockRenderer: PythonMacroRendererContract = {
+      getEnabledMacroScripts: vi.fn().mockResolvedValue([
+        {
+          id: 'no-prefix-script',
+          slug: 'no_prefix',
+          entrypoint: 'render',
+          content: 'def render(ctx, post): return {"html": "ok"}',
+          version: 1,
+        },
+      ] satisfies PythonMacroScript[]),
+      renderMacro: vi.fn().mockResolvedValue({ html: 'ok' }),
+    };
+
+    await replaceAllMacrosAsync(
+      '[[no_prefix]]',
+      'post-1',
+      [],
+      null,
+      [],
+      'en',
+      mockRenderer,
+    );
+
+    const call = (mockRenderer.renderMacro as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const parsedContext = JSON.parse(call.contextJson);
+
+    expect(parsedContext.env.languagePrefix).toBe('');
+    expect(parsedContext.env.translations).toBeDefined();
+  });
+
   it('returns unchanged text when there are no macros', async () => {
     const content = 'Just plain text with no macros';
     const result = await replaceAllMacrosAsync(content, '', [], null, [], 'en', null);
