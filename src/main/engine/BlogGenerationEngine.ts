@@ -783,11 +783,101 @@ export class BlogGenerationEngine {
     const htmlDir = path.join(options.dataDir, 'html');
     await fs.mkdir(htmlDir, { recursive: true });
     const sitemapPath = path.join(htmlDir, 'sitemap.xml');
+
+    // --- Build per-language expected paths ---
+    const mainLanguage = (options.language ?? 'en').trim().toLowerCase();
+    const additionalLanguages = (options.blogLanguages ?? [])
+      .map((lang) => lang.trim().toLowerCase())
+      .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+
+    let sitemapToWrite = sitemapXml;
+    const additionalExpectedPaths: string[] = [];
+    const additionalPostTimestampChecks: Array<{
+      postUrlPath: string;
+      postFilePath: string;
+      generatedUpdatedAtMs?: number;
+    }> = [];
+
+    if (additionalLanguages.length > 0) {
+      const langPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+      const langListPosts = publishedListPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+
+      for (const lang of additionalLanguages) {
+        const langPostIndex = buildGenerationPostIndex(langListPosts);
+        const langSitemapResult = buildSitemapAndFeeds({
+          baseUrl: `${options.baseUrl}/${lang}`,
+          projectName: options.projectName,
+          projectDescription: options.projectDescription,
+          maxPostsPerPage,
+          publishedPosts: langPosts,
+          publishedListPosts: langListPosts,
+          postIndex: langPostIndex,
+          includeFeeds: false,
+        });
+
+        // Extract expected paths from the per-language sitemap, stripping base URL
+        const langLocMatches = langSitemapResult.sitemapXml.matchAll(/<loc>(.*?)<\/loc>/g);
+        for (const match of langLocMatches) {
+          const loc = match[1]?.trim();
+          if (!loc) continue;
+          try {
+            const locUrl = new URL(loc);
+            const base = new URL(options.baseUrl);
+            let locPath = locUrl.pathname.replace(/\/+$/, '');
+            const basePath = base.pathname.replace(/\/+$/, '');
+            if (basePath && locPath.startsWith(basePath)) {
+              locPath = locPath.slice(basePath.length);
+            }
+            additionalExpectedPaths.push(locPath || '/');
+          } catch {
+            additionalExpectedPaths.push(loc);
+          }
+        }
+
+        // Build per-language post timestamp checks
+        for (const post of langPosts) {
+          const createdAt = resolvePostCreatedAt(post);
+          const year = String(createdAt.getFullYear());
+          const month = String(createdAt.getMonth() + 1).padStart(2, '0');
+          const postFilePath = path.join(options.dataDir, 'posts', year, month, `${post.slug}.md`);
+          const postUrlPath = `/${lang}${buildCanonicalPostPath(post)}`;
+          const relativePath = `${postUrlPath.replace(/^\//, '')}/index.html`;
+          const generatedRecord = await getGeneratedFileHashRecord(options.projectId, relativePath);
+
+          additionalPostTimestampChecks.push({
+            postUrlPath,
+            postFilePath,
+            generatedUpdatedAtMs: generatedRecord?.updatedAt,
+          });
+        }
+      }
+
+      // Write multi-language sitemap
+      const allLanguages = [mainLanguage, ...additionalLanguages];
+      const langFilteredPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+      const doNotTranslateIds = new Set(
+        publishedPosts
+          .filter((p) => (p as PostData & { doNotTranslate?: boolean }).doNotTranslate)
+          .map((p) => p.id),
+      );
+
+      sitemapToWrite = buildMultiLanguageSitemap({
+        baseUrl: options.baseUrl,
+        mainLanguage,
+        allLanguages,
+        translatablePosts: langFilteredPosts,
+        doNotTranslatePosts: publishedPosts.filter((p) => doNotTranslateIds.has(p.id)),
+        publishedListPosts,
+        maxPostsPerPage,
+        postIndex: generationPostIndex,
+      });
+    }
+
     const sitemapChanged = await writeFileIfHashChanged({
       projectId: options.projectId,
       filePath: sitemapPath,
       relativePath: 'sitemap.xml',
-      content: sitemapXml,
+      content: sitemapToWrite,
     });
 
     onProgress(50, 'Comparing sitemap to html pages...');
@@ -813,7 +903,8 @@ export class BlogGenerationEngine {
       sitemapXml,
       baseUrl: options.baseUrl,
       htmlDir,
-      postTimestampChecks,
+      postTimestampChecks: [...postTimestampChecks, ...additionalPostTimestampChecks],
+      additionalExpectedPaths,
     });
 
     onProgress(
@@ -846,7 +937,12 @@ export class BlogGenerationEngine {
 
     onProgress(10, 'Planning validation apply steps...');
 
-    const missingPathPlan = planMissingValidationPaths(rerenderPaths);
+    const mainLanguage = (options.language ?? 'en').trim().toLowerCase();
+    const additionalLanguages = (options.blogLanguages ?? [])
+      .map((lang) => lang.trim().toLowerCase())
+      .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+
+    const missingPathPlan = planMissingValidationPaths(rerenderPaths, additionalLanguages);
 
     onProgress(20, 'Deleting extra URLs...');
 
@@ -1052,6 +1148,136 @@ export class BlogGenerationEngine {
           postsByYearMonth: generationPostIndex.postsByYearMonth,
           postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
         });
+      }
+
+      // --- Render missing per-language subtree pages ---
+      for (const [lang, langMissingPlan] of missingPathPlan.languagePlans) {
+        const langPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+        const langListPosts = publishedListPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+        const langPostIndex = buildGenerationPostIndex(langListPosts);
+        const langArchives = buildApplyValidationArchives(langListPosts);
+
+        const langTargetedPlan = buildTargetedValidationPlan({
+          initialPlan: langMissingPlan,
+          publishedPosts: langPosts,
+          allCategories: langArchives.allCategories,
+          allTags: langArchives.allTags,
+          availableYearMonths: langArchives.yearMonths.keys(),
+          availableYearMonthDays: langArchives.yearMonthDays.keys(),
+        });
+
+        const langRenderRoute = createPreviewBackedGenerationRouteRenderer({
+          options: { ...options, language: lang },
+          maxPostsPerPage,
+          publishedPostsForLookup: langPosts,
+          languagePrefix: `/${lang}`,
+          engines: {
+            postEngine: this.postEngine,
+            mediaEngine: this.mediaEngine,
+            postMediaEngine: this.postMediaEngine,
+          },
+        });
+
+        const langWritePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
+          projectId,
+          htmlDir,
+          urlPath: `${lang}/${urlPath}`,
+          content,
+          refreshHashTimestampOnUnchanged: true,
+        });
+
+        if (langTargetedPlan.requestRootRoutes) {
+          renderedUrlCount += await generateRootPages({
+            projectId: options.projectId,
+            posts: langListPosts,
+            maxPostsPerPage,
+            renderRoute: langRenderRoute,
+            writePage: langWritePage,
+            onPageGenerated,
+          });
+          const langRequestedPagePosts = selectRequestedPosts({
+            publishedPosts: langPosts,
+            requestedPostIds: new Set(),
+            requestedPageSlugs: langTargetedPlan.requestedPageSlugs,
+          }).requestedPagePosts;
+          if (langRequestedPagePosts.length > 0) {
+            renderedUrlCount += await generatePageRoutes({
+              projectId: options.projectId,
+              posts: langRequestedPagePosts,
+              renderRoute: langRenderRoute,
+              writePage: langWritePage,
+              onPageGenerated,
+            });
+          }
+        }
+
+        if (langTargetedPlan.requestedCategorySet.size > 0) {
+          renderedUrlCount += await generateCategoryPages({
+            projectId: options.projectId,
+            posts: langListPosts,
+            allCategories: langTargetedPlan.requestedCategorySet,
+            maxPostsPerPage,
+            renderRoute: langRenderRoute,
+            writePage: langWritePage,
+            onPageGenerated,
+            postsByCategory: langPostIndex.postsByCategory,
+          });
+        }
+
+        if (langTargetedPlan.requestedTagSet.size > 0) {
+          renderedUrlCount += await generateTagPages({
+            projectId: options.projectId,
+            posts: langListPosts,
+            allTags: langTargetedPlan.requestedTagSet,
+            maxPostsPerPage,
+            renderRoute: langRenderRoute,
+            writePage: langWritePage,
+            onPageGenerated,
+            postsByTag: langPostIndex.postsByTag,
+          });
+        }
+
+        const langRequestedSinglePosts = selectRequestedPosts({
+          publishedPosts: langPosts,
+          requestedPostIds: langTargetedPlan.requestedPostIds,
+          requestedPageSlugs: new Set(),
+        }).requestedSinglePosts;
+
+        if (langRequestedSinglePosts.length > 0) {
+          renderedUrlCount += await generateSinglePostPages({
+            projectId: options.projectId,
+            posts: langRequestedSinglePosts,
+            renderRoute: langRenderRoute,
+            writePage: langWritePage,
+            onPageGenerated,
+          });
+        }
+
+        const langRequestedArchives = buildRequestedArchiveMaps({
+          requestedYears: langTargetedPlan.requestedYears,
+          requestedYearMonths: langTargetedPlan.requestedYearMonths,
+          requestedYearMonthDays: langTargetedPlan.requestedYearMonthDays,
+          years: langArchives.years,
+          yearMonths: langArchives.yearMonths,
+          yearMonthDays: langArchives.yearMonthDays,
+        });
+
+        if (langRequestedArchives.requestedYearsMap.size > 0 || langRequestedArchives.requestedYearMonthsMap.size > 0 || langRequestedArchives.requestedYearMonthDaysMap.size > 0) {
+          renderedUrlCount += await generateDateArchivePages({
+            projectId: options.projectId,
+            posts: langListPosts,
+            yearsMap: langRequestedArchives.requestedYearsMap,
+            yearMonthsMap: langRequestedArchives.requestedYearMonthsMap,
+            yearMonthDaysMap: langRequestedArchives.requestedYearMonthDaysMap,
+            maxPostsPerPage,
+            renderRoute: langRenderRoute,
+            writePage: langWritePage,
+            onPageGenerated,
+            postsByYear: langPostIndex.postsByYear,
+            postsByYearMonth: langPostIndex.postsByYearMonth,
+            postsByYearMonthDay: langPostIndex.postsByYearMonthDay,
+          });
+        }
       }
     }
 

@@ -1981,6 +1981,167 @@ describe('BlogGenerationEngine', () => {
     expect(await fileExists(path.join(tempDir, 'html', 'media'))).toBe(false);
   });
 
+  it('validateSite reports missing language subtree pages and does not flag them as extra', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'lang-post',
+        title: 'Language Post',
+        categories: ['news'],
+        tags: ['lang-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    // Generate only main language pages
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+    }, vi.fn());
+
+    // Validate with blogLanguages including fr - should report missing fr pages
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toContain('/fr');
+    expect(report.missingUrlPaths).toContain('/fr/2025/01/15/lang-post');
+    expect(report.missingUrlPaths).toContain('/fr/category/news');
+    expect(report.missingUrlPaths).toContain('/fr/tag/lang-tag');
+    expect(report.extraUrlPaths).not.toContain('/fr');
+  });
+
+  it('validateSite reports no missing language pages after full multi-language generation', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'multilang-post',
+        title: 'Multi Lang Post',
+        categories: ['news'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toEqual([]);
+    expect(report.extraUrlPaths).toEqual([]);
+  });
+
+  it('applyValidation renders missing language subtree pages', async () => {
+    const posts = [
+      makePost({
+        id: '1',
+        slug: 'apply-lang-post',
+        title: 'Apply Lang Post',
+        categories: ['news'],
+        tags: ['apply-lang-tag'],
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+      }),
+    ];
+    setupPosts(posts);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    const result = await engine.applyValidation({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, {
+      sitemapPath: path.join(tempDir, 'html', 'sitemap.xml'),
+      sitemapChanged: false,
+      missingUrlPaths: ['/fr/category/news', '/fr/tag/apply-lang-tag'],
+      extraUrlPaths: [],
+      updatedPostUrlPaths: [],
+      expectedUrlCount: 2,
+      existingHtmlUrlCount: 0,
+    }, vi.fn());
+
+    expect(result.renderedUrlCount).toBeGreaterThan(0);
+    expect(await fileExists(path.join(tempDir, 'html', 'fr', 'category', 'news', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', 'fr', 'tag', 'apply-lang-tag', 'index.html'))).toBe(true);
+  });
+
+  it('validateSite excludes doNotTranslate posts from language subtree expected urls', async () => {
+    const translatablePost = makePost({
+      id: '1',
+      slug: 'translatable',
+      title: 'Translatable',
+      categories: ['news'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const dntPost = makePost({
+      id: '2',
+      slug: 'no-translate',
+      title: 'Do Not Translate',
+      categories: ['news'],
+      createdAt: new Date('2025-01-16T10:00:00Z'),
+      doNotTranslate: true,
+    } as any);
+    setupPosts([translatablePost, dntPost]);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    const report = await engine.validateSite({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    expect(report.missingUrlPaths).toEqual([]);
+    // The dnt post's single page should NOT be expected in /fr/ subtree
+    expect(report.extraUrlPaths).not.toContain('/fr/2025/01/16/no-translate');
+  });
+
   it('generates zero pages when there are no published posts', async () => {
     const result = await generate([]);
     expect(result.pagesGenerated).toBe(0);
