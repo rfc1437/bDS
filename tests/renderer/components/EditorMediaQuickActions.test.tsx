@@ -114,7 +114,7 @@ vi.mock('../../../src/renderer/components/Toast', () => ({
   },
 }));
 
-import { MediaEditor } from '../../../src/renderer/components/Editor/Editor';
+import { MediaEditor } from '../../../src/renderer/components/Editor/MediaEditor';
 import { useAppStore } from '../../../src/renderer/store';
 
 const createMedia = (overrides: Record<string, unknown> = {}) => ({

@@ -124,7 +124,7 @@ vi.mock('../../../src/renderer/components/Toast', () => ({
   },
 }));
 
-import { PostEditor } from '../../../src/renderer/components/Editor/Editor';
+import { PostEditor } from '../../../src/renderer/components/Editor/PostEditor';
 import { useAppStore } from '../../../src/renderer/store';
 
 const createPost = () => ({
