@@ -159,7 +159,6 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     showErrorModal,
     showConfirmDeleteModal,
     media,
-    closeTab,
   } = useAppStore();
   
   // Fetch full post data from backend
@@ -194,7 +193,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const [doNotTranslate, setDoNotTranslate] = useState(false);
   const [activeEditingLanguage, setActiveEditingLanguage] = useState('');
   const [canonicalDraft, setCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
-  const [savedCanonicalDraft, setSavedCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
+  const [, setSavedCanonicalDraft] = useState<EditableContentDraft>({ title: '', excerpt: '', content: '' });
   const [translationDrafts, setTranslationDrafts] = useState<Record<string, import('../../../main/shared/electronApi').PostTranslationData>>({});
   const [savedTranslationDrafts, setSavedTranslationDrafts] = useState<Record<string, import('../../../main/shared/electronApi').PostTranslationData>>({});
   const [availablePostTemplates, setAvailablePostTemplates] = useState<Array<{ slug: string; title: string }>>([]);

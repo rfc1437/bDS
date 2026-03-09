@@ -208,23 +208,25 @@ export const ImportAnalysisView: React.FC<ImportAnalysisViewProps> = ({ definiti
 
   // Subscribe to task completion events
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.on('task:completed', (task: { taskId: string }) => {
+    const unsubscribe = window.electronAPI?.on('task:completed', ((...args: unknown[]) => {
+      const task = args[0] as { taskId: string };
       setExecutionState(prev => {
         if (prev.taskId !== task.taskId) return prev;
         return { ...prev, isExecuting: false, completed: true };
       });
-    });
+    }) as (...args: unknown[]) => void);
     return () => unsubscribe?.();
   }, []);
 
   // Subscribe to task failure events
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.on('task:failed', (task: { taskId: string; error: string }) => {
+    const unsubscribe = window.electronAPI?.on('task:failed', ((...args: unknown[]) => {
+      const task = args[0] as { taskId: string; error: string };
       setExecutionState(prev => {
         if (prev.taskId !== task.taskId) return prev;
         return { ...prev, isExecuting: false, error: task.error };
       });
-    });
+    }) as (...args: unknown[]) => void);
     return () => unsubscribe?.();
   }, []);
 
@@ -919,7 +921,7 @@ const DateDistributionCard: React.FC<{ distribution: DateDistribution }> = ({ di
 };
 
 // Helper function to format post metadata for tooltip (new post from WXR)
-function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost'], t: (key: string, params?: Record<string, unknown>) => string): string {
+function formatPostTooltip(wxrPost: AnalyzedPostItem['wxrPost'], t: (key: string, params?: Record<string, string | number>) => string): string {
   const lines: string[] = [];
   lines.push(`${t('importAnalysis.wordpressId')}: ${wxrPost.wpId}`);
   lines.push(`${t('importAnalysis.type')}: ${wxrPost.postType}`);
@@ -1051,7 +1053,7 @@ function ExistingPostHoverCard({ children, className, postId }: {
 }
 
 // Helper function to format media metadata for tooltip
-function formatMediaTooltip(wxrMedia: AnalyzedMediaItem['wxrMedia'], t: (key: string, params?: Record<string, unknown>) => string): string {
+function formatMediaTooltip(wxrMedia: AnalyzedMediaItem['wxrMedia'], t: (key: string, params?: Record<string, string | number>) => string): string {
   const lines: string[] = [];
   lines.push(`${t('importAnalysis.wordpressId')}: ${wxrMedia.wpId}`);
   lines.push(`${t('importAnalysis.mimeType')}: ${wxrMedia.mimeType || t('importAnalysis.unknown')}`);

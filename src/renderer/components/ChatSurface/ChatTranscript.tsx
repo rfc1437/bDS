@@ -1,8 +1,8 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactElement } from 'react';
 import Markdown from 'marked-react';
 import type { ChatMessage } from '../../types/electron';
 import type { ChatToolEvent } from '../../navigation/useChatSurfaceState';
-import type { A2UIResolvedComponent, A2UIClientAction } from '../../../main/a2ui/types';
+import type { A2UIClientAction } from '../../../main/a2ui/types';
 import { InlineSurface } from '../../a2ui/InlineSurface';
 import type { SurfaceEntry } from '../../a2ui/useA2UISurface';
 import { computeTurnIndex } from '../../a2ui/surfaceAssociation';
@@ -51,7 +51,7 @@ export const ChatTranscript: React.FC<ChatTranscriptProps> = ({
 }) => {
   // Block external images — CSP only allows self/data/file/blob/bds-media/bds-thumb
   const safeRenderer = {
-    image(src: string, alt: string): ReactNode {
+    image(src: string, alt: string, _title?: string | null): ReactElement {
       if (/^https?:\/\//i.test(src)) {
         // Show alt text as a link instead of trying to load the image
         return <a href={src} key={src} title={alt}>{alt || src}</a>;

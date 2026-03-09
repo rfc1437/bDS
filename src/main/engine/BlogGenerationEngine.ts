@@ -45,10 +45,17 @@ import {
   selectRequestedPosts,
 } from './ApplyValidationDataService';
 import { getGeneratedFileHashRecord } from '../database/generatedFileHashStore';
+import { getAllGeneratedFileHashes } from '../database/generatedFileHashStore';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
 const MAX_MAX_POSTS_PER_PAGE = 500;
+
+export interface PreloadedGenerationData {
+  publishedPosts: PostData[];
+  publishedListPosts: PostData[];
+  publishedRoutePosts: PostData[];
+}
 
 export interface BlogGenerationOptions {
   projectId: string;
@@ -65,6 +72,7 @@ export interface BlogGenerationOptions {
   categorySettings?: Record<string, CategoryRenderSettings>;
   menu?: MenuDocument;
   sections?: BlogGenerationSection[];
+  preloadedData?: PreloadedGenerationData;
 }
 
 export interface CategoryMetadata extends CategoryRenderSettings {
@@ -207,7 +215,9 @@ interface BlogGenerationPostEngineContract {
   getPost: (postId: string) => Promise<PostData | null>;
   hasPublishedVersion: (postId: string) => Promise<boolean>;
   getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>;
+  getAllBacklinks?: () => Promise<Map<string, { id: string; title: string; slug: string }[]>>;
   getPostTranslations?: (postId: string) => Promise<PostTranslationData[]>;
+  getPublishedTranslationsForRoutePosts?: (publishedPosts: PostData[]) => Promise<Map<string, PostTranslationData[]>>;
   setProjectContext: (projectId: string, dataDir?: string) => void;
 }
 
@@ -247,25 +257,62 @@ export class BlogGenerationEngine {
     };
   }
 
+  private async resolvePostContents(postList: PostData[]): Promise<void> {
+    const postsNeedingContent = postList.filter((p) => !p.content);
+    if (postsNeedingContent.length === 0) return;
+
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < postsNeedingContent.length; i += BATCH_SIZE) {
+      const batch = postsNeedingContent.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(async (post) => {
+          const full = await this.postEngine.getPublishedVersion(post.id);
+          return { post, content: full?.content ?? '' };
+        }),
+      );
+      for (const { post, content } of results) {
+        post.content = content;
+      }
+    }
+  }
+
   private async buildPublishedRoutePosts(publishedPosts: PostData[]): Promise<PostData[]> {
     const routePosts: PostData[] = [...publishedPosts];
 
-    if (typeof this.postEngine.getPostTranslations !== 'function') {
-      return routePosts;
-    }
-
-    for (const post of publishedPosts) {
-      const translations = await this.postEngine.getPostTranslations(post.id);
-      for (const translation of translations) {
-        if (translation.status !== 'published') {
-          continue;
+    if (typeof this.postEngine.getPublishedTranslationsForRoutePosts === 'function') {
+      const translationsByPost = await this.postEngine.getPublishedTranslationsForRoutePosts(publishedPosts);
+      for (const post of publishedPosts) {
+        const translations = translationsByPost.get(post.id) || [];
+        for (const translation of translations) {
+          routePosts.push(this.buildPublishedTranslationVariant(post, translation));
         }
+      }
+    } else if (typeof this.postEngine.getPostTranslations === 'function') {
+      for (const post of publishedPosts) {
+        const translations = await this.postEngine.getPostTranslations(post.id);
+        for (const translation of translations) {
+          if (translation.status !== 'published') {
+            continue;
+          }
 
-        routePosts.push(this.buildPublishedTranslationVariant(post, translation));
+          routePosts.push(this.buildPublishedTranslationVariant(post, translation));
+        }
       }
     }
 
     return routePosts;
+  }
+
+  async preloadGenerationData(options: BlogGenerationOptions): Promise<PreloadedGenerationData> {
+    const categorySettings = resolveCategorySettings(options.categoryMetadata, options.categorySettings);
+    const listExcludedCategories = Object.entries(categorySettings)
+      .filter(([, settings]) => settings.renderInLists === false)
+      .map(([category]) => category);
+
+    const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
+    const publishedRoutePosts = await this.buildPublishedRoutePosts(publishedPosts);
+
+    return { publishedPosts, publishedListPosts, publishedRoutePosts };
   }
 
   async generate(options: BlogGenerationOptions, onProgress: (progress: number, message?: string) => void): Promise<BlogGenerationResult> {
@@ -288,10 +335,19 @@ export class BlogGenerationEngine {
       .map(([category]) => category);
 
     const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
-    const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
-    const publishedRoutePosts = await this.buildPublishedRoutePosts(publishedPosts);
 
-    onProgress(3, `Found ${publishedPosts.length} published posts`);
+    let publishedPosts: PostData[];
+    let publishedListPosts: PostData[];
+    let publishedRoutePosts: PostData[];
+
+    if (options.preloadedData) {
+      ({ publishedPosts, publishedListPosts, publishedRoutePosts } = options.preloadedData);
+    } else {
+      ({ publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories));
+      publishedRoutePosts = await this.buildPublishedRoutePosts(publishedPosts);
+    }
+
+    onProgress(3, `Loaded ${publishedPosts.length} published posts`);
 
     const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
@@ -308,6 +364,10 @@ export class BlogGenerationEngine {
     let calendarJson = '';
 
     if (includeCore) {
+      // Pre-load content for feed posts (top N by recency) before building feeds
+      const feedSlice = publishedListPosts.slice(0, maxPostsPerPage);
+      await this.resolvePostContents(feedSlice);
+
       onProgress(5, 'Building sitemap XML...');
       const sitemapAndFeedResult = buildSitemapAndFeeds({
         baseUrl: options.baseUrl,
@@ -389,6 +449,12 @@ export class BlogGenerationEngine {
     let atomWritten = false;
     const generatedHashCache = new Map<string, string | null>();
     const knownOutputDirectories = new Set<string>();
+
+    // Bulk-load all known file hashes to avoid per-page DB reads
+    const existingHashes = await getAllGeneratedFileHashes(options.projectId);
+    for (const [relativePath, hash] of existingHashes) {
+      generatedHashCache.set(relativePath, hash);
+    }
 
     if (includeCore) {
       onProgress(10, 'Writing sitemap and feeds...');
@@ -551,6 +617,10 @@ export class BlogGenerationEngine {
 
       // Build per-language feeds
       if (includeCore) {
+        // Pre-load content for language feed posts
+        const langFeedSlice = langListPosts.slice(0, maxPostsPerPage);
+        await this.resolvePostContents(langFeedSlice);
+
         const langFeedResult = buildSitemapAndFeeds({
           baseUrl: `${options.baseUrl}/${lang}`,
           projectName: options.projectName,

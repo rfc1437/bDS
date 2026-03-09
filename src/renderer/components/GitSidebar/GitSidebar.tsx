@@ -390,7 +390,7 @@ export const GitSidebar: React.FC = () => {
                   recentCommitsToKeep: 2,
                 });
       if (!result.success) {
-        if (result.code === 'offline') {
+        if ('code' in result && result.code === 'offline') {
           showErrorModal({ message: tr('gitSidebar.error.offlineMode') });
           return;
         }

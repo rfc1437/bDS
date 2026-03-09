@@ -91,6 +91,9 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
     const blogGenerationEngine = bundle.blogGenerationEngine;
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
+    // Pre-load post data ONCE before parallel tasks
+    const preloadedData = await blogGenerationEngine.preloadGenerationData(baseOptions);
+
     const taskTimestamp = Date.now();
     const taskGroupId = `site-render-${taskTimestamp}`;
     const taskGroupName = 'Render Site';
@@ -109,6 +112,7 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
           return blogGenerationEngine.generate({
             ...baseOptions,
             sections: [section],
+            preloadedData,
           }, (progress, message) => onProgress(progress, message || ''));
         },
       });

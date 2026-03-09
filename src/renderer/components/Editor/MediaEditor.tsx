@@ -5,6 +5,7 @@ import { AISuggestionsModal } from '../AISuggestionsModal/AISuggestionsModal';
 import { openEntityTab } from '../../navigation/tabPolicy';
 import { useI18n } from '../../i18n';
 import { SUPPORTED_POST_LANGUAGES, POST_LANGUAGE_FLAGS } from '../../../main/shared/i18n';
+import type { MediaData } from '../../../main/shared/electronApi';
 import { getMediaDisplayName } from './editorUtils';
 
 export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
@@ -71,7 +72,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     try {
       const updated = await window.electronAPI?.media.update(item!.id, { language: newLanguage || undefined });
       if (updated) {
-        updateMedia(item!.id, updated as Partial<typeof item>);
+        updateMedia(item!.id, updated as Partial<MediaData>);
       }
     } catch (error) {
       console.error('Failed to update media language:', error);
@@ -92,7 +93,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         setMediaLanguage(result.language);
         const updated = await window.electronAPI?.media.update(item.id, { language: result.language });
         if (updated) {
-          updateMedia(item.id, updated as Partial<typeof item>);
+          updateMedia(item.id, updated as Partial<MediaData>);
         }
         showToast.success(tr('editor.media.toast.languageDetected', { language: tr(`language.${result.language}`) }));
       } else {
@@ -249,7 +250,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
   // Close AI suggestions modal
   const handleCloseAISuggestionsModal = () => {
     setShowAISuggestionsModal(false);
-    setAISuggestions(null);
+    setAISuggestionFields([]);
     setAIError(undefined);
   };
 
@@ -364,7 +365,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
         tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
       });
       if (updated) {
-        updateMedia(item.id, updated as Partial<typeof item>);
+        updateMedia(item.id, updated as Partial<MediaData>);
         showToast.success(tr('editor.media.toast.updated'));
       }
     } catch (error) {
@@ -382,7 +383,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     try {
       const updated = await window.electronAPI?.media.replaceFileDialog(item.id);
       if (updated) {
-        updateMedia(item.id, updated as Partial<typeof item>);
+        updateMedia(item.id, updated as Partial<MediaData>);
         showToast.success(tr('editor.media.toast.fileReplaced'));
       }
       // null means user cancelled or file unchanged - no action needed
@@ -523,7 +524,7 @@ export const MediaEditor: React.FC<{ mediaId: string }> = ({ mediaId }) => {
           {item.mimeType.startsWith('image/') ? (
             <div className="media-preview-image">
               <img 
-                src={`bds-media://${item.id}?t=${item.updatedAt instanceof Date ? item.updatedAt.getTime() : item.updatedAt}`} 
+                src={`bds-media://${item.id}?t=${item.updatedAt}`} 
                 alt={item.alt || item.originalName}
                 onError={(e) => {
                   // Fallback to placeholder if image fails to load

@@ -1,4 +1,4 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactElement } from 'react';
 import Markdown from 'marked-react';
 import type { A2UIResolvedComponent, A2UIClientAction } from '../../../main/a2ui/types';
 
@@ -11,7 +11,7 @@ interface A2UIComponentProps {
 }
 
 const safeRenderer = {
-  image(src: string, alt: string): ReactNode {
+  image(src: string, alt: string, _title?: string | null): ReactElement {
     if (/^https?:\/\//i.test(src)) {
       return <a href={src} key={src} title={alt}>{alt || src}</a>;
     }

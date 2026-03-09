@@ -28,7 +28,7 @@ export function SidebarEntityList<TItem>({
   renderItem,
   getItemKey,
   topContent,
-}: SidebarEntityListProps<TItem>): JSX.Element {
+}: SidebarEntityListProps<TItem>): React.JSX.Element {
   if (isLoading) {
     return (
       <div className="chat-list">

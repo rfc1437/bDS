@@ -3,11 +3,35 @@ import type { PostData } from './PostEngine';
 export interface GenerationSnapshotPostEngine {
   getPostsFiltered: (filter: { status?: 'draft' | 'published' | 'archived'; excludeCategories?: string[] }) => Promise<PostData[]>;
   getPublishedVersion: (id: string) => Promise<PostData | null>;
+  getPublishedVersionsBulk?: (ids: string[]) => Promise<Map<string, PostData>>;
 }
 
 export interface GenerationPublishedSets {
   publishedPosts: PostData[];
   publishedListPosts: PostData[];
+}
+
+async function resolvePublishedVersions(
+  postEngine: GenerationSnapshotPostEngine,
+  ids: string[],
+): Promise<Map<string, PostData>> {
+  if (ids.length === 0) return new Map();
+
+  if (postEngine.getPublishedVersionsBulk) {
+    return postEngine.getPublishedVersionsBulk(ids);
+  }
+
+  const result = new Map<string, PostData>();
+  const entries = await Promise.all(
+    ids.map(async (id) => {
+      const version = await postEngine.getPublishedVersion(id);
+      return { id, version };
+    }),
+  );
+  for (const { id, version } of entries) {
+    if (version) result.set(id, version);
+  }
+  return result;
 }
 
 export async function loadPublishedGenerationSets(
@@ -16,51 +40,35 @@ export async function loadPublishedGenerationSets(
 ): Promise<GenerationPublishedSets> {
   const publishedCandidates = await postEngine.getPostsFiltered({ status: 'published' });
   const draftCandidates = await postEngine.getPostsFiltered({ status: 'draft' });
-  const publishedListCandidates = await postEngine.getPostsFiltered({
-    status: 'published',
-    excludeCategories: listExcludedCategories,
-  });
-  const draftListCandidates = await postEngine.getPostsFiltered({
-    status: 'draft',
-    excludeCategories: listExcludedCategories,
-  });
 
-  const publishedSnapshots = await Promise.all(
-    publishedCandidates.map(async (post) => {
-      const snapshot = await postEngine.getPublishedVersion(post.id);
-      return snapshot || post;
-    }),
-  );
-  const draftPublishedSnapshots = await Promise.all(
-    draftCandidates.map(async (post) => postEngine.getPublishedVersion(post.id)),
-  );
-  const publishedListSnapshots = await Promise.all(
-    publishedListCandidates.map(async (post) => {
-      const snapshot = await postEngine.getPublishedVersion(post.id);
-      return snapshot || post;
-    }),
-  );
-  const draftListPublishedSnapshots = await Promise.all(
-    draftListCandidates.map(async (post) => postEngine.getPublishedVersion(post.id)),
-  );
+  const allIds = new Set<string>();
+  for (const p of publishedCandidates) allIds.add(p.id);
+  for (const p of draftCandidates) allIds.add(p.id);
+
+  const publishedVersions = await resolvePublishedVersions(postEngine, Array.from(allIds));
+
+  const excludedCategorySet = new Set(listExcludedCategories);
+  const isListExcluded = (post: PostData) =>
+    excludedCategorySet.size > 0 && post.categories.some((c) => excludedCategorySet.has(c));
 
   const publishedPostById = new Map<string, PostData>();
-  for (const post of publishedSnapshots) {
-    publishedPostById.set(post.id, post);
-  }
-  for (const snapshot of draftPublishedSnapshots) {
-    if (snapshot) {
-      publishedPostById.set(snapshot.id, snapshot);
+  const publishedListPostById = new Map<string, PostData>();
+
+  for (const post of publishedCandidates) {
+    const snapshot = publishedVersions.get(post.id) || post;
+    publishedPostById.set(post.id, snapshot);
+    if (!isListExcluded(post)) {
+      publishedListPostById.set(post.id, snapshot);
     }
   }
 
-  const publishedListPostById = new Map<string, PostData>();
-  for (const post of publishedListSnapshots) {
-    publishedListPostById.set(post.id, post);
-  }
-  for (const snapshot of draftListPublishedSnapshots) {
+  for (const post of draftCandidates) {
+    const snapshot = publishedVersions.get(post.id);
     if (snapshot) {
-      publishedListPostById.set(snapshot.id, snapshot);
+      publishedPostById.set(post.id, snapshot);
+      if (!isListExcluded(post)) {
+        publishedListPostById.set(post.id, snapshot);
+      }
     }
   }
 

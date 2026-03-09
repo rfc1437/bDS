@@ -138,7 +138,7 @@ const tabsElementSchema: z.ZodTypeAny = z.lazy(() => z.object({
   ).min(1),
 }));
 
-assistantPanelElementSchemaRef = z.discriminatedUnion('type', [
+assistantPanelElementSchemaRef = z.union([
   textElementSchema,
   metricElementSchema,
   listElementSchema,

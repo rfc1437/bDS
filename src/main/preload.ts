@@ -412,7 +412,7 @@ export const electronAPI: ElectronAPI = {
     translatePost: (postId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translatePost', postId, targetLanguage),
 
     // Media Language Detection
-    detectMediaLanguage: (mediaId: string) => ipcRenderer.invoke('chat:detectMediaLanguage', mediaId),
+    detectMediaLanguage: (title: string, alt: string, caption: string) => ipcRenderer.invoke('chat:detectMediaLanguage', title, alt, caption),
 
     // Media Metadata Translation
     translateMediaMetadata: (mediaId: string, targetLanguage: string) => ipcRenderer.invoke('chat:translateMediaMetadata', mediaId, targetLanguage),

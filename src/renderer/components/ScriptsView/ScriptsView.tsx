@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import MonacoEditor, { type Monaco } from '@monaco-editor/react';
 import type { ScriptData } from '../../../main/shared/electronApi';
 import { useAppStore } from '../../store';
@@ -89,7 +89,6 @@ export const ScriptsView: React.FC<ScriptsViewProps> = ({ scriptId }) => {
 
       // Refresh entrypoints asynchronously
       entrypointCancelRef.current = true; // cancel any pending refresh
-      const cancelToken = {};
       entrypointCancelRef.current = false;
       const refreshEntrypoints = async () => {
         try {

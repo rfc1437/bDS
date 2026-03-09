@@ -57,6 +57,7 @@ vi.mock('../../src/main/database/generatedFileHashStore', () => ({
   getGeneratedFileHash: getGeneratedFileHashMock,
   getGeneratedFileHashRecord: getGeneratedFileHashRecordMock,
   setGeneratedFileHash: setGeneratedFileHashMock,
+  getAllGeneratedFileHashes: vi.fn(async () => new Map<string, string>()),
 }));
 
 vi.mock('../../src/main/database', () => ({
