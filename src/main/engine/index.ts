@@ -21,6 +21,7 @@ export {
   stemQuery,
   prepareForFTS,
   getSupportedLanguages,
+  isoToStemmerLanguage,
   type SupportedLanguage,
 } from './stemmer';
 export {

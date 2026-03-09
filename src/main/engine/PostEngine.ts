@@ -9,7 +9,7 @@ import { app } from 'electron';
 import { getDatabase } from '../database';
 import { posts, postTranslations, Post, PostTranslation, NewPost, NewPostTranslation, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
-import { stemText, stemQuery, SupportedLanguage } from './stemmer';
+import { stemText, stemQuery, isoToStemmerLanguage, SupportedLanguage } from './stemmer';
 import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
 import { readPostTranslationFile as readPostTranslationFileShared, type PostTranslationFileData } from './postTranslationFileUtils';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
@@ -184,10 +184,9 @@ export class PostEngine extends EventEmitter {
 
   /**
    * Update the FTS index for a post.
-   * Updates the FTS index for a post.
-   * Stores the stemmed content (combining title, excerpt, content, tags, categories).
-   * Includes project_id for project-scoped search.
-   * Only the post ID is returned from searches - actual post data comes from DB/files.
+   * Stores stemmed content combining title, excerpt, content, tags, categories,
+   * plus all translation content — each stemmed with its own language stemmer.
+   * This enables cross-language full-text search.
    * Public to allow ImportExecutionEngine to index imported posts directly.
    */
   async updateFTSIndex(post: {
@@ -205,7 +204,7 @@ export class PostEngine extends EventEmitter {
     // Delete existing entry
     await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [post.id] });
 
-    // Combine all searchable fields and stem them
+    // Combine all searchable fields and stem them with the project search language
     const allText = [
       post.title,
       post.excerpt || '',
@@ -214,13 +213,54 @@ export class PostEngine extends EventEmitter {
       post.categories.join(' '),
     ].join(' ');
 
-    const stemmedContent = stemText(allText, this.searchLanguage);
+    const stemmedParts = [stemText(allText, this.searchLanguage)];
+
+    // Append translation content, each stemmed with its own language
+    const translationTexts = await this.getTranslationTextsForFTS(post.id);
+    for (const { language, text } of translationTexts) {
+      const stemmerLang = isoToStemmerLanguage(language);
+      stemmedParts.push(stemText(text, stemmerLang));
+    }
+
+    const stemmedContent = stemmedParts.join(' ');
 
     // Insert with id, project_id, and stemmed content
     await client.execute({
       sql: 'INSERT INTO posts_fts (id, project_id, content) VALUES (?, ?, ?)',
       args: [post.id, post.projectId, stemmedContent],
     });
+  }
+
+  /**
+   * Collect translatable text (title, excerpt, content) for each translation of a post.
+   * Resolves content from the database (drafts) or filesystem (published).
+   */
+  private async getTranslationTextsForFTS(postId: string): Promise<Array<{ language: string; text: string }>> {
+    const rows = await this.getTranslationRowsForPost(postId);
+    const results: Array<{ language: string; text: string }> = [];
+
+    for (const row of rows) {
+      let text = [row.title, row.excerpt || ''].join(' ');
+
+      if (row.content) {
+        // Draft: content stored in DB
+        text += ' ' + row.content;
+      } else if (row.filePath) {
+        // Published: content stored in file
+        try {
+          const fileData = await readPostTranslationFileShared(row.filePath);
+          if (fileData) {
+            text += ' ' + fileData.content;
+          }
+        } catch {
+          // File might not exist; index with title/excerpt only
+        }
+      }
+
+      results.push({ language: row.language, text });
+    }
+
+    return results;
   }
 
   /**
@@ -1290,6 +1330,9 @@ export class PostEngine extends EventEmitter {
         updated.filePath = translationFilePath;
       }
 
+      // Re-index FTS to include updated translation content
+      await this.updateFTSIndex(sourcePost);
+
       this.emit('postTranslationUpdated', updated);
       return updated;
     }
@@ -1335,6 +1378,9 @@ export class PostEngine extends EventEmitter {
         .where(eq(postTranslations.id, created.id));
       created.filePath = translationFilePath;
     }
+
+    // Re-index FTS to include new translation content
+    await this.updateFTSIndex(sourcePost);
 
     this.emit('postTranslationCreated', created);
     return created;
@@ -1548,6 +1594,9 @@ export class PostEngine extends EventEmitter {
       filePath: created.filePath,
       checksum: this.calculateChecksum(created.content),
     });
+
+    // Re-index FTS to include imported translation content
+    await this.updateFTSIndex(sourcePost);
 
     this.emit('postTranslationCreated', created);
     return created;
@@ -1766,18 +1815,56 @@ export class PostEngine extends EventEmitter {
     });
   }
 
+  /**
+   * Build a multilingual FTS5 query by stemming the user query with each
+   * language that has indexed content (project main language + all translation
+   * languages).  Distinct stems are combined with OR so a match in any language
+   * will surface the post.
+   */
+  private async buildMultilingualFTSQuery(query: string): Promise<string> {
+    const translationLanguages = await this.getDistinctTranslationLanguages();
+    const languages = new Set<SupportedLanguage>([this.searchLanguage]);
+    for (const iso of translationLanguages) {
+      languages.add(isoToStemmerLanguage(iso));
+    }
+
+    const stems = new Set<string>();
+    for (const lang of languages) {
+      const stemmed = stemQuery(query, lang);
+      if (stemmed) stems.add(stemmed);
+    }
+
+    if (stems.size <= 1) {
+      return stems.values().next().value || stemQuery(query, this.searchLanguage);
+    }
+
+    // Wrap each language-stemmed query in parentheses and combine with OR
+    return Array.from(stems).map(s => `(${s})`).join(' OR ');
+  }
+
+  /**
+   * Return the distinct ISO language codes used by translations in the current project.
+   */
+  private async getDistinctTranslationLanguages(): Promise<string[]> {
+    const rows = await this.getAllTranslationRows();
+    const langs = new Set<string>();
+    for (const row of rows) {
+      if (row.language) langs.add(row.language);
+    }
+    return Array.from(langs);
+  }
+
   async searchPosts(query: string): Promise<SearchResult[]> {
     const client = getDatabase().getLocalClient();
     if (!client) return [];
 
     try {
-      // Stem the query for multilingual matching
-      const stemmedQuery = stemQuery(query, this.searchLanguage);
+      const multilingualQuery = await this.buildMultilingualFTSQuery(query);
       
       // Search the stemmed content, filtered by project_id for project isolation
       const result = await client.execute({
         sql: `SELECT id FROM posts_fts WHERE project_id = ? AND posts_fts MATCH ? ORDER BY rank LIMIT 500`,
-        args: [this.currentProjectId, stemmedQuery],
+        args: [this.currentProjectId, multilingualQuery],
       });
 
       // Fetch actual post data for results
@@ -1820,14 +1907,14 @@ export class PostEngine extends EventEmitter {
     if (!client) return { posts: [], total: 0 };
 
     try {
-      const stemmedQuery = stemQuery(query, this.searchLanguage);
+      const multilingualQuery = await this.buildMultilingualFTSQuery(query);
 
       // Build WHERE clauses and args for the joined query
       const conditions: string[] = [
         'posts_fts.project_id = ?',
         'posts_fts.MATCH ?',
       ];
-      const args: (string | number | Date)[] = [this.currentProjectId, stemmedQuery];
+      const args: (string | number | Date)[] = [this.currentProjectId, multilingualQuery];
 
       if (filter.status) {
         conditions.push('posts.status = ?');
