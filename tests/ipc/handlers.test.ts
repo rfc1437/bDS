@@ -339,8 +339,13 @@ vi.mock('fs/promises', () => ({
 }));
 
 let mockOfflineMode = false;
+const mockAutoTranslatePost = vi.fn().mockResolvedValue({ success: true });
+const mockAutoTranslateMediaMetadata = vi.fn().mockResolvedValue({ success: true });
+
 vi.mock('../../src/main/ipc/chatHandlers', () => ({
   isOfflineModeActive: vi.fn(() => mockOfflineMode),
+  autoTranslatePost: (...args: any[]) => mockAutoTranslatePost(...args),
+  autoTranslateMediaMetadata: (...args: any[]) => mockAutoTranslateMediaMetadata(...args),
 }));
 
 // Helper to invoke a registered handler
@@ -3021,6 +3026,45 @@ describe('IPC Handlers', () => {
 
         expect(result).toEqual({ taskStarted: true });
         expect(onProgress).toHaveBeenCalledWith(100, 'All translations are up to date');
+      });
+
+      it('should use media canonical language, not post language, to determine target languages', async () => {
+        // Scenario: blog has en + de. An English media item is linked to a German post.
+        // The media is missing a German translation, NOT an English one.
+        const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({
+          mainLanguage: 'de',
+          blogLanguages: ['de', 'en'],
+        });
+
+        const post1 = createMockPost({ id: 'post-1', title: 'German Post', language: 'de', status: 'published' });
+        // No posts missing post translations
+        mockPostEngine.getPostsFiltered.mockImplementation(async (filter: any) => {
+          if (filter.missingTranslationLanguage) return [];
+          return [post1]; // all published
+        });
+
+        // Post links to an English-language media item
+        mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([{ mediaId: 'media-en-1', sortOrder: 0 }]);
+        mockMediaEngine.getMedia.mockResolvedValue(createMockMedia({ id: 'media-en-1', language: 'en' }));
+        mockMediaEngine.getMediaTranslations.mockResolvedValue([]); // no translations yet
+
+        const onProgress = vi.fn();
+        let taskDone: Promise<void> | undefined;
+        mockTaskManager.runTask.mockImplementation((task: any) => {
+          taskDone = task.execute(onProgress);
+          return taskDone;
+        });
+
+        const result = await invokeHandler('blog:fillMissingTranslations');
+        await taskDone;
+
+        expect(result).toEqual({ taskStarted: true });
+        // Should translate to German (the missing language), NOT to English (the media's own language)
+        expect(mockAutoTranslateMediaMetadata).toHaveBeenCalledTimes(1);
+        expect(mockAutoTranslateMediaMetadata).toHaveBeenCalledWith('media-en-1', 'de');
       });
     });
 
