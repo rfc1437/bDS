@@ -9,7 +9,7 @@ export type UiLanguage = 'en' | 'de' | 'fr' | 'it' | 'es';
 
 export const UI_LANGUAGE_STORAGE_KEY = 'bds-ui-language';
 
-export const SUPPORTED_UI_LANGUAGES: UiLanguage[] = ['en', 'de', 'fr', 'it', 'es'];
+const SUPPORTED_UI_LANGUAGES: UiLanguage[] = ['en', 'de', 'fr', 'it', 'es'];
 
 type TranslationTable = Record<string, string>;
 

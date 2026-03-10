@@ -23,7 +23,7 @@ export const PICO_THEME_NAMES = [
 export type PicoThemeName = (typeof PICO_THEME_NAMES)[number];
 export type PicoThemeMode = 'auto' | 'light' | 'dark';
 
-export function isPicoThemeName(value: unknown): value is PicoThemeName {
+function isPicoThemeName(value: unknown): value is PicoThemeName {
   return typeof value === 'string' && (PICO_THEME_NAMES as readonly string[]).includes(value);
 }
 
@@ -38,7 +38,7 @@ export function sanitizePicoThemeMode(value: unknown): PicoThemeMode | undefined
   return undefined;
 }
 
-export function getPicoStylesheetAssetName(theme: PicoThemeName | undefined): string {
+function getPicoStylesheetAssetName(theme: PicoThemeName | undefined): string {
   if (!theme) {
     return 'pico.min.css';
   }

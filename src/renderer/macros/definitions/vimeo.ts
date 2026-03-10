@@ -72,5 +72,3 @@ const vimeoMacro: MacroDefinition = {
 
 // Self-register
 registerMacro(vimeoMacro);
-
-export default vimeoMacro;

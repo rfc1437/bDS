@@ -50,8 +50,8 @@ function getNodeColor(depth: number): string {
 
 /* ── Constants ──────────────────────────────────────────────── */
 
-export const FONT_SIZE = 13;
-export const CHAR_WIDTH = 7.8;
+const FONT_SIZE = 13;
+const CHAR_WIDTH = 7.8;
 export const LINE_HEIGHT = 18;
 const NODE_PADDING_X = 14;
 const NODE_PADDING_Y = 8;

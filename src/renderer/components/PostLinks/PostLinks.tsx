@@ -116,5 +116,3 @@ export const PostLinks: React.FC<PostLinksProps> = ({ postId, onPostClick, updat
     </div>
   );
 };
-
-export default PostLinks;

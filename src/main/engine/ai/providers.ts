@@ -24,9 +24,9 @@ import type { ChatModel } from '../../shared/electronApi';
 // Constants
 // ---------------------------------------------------------------------------
 
-export const ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
-export const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
-export const MISTRAL_MODELS_URL = 'https://api.mistral.ai/v1/models';
+const ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
+const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
+const MISTRAL_MODELS_URL = 'https://api.mistral.ai/v1/models';
 export const OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 export const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
 export const LMSTUDIO_BASE_URL = 'http://localhost:1234/v1';

@@ -1,1 +1,0 @@
-export { PostSearchModal } from './PostSearchModal';

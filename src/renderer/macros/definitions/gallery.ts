@@ -74,5 +74,3 @@ const galleryMacro: MacroDefinition = {
 
 // Self-register
 registerMacro(galleryMacro);
-
-export default galleryMacro;

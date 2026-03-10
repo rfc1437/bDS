@@ -46,6 +46,8 @@ export interface DuplicatePair {
 export interface EmbeddingEngineDeps {
   /** Return the path to the USearch index file for a project */
   getIndexPath: (projectId: string) => string;
+  /** Writable directory for caching downloaded models (must be outside app.asar) */
+  modelCacheDir: string;
   /** Create the embedding pipeline (dependency-injected for tests) */
   createPipeline?: () => Promise<EmbeddingPipeline>;
 }
@@ -104,8 +106,9 @@ export class EmbeddingEngine extends EventEmitter {
     // Dynamic import to avoid loading heavy ONNX runtime at startup
     const { pipeline, env } = await import('@huggingface/transformers');
 
-    // Configure cache for Electron -- use ~/.cache/huggingface
+    // Configure cache for Electron -- point to writable userData dir (not app.asar)
     env.useFSCache = true;
+    env.cacheDir = this.deps.modelCacheDir;
 
     const extractor = await pipeline('feature-extraction', this.MODEL_ID, {
       dtype: 'fp32',

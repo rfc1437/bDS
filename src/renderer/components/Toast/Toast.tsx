@@ -2,11 +2,8 @@ import React from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import './Toast.css';
 
-// Re-export toast for use throughout the app
-export { toast };
-
 // Toast types
-export type ToastType = 'success' | 'error' | 'loading' | 'info';
+type ToastType = 'success' | 'error' | 'loading' | 'info';
 
 // Custom toast functions
 export const showToast = {
@@ -84,5 +81,3 @@ export const ToastContainer: React.FC = () => {
     />
   );
 };
-
-export default ToastContainer;

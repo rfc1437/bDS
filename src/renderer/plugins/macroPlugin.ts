@@ -84,12 +84,12 @@ const remarkMacroParser: Plugin<[], Root> = () => {
 /**
  * Remark plugin registration for Milkdown
  */
-export const remarkMacro = $remark('remarkMacro', () => remarkMacroParser);
+const remarkMacro = $remark('remarkMacro', () => remarkMacroParser);
 
 /**
  * ProseMirror node schema for macros
  */
-export const macroNode = $node('macro', () => ({
+const macroNode = $node('macro', () => ({
   group: 'inline',
   inline: true,
   atom: true, // Treated as a single unit, not editable as text
@@ -154,7 +154,7 @@ export const macroNode = $node('macro', () => ({
  * Input rule to convert typed [[macro...]] to macro node
  * Triggers when user types ]] to close a macro
  */
-export const macroInputRule = $inputRule(() => {
+const macroInputRule = $inputRule(() => {
   // Match [[macroName param="value"]] when user types the closing ]]
   return new InputRule(
     /\[\[(\w+)(?:\s+([^\]]+))?\]\]$/,
@@ -185,5 +185,3 @@ export const macroPlugin = [
   macroNode,
   macroInputRule,
 ].flat();
-
-export default macroPlugin;

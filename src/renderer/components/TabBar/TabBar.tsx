@@ -839,5 +839,3 @@ export const TabBar: React.FC = () => {
     </div>
   );
 };
-
-export default TabBar;

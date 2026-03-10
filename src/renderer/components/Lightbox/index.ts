@@ -1,1 +1,1 @@
-export { Lightbox, ImageGallery, useMarkdownImages } from './Lightbox';
+export { Lightbox, useMarkdownImages } from './Lightbox';

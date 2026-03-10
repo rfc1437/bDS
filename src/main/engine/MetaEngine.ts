@@ -144,19 +144,9 @@ function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
 /**
  * Default categories for new projects (from VISION.md)
  */
-export const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
+const DEFAULT_CATEGORIES = ['article', 'picture', 'aside', 'page'];
 
-export function getDefaultCategorySettings(): Record<string, CategoryRenderSettings> {
-  const defaults = getDefaultCategoryMetadata();
-  return Object.fromEntries(
-    Object.entries(defaults).map(([category, value]) => [
-      category,
-      { renderInLists: value.renderInLists, showTitle: value.showTitle },
-    ]),
-  );
-}
-
-export function getDefaultCategoryMetadata(): Record<string, CategoryMetadata> {
+function getDefaultCategoryMetadata(): Record<string, CategoryMetadata> {
   return {
     article: { renderInLists: true, showTitle: true, title: 'article' },
     picture: { renderInLists: true, showTitle: true, title: 'picture' },

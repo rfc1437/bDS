@@ -345,5 +345,3 @@ export const LinkedMediaPanel: React.FC<LinkedMediaPanelProps> = ({
     </div>
   );
 };
-
-export default LinkedMediaPanel;

@@ -32,7 +32,7 @@ export default defineConfig({
             return 'react-vendor';
           }
 
-          if (id.includes('node_modules/zustand') || id.includes('node_modules/date-fns')) {
+          if (id.includes('node_modules/zustand')) {
             return 'app-vendor';
           }
         },

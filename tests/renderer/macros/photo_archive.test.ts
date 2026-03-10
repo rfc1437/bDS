@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { clearMacros, getMacro, registerMacro } from '../../../src/renderer/macros/registry';
 import type { MacroParams, MacroRenderContext } from '../../../src/renderer/macros/types';
-import photoArchiveMacro from '../../../src/renderer/macros/definitions/photo_archive';
+import { photoArchiveMacro } from '../../../src/renderer/macros/definitions/photo_archive';
 
 describe('photo_archive macro', () => {
   beforeEach(() => {

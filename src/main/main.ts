@@ -943,6 +943,7 @@ app.whenReady().then(async () => {
   const embeddingEngine = new EmbeddingEngine({
     getIndexPath: (projectId: string) =>
       path.join(userData, 'projects', projectId, 'embeddings.usearch'),
+    modelCacheDir: path.join(userData, 'model-cache'),
   });
   const appApiAdapter = new AppApiAdapter(projectEngine);
   const publishApiAdapter = new PublishApiAdapter(projectEngine, publishEngine, taskManager);

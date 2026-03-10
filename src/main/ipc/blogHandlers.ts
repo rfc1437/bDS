@@ -245,14 +245,15 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         const seenMediaLang = new Set<string>();
         for (let i = 0; i < publishedPosts.length; i++) {
           const post = publishedPosts[i];
-          const postLang = post.language || mainLang;
           const links = await bundle.postMediaEngine.getLinkedMediaForPost(post.id);
           for (const link of links) {
+            const mediaItem = await bundle.mediaEngine.getMedia(link.mediaId);
+            const mediaLang = mediaItem?.language || mainLang;
             const mediaTranslations = await bundle.mediaEngine.getMediaTranslations(link.mediaId);
             const existingLangs = new Set(mediaTranslations.map((t) => t.language));
             for (const lang of blogLanguages) {
               const key = `${link.mediaId}:${lang}`;
-              if (lang !== postLang && !existingLangs.has(lang) && !seenMediaLang.has(key)) {
+              if (lang !== mediaLang && !existingLangs.has(lang) && !seenMediaLang.has(key)) {
                 seenMediaLang.add(key);
                 mediaItems.push({ mediaId: link.mediaId, targetLang: lang });
               }

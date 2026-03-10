@@ -23,7 +23,7 @@ export interface MacroConfig {
  * Registry of known macro configurations.
  * Add new macros here to enable validation during import analysis.
  */
-export const macroConfigs: MacroConfig[] = [
+const macroConfigs: MacroConfig[] = [
   {
     name: 'youtube',
     description: 'Embeds a YouTube video player',
@@ -105,43 +105,3 @@ export function getMacroConfigMap(): Map<string, MacroConfig> {
   return map;
 }
 
-/**
- * Validate macro parameters against known configurations.
- * 
- * @param macroName - The macro name
- * @param params - The macro parameters
- * @returns Error message if invalid, undefined if valid or macro is unknown
- */
-export function validateMacroParams(
-  macroName: string,
-  params: Record<string, string>
-): { valid: boolean; error?: string; known: boolean } {
-  const config = getMacroConfigMap().get(macroName.toLowerCase());
-  
-  if (!config) {
-    return { valid: false, known: false };
-  }
-  
-  // Check required parameters
-  if (config.requiredParams) {
-    for (const param of config.requiredParams) {
-      if (!params[param]) {
-        return { 
-          valid: false, 
-          known: true, 
-          error: `Missing required parameter: ${param}` 
-        };
-      }
-    }
-  }
-  
-  // Run custom validation if provided
-  if (config.validate) {
-    const error = config.validate(params);
-    if (error) {
-      return { valid: false, known: true, error };
-    }
-  }
-  
-  return { valid: true, known: true };
-}

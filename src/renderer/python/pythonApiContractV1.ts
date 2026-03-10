@@ -3,7 +3,6 @@ export {
   BDS_PYTHON_API_CONTRACT_V1,
   listPythonApiMethodNames,
   getPythonApiMethodContract,
-  getPythonApiDataStructureContracts,
 } from '../../main/shared/pythonApiContractV1';
 
 export type {

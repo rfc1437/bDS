@@ -43,11 +43,11 @@ export function urlPathToHtmlIndexPath(htmlDir: string, urlPath: string): string
   return path.join(htmlDir, normalizedPath.slice(1), 'index.html');
 }
 
-export function computeContentHash(content: string): string {
+function computeContentHash(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
-export function computeBufferHash(content: Buffer): string {
+function computeBufferHash(content: Buffer): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
