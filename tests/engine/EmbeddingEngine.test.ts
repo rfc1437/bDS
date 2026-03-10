@@ -138,6 +138,7 @@ function createMockPipeline(): EmbeddingPipeline {
 function makeEngine(tmpDir: string): EmbeddingEngine {
   return new EmbeddingEngine({
     getIndexPath: (projectId: string) => path.join(tmpDir, `${projectId}.usearch`),
+    modelCacheDir: path.join(tmpDir, 'model-cache'),
     createPipeline: async () => createMockPipeline(),
   });
 }

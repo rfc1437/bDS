@@ -130,6 +130,10 @@
     "appId": "com.bds.blogging-desktop-server",
     "productName": "Blogging Desktop Server",
     "asar": true,
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/usearch/**"
+    ],
     "afterSign": "scripts/notarize.mjs",
     "directories": {
       "output": "release"
