@@ -898,14 +898,19 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       const result = await handleDropImport(postId, filePath);
       if (result) {
         // Insert markdown image reference at cursor position in Monaco
-        const monacoEditor = editorRef.current as { executeEdits?: (source: string, edits: Array<{ range: unknown; text: string }>) => void; getPosition?: () => { lineNumber: number; column: number } | null; getModel?: () => { getFullModelRange?: () => unknown } | null } | null;
+        const monacoEditor = editorRef.current as any;
         const imageMarkdown = `![${result.alt}](${result.relativePath})`;
 
         if (monacoEditor?.executeEdits && monacoEditor?.getPosition) {
           const position = monacoEditor.getPosition();
           if (position) {
             monacoEditor.executeEdits('drop-image', [{
-              range: { startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column },
+              range: {
+                startLineNumber: position.lineNumber,
+                startColumn: position.column,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column,
+              },
               text: `\n${imageMarkdown}\n`,
             }]);
           }
