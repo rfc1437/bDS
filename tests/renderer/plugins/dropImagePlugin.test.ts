@@ -1,11 +1,11 @@
 /**
  * Tests for the drop image plugin validation logic.
  */
-import { describe, it, expect } from 'vitest';
-import { hasImageFiles, SUPPORTED_IMAGE_EXTENSIONS } from '../../../src/renderer/plugins/dropImagePlugin';
+import { describe, it, expect, vi } from 'vitest';
+import { createImageImportPayload, hasImageFiles, SUPPORTED_IMAGE_EXTENSIONS } from '../../../src/renderer/plugins/dropImagePlugin';
 
-function makeFile(name: string): File {
-  return new File([''], name, { type: 'application/octet-stream' });
+function makeFile(name: string, type: string = 'application/octet-stream'): File {
+  return new File([''], name, { type });
 }
 
 describe('dropImagePlugin', () => {
@@ -47,6 +47,10 @@ describe('dropImagePlugin', () => {
       expect(hasImageFiles([makeFile('photo.jpg'), makeFile('doc.pdf')])).toBe(false);
     });
 
+    it('should return true for screenshot-like clipboard files identified only by mime type', () => {
+      expect(hasImageFiles([makeFile('', 'image/png')])).toBe(true);
+    });
+
     it('should return false for empty list', () => {
       expect(hasImageFiles([])).toBe(false);
     });
@@ -54,6 +58,26 @@ describe('dropImagePlugin', () => {
     it('should return false for null-ish input', () => {
       expect(hasImageFiles(null as unknown as File[])).toBe(false);
       expect(hasImageFiles(undefined as unknown as File[])).toBe(false);
+    });
+  });
+
+  describe('createImageImportPayload', () => {
+    it('should build a buffer payload for screenshot-like clipboard images without a native path', async () => {
+      const screenshot = makeFile('', 'image/png');
+      const arrayBuffer = vi.fn().mockResolvedValue(new ArrayBuffer(0));
+      Object.defineProperty(screenshot, 'arrayBuffer', {
+        value: arrayBuffer,
+      });
+
+      const payload = await createImageImportPayload(screenshot);
+
+      expect(arrayBuffer).toHaveBeenCalledOnce();
+      expect(payload).toEqual({
+        kind: 'buffer',
+        fileName: 'pasted-image.png',
+        mimeType: 'image/png',
+        bytes: new Uint8Array(),
+      });
     });
   });
 });

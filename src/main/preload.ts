@@ -150,6 +150,7 @@ export const electronAPI: ElectronAPI = {
     isLinked: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:isLinked', postId, mediaId),
     import: (postId: string, filePath: string) => ipcRenderer.invoke('postMedia:import', postId, filePath),
     dropImport: (postId: string, filePath: string) => ipcRenderer.invoke('postMedia:dropImport', postId, filePath),
+    dropImportBuffer: (postId: string, payload: { fileName: string; mimeType: string; bytes: Uint8Array }) => ipcRenderer.invoke('postMedia:dropImportBuffer', postId, payload),
     rebuild: () => ipcRenderer.invoke('postMedia:rebuild'),
   },
 
@@ -202,7 +203,7 @@ export const electronAPI: ElectronAPI = {
     syncOnStartup: () => ipcRenderer.invoke('meta:syncOnStartup'),
     getProjectMetadata: () => ipcRenderer.invoke('meta:getProjectMetadata'),
     setProjectMetadata: (metadata: { name: string; description?: string }) => ipcRenderer.invoke('meta:setProjectMetadata', metadata),
-    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }>; semanticSimilarityEnabled?: boolean }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
+    updateProjectMetadata: (updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('./shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }>; semanticSimilarityEnabled?: boolean; blogLanguages?: string[] }) => ipcRenderer.invoke('meta:updateProjectMetadata', updates),
     getPublishingPreferences: () => ipcRenderer.invoke('meta:getPublishingPreferences'),
     setPublishingPreferences: (prefs: { sshHost: string; sshUser: string; sshRemotePath: string; sshMode: 'scp' | 'rsync' }) => ipcRenderer.invoke('meta:setPublishingPreferences', prefs),
     clearPublishingPreferences: () => ipcRenderer.invoke('meta:clearPublishingPreferences'),

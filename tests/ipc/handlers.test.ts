@@ -78,6 +78,7 @@ const mockMediaEngine = {
   setProjectContext: vi.fn(),
   setSearchLanguage: vi.fn(),
   importMedia: vi.fn(),
+  importMediaBuffer: vi.fn(),
   updateMedia: vi.fn(),
   deleteMedia: vi.fn(),
   getMedia: vi.fn(),
@@ -1572,6 +1573,21 @@ describe('IPC Handlers', () => {
         expect(mockMetaEngine.updateProjectMetadata).toHaveBeenCalledWith(updates);
         expect(result).toEqual(updatedMetadata);
       });
+
+      it('should pass blogLanguages through to meta engine', async () => {
+        const activeProject = createMockProject({ id: 'project-langs', dataPath: '/langs/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/langs-data');
+        mockMetaEngine.updateProjectMetadata.mockResolvedValue(undefined);
+        const updatedMetadata = { name: 'Test', blogLanguages: ['en', 'de', 'fr'] };
+        mockMetaEngine.getProjectMetadata.mockResolvedValue(updatedMetadata);
+
+        const updates = { blogLanguages: ['en', 'de', 'fr'] };
+        const result = await invokeHandler('meta:updateProjectMetadata', updates);
+
+        expect(mockMetaEngine.updateProjectMetadata).toHaveBeenCalledWith(updates);
+        expect(result).toEqual(updatedMetadata);
+      });
     });
   });
 
@@ -1840,6 +1856,54 @@ describe('IPC Handlers', () => {
         // Should NOT call updateMedia or translate when analysis fails
         expect(mockMediaEngine.updateMedia).not.toHaveBeenCalled();
         expect(mockAutoTranslateMediaMetadata).not.toHaveBeenCalled();
+      });
+
+      it('should reject non-image files before importing them into the media library', async () => {
+        await expect(invokeHandler('postMedia:dropImport', 'post-1', '/tmp/document.pdf')).rejects.toThrow(/image/i);
+
+        expect(mockMediaEngine.importMedia).not.toHaveBeenCalled();
+        expect(mockPostMediaEngine.linkMediaToPost).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('postMedia:dropImportBuffer', () => {
+      it('should import screenshot-like image buffers without a native file path', async () => {
+        const mockMedia = createMockMedia({ id: 'drop-media-buffer-1', filename: 'drop-media-buffer-1.png', mimeType: 'image/png' });
+        mockMediaEngine.importMediaBuffer.mockResolvedValue(mockMedia);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({ name: 'Test', mainLanguage: 'en', blogLanguages: ['en', 'de'] });
+        mockPostMediaEngine.linkMediaToPost.mockResolvedValue(undefined);
+        mockMediaEngine.updateMedia.mockResolvedValue(mockMedia);
+        mockMediaEngine.getRelativePath.mockResolvedValue('media/2026/03/drop-media-buffer-1.png');
+        mockPostEngine.getPost.mockResolvedValue(createMockPost({ id: 'post-4', status: 'draft' }));
+        mockAutoAnalyzeMediaImage.mockResolvedValue({ success: true, title: 'AI Title', alt: 'AI alt', caption: 'AI caption' });
+
+        mockDatabase.getLocal.mockReturnValue({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue({ filePath: '/mock/media/drop-media-buffer-1.png' }),
+              })),
+            })),
+          })),
+        });
+
+        const result = await invokeHandler(
+          'postMedia:dropImportBuffer',
+          'post-4',
+          { fileName: 'pasted-image.png', mimeType: 'image/png', bytes: new Uint8Array() },
+        );
+
+        expect(mockMediaEngine.importMediaBuffer).toHaveBeenCalledWith(
+          expect.any(Uint8Array),
+          'pasted-image.png',
+          expect.objectContaining({ language: 'en', mimeType: 'image/png' }),
+        );
+        expect(mockPostMediaEngine.linkMediaToPost).toHaveBeenCalledWith('post-4', 'drop-media-buffer-1');
+        expect(result).toEqual({
+          mediaId: 'drop-media-buffer-1',
+          alt: 'AI alt',
+          relativePath: 'media/2026/03/drop-media-buffer-1.png',
+        });
       });
     });
   });

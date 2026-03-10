@@ -58,6 +58,12 @@ export interface ProjectMetadata {
   blogLanguages?: string[];
 }
 
+export interface DropImportBufferPayload {
+  fileName: string;
+  mimeType: string;
+  bytes: Uint8Array;
+}
+
 export interface CategoryRenderSettings {
   renderInLists: boolean;
   showTitle: boolean;
@@ -771,6 +777,7 @@ export interface ElectronAPI {
     isLinked: (postId: string, mediaId: string) => Promise<boolean>;
     import: (postId: string, filePath: string) => Promise<MediaLinkData>;
     dropImport: (postId: string, filePath: string) => Promise<{ mediaId: string; alt: string; relativePath: string }>;
+    dropImportBuffer: (postId: string, payload: DropImportBufferPayload) => Promise<{ mediaId: string; alt: string; relativePath: string }>;
     rebuild: () => Promise<void>;
   };
   sync: {

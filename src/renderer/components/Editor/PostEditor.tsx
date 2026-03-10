@@ -15,7 +15,7 @@ import { useEntityLoader, useSaveShortcut } from '../../navigation/useEntityEdit
 import { useI18n } from '../../i18n';
 import { SUPPORTED_POST_LANGUAGES, POST_LANGUAGE_FLAGS } from '../../../main/shared/i18n';
 import { UI_DATE_LOCALE, getMediaDisplayName } from './editorUtils';
-import { dropImageContext, hasImageFiles, SUPPORTED_IMAGE_EXTENSIONS } from '../../plugins/dropImagePlugin';
+import { dropImageContext, hasImageFiles, importImageFile } from '../../plugins/dropImagePlugin';
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -824,18 +824,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
   // ── Drag-and-drop image import handler ──────────────────────────────
 
-  const handleDropImport = useCallback(async (pid: string, filePath: string): Promise<{ mediaId: string; alt: string; relativePath: string } | null> => {
+  const runDropImport = useCallback(async (request: () => Promise<{ mediaId: string; alt: string; relativePath: string } | null | undefined>): Promise<{ mediaId: string; alt: string; relativePath: string } | null> => {
     try {
       showToast.info(tr('editor.dropImage.importing'));
-      const result = await window.electronAPI?.postMedia.dropImport(pid, filePath);
+      const result = await request();
       if (result) {
         showToast.success(tr('editor.dropImage.success'));
-        // Refresh post data to reflect status change (published → draft)
-        const refreshed = await window.electronAPI?.posts.get(pid);
-        if (refreshed) {
-          setPost(refreshed as PostData);
-          updatePost(pid, refreshed as Partial<PostData>);
-        }
         return result;
       }
       return null;
@@ -844,17 +838,48 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
       showToast.error(tr('editor.dropImage.failed'));
       return null;
     }
-  }, [tr, updatePost]);
+  }, [tr]);
+
+  const refreshPostAfterDropImport = useCallback(async (pid: string) => {
+    const refreshed = await window.electronAPI?.posts.get(pid);
+    if (refreshed) {
+      setPost(refreshed as PostData);
+      updatePost(pid, refreshed as Partial<PostData>);
+    }
+  }, [updatePost]);
+
+  const handleDropImport = useCallback(async (pid: string, filePath: string): Promise<{ mediaId: string; alt: string; relativePath: string } | null> => {
+    const result = await runDropImport(() => window.electronAPI?.postMedia.dropImport(pid, filePath));
+    if (result) {
+      await refreshPostAfterDropImport(pid);
+    }
+    return result;
+  }, [refreshPostAfterDropImport, runDropImport]);
+
+  const handleDropImportBuffer = useCallback(async (pid: string, payload: { fileName: string; mimeType: string; bytes: Uint8Array }): Promise<{ mediaId: string; alt: string; relativePath: string } | null> => {
+    const result = await runDropImport(() => window.electronAPI?.postMedia.dropImportBuffer(pid, payload));
+    if (result) {
+      await refreshPostAfterDropImport(pid);
+    }
+    return result;
+  }, [refreshPostAfterDropImport, runDropImport]);
+
+  const handleDropImportFile = useCallback(async (pid: string, file: File): Promise<{ mediaId: string; alt: string; relativePath: string } | null> => {
+    return importImageFile(pid, file, {
+      importFromPath: handleDropImport,
+      importFromBuffer: handleDropImportBuffer,
+    });
+  }, [handleDropImport, handleDropImportBuffer]);
 
   // Keep the shared dropImageContext in sync so the Milkdown plugin can access it
   useEffect(() => {
     dropImageContext.postId = postId;
-    dropImageContext.onDropImport = handleDropImport;
+    dropImageContext.onDropImportFile = handleDropImportFile;
     return () => {
       dropImageContext.postId = null;
-      dropImageContext.onDropImport = null;
+      dropImageContext.onDropImportFile = null;
     };
-  }, [postId, handleDropImport]);
+  }, [postId, handleDropImportFile]);
 
   // Drag-and-drop handler for the Monaco markdown editor
   const handleEditorBodyDragOver = useCallback((e: React.DragEvent) => {
@@ -883,19 +908,16 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
 
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
-    if (!hasImageFiles(files)) return;
+    if (!hasImageFiles(files)) {
+      showToast.info(tr('editor.dropImage.invalidType'));
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
 
     for (const file of Array.from(files)) {
-      const filePath = (file as File & { path?: string }).path;
-      if (!filePath) continue;
-
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      if (!SUPPORTED_IMAGE_EXTENSIONS.has(ext)) continue;
-
-      const result = await handleDropImport(postId, filePath);
+      const result = await handleDropImportFile(postId, file);
       if (result) {
         // Insert markdown image reference at cursor position in Monaco
         const monacoEditor = editorRef.current as any;
@@ -914,13 +936,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
               text: `\n${imageMarkdown}\n`,
             }]);
           }
-        } else {
-          // Fallback: append to content
-          setContent(content + `\n${imageMarkdown}\n`);
         }
       }
     }
-  }, [editorMode, handleDropImport, postId, setContent, content]);
+  }, [editorMode, handleDropImportFile, postId, tr]);
 
   // Close quick actions menu when clicking outside
   useEffect(() => {

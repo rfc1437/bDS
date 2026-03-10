@@ -522,33 +522,31 @@ export class MediaEngine extends EventEmitter {
     return mimeTypes[ext] || 'application/octet-stream';
   }
 
-  async importMedia(sourcePath: string, metadata?: Partial<MediaData>): Promise<MediaData> {
+  private async importMediaBytes(sourceBuffer: Buffer, originalName: string, metadata?: Partial<MediaData>, sourcePath?: string): Promise<MediaData> {
     const db = getDatabase().getLocal();
     const id = uuidv4();
     const now = new Date();
-    
-    // Use provided createdAt date or current date
+
     const createdAt = metadata?.createdAt ?? now;
     const updatedAt = metadata?.updatedAt ?? now;
-    
-    const sourceBuffer = await fs.readFile(sourcePath);
-    const originalName = path.basename(sourcePath);
+
     const ext = path.extname(originalName);
     const filename = `${id}${ext}`;
-    
-    // Use date-based directory structure (media/YYYY/MM/) based on createdAt
+
     const mediaDir = this.getMediaDirForDate(createdAt);
     await fs.mkdir(mediaDir, { recursive: true });
     const destPath = path.join(mediaDir, filename);
 
-    // Copy file to media directory
-    await fs.copyFile(sourcePath, destPath);
+    if (sourcePath) {
+      await fs.copyFile(sourcePath, destPath);
+    } else {
+      await fs.writeFile(destPath, sourceBuffer);
+    }
 
     const mimeType = metadata?.mimeType || this.getMimeType(originalName);
     let width = metadata?.width;
     let height = metadata?.height;
 
-    // Get image dimensions using sharp if it's an image
     if (mimeType.startsWith('image/') && !mimeType.includes('svg')) {
       try {
         const sharp = (await import('sharp')).default;
@@ -582,7 +580,6 @@ export class MediaEngine extends EventEmitter {
     const sidecarPath = await this.writeSidecarFile(mediaData, destPath);
     const checksum = this.calculateChecksum(sourceBuffer);
 
-    // Generate thumbnails for images (async, non-blocking)
     if (mimeType.startsWith('image/') && !mimeType.includes('svg')) {
       this.generateThumbnails(id, destPath).catch(err => {
         console.error('Failed to generate thumbnails:', err);
@@ -613,7 +610,6 @@ export class MediaEngine extends EventEmitter {
 
     await db.insert(media).values(dbMedia);
 
-    // Update FTS index
     await this.updateFTSIndex({
       id: mediaData.id,
       projectId: this.currentProjectId,
@@ -627,6 +623,16 @@ export class MediaEngine extends EventEmitter {
     this.emit('mediaImported', mediaData);
     await this.notifier.notify('media', mediaData.id, 'created');
     return mediaData;
+  }
+
+  async importMedia(sourcePath: string, metadata?: Partial<MediaData>): Promise<MediaData> {
+    const sourceBuffer = await fs.readFile(sourcePath);
+    const originalName = path.basename(sourcePath);
+    return this.importMediaBytes(sourceBuffer, originalName, metadata, sourcePath);
+  }
+
+  async importMediaBuffer(sourceBytes: Uint8Array, originalName: string, metadata?: Partial<MediaData>): Promise<MediaData> {
+    return this.importMediaBytes(Buffer.from(sourceBytes), originalName, metadata);
   }
 
   async updateMedia(id: string, data: Partial<MediaData>): Promise<MediaData | null> {
