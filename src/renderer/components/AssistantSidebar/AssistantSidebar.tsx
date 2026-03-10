@@ -302,5 +302,3 @@ export const AssistantSidebar: React.FC = () => {
     </div>
   );
 };
-
-export default AssistantSidebar;

@@ -12,15 +12,6 @@ describe('Phase 1 i18n hardcoded literals', () => {
   it('does not keep known hardcoded user-facing literals in renderer components', () => {
     const checks: Array<{ file: string; literals: string[] }> = [
       {
-        file: 'src/renderer/components/PostSearchModal/PostSearchModal.tsx',
-        literals: [
-          'Search posts by title or content...',
-          'Searching...',
-          'Type at least 2 characters to search',
-          'Use ↑↓ to navigate, Enter to select, Esc to close',
-        ],
-      },
-      {
         file: 'src/renderer/components/StatusBar/StatusBar.tsx',
         literals: ['<span>{totalPosts} posts</span>', '<span>{media.length} media</span>', 'Theme: {activeTheme}', 'aria-label="UI language"'],
       },

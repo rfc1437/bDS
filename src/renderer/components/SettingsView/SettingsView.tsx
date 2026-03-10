@@ -2246,5 +2246,3 @@ export const SettingsView: React.FC = () => {
     </div>
   );
 };
-
-export default SettingsView;

@@ -34,7 +34,7 @@ function getMonthName(month: number): string {
   return MONTH_NAMES[month - 1] || 'Unknown';
 }
 
-const photoArchiveMacro: MacroDefinition = {
+export const photoArchiveMacro: MacroDefinition = {
   name: 'photo_archive',
   description: 'Creates a photo archive gallery organized by year and month',
 
@@ -125,5 +125,3 @@ const photoArchiveMacro: MacroDefinition = {
 // Self-register
 registerMacro(photoArchiveMacro);
 
-export default photoArchiveMacro;
-export { getMonthName, MONTH_NAMES };

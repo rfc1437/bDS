@@ -147,5 +147,3 @@ export const imageResolverPlugin = $prose(() => {
     },
   });
 });
-
-export default imageResolverPlugin;

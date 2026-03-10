@@ -136,5 +136,3 @@ export const StyleView: React.FC = () => {
     </div>
   );
 };
-
-export default StyleView;

@@ -387,5 +387,3 @@ export const ProjectSelector: React.FC = () => {
     </div>
   );
 };
-
-export default ProjectSelector;

@@ -244,7 +244,7 @@ export interface TagUsageEntry {
 
 export type TagCloudOrientationMode = 'horizontal' | 'mixed-hv' | 'mixed-diagonal';
 
-export function normalizeTagCloudOrientation(value: string | undefined): TagCloudOrientationMode {
+function normalizeTagCloudOrientation(value: string | undefined): TagCloudOrientationMode {
   const normalized = (value || '').trim().toLowerCase();
 
   if (normalized === 'mixed_hv' || normalized === 'mixed-hv' || normalized === 'hv' || normalized === 'horizontal_vertical') {
@@ -376,7 +376,7 @@ export function resolvePageTitle(metadata: { description?: string; name?: string
   return 'Blog Preview';
 }
 
-export function escapeHtml(value: string): string {
+function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -385,7 +385,7 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export function parseMacroParams(paramString: string | undefined): Record<string, string> {
+function parseMacroParams(paramString: string | undefined): Record<string, string> {
   if (!paramString) return {};
 
   const params: Record<string, string> = {};
@@ -399,7 +399,7 @@ export function parseMacroParams(paramString: string | undefined): Record<string
   return params;
 }
 
-export function parseIntegerParam(value: string | undefined): number | null {
+function parseIntegerParam(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) ? parsed : null;
@@ -514,13 +514,13 @@ function renderMacroTemplate(templateName: string, context: Record<string, unkno
   return macroLiquid.parseAndRenderSync(readMacroTemplateSource(templateName), context);
 }
 
-export function buildCanonicalMediaPath(media: MediaData): string {
+function buildCanonicalMediaPath(media: MediaData): string {
   const year = media.createdAt.getFullYear();
   const month = String(media.createdAt.getMonth() + 1).padStart(2, '0');
   return `/media/${year}/${month}/${media.filename}`;
 }
 
-export function isRenderableImage(media: MediaData): boolean {
+function isRenderableImage(media: MediaData): boolean {
   if (media.mimeType?.toLowerCase().startsWith('image/')) {
     return true;
   }
@@ -529,7 +529,7 @@ export function isRenderableImage(media: MediaData): boolean {
   return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'].includes(extension);
 }
 
-export function buildPhotoArchiveBuckets(
+function buildPhotoArchiveBuckets(
   mediaItems: MediaData[],
   params: Record<string, string>,
 ): Array<{ year: number; month: number; media: MediaData[] }> {
@@ -580,7 +580,7 @@ export function buildPhotoArchiveBuckets(
   return orderedBuckets;
 }
 
-export function renderGalleryMacro(
+function renderGalleryMacro(
   params: Record<string, string>,
   postId: string,
   mediaItems: MediaData[],
@@ -621,7 +621,7 @@ export function renderGalleryMacro(
   });
 }
 
-export function renderPhotoArchiveMacro(
+function renderPhotoArchiveMacro(
   params: Record<string, string>,
   mediaItems: MediaData[],
   renderLanguage: string,
@@ -678,7 +678,7 @@ export function renderPhotoArchiveMacro(
   });
 }
 
-export function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageEntry[], renderLanguage: string): string {
+function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageEntry[], renderLanguage: string): string {
   const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
   const widthParam = parseIntegerParam(params.width);
   const heightParam = parseIntegerParam(params.height);
@@ -727,14 +727,14 @@ export function renderTagCloudMacro(params: Record<string, string>, tagUsage: Ta
   });
 }
 
-export function isExternalOrSpecialUrl(value: string): boolean {
+function isExternalOrSpecialUrl(value: string): boolean {
   const normalized = value.trim();
   if (!normalized) return false;
   if (normalized.startsWith('#') || normalized.startsWith('//')) return true;
   return /^[a-z][a-z0-9+.-]*:/i.test(normalized);
 }
 
-export function splitPathSuffix(value: string): { pathPart: string; suffix: string } {
+function splitPathSuffix(value: string): { pathPart: string; suffix: string } {
   const match = value.match(/^([^?#]*)([?#].*)?$/);
   return {
     pathPart: match?.[1] ?? value,
@@ -802,7 +802,7 @@ export function normalizePreviewHref(rawHref: string, rewriteContext: HtmlRewrit
   return rawHref;
 }
 
-export function normalizePreviewSrc(rawSrc: string, rewriteContext: HtmlRewriteContext): string {
+function normalizePreviewSrc(rawSrc: string, rewriteContext: HtmlRewriteContext): string {
   if (!rawSrc || isExternalOrSpecialUrl(rawSrc)) {
     return rawSrc;
   }
@@ -891,7 +891,7 @@ export function isBuiltInMacro(name: string): boolean {
   return JS_BUILTIN_MACROS.has(normalizeMacroName(name));
 }
 
-export function serializePostDataForMacro(post: PostData): Record<string, unknown> {
+function serializePostDataForMacro(post: PostData): Record<string, unknown> {
   return {
     id: post.id,
     projectId: post.projectId,
@@ -1019,21 +1019,21 @@ export function buildCanonicalPostPath(post: PostData): string {
   return `/${year}/${month}/${day}/${post.slug}`;
 }
 
-export function formatArchiveDate(date: Date): string {
+function formatArchiveDate(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = String(date.getFullYear());
   return `${day}.${month}.${year}`;
 }
 
-export function getArchiveDateKey(date: Date): string {
+function getArchiveDateKey(date: Date): string {
   const year = String(date.getFullYear());
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
-export function toDateParts(date: Date): { day: number; month: number; year: number } {
+function toDateParts(date: Date): { day: number; month: number; year: number } {
   return {
     day: date.getDate(),
     month: date.getMonth() + 1,
@@ -1041,7 +1041,7 @@ export function toDateParts(date: Date): { day: number; month: number; year: num
   };
 }
 
-export function buildPaginationHref(basePathname: string, page: number): string {
+function buildPaginationHref(basePathname: string, page: number): string {
   const base = basePathname === '/' ? '' : basePathname;
   if (page <= 1) {
     return basePathname === '/' ? '/' : `${basePathname}/`;
@@ -1072,7 +1072,7 @@ export function mapToRecord(map: Map<string, string>): Record<string, string> {
   return Object.fromEntries(map.entries());
 }
 
-export function recordToMap(record: unknown): Map<string, string> {
+function recordToMap(record: unknown): Map<string, string> {
   if (!record || typeof record !== 'object') {
     return new Map<string, string>();
   }

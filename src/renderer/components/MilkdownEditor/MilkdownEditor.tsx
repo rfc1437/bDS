@@ -391,5 +391,3 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
     </div>
   );
 };
-
-export default MilkdownEditor;

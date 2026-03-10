@@ -1,1 +1,1 @@
-export { ToastContainer, toast, showToast, type ToastType } from './Toast';
+export { ToastContainer, showToast } from './Toast';

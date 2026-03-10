@@ -506,5 +506,3 @@ export const WindowTitleBar: React.FC = () => {
     </div>
   );
 };
-
-export default WindowTitleBar;

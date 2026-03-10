@@ -517,7 +517,3 @@ export function listPythonApiMethodNames(): string[] {
 export function getPythonApiMethodContract(methodName: string): PythonApiMethodContractV1 | undefined {
   return BDS_PYTHON_API_CONTRACT_V1.methods.find((entry) => entry.method === methodName);
 }
-
-export function getPythonApiDataStructureContracts(): PythonApiDataStructureContractV1[] {
-  return BDS_PYTHON_API_CONTRACT_V1.dataStructures;
-}

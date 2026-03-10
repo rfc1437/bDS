@@ -221,5 +221,3 @@ export const TaskPopup: React.FC = () => {
     </div>
   );
 };
-
-export default TaskPopup;

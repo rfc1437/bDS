@@ -17,7 +17,8 @@
       "Bash(grep -n \"templateSlug\\\\|postTemplateSlug\" /Users/gb/Projects/bDS/src/main/engine/*.ts)",
       "Bash(npm test -- tests/renderer/i18nLocaleCompleteness.test.ts)",
       "WebFetch(domain:ricmac.org)",
-      "WebFetch(domain:docs.mistral.ai)"
+      "WebFetch(domain:docs.mistral.ai)",
+      "Bash(npm uninstall dropbox date-fns @testing-library/user-event @types/dagre electron-store memfs)"
     ]
   }
 }

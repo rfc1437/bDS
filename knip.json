@@ -1,0 +1,55 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main/main.ts",
+    "src/main/preload.ts",
+    "src/cli/bds-mcp.ts",
+    "src/main/engine/generation.worker.ts",
+    "src/main/engine/pythonMacro.worker.ts",
+    "src/main/engine/blogmarkPython.worker.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}"
+  ],
+  "ignoreDependencies": [
+    "@ai-sdk/provider",
+    "@electron/notarize",
+    "@floating-ui/dom",
+    "@milkdown/plugin-block",
+    "@milkdown/plugin-clipboard",
+    "@milkdown/plugin-cursor",
+    "@milkdown/plugin-history",
+    "@milkdown/plugin-indent",
+    "@milkdown/plugin-listener",
+    "@milkdown/plugin-trailing",
+    "@milkdown/theme-nord",
+    "d3-cloud",
+    "highlight.js",
+    "lightbox2",
+    "marked",
+    "mdast",
+    "unified",
+    "unist-util-visit",
+    "vanilla-calendar-pro"
+  ],
+  "vitest": {
+    "config": ["vitest.config.ts"],
+    "entry": [
+      "tests/**/*.test.{ts,tsx}",
+      "src/**/*.test.{ts,tsx}",
+      "tests/setup.ts"
+    ]
+  },
+  "eslint": {
+    "config": ["eslint.config.mjs"]
+  },
+  "vite": {
+    "config": ["vite.config.ts", "vite.config.cli.ts"]
+  },
+  "drizzle": {
+    "config": ["drizzle.config.ts"]
+  },
+  "paths": {
+    "@/*": ["src/renderer/*"]
+  }
+}

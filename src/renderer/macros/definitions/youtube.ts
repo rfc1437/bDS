@@ -85,5 +85,3 @@ const youtubeMacro: MacroDefinition = {
 
 // Self-register
 registerMacro(youtubeMacro);
-
-export default youtubeMacro;

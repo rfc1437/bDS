@@ -133,11 +133,11 @@ export function openTemplateTab(
   openTab(getTemplateTabSpec(templateId, intent));
 }
 
-export function getGitDiffFileTabId(filePath: string): string {
+function getGitDiffFileTabId(filePath: string): string {
   return `git-diff:${filePath}`;
 }
 
-export function getGitDiffCommitTabId(commitHash: string): string {
+function getGitDiffCommitTabId(commitHash: string): string {
   return `git-diff:commit:${commitHash}`;
 }
 
