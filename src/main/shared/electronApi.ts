@@ -55,6 +55,7 @@ export interface ProjectMetadata {
   categoryMetadata?: Record<string, CategoryMetadata>;
   categorySettings?: Record<string, CategoryRenderSettings>;
   semanticSimilarityEnabled?: boolean;
+  blogLanguages?: string[];
 }
 
 export interface CategoryRenderSettings {
@@ -769,6 +770,7 @@ export interface ElectronAPI {
     reorder: (postId: string, mediaIds: string[]) => Promise<void>;
     isLinked: (postId: string, mediaId: string) => Promise<boolean>;
     import: (postId: string, filePath: string) => Promise<MediaLinkData>;
+    dropImport: (postId: string, filePath: string) => Promise<{ mediaId: string; alt: string; relativePath: string }>;
     rebuild: () => Promise<void>;
   };
   sync: {

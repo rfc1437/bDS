@@ -21,7 +21,7 @@ import { registerEmbeddingHandlers } from './embeddingHandlers';
 import { isOfflineModeActive } from './chatHandlers';
 import type { EngineBundle } from '../engine/EngineBundle';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from '../shared/i18n';
-import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
+import { autoTranslatePost, autoTranslateMediaMetadata, autoAnalyzeMediaImage } from './chatHandlers';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -1468,6 +1468,79 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   safeHandle('postMedia:import', async (_, postId: string, filePath: string) => {
     const engine = bundle.postMediaEngine;
     return engine.importMediaForPost(postId, filePath);
+  });
+
+  safeHandle('postMedia:dropImport', async (_, postId: string, filePath: string) => {
+    const mediaEngine = bundle.mediaEngine;
+    const postMediaEngine = bundle.postMediaEngine;
+    const postEngine = bundle.postEngine;
+    const metaEngine = bundle.metaEngine;
+
+    // 1. Get project metadata for mainLanguage and blogLanguages
+    const projectMetadata = await metaEngine.getProjectMetadata();
+    const mainLanguage = projectMetadata?.mainLanguage || 'en';
+    const blogLanguages: string[] = projectMetadata?.blogLanguages || [];
+
+    // Apply default author if available
+    const metadata: Partial<MediaData> = {};
+    if (projectMetadata?.defaultAuthor) {
+      metadata.author = projectMetadata.defaultAuthor;
+    }
+    metadata.language = mainLanguage;
+
+    // 2. Import the media file (copies to media/YYYY/MM/, creates sidecar, starts async thumbnails)
+    const importedMedia = await mediaEngine.importMedia(filePath, metadata);
+
+    // 3. Explicitly await thumbnail generation so AI analysis has the AI thumbnail ready
+    const db = getDatabase().getLocal();
+    const dbMedia = await db.select().from(media).where(eq(media.id, importedMedia.id)).get();
+    if (dbMedia?.filePath && importedMedia.mimeType.startsWith('image/') && !importedMedia.mimeType.includes('svg')) {
+      try {
+        await mediaEngine.generateThumbnails(importedMedia.id, dbMedia.filePath);
+      } catch {
+        // Non-critical: AI analysis will fall back to other thumbnail sizes
+      }
+    }
+
+    // 4. Link media to the post
+    await postMediaEngine.linkMediaToPost(postId, importedMedia.id);
+
+    // 5. Run AI analysis to get title/alt/caption (handles offline mode internally)
+    let alt = importedMedia.alt || '';
+    const analysis = await autoAnalyzeMediaImage(importedMedia.id, mainLanguage);
+    if (analysis.success) {
+      // Update media metadata with AI-discovered values
+      await mediaEngine.updateMedia(importedMedia.id, {
+        title: analysis.title,
+        alt: analysis.alt,
+        caption: analysis.caption,
+        language: mainLanguage,
+      });
+      alt = analysis.alt || alt;
+
+      // 6. Translate metadata to other blog languages
+      const otherLanguages = blogLanguages.filter(lang => lang !== mainLanguage);
+      for (const targetLang of otherLanguages) {
+        await autoTranslateMediaMetadata(importedMedia.id, targetLang).catch(() => {
+          // Non-critical: translation failure shouldn't block the drop
+        });
+      }
+    }
+
+    // 7. If post is currently published, transition to draft
+    const post = await postEngine.getPost(postId);
+    if (post?.status === 'published') {
+      await postEngine.updatePost(postId, { content: post.content || '', status: 'draft' });
+    }
+
+    // 8. Get relative path for markdown insertion
+    const relativePath = await mediaEngine.getRelativePath(importedMedia.id);
+
+    return {
+      mediaId: importedMedia.id,
+      alt,
+      relativePath: relativePath || `media/${importedMedia.filename}`,
+    };
   });
 
   safeHandle('postMedia:rebuild', async () => {

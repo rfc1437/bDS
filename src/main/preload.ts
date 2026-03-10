@@ -149,6 +149,7 @@ export const electronAPI: ElectronAPI = {
     reorder: (postId: string, mediaIds: string[]) => ipcRenderer.invoke('postMedia:reorder', postId, mediaIds),
     isLinked: (postId: string, mediaId: string) => ipcRenderer.invoke('postMedia:isLinked', postId, mediaId),
     import: (postId: string, filePath: string) => ipcRenderer.invoke('postMedia:import', postId, filePath),
+    dropImport: (postId: string, filePath: string) => ipcRenderer.invoke('postMedia:dropImport', postId, filePath),
     rebuild: () => ipcRenderer.invoke('postMedia:rebuild'),
   },
 
