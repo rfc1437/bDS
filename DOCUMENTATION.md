@@ -9,6 +9,7 @@
 - [Working with posts](#working-with-posts)
 - [Working with pages](#working-with-pages)
 - [Working with media](#working-with-media)
+- [Working with translations](#working-with-translations)
 - [Using macros](#using-macros)
 - [Using scripting](#using-scripting)
 - [Using the AI assistant](#using-the-ai-assistant)
@@ -143,13 +144,60 @@ The Media section is where you import, describe, and maintain assets used by pos
 
 When importing media, add metadata immediately while context is still fresh. Alt text should describe image meaning for accessibility, captions should support reader understanding, and media tags should help with retrieval and reuse. The goal is to make media usable both now and later, including by teammates who did not import the asset.
 
+You can also insert images directly into the editor by dragging image files from the filesystem onto the post body, or by pasting screenshots from the clipboard. Dropped or pasted images are automatically imported into the media library, linked to the current post, and inserted as markdown images at the cursor position. Supported formats include JPEG, PNG, GIF, WebP, SVG, and BMP. Non-image files are ignored. If the import fails, bDS shows an error toast without inserting anything into the editor.
+
 After placing media in content, run a quick preview pass to confirm placement and context. When possible, commit post changes and their related media changes together. This keeps history coherent and makes future rollback or investigation much easier.
 
 ### Key takeaways
 
 - Media management includes metadata quality, not only file import.
 - Add alt text and captions during import, not as a postponed task.
+- Drag-and-drop or paste images directly into the post editor for quick insertion.
 - Commit content and related media in the same change when possible.
+
+[↑ Back to In this article](#in-this-article)
+
+---
+
+## Working with translations
+
+bDS supports translating both posts and media metadata into multiple languages. Translations are stored separately from canonical content so localized variants cannot drift into independent records with their own unrelated metadata.
+
+### Post translations
+
+Each post has a canonical language and can have translations for additional languages. Translations store their own title, excerpt, and content, while all other metadata (category, tags, status, slug, dates) stays on the canonical post. This keeps editorial control centralized.
+
+In the post editor, the **Translations** section shows the current post language as a dropdown and lists existing translations by language with status badges (draft, published, archived). Missing languages are shown so you can see at a glance which translations still need work. Click **Translate to...** to generate a translation using the AI assistant, or manually edit a translation by clicking its language badge.
+
+The **Do Not Translate** checkbox marks a post as single-language. Posts with this flag are excluded from automatic translation and omitted from alternative language subtrees during blog generation.
+
+Published translations follow the same filesystem rule as published posts: body content lives in the file, not in the database. Translation files use the naming pattern `slug.lang.md` (for example, `my-post.fr.md` for a French translation of `my-post.md`).
+
+### Media translations
+
+Media items can have translated metadata (title, alt text, caption) for each language. The binary asset remains shared — only the descriptive text varies by language.
+
+In the media editor, the **Translations** section shows the canonical media language as a dropdown. A **Detect Language** button uses AI to identify the language of the existing metadata. Existing translations are listed by language, and you can translate metadata to additional languages using the **Translate to...** button.
+
+Media translation sidecars use the naming pattern `filename.ext.lang.meta` (for example, `photo.jpg.fr.meta` for the French metadata of `photo.jpg`).
+
+### Automatic translation cascade
+
+When blog languages are configured in project settings, bDS can automatically translate content:
+
+- **On post create/update**: If the project has blog languages beyond the main language, missing translations are generated automatically for each active language (unless the post is marked Do Not Translate).
+- **Post-to-media cascade**: After a post is translated, all images linked to that post are automatically translated to the same language if they don't already have a translation. This ensures rendered output never mixes languages.
+- **Fill Missing Translations**: A batch tool under the Blog menu scans all published posts and their linked media for missing translations across all configured blog languages and fills them in. Use this after adding a new blog language or after importing content.
+
+Automatic translation requires AI to be configured and respects offline mode. Failures on individual items are reported via toast but do not block other translations from completing.
+
+### Key takeaways
+
+- Post translations store title, excerpt, and content separately from the canonical post.
+- Media translations store title, alt text, and caption separately from the canonical media item.
+- AI-powered translation is available for both posts and media metadata.
+- Automatic cascading ensures posts and their linked media stay in sync across languages.
+- Mark posts as Do Not Translate to exclude them from multi-language workflows.
 
 [↑ Back to In this article](#in-this-article)
 
@@ -449,7 +497,7 @@ Commit messages should describe intent, not just activity. Messages such as “p
 
 ## Configuring settings
 
-Settings define how your project behaves and should be treated as operational controls, not one-time preferences. Project settings establish identity, data location, and public URL context. Editor settings control default working mode and should match how your team writes and reviews content. Content settings support taxonomy consistency and reduce drift across contributors.
+Settings define how your project behaves and should be treated as operational controls, not one-time preferences. Project settings establish identity, data location, public URL context, and blog languages for multi-language rendering. Editor settings control default working mode and should match how your team writes and reviews content. Content settings support taxonomy consistency and reduce drift across contributors.
 
 AI settings are optional. If configured, they can support drafting and analysis tasks, but core workflows remain fully functional without them. The key principle is that editorial reliability must never depend on optional integrations.
 
@@ -555,6 +603,18 @@ Publishing in bDS is a two-stage process: first you generate the static site loc
 
 Full generation is appropriate when you first set up your site, after major template changes, or when you want a clean rebuild. For day-to-day content additions, site validation offers a faster alternative.
 
+### Multi-language generation
+
+When **Blog Languages** are configured in project settings (for example, English and German), generation produces a fully navigable site in each activated language. The main language keeps the current flat route structure (no prefix). Each additional language gets its own `/{lang}/` prefixed subtree with the same archive routes, category pages, tag pages, and date routes.
+
+Each language subtree gets its own `rss.xml` and `atom.xml` feeds containing only posts available in that language, with URLs pointing into the language subtree. The root `sitemap.xml` lists all language variants and includes `hreflang` alternate links so search engines can discover the correct version for each user's language.
+
+Templates receive `blog_languages` and `current_language` in their context. Default templates render a language switcher bar linking to the same page in each available language. Posts marked **Do Not Translate** render only in the main language and are omitted from alternative language subtrees entirely.
+
+Shared assets (media, CSS, JavaScript) are not duplicated per language — only HTML output varies. This keeps the generated site compact while providing full multi-language navigation.
+
+The preview server serves the same language-prefixed routes, so you can verify multi-language output before deploying. For example, `/de/2025/03/08/my-post` shows the German translation in preview, matching the generated output exactly.
+
 ### Site validation and incremental publishing
 
 After generating a site at least once, you can use **site validation** to detect what changed and re-render only the affected routes — without regenerating the entire site.
@@ -586,6 +646,7 @@ The recommended lifecycle is: publish content locally (mark as published), gener
 ### Key takeaways
 
 - Full generation produces a complete static site; use it for initial builds or major changes.
+- Multi-language blogs generate language-prefixed subtrees with per-language feeds and hreflang sitemap entries.
 - Site validation detects missing, extra, and updated pages by comparing the sitemap to generated HTML.
 - Apply resolves all validation issues by targeted re-rendering — much faster than full generation.
 - Use validate+apply as the standard incremental publishing workflow after creating or editing posts.
