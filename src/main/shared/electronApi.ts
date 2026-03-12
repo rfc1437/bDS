@@ -686,6 +686,7 @@ export interface ElectronAPI {
     rebuildLinks: () => Promise<void>;
     isSlugAvailable: (slug: string, excludePostId?: string) => Promise<boolean>;
     generateUniqueSlug: (title: string, excludePostId?: string) => Promise<string>;
+    requestAutoTranslation: (id: string) => Promise<void>;
   };
   media: {
     import: (sourcePath: string, metadata?: Partial<MediaData>) => Promise<MediaData>;

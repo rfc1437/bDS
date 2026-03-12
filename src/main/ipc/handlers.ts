@@ -571,7 +571,55 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   });
 
   // ============ Post Handlers ============
-  
+
+  // Auto-translate: enqueue translation tasks for each blog language that does
+  // not yet have a translation. Only triggered on manual save or publish.
+  const enqueueAutoTranslations = async (post: PostData): Promise<void> => {
+    if (post.doNotTranslate) return;
+    const metadata = await bundle.metaEngine.getProjectMetadata();
+    if (!metadata) return;
+    const blogLanguages = metadata.blogLanguages || [];
+    const mainLang = metadata.mainLanguage || 'en';
+    const postLang = post.language || mainLang;
+    const targetLanguages = blogLanguages.filter((lang) => lang !== postLang);
+    if (targetLanguages.length === 0) return;
+
+    const existingTranslations = await bundle.postEngine.getPostTranslations(post.id);
+    const existingLangs = new Set(existingTranslations.map((t) => t.language));
+    const missingLanguages = targetLanguages.filter((lang) => !existingLangs.has(lang));
+    if (missingLanguages.length === 0) return;
+
+    const groupId = uuidv4();
+    for (const targetLang of missingLanguages) {
+      bundle.taskManager.runTask({
+        id: uuidv4(),
+        name: `Translate "${post.title}" → ${targetLang}`,
+        groupId,
+        groupName: `Auto-translate: ${post.title}`,
+        execute: async (onProgress) => {
+          onProgress(10, `Translating to ${targetLang}...`);
+          const result = await autoTranslatePost(post.id, targetLang);
+          if (!result.success) {
+            throw new Error(result.error || `Translation to ${targetLang} failed`);
+          }
+          onProgress(70, `Translating linked media...`);
+          // Cascade: translate linked media metadata
+          const links = await bundle.postMediaEngine.getLinkedMediaForPost(post.id);
+          for (const link of links) {
+            const mediaTranslations = await bundle.mediaEngine.getMediaTranslations(link.mediaId);
+            const hasLang = mediaTranslations.some((t) => t.language === targetLang);
+            if (!hasLang) {
+              await autoTranslateMediaMetadata(link.mediaId, targetLang).catch(() => {});
+            }
+          }
+          onProgress(100, 'Done');
+        },
+      }).catch((error) => {
+        console.error(`[Auto-translate] Failed for ${post.id} → ${targetLang}:`, error);
+      });
+    }
+  };
+
   safeHandle('posts:create', async (_, data: Partial<PostData>) => {
     const engine = bundle.postEngine;
     
@@ -609,6 +657,13 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   safeHandle('posts:update', async (_, id: string, data: Partial<PostData>) => {
     const engine = bundle.postEngine;
     return engine.updatePost(id, data);
+  });
+
+  safeHandle('posts:requestAutoTranslation', async (_, id: string) => {
+    const post = await bundle.postEngine.getPost(id);
+    if (post) {
+      await enqueueAutoTranslations(post);
+    }
   });
 
   safeHandle('posts:delete', async (_, id: string) => {
@@ -683,7 +738,11 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
 
   safeHandle('posts:publish', async (_, id: string) => {
     const engine = bundle.postEngine;
-    return engine.publishPost(id);
+    const published = await engine.publishPost(id);
+    if (published) {
+      enqueueAutoTranslations(published);
+    }
+    return published;
   });
 
   safeHandle('posts:discard', async (_, id: string) => {
@@ -1961,58 +2020,6 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   postEngine.on('postDeleted', forwardEvent('post:deleted'));
   postEngine.on('rebuildStarted', forwardEvent('posts:rebuildStarted'));
   postEngine.on('databaseRebuilt', forwardEvent('posts:databaseRebuilt'));
-
-  // Auto-translate: when a canonical post is created or updated, enqueue
-  // translation tasks for each blog language that does not yet have a translation.
-  const enqueueAutoTranslations = (post: PostData) => {
-    if (post.doNotTranslate) return;
-    metaEngine.getProjectMetadata().then(async (metadata) => {
-      if (!metadata) return;
-      const blogLanguages = metadata.blogLanguages || [];
-      const mainLang = metadata.mainLanguage || 'en';
-      const postLang = post.language || mainLang;
-      const targetLanguages = blogLanguages.filter((lang) => lang !== postLang);
-      if (targetLanguages.length === 0) return;
-
-      const existingTranslations = await postEngine.getPostTranslations(post.id);
-      const existingLangs = new Set(existingTranslations.map((t) => t.language));
-      const missingLanguages = targetLanguages.filter((lang) => !existingLangs.has(lang));
-      if (missingLanguages.length === 0) return;
-
-      const groupId = uuidv4();
-      for (const targetLang of missingLanguages) {
-        bundle.taskManager.runTask({
-          id: uuidv4(),
-          name: `Translate "${post.title}" → ${targetLang}`,
-          groupId,
-          groupName: `Auto-translate: ${post.title}`,
-          execute: async (onProgress) => {
-            onProgress(10, `Translating to ${targetLang}...`);
-            const result = await autoTranslatePost(post.id, targetLang);
-            if (!result.success) {
-              throw new Error(result.error || `Translation to ${targetLang} failed`);
-            }
-            onProgress(70, `Translating linked media...`);
-            // Cascade: translate linked media metadata
-            const links = await bundle.postMediaEngine.getLinkedMediaForPost(post.id);
-            for (const link of links) {
-              const mediaTranslations = await bundle.mediaEngine.getMediaTranslations(link.mediaId);
-              const hasLang = mediaTranslations.some((t) => t.language === targetLang);
-              if (!hasLang) {
-                await autoTranslateMediaMetadata(link.mediaId, targetLang).catch(() => {});
-              }
-            }
-            onProgress(100, 'Done');
-          },
-        }).catch((error) => {
-          console.error(`[Auto-translate] Failed for ${post.id} → ${targetLang}:`, error);
-        });
-      }
-    }).catch(() => {});
-  };
-
-  postEngine.on('postCreated', (post: PostData) => enqueueAutoTranslations(post));
-  postEngine.on('postUpdated', (post: PostData) => enqueueAutoTranslations(post));
 
   mediaEngine.on('mediaImported', forwardEvent('media:imported'));
   mediaEngine.on('mediaUpdated', forwardEvent('media:updated'));
