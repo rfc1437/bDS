@@ -21,8 +21,11 @@ import { registerEmbeddingHandlers } from './embeddingHandlers';
 import { isOfflineModeActive } from './chatHandlers';
 import type { EngineBundle } from '../engine/EngineBundle';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from '../shared/i18n';
-import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
+import { autoTranslatePost, autoTranslateMediaMetadata, autoAnalyzeMediaImage } from './chatHandlers';
 import { v4 as uuidv4 } from 'uuid';
+
+const SUPPORTED_DROP_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp']);
+const SUPPORTED_DROP_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp']);
 
 /**
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
@@ -125,6 +128,88 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
     default:
       return false;
   }
+}
+
+function assertSupportedDropImage(params: { filePath?: string; fileName?: string; mimeType?: string }): void {
+  const mimeType = params.mimeType?.trim().toLowerCase();
+  if (mimeType && SUPPORTED_DROP_IMAGE_MIME_TYPES.has(mimeType)) {
+    return;
+  }
+
+  const nameForExtension = params.filePath || params.fileName || '';
+  const extension = path.extname(nameForExtension).toLowerCase();
+  if (SUPPORTED_DROP_IMAGE_EXTENSIONS.has(extension)) {
+    return;
+  }
+
+  throw new Error('Only image files can be imported into the media library from drag-and-drop or paste.');
+}
+
+async function handleDroppedImageImport(
+  bundle: EngineBundle,
+  postId: string,
+  importMedia: (metadata: Partial<MediaData>) => Promise<MediaData>,
+): Promise<{ mediaId: string; alt: string; relativePath: string }> {
+  const mediaEngine = bundle.mediaEngine;
+  const postMediaEngine = bundle.postMediaEngine;
+  const postEngine = bundle.postEngine;
+  const metaEngine = bundle.metaEngine;
+
+  const projectMetadata = await metaEngine.getProjectMetadata();
+  const mainLanguage = projectMetadata?.mainLanguage || 'en';
+  const blogLanguages: string[] = projectMetadata?.blogLanguages || [];
+
+  const metadata: Partial<MediaData> = {};
+  if (projectMetadata?.defaultAuthor) {
+    metadata.author = projectMetadata.defaultAuthor;
+  }
+  metadata.language = mainLanguage;
+
+  const importedMedia = await importMedia(metadata);
+
+  const db = getDatabase().getLocal();
+  const dbMedia = await db.select().from(media).where(eq(media.id, importedMedia.id)).get();
+  if (dbMedia?.filePath && importedMedia.mimeType.startsWith('image/') && !importedMedia.mimeType.includes('svg')) {
+    try {
+      await mediaEngine.generateThumbnails(importedMedia.id, dbMedia.filePath);
+    } catch {
+      // Non-critical: AI analysis will fall back to other thumbnail sizes
+    }
+  }
+
+  await postMediaEngine.linkMediaToPost(postId, importedMedia.id);
+
+  let alt = importedMedia.alt || '';
+  const analysis = await autoAnalyzeMediaImage(importedMedia.id, mainLanguage);
+  if (analysis.success) {
+    await mediaEngine.updateMedia(importedMedia.id, {
+      title: analysis.title,
+      alt: analysis.alt,
+      caption: analysis.caption,
+      language: mainLanguage,
+    });
+    alt = analysis.alt || alt;
+
+    const otherLanguages = blogLanguages.filter(lang => lang !== mainLanguage);
+    for (const targetLang of otherLanguages) {
+      await autoTranslateMediaMetadata(importedMedia.id, targetLang).catch(() => {
+        // Non-critical: translation failure shouldn't block the drop
+      });
+    }
+  }
+
+  const post = await postEngine.getPost(postId);
+  if (post?.status === 'published') {
+    await postEngine.updatePost(postId, { content: post.content || '', status: 'draft' });
+  }
+
+  const relativePath = await mediaEngine.getRelativePath(importedMedia.id);
+
+  return {
+    mediaId: importedMedia.id,
+    alt,
+    relativePath: relativePath || `media/${importedMedia.filename}`,
+  };
 }
 
 function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCPAgentConfigEngine').MCPAgentConfigOptions {
@@ -1331,7 +1416,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.getProjectMetadata();
   });
 
-  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }>; semanticSimilarityEnabled?: boolean }) => {
+  safeHandle('meta:updateProjectMetadata', async (_, updates: { name?: string; description?: string; dataPath?: string; publicUrl?: string; mainLanguage?: string; defaultAuthor?: string; maxPostsPerPage?: number; blogmarkCategory?: string; pythonRuntimeMode?: 'webworker' | 'main-thread'; picoTheme?: import('../shared/picoThemes').PicoThemeName; categoryMetadata?: Record<string, { renderInLists: boolean; showTitle: boolean; title: string }>; categorySettings?: Record<string, { renderInLists: boolean; showTitle: boolean }>; semanticSimilarityEnabled?: boolean; blogLanguages?: string[] }) => {
     const engine = bundle.metaEngine;
     await ensureMetaContext(engine);
     const previousMetadata = await engine.getProjectMetadata();
@@ -1468,6 +1553,19 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   safeHandle('postMedia:import', async (_, postId: string, filePath: string) => {
     const engine = bundle.postMediaEngine;
     return engine.importMediaForPost(postId, filePath);
+  });
+
+  safeHandle('postMedia:dropImport', async (_, postId: string, filePath: string) => {
+    assertSupportedDropImage({ filePath });
+    return handleDroppedImageImport(bundle, postId, (metadata) => bundle.mediaEngine.importMedia(filePath, metadata));
+  });
+
+  safeHandle('postMedia:dropImportBuffer', async (_, postId: string, payload: { fileName: string; mimeType: string; bytes: Uint8Array }) => {
+    assertSupportedDropImage({ fileName: payload.fileName, mimeType: payload.mimeType });
+    return handleDroppedImageImport(bundle, postId, (metadata) => bundle.mediaEngine.importMediaBuffer(payload.bytes, payload.fileName, {
+      ...metadata,
+      mimeType: payload.mimeType,
+    }));
   });
 
   safeHandle('postMedia:rebuild', async () => {

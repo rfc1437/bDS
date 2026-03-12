@@ -78,6 +78,7 @@ const mockMediaEngine = {
   setProjectContext: vi.fn(),
   setSearchLanguage: vi.fn(),
   importMedia: vi.fn(),
+  importMediaBuffer: vi.fn(),
   updateMedia: vi.fn(),
   deleteMedia: vi.fn(),
   getMedia: vi.fn(),
@@ -92,6 +93,7 @@ const mockMediaEngine = {
   getThumbnailDataUrl: vi.fn(),
   regenerateMissingThumbnails: vi.fn(),
   getRelativePath: vi.fn(),
+  generateThumbnails: vi.fn().mockResolvedValue({}),
   getMediaTranslations: vi.fn(),
 };
 
@@ -341,11 +343,13 @@ vi.mock('fs/promises', () => ({
 let mockOfflineMode = false;
 const mockAutoTranslatePost = vi.fn().mockResolvedValue({ success: true });
 const mockAutoTranslateMediaMetadata = vi.fn().mockResolvedValue({ success: true });
+const mockAutoAnalyzeMediaImage = vi.fn().mockResolvedValue({ success: true, title: 'AI Title', alt: 'AI alt text', caption: 'AI caption' });
 
 vi.mock('../../src/main/ipc/chatHandlers', () => ({
   isOfflineModeActive: vi.fn(() => mockOfflineMode),
   autoTranslatePost: (...args: any[]) => mockAutoTranslatePost(...args),
   autoTranslateMediaMetadata: (...args: any[]) => mockAutoTranslateMediaMetadata(...args),
+  autoAnalyzeMediaImage: (...args: any[]) => mockAutoAnalyzeMediaImage(...args),
 }));
 
 // Helper to invoke a registered handler
@@ -1569,6 +1573,21 @@ describe('IPC Handlers', () => {
         expect(mockMetaEngine.updateProjectMetadata).toHaveBeenCalledWith(updates);
         expect(result).toEqual(updatedMetadata);
       });
+
+      it('should pass blogLanguages through to meta engine', async () => {
+        const activeProject = createMockProject({ id: 'project-langs', dataPath: '/langs/data' });
+        mockProjectEngine.getActiveProject.mockResolvedValue(activeProject);
+        mockProjectEngine.getDataDir.mockReturnValue('/resolved/langs-data');
+        mockMetaEngine.updateProjectMetadata.mockResolvedValue(undefined);
+        const updatedMetadata = { name: 'Test', blogLanguages: ['en', 'de', 'fr'] };
+        mockMetaEngine.getProjectMetadata.mockResolvedValue(updatedMetadata);
+
+        const updates = { blogLanguages: ['en', 'de', 'fr'] };
+        const result = await invokeHandler('meta:updateProjectMetadata', updates);
+
+        expect(mockMetaEngine.updateProjectMetadata).toHaveBeenCalledWith(updates);
+        expect(result).toEqual(updatedMetadata);
+      });
     });
   });
 
@@ -1737,6 +1756,154 @@ describe('IPC Handlers', () => {
 
         expect(mockPostMediaEngine.isMediaLinkedToPost).toHaveBeenCalledWith('post-1', 'media-1');
         expect(result).toBe(true);
+      });
+    });
+
+    describe('postMedia:dropImport', () => {
+      it('should import media, run AI analysis, link to post, and return result', async () => {
+        const mockMedia = createMockMedia({ id: 'drop-media-1', filename: 'drop-media-1.jpg', mimeType: 'image/jpeg' });
+        mockMediaEngine.importMedia.mockResolvedValue(mockMedia);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({ name: 'Test', mainLanguage: 'en', blogLanguages: ['en', 'de'] });
+        mockPostMediaEngine.linkMediaToPost.mockResolvedValue(undefined);
+        mockMediaEngine.updateMedia.mockResolvedValue(mockMedia);
+        mockMediaEngine.getRelativePath.mockResolvedValue('media/2026/03/drop-media-1.jpg');
+        mockPostEngine.getPost.mockResolvedValue(createMockPost({ id: 'post-1', status: 'draft' }));
+        mockAutoAnalyzeMediaImage.mockResolvedValue({ success: true, title: 'AI Title', alt: 'AI alt', caption: 'AI caption' });
+
+        // Mock DB query for filePath used by generateThumbnails
+        mockDatabase.getLocal.mockReturnValue({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue({ filePath: '/mock/media/drop-media-1.jpg' }),
+              })),
+            })),
+          })),
+        });
+
+        const result = await invokeHandler('postMedia:dropImport', 'post-1', '/tmp/photo.jpg');
+
+        expect(mockMediaEngine.importMedia).toHaveBeenCalledWith('/tmp/photo.jpg', expect.objectContaining({ language: 'en' }));
+        expect(mockPostMediaEngine.linkMediaToPost).toHaveBeenCalledWith('post-1', 'drop-media-1');
+        expect(mockAutoAnalyzeMediaImage).toHaveBeenCalledWith('drop-media-1', 'en');
+        expect(mockMediaEngine.updateMedia).toHaveBeenCalledWith('drop-media-1', expect.objectContaining({
+          title: 'AI Title',
+          alt: 'AI alt',
+          caption: 'AI caption',
+        }));
+        expect(mockAutoTranslateMediaMetadata).toHaveBeenCalledWith('drop-media-1', 'de');
+        expect(result).toEqual({
+          mediaId: 'drop-media-1',
+          alt: 'AI alt',
+          relativePath: 'media/2026/03/drop-media-1.jpg',
+        });
+      });
+
+      it('should transition published post to draft', async () => {
+        const mockMedia = createMockMedia({ id: 'drop-media-2', filename: 'drop-media-2.png', mimeType: 'image/png' });
+        mockMediaEngine.importMedia.mockResolvedValue(mockMedia);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({ name: 'Test', mainLanguage: 'en' });
+        mockPostMediaEngine.linkMediaToPost.mockResolvedValue(undefined);
+        mockMediaEngine.updateMedia.mockResolvedValue(mockMedia);
+        mockMediaEngine.getRelativePath.mockResolvedValue('media/2026/03/drop-media-2.png');
+        const publishedPost = createMockPost({ id: 'post-2', status: 'published', content: 'Published content' });
+        mockPostEngine.getPost.mockResolvedValue(publishedPost);
+        mockPostEngine.updatePost.mockResolvedValue({ ...publishedPost, status: 'draft' });
+        mockAutoAnalyzeMediaImage.mockResolvedValue({ success: true, title: 'Title', alt: 'Alt', caption: 'Cap' });
+
+        mockDatabase.getLocal.mockReturnValue({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue({ filePath: '/mock/media/drop-media-2.png' }),
+              })),
+            })),
+          })),
+        });
+
+        await invokeHandler('postMedia:dropImport', 'post-2', '/tmp/image.png');
+
+        expect(mockPostEngine.updatePost).toHaveBeenCalledWith('post-2', expect.objectContaining({ status: 'draft' }));
+      });
+
+      it('should handle AI analysis failure gracefully', async () => {
+        const mockMedia = createMockMedia({ id: 'drop-media-3', filename: 'drop-media-3.jpg', mimeType: 'image/jpeg', alt: undefined });
+        mockMediaEngine.importMedia.mockResolvedValue(mockMedia);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({ name: 'Test', mainLanguage: 'en' });
+        mockPostMediaEngine.linkMediaToPost.mockResolvedValue(undefined);
+        mockMediaEngine.getRelativePath.mockResolvedValue('media/2026/03/drop-media-3.jpg');
+        mockPostEngine.getPost.mockResolvedValue(createMockPost({ id: 'post-3', status: 'draft' }));
+        mockAutoAnalyzeMediaImage.mockResolvedValue({ success: false, error: 'No API key' });
+
+        mockDatabase.getLocal.mockReturnValue({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue({ filePath: '/mock/media/drop-media-3.jpg' }),
+              })),
+            })),
+          })),
+        });
+
+        const result = await invokeHandler('postMedia:dropImport', 'post-3', '/tmp/photo.jpg');
+
+        // Should still return a result even without AI metadata
+        expect(result).toEqual({
+          mediaId: 'drop-media-3',
+          alt: '',
+          relativePath: 'media/2026/03/drop-media-3.jpg',
+        });
+        // Should NOT call updateMedia or translate when analysis fails
+        expect(mockMediaEngine.updateMedia).not.toHaveBeenCalled();
+        expect(mockAutoTranslateMediaMetadata).not.toHaveBeenCalled();
+      });
+
+      it('should reject non-image files before importing them into the media library', async () => {
+        await expect(invokeHandler('postMedia:dropImport', 'post-1', '/tmp/document.pdf')).rejects.toThrow(/image/i);
+
+        expect(mockMediaEngine.importMedia).not.toHaveBeenCalled();
+        expect(mockPostMediaEngine.linkMediaToPost).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('postMedia:dropImportBuffer', () => {
+      it('should import screenshot-like image buffers without a native file path', async () => {
+        const mockMedia = createMockMedia({ id: 'drop-media-buffer-1', filename: 'drop-media-buffer-1.png', mimeType: 'image/png' });
+        mockMediaEngine.importMediaBuffer.mockResolvedValue(mockMedia);
+        mockMetaEngine.getProjectMetadata.mockResolvedValue({ name: 'Test', mainLanguage: 'en', blogLanguages: ['en', 'de'] });
+        mockPostMediaEngine.linkMediaToPost.mockResolvedValue(undefined);
+        mockMediaEngine.updateMedia.mockResolvedValue(mockMedia);
+        mockMediaEngine.getRelativePath.mockResolvedValue('media/2026/03/drop-media-buffer-1.png');
+        mockPostEngine.getPost.mockResolvedValue(createMockPost({ id: 'post-4', status: 'draft' }));
+        mockAutoAnalyzeMediaImage.mockResolvedValue({ success: true, title: 'AI Title', alt: 'AI alt', caption: 'AI caption' });
+
+        mockDatabase.getLocal.mockReturnValue({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                get: vi.fn().mockResolvedValue({ filePath: '/mock/media/drop-media-buffer-1.png' }),
+              })),
+            })),
+          })),
+        });
+
+        const result = await invokeHandler(
+          'postMedia:dropImportBuffer',
+          'post-4',
+          { fileName: 'pasted-image.png', mimeType: 'image/png', bytes: new Uint8Array() },
+        );
+
+        expect(mockMediaEngine.importMediaBuffer).toHaveBeenCalledWith(
+          expect.any(Uint8Array),
+          'pasted-image.png',
+          expect.objectContaining({ language: 'en', mimeType: 'image/png' }),
+        );
+        expect(mockPostMediaEngine.linkMediaToPost).toHaveBeenCalledWith('post-4', 'drop-media-buffer-1');
+        expect(result).toEqual({
+          mediaId: 'drop-media-buffer-1',
+          alt: 'AI alt',
+          relativePath: 'media/2026/03/drop-media-buffer-1.png',
+        });
       });
     });
   });

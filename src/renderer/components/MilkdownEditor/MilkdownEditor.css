@@ -78,6 +78,13 @@
   flex-direction: column;
 }
 
+/* Drop zone visual feedback */
+.milkdown-content.drop-target-active {
+  outline: 2px dashed var(--vscode-focusBorder, #007acc);
+  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--vscode-focusBorder, #007acc) 8%, transparent);
+}
+
 .milkdown-content .milkdown .ProseMirror {
   flex: 1;
   outline: none;

@@ -8,12 +8,15 @@ Implemented and actively used:
 
 - **Offline-first by default** — full local editing, preview, generation, and git-based workflows; all online features are optional
 - **Multi-project workflow** with active project switching and optional custom data paths
-- **Post & page management** (draft/published/archived), pagination, filtering, multi-language full-text search (Snowball stemming), canonical URL handling, inter-post link graph with backlinks/outlinks
+- **Post & page management** (draft/published/archived), pagination, filtering, multi-language full-text search (Snowball stemming), canonical URL handling, inter-post link graph with backlinks/outlinks, drag-and-drop and paste image insertion directly into the editor
+- **Post translation system** — dedicated translation records per post (title, excerpt, content) stored separately from canonical posts; AI-powered translation via `translatePost`; translation panel in the editor showing existing translations, missing languages, and language badges; `availableLanguages` exposed across all APIs; `doNotTranslate` flag for posts that should remain single-language
 - **Media pipeline** with import, metadata sidecars, three thumbnail sizes (Sharp), linked-media references, cleanup tooling, and AI-assisted metadata suggestions (title, alt text, caption from image vision)
+- **Media translation system** — language-specific metadata (title, alt, caption) stored in separate translation records and `.lang.meta` sidecars; AI-powered metadata translation with language detection; automatic cascade from post translation to linked media; translation panel in the media editor
 - **Tag management** including merge/rename/sync from content, color support
 - **Menu editor** for hierarchical site navigation (OPML-based), with page picker and submenu nesting
 - **WordPress WXR import pipeline** (analysis, import definitions, 4-phase execution with progress tracking, HTML-to-Markdown conversion)
 - **Blogmark deep links** — `bds://new-post` custom protocol for one-click bookmark saving from any browser, with bookmarklet generation and transform script pipeline
+- **Multi-language blog rendering** — configurable `blogLanguages` list in project settings; main language keeps flat routes, additional languages get `/{lang}/` prefixed subtrees with their own feeds; combined `sitemap.xml` with `hreflang` alternates; language switcher in templates; automatic translation on post create/update; "Fill Missing Translations" batch tool; `doNotTranslate` posts excluded from alternative language subtrees; preview server serves language-prefixed routes matching generated output
 - **Static site generation** — full blog output with single-post pages, paginated category/tag/date archive routes, standalone page routes, plus `sitemap.xml`, `rss.xml`, `atom.xml`, and `calendar.json`; content-hash-based incremental writes
 - **Site validation** — compares sitemap against generated HTML, detects missing/extra/stale pages, and auto-repairs with targeted re-rendering
 - **SSH publishing** via `scp` or `rsync` with parallel upload of HTML, thumbnails, and media
@@ -26,12 +29,12 @@ Implemented and actively used:
     - *Utility scripts* — general-purpose Python automation
 - **Built-in macros** — `youtube`, `vimeo`, `gallery` (lightbox), `photo_archive`, `tag_cloud` (D3 word cloud)
 - **Liquid template system** for all generated pages with i18n support (English, German, French, Italian, Spanish) and custom Markdown filter with internal link rewriting
-- **AI assistant** (OpenCode Zen API, Mistral direct API, Ollama local models) with streaming responses, tool use (search/read/update posts, media analysis including image vision, blog stats), AI-powered taxonomy analysis, and rich interactive responses via the A2UI protocol (charts, tables, forms, cards, metrics, lists, tabs)
+- **AI assistant** (OpenCode Zen API, Mistral direct API, Ollama local models) with streaming responses, tool use (search/read/update posts, media analysis including image vision, blog stats, post and media translation), AI-powered taxonomy analysis, and rich interactive responses via the A2UI protocol (charts, tables, forms, cards, metrics, lists, tabs)
 - **MCP server** — full Model Context Protocol integration exposing the blog to external coding agents; 10 tools, 13 resources, 3 prompts, and interactive review views; supports Streamable HTTP transport (in-app) and stdio transport (standalone CLI); auto-configures into Claude Code, Claude Desktop, GitHub Copilot, Gemini CLI, OpenCode, Mistral Vibe, and OpenAI Codex agent configs
 - **Model catalog** — fetches and caches model metadata from models.dev with conditional GET refresh; provides pricing, context windows, capabilities, and modalities; works fully offline after first fetch
 - **Secure key storage** — API keys encrypted via OS keychain (macOS Keychain, Windows DPAPI, Linux libsecret) using Electron safeStorage
 - **Git integration** (status, diff, commit history with sync status, fetch/pull/push, init, .gitignore management, LFS configure/prune, branch operations)
-- **Metadata diff tooling** for comparing filesystem metadata vs database metadata with sync in either direction
+- **Metadata diff tooling** for comparing filesystem metadata vs database metadata with sync in either direction, including post and media translation records
 - **Rich editing** — Milkdown WYSIWYG Markdown editor for posts, Monaco code editor for Python scripts and Liquid templates
 - **Task system** for background progress reporting across long-running operations with grouping, cancellation, and status bar integration
 - **In-app documentation** — rendered user guide with navigable table of contents and heading anchors
@@ -46,8 +49,8 @@ src/
 ├── main/
 │   ├── database/        # Drizzle schema, migrations, connection
 │   ├── engine/          # Core business logic (no UI)
-│   │   ├── PostEngine             # Post CRUD, FTS indexing, link graph
-│   │   ├── MediaEngine            # Media files, Sharp thumbnails
+│   │   ├── PostEngine             # Post CRUD, FTS indexing, link graph, translations
+│   │   ├── MediaEngine            # Media files, Sharp thumbnails, translations
 │   │   ├── PostMediaEngine        # Post ↔ media linking
 │   │   ├── ProjectEngine          # Multi-project management
 │   │   ├── MetaEngine             # Project metadata, categories
@@ -55,15 +58,15 @@ src/
 │   │   ├── ScriptEngine           # Python script management & Git sync
 │   │   ├── TemplateEngine         # Liquid template CRUD, validation, Git sync
 │   │   ├── MenuEngine             # OPML-based navigation menus
-│   │   ├── PreviewServer          # Local HTTP preview with Liquid
-│   │   ├── BlogGenerationEngine   # Static site generation
+│   │   ├── PreviewServer          # Local HTTP preview with Liquid, language-prefixed routes
+│   │   ├── BlogGenerationEngine   # Static site generation, multi-language subtrees
 │   │   ├── PublishEngine          # SSH upload (scp / rsync)
 │   │   ├── SiteValidationDiffService  # Sitemap ↔ HTML validation
 │   │   ├── Import* engines        # WXR parsing, analysis, execution
 │   │   ├── Blogmark* services     # Deep link handling, transforms
 │   │   ├── PythonMacroWorkerRuntime   # Pyodide macro execution
 │   │   ├── GitEngine              # Git operations (simple-git)
-│   │   ├── MetadataDiffEngine     # DB ↔ file metadata comparison
+│   │   ├── MetadataDiffEngine     # DB ↔ file metadata comparison (posts, media, translations)
 │   │   ├── ChatEngine             # AI chat with streaming & tool use
 │   │   ├── MCPServer              # Model Context Protocol server (HTTP + stdio)
 │   │   ├── MCPAgentConfigEngine   # Auto-configure MCP into coding agents

@@ -974,6 +974,18 @@ export async function autoTranslatePost(postId: string, targetLanguage: string, 
 }
 
 /**
+ * Analyze a media image for auto-analysis workflows (called from IPC handlers).
+ */
+export async function autoAnalyzeMediaImage(mediaId: string, language: string): Promise<{ success: boolean; title?: string; alt?: string; caption?: string; error?: string }> {
+  try {
+    await ensureInitialized();
+    return await retryWithBackoff(() => getOneShotTasks().analyzeMediaImage(mediaId, language));
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
  * Translate media metadata for auto-translation workflows (called from event handlers).
  */
 export async function autoTranslateMediaMetadata(mediaId: string, targetLanguage: string): Promise<{ success: boolean; error?: string }> {

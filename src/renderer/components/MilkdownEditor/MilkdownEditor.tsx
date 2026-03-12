@@ -18,6 +18,7 @@ import type { Plugin } from 'unified';
 import { visit } from 'unist-util-visit';
 import { macroPlugin } from '../../plugins/macroPlugin';
 import { imageResolverPlugin } from '../../plugins/imageResolverPlugin';
+import { dropImagePlugin } from '../../plugins/dropImagePlugin';
 // Import macros module to register all macro definitions
 import '../../macros';
 import './MilkdownEditor.css';
@@ -346,6 +347,7 @@ const MilkdownProviderInner: React.FC<MilkdownEditorProps> = ({
       .use(commonmark)
       .use(gfm)
       .use(imageResolverPlugin)
+      .use(dropImagePlugin)
       .use(macroPlugin)
       .use(history)
       .use(listener)
