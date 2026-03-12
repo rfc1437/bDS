@@ -734,6 +734,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
         updatePost(postId, { status: 'draft' } as Partial<PostData>);
       }
       markClean(postId);
+
+      // Trigger auto-translation for missing languages on manual save
+      window.electronAPI?.posts.requestAutoTranslation(postId).catch(() => {});
     } catch (error) {
       console.error('Failed to save post:', error);
       const err = error as Error;

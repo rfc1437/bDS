@@ -3572,4 +3572,147 @@ describe('IPC Handlers', () => {
       await expect(invokeHandler('projects:getAll')).rejects.toThrow('Something went wrong');
     });
   });
+
+  // ============ Auto-Translation Trigger Tests ============
+  describe('posts:requestAutoTranslation', () => {
+    it('should enqueue translation tasks for missing languages', async () => {
+      const post = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
+      mockPostEngine.getPost.mockResolvedValue(post);
+      mockMetaEngine.getProjectMetadata.mockResolvedValue({
+        mainLanguage: 'en',
+        blogLanguages: ['en', 'de'],
+      });
+      mockPostEngine.getPostTranslations.mockResolvedValue([]);
+      mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+      mockTaskManager.runTask.mockResolvedValue(undefined);
+
+      await invokeHandler('posts:requestAutoTranslation', 'post-1');
+
+      expect(mockPostEngine.getPost).toHaveBeenCalledWith('post-1');
+      expect(mockTaskManager.runTask).toHaveBeenCalledTimes(1);
+      expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: expect.stringContaining('de'),
+        }),
+      );
+    });
+
+    it('should skip translation when post has doNotTranslate flag', async () => {
+      const post = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en', doNotTranslate: true });
+      mockPostEngine.getPost.mockResolvedValue(post);
+      mockMetaEngine.getProjectMetadata.mockResolvedValue({
+        mainLanguage: 'en',
+        blogLanguages: ['en', 'de'],
+      });
+
+      await invokeHandler('posts:requestAutoTranslation', 'post-1');
+
+      expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip translation when post does not exist', async () => {
+      mockPostEngine.getPost.mockResolvedValue(null);
+
+      await invokeHandler('posts:requestAutoTranslation', 'nonexistent');
+
+      expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip when all translations already exist', async () => {
+      const post = createMockPost({ id: 'post-1', title: 'Test Post', language: 'en' });
+      mockPostEngine.getPost.mockResolvedValue(post);
+      mockMetaEngine.getProjectMetadata.mockResolvedValue({
+        mainLanguage: 'en',
+        blogLanguages: ['en', 'de'],
+      });
+      mockPostEngine.getPostTranslations.mockResolvedValue([{ language: 'de' }]);
+
+      await invokeHandler('posts:requestAutoTranslation', 'post-1');
+
+      expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('posts:publish auto-translation', () => {
+    it('should enqueue missing translations after publishing a post', async () => {
+      const publishedPost = createMockPost({ id: 'post-1', title: 'Published Post', status: 'published', language: 'en' });
+      mockPostEngine.publishPost.mockResolvedValue(publishedPost);
+      mockMetaEngine.getProjectMetadata.mockResolvedValue({
+        mainLanguage: 'en',
+        blogLanguages: ['en', 'de', 'fr'],
+      });
+      mockPostEngine.getPostTranslations.mockResolvedValue([{ language: 'de' }]);
+      mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+      mockTaskManager.runTask.mockResolvedValue(undefined);
+
+      await invokeHandler('posts:publish', 'post-1');
+
+      // Should only enqueue for fr (de already exists)
+      expect(mockTaskManager.runTask).toHaveBeenCalledTimes(1);
+      expect(mockTaskManager.runTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: expect.stringContaining('fr'),
+        }),
+      );
+    });
+
+    it('should not enqueue translations when published post has doNotTranslate', async () => {
+      const publishedPost = createMockPost({ id: 'post-1', title: 'Published Post', status: 'published', doNotTranslate: true });
+      mockPostEngine.publishPost.mockResolvedValue(publishedPost);
+
+      await invokeHandler('posts:publish', 'post-1');
+
+      expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('auto-translation should not trigger on postCreated/postUpdated events', () => {
+    it('should not trigger auto-translation when postCreated event handlers are called', async () => {
+      mockMetaEngine.getProjectMetadata.mockResolvedValue({
+        mainLanguage: 'en',
+        blogLanguages: ['en', 'de'],
+      });
+      mockPostEngine.getPostTranslations.mockResolvedValue([]);
+      mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+
+      // Simulate calling all postCreated handlers that were registered
+      const postCreatedCalls = mockPostEngine.on.mock.calls.filter(
+        ([event]: [string]) => event === 'postCreated'
+      );
+      const post = createMockPost({ id: 'event-post-1', title: 'Event Post', language: 'en' });
+      for (const [, handler] of postCreatedCalls) {
+        await handler(post);
+      }
+
+      // Wait for any async work (enqueueAutoTranslations uses .then())
+      await new Promise(r => setTimeout(r, 50));
+
+      // No auto-translation tasks should have been enqueued via taskManager
+      expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+
+    it('should not trigger auto-translation when postUpdated event handlers are called', async () => {
+      mockMetaEngine.getProjectMetadata.mockResolvedValue({
+        mainLanguage: 'en',
+        blogLanguages: ['en', 'de'],
+      });
+      mockPostEngine.getPostTranslations.mockResolvedValue([]);
+      mockPostMediaEngine.getLinkedMediaForPost.mockResolvedValue([]);
+
+      // Simulate calling all postUpdated handlers that were registered
+      const postUpdatedCalls = mockPostEngine.on.mock.calls.filter(
+        ([event]: [string]) => event === 'postUpdated'
+      );
+      const post = createMockPost({ id: 'event-post-2', title: 'Event Post 2', language: 'en' });
+      for (const [, handler] of postUpdatedCalls) {
+        await handler(post);
+      }
+
+      // Wait for any async work (enqueueAutoTranslations uses .then())
+      await new Promise(r => setTimeout(r, 50));
+
+      // No auto-translation tasks should have been enqueued via taskManager
+      expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+  });
 });

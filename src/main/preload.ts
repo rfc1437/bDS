@@ -81,6 +81,7 @@ export const electronAPI: ElectronAPI = {
     rebuildLinks: () => ipcRenderer.invoke('posts:rebuildLinks'),
     isSlugAvailable: (slug: string, excludePostId?: string) => ipcRenderer.invoke('posts:isSlugAvailable', slug, excludePostId),
     generateUniqueSlug: (title: string, excludePostId?: string) => ipcRenderer.invoke('posts:generateUniqueSlug', title, excludePostId),
+    requestAutoTranslation: (id: string) => ipcRenderer.invoke('posts:requestAutoTranslation', id),
   },
 
   // Media
