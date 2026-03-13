@@ -769,7 +769,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     }
   }, [title, content, isDetectingLanguage, tr]);
 
-  const handleTranslatePost = useCallback(async (targetLanguage: string) => {
+  const handleTranslatePost = useCallback(async (targetLanguage: string, options?: { switchToTarget?: boolean }) => {
     if (!targetLanguage || isTranslatingPost) return;
     setIsTranslatingPost(true);
     try {
@@ -782,8 +782,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
           updatePost(postId, refreshedPost as Partial<PostData>);
           setPost(prev => prev ? { ...prev, ...refreshedPost as Partial<PostData> } : prev);
         }
-        const refreshedMap = mapTranslationsByLanguage(loadedTranslations);
-        applyDisplayedDraft(targetLanguage, canonicalDraft, refreshedMap);
+        // Only switch the editing language when the user explicitly requested
+        // it via the quick action modal. Background/auto translations must
+        // never move the editor away from the language the user is working on.
+        if (options?.switchToTarget) {
+          const refreshedMap = mapTranslationsByLanguage(loadedTranslations);
+          applyDisplayedDraft(targetLanguage, canonicalDraft, refreshedMap);
+        }
         showToast.success(tr('editor.translations.translateSuccess', { language: getLanguageLabel(targetLanguage) }));
       } else {
         showToast.error(result?.error || tr('editor.translations.translateFailed'));
@@ -813,7 +818,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const handleConfirmTranslation = useCallback(() => {
     if (!translationTargetLanguage) return;
     setShowTranslationModal(false);
-    void handleTranslatePost(translationTargetLanguage);
+    void handleTranslatePost(translationTargetLanguage, { switchToTarget: true });
   }, [handleTranslatePost, translationTargetLanguage]);
 
   // Load project language for AI post analysis

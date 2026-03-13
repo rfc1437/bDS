@@ -329,6 +329,58 @@ describe('Editor AI post suggestions', () => {
     expect((window as any).electronAPI.chat.translatePost).toHaveBeenCalledWith('post-1', 'fr');
   });
 
+  it('switches editing language to translated language when confirmed via quick action modal', async () => {
+    const frTranslation = createTranslation({ language: 'fr', title: 'Bonjour le monde', excerpt: 'Resume', content: 'Contenu traduit' });
+    (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({
+      title: 'Hello world',
+      language: 'en',
+      content: 'Original content',
+    }));
+    (window as any).electronAPI.posts.requestAutoTranslation = vi.fn().mockResolvedValue(undefined);
+    // First call (initial load) returns empty, subsequent calls return the french translation
+    (window as any).electronAPI.posts.getTranslations = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([frTranslation]);
+    (window as any).electronAPI.chat.translatePost = vi.fn().mockResolvedValue({ success: true });
+
+    const view = render(<PostEditor postId="post-1" />);
+    const ui = within(view.container);
+
+    // Wait for post data to load and editor to initialize
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Expand metadata section so the title input is visible
+    await act(async () => {
+      fireEvent.click(ui.getByRole('button', { name: /Metadata/i }));
+    });
+
+    // Verify canonical content is shown initially
+    const titleInput = view.container.querySelector('#post-editor-post-1-title') as HTMLInputElement;
+    expect(titleInput?.value).toBe('Hello world');
+
+    // Open quick actions → translate modal
+    await act(async () => { fireEvent.click(ui.getByRole('button', { name: '⚡ Quick Actions' })); });
+    await act(async () => { fireEvent.click(ui.getByRole('button', { name: /Translate to\.\.\./i })); });
+    await act(async () => { fireEvent.change(ui.getByLabelText('Select target language'), { target: { value: 'fr' } }); });
+
+    // Confirm translation from the quick action modal
+    await act(async () => {
+      fireEvent.click(ui.getByRole('button', { name: 'Translate to...' }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // After quick-action translation, editor should switch to the translated content
+    expect(titleInput?.value).toBe('Bonjour le monde');
+  });
+
   it('renders available translations as compact flag indicators in metadata', async () => {
     (window as any).electronAPI.posts.get = vi.fn().mockResolvedValue(createPost({ title: '' }));
     (window as any).electronAPI.posts.getTranslations = vi.fn().mockResolvedValue([
