@@ -128,3 +128,6 @@ userData/
 # *.AppImage
 # *.deb
 # *.rpm
+
+# Dolt database files (added by bd init)
+.dolt/
