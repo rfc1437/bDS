@@ -235,6 +235,17 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
   const canonicalLanguage = postLanguage || post?.language || projectLanguage;
   const fieldIdPrefix = `post-editor-${postId}`;
 
+  // Keep activeEditingLanguage in sync when canonicalLanguage changes
+  // (e.g. due to async projectLanguage loading after post init)
+  const prevCanonicalLanguageRef = useRef(canonicalLanguage);
+  useEffect(() => {
+    const prev = prevCanonicalLanguageRef.current;
+    prevCanonicalLanguageRef.current = canonicalLanguage;
+    if (prev !== canonicalLanguage && activeEditingLanguage === prev) {
+      setActiveEditingLanguage(canonicalLanguage);
+    }
+  }, [canonicalLanguage, activeEditingLanguage]);
+
   const loadTranslations = useCallback(async () => {
     const result = await window.electronAPI?.posts.getTranslations?.(postId);
     const items = result || [];
