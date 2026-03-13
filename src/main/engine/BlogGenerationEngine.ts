@@ -44,6 +44,7 @@ import {
   buildRequestedArchiveMaps,
   selectRequestedPosts,
 } from './ApplyValidationDataService';
+import { buildApplyValidationWorkerTasks } from './ApplyValidationWorkerService';
 import { getGeneratedFileHashRecord } from '../database/generatedFileHashStore';
 import { getAllGeneratedFileHashes, setGeneratedFileHash } from '../database/generatedFileHashStore';
 import { GenerationWorkerPool, type WorkerPoolResult } from './GenerationWorkerPool';
@@ -1631,7 +1632,7 @@ export class BlogGenerationEngine {
 
       const maxPostsPerPage = clampMaxPostsPerPage(options.maxPostsPerPage);
       const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
-      const { routePosts: publishedRoutePosts } = await this.buildPublishedRoutePosts(publishedPosts);
+      const { routePosts: publishedRoutePosts, translationsByPost } = await this.buildPublishedRoutePosts(publishedPosts);
       const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
 
       const { allCategories, allTags, years, yearMonths, yearMonthDays } = buildApplyValidationArchives(publishedListPosts);
@@ -1648,251 +1649,49 @@ export class BlogGenerationEngine {
       const htmlDir = path.join(options.dataDir, 'html');
       await fs.mkdir(htmlDir, { recursive: true });
 
-      const renderRoute = createPreviewBackedGenerationRouteRenderer({
-        options,
-        maxPostsPerPage,
-        publishedPostsForLookup: publishedRoutePosts,
-        engines: {
-          postEngine: this.postEngine,
-          mediaEngine: this.mediaEngine,
-          postMediaEngine: this.postMediaEngine,
-        },
-      });
-      const writePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
-        projectId,
-        htmlDir,
-        urlPath,
-        content,
-        refreshHashTimestampOnUnchanged: true,
-      });
-      const onPageGenerated = (_message: string) => {
-        // no-op for applyValidation
-      };
+      const useWorkers = !!options.dbPath;
 
-      const { requestedSinglePosts, requestedPagePosts } = selectRequestedPosts({
-        publishedPosts: publishedRoutePosts,
-        requestedPostIds: targetedPlan.requestedPostIds,
-        requestedPageSlugs: targetedPlan.requestedPageSlugs,
-      });
-
-      const { requestedYearsMap, requestedYearMonthsMap, requestedYearMonthDaysMap } = buildRequestedArchiveMaps({
-        requestedYears: targetedPlan.requestedYears,
-        requestedYearMonths: targetedPlan.requestedYearMonths,
-        requestedYearMonthDays: targetedPlan.requestedYearMonthDays,
-        years,
-        yearMonths,
-        yearMonthDays,
-      });
-
-      onProgress(
-        48,
-        `Targeted rerender plan: singles=${requestedSinglePosts.length}, categories=${targetedPlan.requestedCategorySet.size}, tags=${targetedPlan.requestedTagSet.size}, years=${requestedYearsMap.size}, months=${requestedYearMonthsMap.size}, days=${requestedYearMonthDaysMap.size}, root=${targetedPlan.requestRootRoutes ? 1 : 0}, pages=${requestedPagePosts.length}`,
-      );
-
-      onProgress(50, 'Rendering targeted missing routes...');
-
-      if (targetedPlan.requestRootRoutes) {
-        renderedUrlCount += await generateRootPages({
-          projectId: options.projectId,
-          posts: publishedListPosts,
+      if (useWorkers) {
+        // ── Worker-based targeted rendering ──────────────────────────────
+        // Dispatches separate worker tasks per section (categories, tags,
+        // single posts, date archives, core) so they render in parallel.
+        renderedUrlCount += await this.applyValidationWithWorkers({
+          options,
           maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-        });
-      }
-
-      if (requestedPagePosts.length > 0) {
-        renderedUrlCount += await generatePageRoutes({
-          projectId: options.projectId,
-          posts: requestedPagePosts,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-        });
-      }
-
-      if (targetedPlan.requestedCategorySet.size > 0) {
-        renderedUrlCount += await generateCategoryPages({
-          projectId: options.projectId,
-          posts: publishedListPosts,
-          allCategories: targetedPlan.requestedCategorySet,
-          maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-          postsByCategory: generationPostIndex.postsByCategory,
-        });
-      }
-
-      if (targetedPlan.requestedTagSet.size > 0) {
-        renderedUrlCount += await generateTagPages({
-          projectId: options.projectId,
-          posts: publishedListPosts,
-          allTags: targetedPlan.requestedTagSet,
-          maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-          postsByTag: generationPostIndex.postsByTag,
-        });
-      }
-
-      if (requestedSinglePosts.length > 0) {
-        renderedUrlCount += await generateSinglePostPages({
-          projectId: options.projectId,
-          posts: requestedSinglePosts,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-        });
-      }
-
-      if (requestedYearsMap.size > 0 || requestedYearMonthsMap.size > 0 || requestedYearMonthDaysMap.size > 0) {
-        renderedUrlCount += await generateDateArchivePages({
-          projectId: options.projectId,
-          posts: publishedListPosts,
-          yearsMap: requestedYearsMap,
-          yearMonthsMap: requestedYearMonthsMap,
-          yearMonthDaysMap: requestedYearMonthDaysMap,
-          maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-          postsByYear: generationPostIndex.postsByYear,
-          postsByYearMonth: generationPostIndex.postsByYearMonth,
-          postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
-        });
-      }
-
-      // --- Render missing per-language subtree pages ---
-      for (const [lang, langMissingPlan] of missingPathPlan.languagePlans) {
-        const langPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
-        const langListPosts = publishedListPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
-        const langPostIndex = buildGenerationPostIndex(langListPosts);
-        const langArchives = buildApplyValidationArchives(langListPosts);
-
-        const langTargetedPlan = buildTargetedValidationPlan({
-          initialPlan: langMissingPlan,
-          publishedPosts: langPosts,
-          allCategories: langArchives.allCategories,
-          allTags: langArchives.allTags,
-          availableYearMonths: langArchives.yearMonths.keys(),
-          availableYearMonthDays: langArchives.yearMonthDays.keys(),
-        });
-
-        const langRenderRoute = createPreviewBackedGenerationRouteRenderer({
-          options: { ...options, language: lang },
-          maxPostsPerPage,
-          publishedPostsForLookup: langPosts,
-          languagePrefix: `/${lang}`,
-          engines: {
-            postEngine: this.postEngine,
-            mediaEngine: this.mediaEngine,
-            postMediaEngine: this.postMediaEngine,
-          },
-        });
-
-        const langWritePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
-          projectId,
           htmlDir,
-          urlPath: `${lang}/${urlPath}`,
-          content,
-          refreshHashTimestampOnUnchanged: true,
+          publishedPosts,
+          publishedListPosts,
+          publishedRoutePosts,
+          generationPostIndex,
+          targetedPlan,
+          missingPathPlan,
+          mainLanguage,
+          additionalLanguages,
+          translationsByPost,
+          years,
+          yearMonths,
+          yearMonthDays,
+          onProgress,
         });
-
-        if (langTargetedPlan.requestRootRoutes) {
-          renderedUrlCount += await generateRootPages({
-            projectId: options.projectId,
-            posts: langListPosts,
-            maxPostsPerPage,
-            renderRoute: langRenderRoute,
-            writePage: langWritePage,
-            onPageGenerated,
-          });
-          const langRequestedPagePosts = selectRequestedPosts({
-            publishedPosts: langPosts,
-            requestedPostIds: new Set(),
-            requestedPageSlugs: langTargetedPlan.requestedPageSlugs,
-          }).requestedPagePosts;
-          if (langRequestedPagePosts.length > 0) {
-            renderedUrlCount += await generatePageRoutes({
-              projectId: options.projectId,
-              posts: langRequestedPagePosts,
-              renderRoute: langRenderRoute,
-              writePage: langWritePage,
-              onPageGenerated,
-            });
-          }
-        }
-
-        if (langTargetedPlan.requestedCategorySet.size > 0) {
-          renderedUrlCount += await generateCategoryPages({
-            projectId: options.projectId,
-            posts: langListPosts,
-            allCategories: langTargetedPlan.requestedCategorySet,
-            maxPostsPerPage,
-            renderRoute: langRenderRoute,
-            writePage: langWritePage,
-            onPageGenerated,
-            postsByCategory: langPostIndex.postsByCategory,
-          });
-        }
-
-        if (langTargetedPlan.requestedTagSet.size > 0) {
-          renderedUrlCount += await generateTagPages({
-            projectId: options.projectId,
-            posts: langListPosts,
-            allTags: langTargetedPlan.requestedTagSet,
-            maxPostsPerPage,
-            renderRoute: langRenderRoute,
-            writePage: langWritePage,
-            onPageGenerated,
-            postsByTag: langPostIndex.postsByTag,
-          });
-        }
-
-        const langRequestedSinglePosts = selectRequestedPosts({
-          publishedPosts: langPosts,
-          requestedPostIds: langTargetedPlan.requestedPostIds,
-          requestedPageSlugs: new Set(),
-        }).requestedSinglePosts;
-
-        if (langRequestedSinglePosts.length > 0) {
-          renderedUrlCount += await generateSinglePostPages({
-            projectId: options.projectId,
-            posts: langRequestedSinglePosts,
-            renderRoute: langRenderRoute,
-            writePage: langWritePage,
-            onPageGenerated,
-          });
-        }
-
-        const langRequestedArchives = buildRequestedArchiveMaps({
-          requestedYears: langTargetedPlan.requestedYears,
-          requestedYearMonths: langTargetedPlan.requestedYearMonths,
-          requestedYearMonthDays: langTargetedPlan.requestedYearMonthDays,
-          years: langArchives.years,
-          yearMonths: langArchives.yearMonths,
-          yearMonthDays: langArchives.yearMonthDays,
+      } else {
+        // ── Main-thread fallback (tests / no dbPath) ─────────────────────
+        renderedUrlCount += await this.applyValidationOnMainThread({
+          options,
+          maxPostsPerPage,
+          htmlDir,
+          publishedPosts,
+          publishedListPosts,
+          publishedRoutePosts,
+          generationPostIndex,
+          targetedPlan,
+          missingPathPlan,
+          mainLanguage,
+          additionalLanguages,
+          years,
+          yearMonths,
+          yearMonthDays,
+          onProgress,
         });
-
-        if (langRequestedArchives.requestedYearsMap.size > 0 || langRequestedArchives.requestedYearMonthsMap.size > 0 || langRequestedArchives.requestedYearMonthDaysMap.size > 0) {
-          renderedUrlCount += await generateDateArchivePages({
-            projectId: options.projectId,
-            posts: langListPosts,
-            yearsMap: langRequestedArchives.requestedYearsMap,
-            yearMonthsMap: langRequestedArchives.requestedYearMonthsMap,
-            yearMonthDaysMap: langRequestedArchives.requestedYearMonthDaysMap,
-            maxPostsPerPage,
-            renderRoute: langRenderRoute,
-            writePage: langWritePage,
-            onPageGenerated,
-            postsByYear: langPostIndex.postsByYear,
-            postsByYearMonth: langPostIndex.postsByYearMonth,
-            postsByYearMonthDay: langPostIndex.postsByYearMonthDay,
-          });
-        }
       }
     }
 
@@ -1911,6 +1710,455 @@ export class BlogGenerationEngine {
       deletedUrlCount,
       removedEmptyDirCount,
     };
+  }
+
+  // ── Main-thread targeted apply validation (tests / no dbPath) ──────────
+
+  private async applyValidationOnMainThread(params: {
+    options: BlogGenerationOptions;
+    maxPostsPerPage: number;
+    htmlDir: string;
+    publishedPosts: PostData[];
+    publishedListPosts: PostData[];
+    publishedRoutePosts: PostData[];
+    generationPostIndex: GenerationPostIndex;
+    targetedPlan: import('./ValidationApplyPlannerService').TargetedValidationPlan;
+    missingPathPlan: import('./ValidationApplyPlannerService').MissingPathPlan;
+    mainLanguage: string;
+    additionalLanguages: string[];
+    years: Map<number, Date>;
+    yearMonths: Map<string, Date>;
+    yearMonthDays: Map<string, Date>;
+    onProgress: (progress: number, message?: string) => void;
+  }): Promise<number> {
+    const {
+      options, maxPostsPerPage, htmlDir,
+      publishedPosts, publishedListPosts, publishedRoutePosts,
+      generationPostIndex, targetedPlan, missingPathPlan,
+      mainLanguage, additionalLanguages,
+      years, yearMonths, yearMonthDays,
+      onProgress,
+    } = params;
+
+    let renderedUrlCount = 0;
+
+    const renderRoute = createPreviewBackedGenerationRouteRenderer({
+      options,
+      maxPostsPerPage,
+      publishedPostsForLookup: publishedRoutePosts,
+      engines: {
+        postEngine: this.postEngine,
+        mediaEngine: this.mediaEngine,
+        postMediaEngine: this.postMediaEngine,
+      },
+    });
+    const writePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
+      projectId,
+      htmlDir,
+      urlPath,
+      content,
+      refreshHashTimestampOnUnchanged: true,
+    });
+    const onPageGenerated = (_message: string) => {
+      // no-op for applyValidation
+    };
+
+    const { requestedSinglePosts, requestedPagePosts } = selectRequestedPosts({
+      publishedPosts: publishedRoutePosts,
+      requestedPostIds: targetedPlan.requestedPostIds,
+      requestedPageSlugs: targetedPlan.requestedPageSlugs,
+    });
+
+    const { requestedYearsMap, requestedYearMonthsMap, requestedYearMonthDaysMap } = buildRequestedArchiveMaps({
+      requestedYears: targetedPlan.requestedYears,
+      requestedYearMonths: targetedPlan.requestedYearMonths,
+      requestedYearMonthDays: targetedPlan.requestedYearMonthDays,
+      years,
+      yearMonths,
+      yearMonthDays,
+    });
+
+    onProgress(
+      48,
+      `Targeted rerender plan: singles=${requestedSinglePosts.length}, categories=${targetedPlan.requestedCategorySet.size}, tags=${targetedPlan.requestedTagSet.size}, years=${requestedYearsMap.size}, months=${requestedYearMonthsMap.size}, days=${requestedYearMonthDaysMap.size}, root=${targetedPlan.requestRootRoutes ? 1 : 0}, pages=${requestedPagePosts.length}`,
+    );
+
+    onProgress(50, 'Rendering targeted missing routes...');
+
+    if (targetedPlan.requestRootRoutes) {
+      renderedUrlCount += await generateRootPages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+      });
+    }
+
+    if (requestedPagePosts.length > 0) {
+      renderedUrlCount += await generatePageRoutes({
+        projectId: options.projectId,
+        posts: requestedPagePosts,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+      });
+    }
+
+    if (targetedPlan.requestedCategorySet.size > 0) {
+      renderedUrlCount += await generateCategoryPages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        allCategories: targetedPlan.requestedCategorySet,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+        postsByCategory: generationPostIndex.postsByCategory,
+      });
+    }
+
+    if (targetedPlan.requestedTagSet.size > 0) {
+      renderedUrlCount += await generateTagPages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        allTags: targetedPlan.requestedTagSet,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+        postsByTag: generationPostIndex.postsByTag,
+      });
+    }
+
+    if (requestedSinglePosts.length > 0) {
+      renderedUrlCount += await generateSinglePostPages({
+        projectId: options.projectId,
+        posts: requestedSinglePosts,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+      });
+    }
+
+    if (requestedYearsMap.size > 0 || requestedYearMonthsMap.size > 0 || requestedYearMonthDaysMap.size > 0) {
+      renderedUrlCount += await generateDateArchivePages({
+        projectId: options.projectId,
+        posts: publishedListPosts,
+        yearsMap: requestedYearsMap,
+        yearMonthsMap: requestedYearMonthsMap,
+        yearMonthDaysMap: requestedYearMonthDaysMap,
+        maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+        postsByYear: generationPostIndex.postsByYear,
+        postsByYearMonth: generationPostIndex.postsByYearMonth,
+        postsByYearMonthDay: generationPostIndex.postsByYearMonthDay,
+      });
+    }
+
+    // --- Render missing per-language subtree pages ---
+    for (const [lang, langMissingPlan] of missingPathPlan.languagePlans) {
+      const langPosts = publishedPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+      const langListPosts = publishedListPosts.filter((p) => !(p as PostData & { doNotTranslate?: boolean }).doNotTranslate);
+      const langPostIndex = buildGenerationPostIndex(langListPosts);
+      const langArchives = buildApplyValidationArchives(langListPosts);
+
+      const langTargetedPlan = buildTargetedValidationPlan({
+        initialPlan: langMissingPlan,
+        publishedPosts: langPosts,
+        allCategories: langArchives.allCategories,
+        allTags: langArchives.allTags,
+        availableYearMonths: langArchives.yearMonths.keys(),
+        availableYearMonthDays: langArchives.yearMonthDays.keys(),
+      });
+
+      const langRenderRoute = createPreviewBackedGenerationRouteRenderer({
+        options: { ...options, language: lang },
+        maxPostsPerPage,
+        publishedPostsForLookup: langPosts,
+        languagePrefix: `/${lang}`,
+        engines: {
+          postEngine: this.postEngine,
+          mediaEngine: this.mediaEngine,
+          postMediaEngine: this.postMediaEngine,
+        },
+      });
+
+      const langWritePage = (projectId: string, urlPath: string, content: string) => writeHtmlPage({
+        projectId,
+        htmlDir,
+        urlPath: `${lang}/${urlPath}`,
+        content,
+        refreshHashTimestampOnUnchanged: true,
+      });
+
+      if (langTargetedPlan.requestRootRoutes) {
+        renderedUrlCount += await generateRootPages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated,
+        });
+        const langRequestedPagePosts = selectRequestedPosts({
+          publishedPosts: langPosts,
+          requestedPostIds: new Set(),
+          requestedPageSlugs: langTargetedPlan.requestedPageSlugs,
+        }).requestedPagePosts;
+        if (langRequestedPagePosts.length > 0) {
+          renderedUrlCount += await generatePageRoutes({
+            projectId: options.projectId,
+            posts: langRequestedPagePosts,
+            renderRoute: langRenderRoute,
+            writePage: langWritePage,
+            onPageGenerated,
+          });
+        }
+      }
+
+      if (langTargetedPlan.requestedCategorySet.size > 0) {
+        renderedUrlCount += await generateCategoryPages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          allCategories: langTargetedPlan.requestedCategorySet,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated,
+          postsByCategory: langPostIndex.postsByCategory,
+        });
+      }
+
+      if (langTargetedPlan.requestedTagSet.size > 0) {
+        renderedUrlCount += await generateTagPages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          allTags: langTargetedPlan.requestedTagSet,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated,
+          postsByTag: langPostIndex.postsByTag,
+        });
+      }
+
+      const langRequestedSinglePosts = selectRequestedPosts({
+        publishedPosts: langPosts,
+        requestedPostIds: langTargetedPlan.requestedPostIds,
+        requestedPageSlugs: new Set(),
+      }).requestedSinglePosts;
+
+      if (langRequestedSinglePosts.length > 0) {
+        renderedUrlCount += await generateSinglePostPages({
+          projectId: options.projectId,
+          posts: langRequestedSinglePosts,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated,
+        });
+      }
+
+      const langRequestedArchives = buildRequestedArchiveMaps({
+        requestedYears: langTargetedPlan.requestedYears,
+        requestedYearMonths: langTargetedPlan.requestedYearMonths,
+        requestedYearMonthDays: langTargetedPlan.requestedYearMonthDays,
+        years: langArchives.years,
+        yearMonths: langArchives.yearMonths,
+        yearMonthDays: langArchives.yearMonthDays,
+      });
+
+      if (langRequestedArchives.requestedYearsMap.size > 0 || langRequestedArchives.requestedYearMonthsMap.size > 0 || langRequestedArchives.requestedYearMonthDaysMap.size > 0) {
+        renderedUrlCount += await generateDateArchivePages({
+          projectId: options.projectId,
+          posts: langListPosts,
+          yearsMap: langRequestedArchives.requestedYearsMap,
+          yearMonthsMap: langRequestedArchives.requestedYearMonthsMap,
+          yearMonthDaysMap: langRequestedArchives.requestedYearMonthDaysMap,
+          maxPostsPerPage,
+          renderRoute: langRenderRoute,
+          writePage: langWritePage,
+          onPageGenerated,
+          postsByYear: langPostIndex.postsByYear,
+          postsByYearMonth: langPostIndex.postsByYearMonth,
+          postsByYearMonthDay: langPostIndex.postsByYearMonthDay,
+        });
+      }
+    }
+
+    return renderedUrlCount;
+  }
+
+  // ── Worker-based targeted apply validation ───────────────────────────────
+
+  private async applyValidationWithWorkers(params: {
+    options: BlogGenerationOptions;
+    maxPostsPerPage: number;
+    htmlDir: string;
+    publishedPosts: PostData[];
+    publishedListPosts: PostData[];
+    publishedRoutePosts: PostData[];
+    generationPostIndex: GenerationPostIndex;
+    targetedPlan: import('./ValidationApplyPlannerService').TargetedValidationPlan;
+    missingPathPlan: import('./ValidationApplyPlannerService').MissingPathPlan;
+    mainLanguage: string;
+    additionalLanguages: string[];
+    translationsByPost: Map<string, PostTranslationData[]>;
+    years: Map<number, Date>;
+    yearMonths: Map<string, Date>;
+    yearMonthDays: Map<string, Date>;
+    onProgress: (progress: number, message?: string) => void;
+  }): Promise<number> {
+    const {
+      options, maxPostsPerPage, htmlDir,
+      publishedPosts, publishedListPosts, publishedRoutePosts,
+      generationPostIndex, targetedPlan, missingPathPlan,
+      mainLanguage, additionalLanguages, translationsByPost,
+      years, yearMonths, yearMonthDays,
+      onProgress,
+    } = params;
+
+    // Pre-load media data for worker serialization
+    const rawMedia = await this.mediaEngine.getAllMedia();
+    const mediaItems = rawMedia.map(serializeMediaItem);
+
+    // Pre-load backlinks
+    let backlinksRecord: Record<string, Array<{ id: string; title: string; slug: string }>> = {};
+    if (typeof this.postEngine.getAllBacklinks === 'function') {
+      const blMap = await this.postEngine.getAllBacklinks();
+      for (const [postId, links] of blMap) {
+        backlinksRecord[postId] = links;
+      }
+    }
+
+    const serializedOptions = serializeBlogGenerationOptions(options);
+
+    // Pre-load post file paths
+    let postFilePathEntries: Array<[string, string]> = [];
+    if (typeof this.postEngine.getPublishedPostFilePaths === 'function') {
+      const filePathMap = await this.postEngine.getPublishedPostFilePaths();
+      postFilePathEntries = Array.from(filePathMap);
+    }
+
+    // Pre-load post-media links
+    let postMediaLinksEntries: Array<[string, Array<{ mediaId: string; sortOrder: number }>]> = [];
+    if (typeof this.postMediaEngine.getAllPostMediaLinks === 'function') {
+      const linksMap = await this.postMediaEngine.getAllPostMediaLinks();
+      postMediaLinksEntries = Array.from(linksMap);
+    }
+
+    // Bulk-load all known file hashes
+    const generatedHashCache = new Map<string, string | null>();
+    const existingHashes = await getAllGeneratedFileHashes(options.projectId);
+    for (const [relativePath, hash] of existingHashes) {
+      generatedHashCache.set(relativePath, hash);
+    }
+
+    const hashMapEntries: Array<[string, string]> = [];
+    for (const [relativePath, hash] of generatedHashCache) {
+      if (hash !== null) {
+        hashMapEntries.push([relativePath, hash]);
+      }
+    }
+
+    // Resolve posts to project main language before serialization
+    const mainLangRoutePosts = this.resolvePostsForLanguage(publishedRoutePosts, mainLanguage, translationsByPost, mainLanguage);
+    const mainLangListPosts = this.resolvePostsForLanguage(publishedListPosts, mainLanguage, translationsByPost, mainLanguage);
+    const mainLangPostIndex = buildGenerationPostIndex(mainLangListPosts);
+
+    const baseWorkerParams = {
+      options: serializedOptions,
+      maxPostsPerPage,
+      htmlDir,
+      mediaItems,
+      backlinksRecord,
+      hashMapEntries,
+      postFilePathEntries,
+      postMediaLinksEntries,
+    };
+
+    // Build main language tasks
+    const tasks = buildApplyValidationWorkerTasks(baseWorkerParams, {
+      targetedPlan,
+      publishedRoutePosts: mainLangRoutePosts,
+      publishedListPosts: mainLangListPosts,
+      generationPostIndex: mainLangPostIndex,
+      years,
+      yearMonths,
+      yearMonthDays,
+    });
+
+    // Build language subtree tasks
+    for (const [lang, langMissingPlan] of missingPathPlan.languagePlans) {
+      const langPosts = publishedPosts.filter((p) => !p.doNotTranslate);
+      const langListPosts = publishedListPosts.filter((p) => !p.doNotTranslate);
+      const langArchives = buildApplyValidationArchives(langListPosts);
+
+      const langTargetedPlan = buildTargetedValidationPlan({
+        initialPlan: langMissingPlan,
+        publishedPosts: langPosts,
+        allCategories: langArchives.allCategories,
+        allTags: langArchives.allTags,
+        availableYearMonths: langArchives.yearMonths.keys(),
+        availableYearMonthDays: langArchives.yearMonthDays.keys(),
+      });
+
+      const resolvedLangPosts = this.resolvePostsForLanguage(langPosts, lang, translationsByPost, mainLanguage);
+      const resolvedLangListPosts = this.resolvePostsForLanguage(langListPosts, lang, translationsByPost, mainLanguage);
+      const resolvedLangPostIndex = buildGenerationPostIndex(resolvedLangListPosts);
+
+      const langTasks = buildApplyValidationWorkerTasks(
+        {
+          ...baseWorkerParams,
+          options: { ...serializedOptions, language: lang },
+        },
+        {
+          targetedPlan: langTargetedPlan,
+          publishedRoutePosts: resolvedLangPosts,
+          publishedListPosts: resolvedLangListPosts,
+          generationPostIndex: resolvedLangPostIndex,
+          years: langArchives.years,
+          yearMonths: langArchives.yearMonths,
+          yearMonthDays: langArchives.yearMonthDays,
+          languagePrefix: `/${lang}`,
+          mainLanguage,
+        },
+      );
+
+      tasks.push(...langTasks);
+    }
+
+    if (tasks.length === 0) {
+      return 0;
+    }
+
+    onProgress(50, `Dispatching ${tasks.length} targeted tasks to worker pool...`);
+
+    const pool = new GenerationWorkerPool();
+    const reportUnitProgress = (message: string) => {
+      onProgress(60, message);
+    };
+
+    const result = await pool.runTasks(tasks, reportUnitProgress);
+
+    if (result.errors.length > 0) {
+      console.error(`[ApplyValidation/Workers] ${result.errors.length} task(s) failed:`);
+      for (const err of result.errors) {
+        console.error(`  [${err.taskId}] ${err.error}`);
+      }
+    }
+
+    // Persist hash updates collected from workers
+    if (result.hashUpdates.length > 0) {
+      for (const update of result.hashUpdates) {
+        await setGeneratedFileHash(options.projectId, update.relativePath, update.hash);
+      }
+    }
+
+    return result.pagesGenerated;
   }
 
 }
