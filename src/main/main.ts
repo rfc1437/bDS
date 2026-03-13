@@ -449,6 +449,8 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
     content: transformResult.post.content,
     tags: transformResult.post.tags,
     categories: transformResult.post.categories,
+    language: (metadata as { mainLanguage?: string } | null)?.mainLanguage || undefined,
+    author: (metadata as { defaultAuthor?: string } | null)?.defaultAuthor || undefined,
   });
 
   const blogmarkCreatedPayload = {

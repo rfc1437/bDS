@@ -5,6 +5,7 @@ import {
   type BlogGenerationSection,
   type BlogGenerationOptions,
   type SiteValidationReport,
+  type ApplyValidationPreparation,
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
 import type { EngineBundle } from '../engine/EngineBundle';
@@ -328,14 +329,71 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
     const baseOptions = await resolveBlogGenerationBaseOptions();
 
     const taskTimestamp = Date.now();
-    return bundle.taskManager.runTask({
-      id: `site-validate-apply-${taskTimestamp}`,
-      name: 'Apply Site Validation',
+    const taskGroupId = `site-validate-apply-${taskTimestamp}`;
+    const taskGroupName = 'Apply Site Validation';
+
+    const sectionDisplayNames: Record<BlogGenerationSection, string> = {
+      core: 'Render Site Core',
+      single: 'Render Single Posts',
+      category: 'Render Category Archives',
+      tag: 'Render Tag Archives',
+      date: 'Render Date Archives',
+    };
+
+    // Phase 1: Prepare — plan & delete extra URLs
+    const preparation = await bundle.taskManager.runTask({
+      id: `site-validate-prepare-${taskTimestamp}`,
+      name: 'Prepare Validation Apply',
+      groupId: taskGroupId,
+      groupName: taskGroupName,
       execute: async (onProgress) => {
-        return blogGenerationEngine.applyValidation(baseOptions, report, (progress, message) => {
-          onProgress(progress, message || 'Applying site validation...');
+        return blogGenerationEngine.prepareApplyValidation(baseOptions, report, (progress, message) => {
+          onProgress(progress, message || 'Preparing validation apply...');
         });
       },
     });
+
+    // Phase 2: Render sections in parallel (grouped tasks)
+    let renderedUrlCount = 0;
+
+    if (preparation.sectionsToRender.length > 0) {
+      const sectionResults = await Promise.all(
+        preparation.sectionsToRender.map((section) =>
+          bundle.taskManager.runTask({
+            id: `site-validate-render-${section}-${taskTimestamp}`,
+            name: sectionDisplayNames[section],
+            groupId: taskGroupId,
+            groupName: taskGroupName,
+            execute: async (onProgress) => {
+              return blogGenerationEngine.applyValidationForSection(baseOptions, preparation, section, (progress, message) => {
+                onProgress(progress, message || `Rendering ${section} routes...`);
+              });
+            },
+          }),
+        ),
+      );
+      renderedUrlCount = sectionResults.reduce((sum, count) => sum + count, 0);
+    }
+
+    // Phase 3: Regenerate calendar (if anything changed)
+    if (renderedUrlCount > 0 || preparation.deletedUrlCount > 0) {
+      await bundle.taskManager.runTask({
+        id: `site-validate-calendar-${taskTimestamp}`,
+        name: 'Regenerate Calendar',
+        groupId: taskGroupId,
+        groupName: taskGroupName,
+        execute: async (onProgress) => {
+          return blogGenerationEngine.regenerateCalendar(baseOptions, (progress, message) => {
+            onProgress(progress, message || 'Regenerating calendar...');
+          });
+        },
+      });
+    }
+
+    return {
+      renderedUrlCount,
+      deletedUrlCount: preparation.deletedUrlCount,
+      removedEmptyDirCount: preparation.removedEmptyDirCount,
+    };
   });
 }

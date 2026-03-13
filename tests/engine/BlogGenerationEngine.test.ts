@@ -1496,7 +1496,7 @@ describe('BlogGenerationEngine', () => {
     generateSpy.mockRestore();
   });
 
-  it('applies validation for a missing month by generating that month and its day archives only', async () => {
+  it('applies validation for a missing month by generating that month and parent year only', async () => {
     const posts = [
       makePost({ id: '1', slug: 'jan-post', createdAt: new Date('2025-01-15T10:00:00Z') }),
       makePost({ id: '2', slug: 'feb-post', createdAt: new Date('2025-02-20T10:00:00Z') }),
@@ -1520,13 +1520,17 @@ describe('BlogGenerationEngine', () => {
       existingHtmlUrlCount: 0,
     }, vi.fn());
 
+    // The requested month and its parent year are rendered
+    expect(await fileExists(path.join(tempDir, 'html', '2025', 'index.html'))).toBe(true);
     expect(await fileExists(path.join(tempDir, 'html', '2025', '01', 'index.html'))).toBe(true);
-    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(true);
+    // Child day archives are NOT cascaded into — only upward cascade
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(false);
+    // Unrelated months are not rendered
     expect(await fileExists(path.join(tempDir, 'html', '2025', '02', 'index.html'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html', '2025', '02', '20', 'index.html'))).toBe(false);
   });
 
-  it('applies validation for a missing year by generating that year and nested month/day archives only', async () => {
+  it('applies validation for a missing year by generating only that year archive', async () => {
     const posts = [
       makePost({ id: '1', slug: 'year-2025', createdAt: new Date('2025-01-15T10:00:00Z') }),
       makePost({ id: '2', slug: 'year-2024', createdAt: new Date('2024-02-20T10:00:00Z') }),
@@ -1550,9 +1554,11 @@ describe('BlogGenerationEngine', () => {
       existingHtmlUrlCount: 0,
     }, vi.fn());
 
+    // Only the requested year archive is rendered — no downward cascade
     expect(await fileExists(path.join(tempDir, 'html', '2025', 'index.html'))).toBe(true);
-    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', 'index.html'))).toBe(true);
-    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(true);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', 'index.html'))).toBe(false);
+    expect(await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'index.html'))).toBe(false);
+    // Other years are not rendered
     expect(await fileExists(path.join(tempDir, 'html', '2024', 'index.html'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html', '2024', '02', 'index.html'))).toBe(false);
     expect(await fileExists(path.join(tempDir, 'html', '2024', '02', '20', 'index.html'))).toBe(false);
