@@ -416,6 +416,22 @@ export const PostEditor: React.FC<PostEditorProps> = ({ postId }) => {
     });
   }, [loadTranslations]);
 
+  // Refresh translations when auto-translation completes for this post
+  useEffect(() => {
+    const handleTranslationEvent = (data: unknown) => {
+      const translation = data as { translationFor?: string };
+      if (translation.translationFor === postId) {
+        loadTranslations().catch(() => {});
+      }
+    };
+    const unsubCreated = window.electronAPI?.on('post:translationCreated', handleTranslationEvent);
+    const unsubUpdated = window.electronAPI?.on('post:translationUpdated', handleTranslationEvent);
+    return () => {
+      unsubCreated?.();
+      unsubUpdated?.();
+    };
+  }, [loadTranslations, postId]);
+
   // Debounce content for lightbox-only computations (not time-critical)
   const debouncedContent = useDebouncedValue(content, 500);
 

@@ -26,6 +26,8 @@ vi.mock('electron', () => ({
     handle: vi.fn((channel: string, handler: (...args: any[]) => Promise<any>) => {
       registeredHandlers.set(channel, handler);
     }),
+    emit: vi.fn(),
+    on: vi.fn(),
   },
   dialog: {
     showOpenDialog: vi.fn(),
@@ -3716,6 +3718,51 @@ describe('IPC Handlers', () => {
 
       // No auto-translation tasks should have been enqueued via taskManager
       expect(mockTaskManager.runTask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('registerEventForwarding: post translation events', () => {
+    it('should forward postTranslationCreated to renderer', async () => {
+      const { registerEventForwarding } = await import('../../src/main/ipc/handlers');
+      mockPostEngine.on.mockClear();
+      registerEventForwarding(mockBundle as any);
+
+      const translationCreatedCalls = mockPostEngine.on.mock.calls.filter(
+        ([event]: [string]) => event === 'postTranslationCreated'
+      );
+      expect(translationCreatedCalls.length).toBeGreaterThanOrEqual(1);
+
+      // Verify the handler calls ipcMain.emit to forward
+      const { ipcMain } = await import('electron');
+      (ipcMain.emit as any).mockClear();
+      const handler = translationCreatedCalls[translationCreatedCalls.length - 1][1];
+      handler({ id: 't1', translationFor: 'p1', language: 'fr' });
+      expect(ipcMain.emit).toHaveBeenCalledWith(
+        'forward-to-renderer',
+        'post:translationCreated',
+        { id: 't1', translationFor: 'p1', language: 'fr' }
+      );
+    });
+
+    it('should forward postTranslationUpdated to renderer', async () => {
+      const { registerEventForwarding } = await import('../../src/main/ipc/handlers');
+      mockPostEngine.on.mockClear();
+      registerEventForwarding(mockBundle as any);
+
+      const translationUpdatedCalls = mockPostEngine.on.mock.calls.filter(
+        ([event]: [string]) => event === 'postTranslationUpdated'
+      );
+      expect(translationUpdatedCalls.length).toBeGreaterThanOrEqual(1);
+
+      const { ipcMain } = await import('electron');
+      (ipcMain.emit as any).mockClear();
+      const handler = translationUpdatedCalls[translationUpdatedCalls.length - 1][1];
+      handler({ id: 't2', translationFor: 'p1', language: 'de' });
+      expect(ipcMain.emit).toHaveBeenCalledWith(
+        'forward-to-renderer',
+        'post:translationUpdated',
+        { id: 't2', translationFor: 'p1', language: 'de' }
+      );
     });
   });
 });

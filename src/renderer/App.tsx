@@ -167,6 +167,24 @@ const App: React.FC = () => {
       }) || (() => {})
     );
 
+    // Post translation events (refresh post to update availableLanguages for sidebar badges)
+    const handlePostTranslationChange = (data: unknown) => {
+      const translation = data as { translationFor?: string };
+      if (translation.translationFor) {
+        window.electronAPI?.posts.get(translation.translationFor).then((post) => {
+          if (post) {
+            updatePost((post as PostData).id, post as PostData);
+          }
+        });
+      }
+    };
+    unsubscribers.push(
+      window.electronAPI?.on('post:translationCreated', handlePostTranslationChange) || (() => {})
+    );
+    unsubscribers.push(
+      window.electronAPI?.on('post:translationUpdated', handlePostTranslationChange) || (() => {})
+    );
+
     // Media events
     unsubscribers.push(
       window.electronAPI?.on('media:imported', (media: unknown) => {

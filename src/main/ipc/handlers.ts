@@ -2018,6 +2018,8 @@ export function registerEventForwarding(bundle: EngineBundle): void {
   postEngine.on('postCreated', forwardEvent('post:created'));
   postEngine.on('postUpdated', forwardEvent('post:updated'));
   postEngine.on('postDeleted', forwardEvent('post:deleted'));
+  postEngine.on('postTranslationCreated', forwardEvent('post:translationCreated'));
+  postEngine.on('postTranslationUpdated', forwardEvent('post:translationUpdated'));
   postEngine.on('rebuildStarted', forwardEvent('posts:rebuildStarted'));
   postEngine.on('databaseRebuilt', forwardEvent('posts:databaseRebuilt'));
 
