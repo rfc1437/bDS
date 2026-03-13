@@ -282,29 +282,16 @@ export function buildTargetedValidationPlan(params: BuildTargetedValidationPlanP
     }
   }
 
-  for (const year of Array.from(requestedYears.values())) {
-    for (const ym of availableYearMonths) {
-      if (ym.startsWith(`${year}/`)) {
-        requestedYearMonths.add(ym);
-      }
-    }
-  }
-
-  for (const ym of Array.from(requestedYearMonths.values())) {
-    for (const ymd of availableYearMonthDays) {
-      if (ymd.startsWith(`${ym}/`)) {
-        requestedYearMonthDays.add(ymd);
-      }
-    }
-
-    const [yearStr] = ym.split('/');
-    requestedYears.add(Number(yearStr));
-  }
-
+  // Upward cascade only: day → month → year
   for (const ymd of Array.from(requestedYearMonthDays.values())) {
     const [yearStr, monthStr] = ymd.split('/');
     requestedYears.add(Number(yearStr));
     requestedYearMonths.add(`${yearStr}/${monthStr}`);
+  }
+
+  for (const ym of Array.from(requestedYearMonths.values())) {
+    const [yearStr] = ym.split('/');
+    requestedYears.add(Number(yearStr));
   }
 
   return {

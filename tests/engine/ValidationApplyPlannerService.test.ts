@@ -86,9 +86,11 @@ describe('ValidationApplyPlannerService', () => {
     expect(targeted.requestedTagSet.has('tag-1')).toBe(true);
     expect(targeted.requestedYears.has(2025)).toBe(true);
     expect(targeted.requestedYearMonths.has('2025/01')).toBe(true);
-    expect(targeted.requestedYearMonths.has('2025/02')).toBe(true);
+    // 2025/02 should NOT be included — only directly affected months are rerendered
+    expect(targeted.requestedYearMonths.has('2025/02')).toBe(false);
     expect(targeted.requestedYearMonthDays.has('2025/01/15')).toBe(true);
-    expect(targeted.requestedYearMonthDays.has('2025/02/20')).toBe(true);
+    // 2025/02/20 should NOT be included — only directly affected days are rerendered
+    expect(targeted.requestedYearMonthDays.has('2025/02/20')).toBe(false);
     expect(targeted.requestedPageSlugs.has('about')).toBe(true);
     expect(targeted.requestRootRoutes).toBe(true);
   });
