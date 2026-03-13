@@ -3236,7 +3236,7 @@ describe('IPC Handlers', () => {
     });
 
     describe('blog:applyValidation', () => {
-      it('should run apply via taskManager.runTask', async () => {
+      it('should run grouped tasks via taskManager.runTask', async () => {
         const mockProject = createMockProject({ id: 'test-project', dataPath: '/mock/data' });
         mockProjectEngine.getActiveProject.mockResolvedValue(mockProject);
         mockProjectEngine.getDataDir.mockReturnValue('/mock/data/dir');
@@ -3266,9 +3266,12 @@ describe('IPC Handlers', () => {
           existingHtmlUrlCount: 1,
         });
 
+        // Should run preparation as a grouped task
         expect(mockTaskManager.runTask).toHaveBeenCalledWith(
           expect.objectContaining({
-            name: 'Apply Site Validation',
+            name: 'Prepare Validation Apply',
+            groupId: expect.stringContaining('site-validate-apply-'),
+            groupName: 'Apply Site Validation',
             execute: expect.any(Function),
           }),
         );
