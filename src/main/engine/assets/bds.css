@@ -148,3 +148,13 @@ main { display: grid; gap: 1rem; }
 .language-switcher-badge:hover,
 .language-switcher-badge:focus-visible { opacity: 1; border-color: var(--pico-color, var(--color)); }
 .language-switcher-badge-current { opacity: 1; border-color: var(--pico-primary, var(--primary)); }
+.blog-search-widget, .blog-search-standalone { position: relative; margin-top: .15rem; }
+.blog-search-standalone { position: fixed; right: .75rem; top: 1.5rem; z-index: 100; }
+.blog-search-toggle { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--pico-muted-color, var(--muted-color)); cursor: pointer; padding: .15rem; opacity: .7; transition: opacity .15s ease-in-out; }
+.blog-search-toggle:hover, .blog-search-toggle:focus-visible { opacity: 1; color: var(--pico-color, var(--color)); }
+.blog-search-toggle svg { display: block; }
+.blog-search-panel { position: absolute; top: calc(100% + .25rem); right: 0; width: min(22rem, 90vw); z-index: 40; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); background: var(--pico-card-background-color, var(--card-background-color)); padding: .5rem; }
+.blog-search-panel .pagefind-ui { font-size: .85rem; }
+.blog-search-panel .pagefind-ui__search-input { font-size: .85rem; padding: .3rem .5rem; border: 1px solid var(--pico-muted-border-color, var(--muted-border-color)); background: var(--pico-background-color, var(--background-color)); color: var(--pico-color, var(--color)); border-radius: .2rem; width: 100%; }
+.blog-search-panel .pagefind-ui__result-link { color: var(--pico-primary, var(--primary)); font-size: .85rem; }
+.blog-search-panel .pagefind-ui__result-excerpt { font-size: .78rem; color: var(--pico-muted-color, var(--muted-color)); }

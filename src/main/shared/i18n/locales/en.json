@@ -94,5 +94,7 @@
   "task.rebuildEmbeddingIndex.clearing": "Clearing index…",
   "task.duplicateSearch.name": "Find Duplicate Posts",
   "task.duplicateSearch.searching": "Checking: {checked}/{total}",
-  "menu.item.fillMissingTranslations": "Fill Missing Translations"
+  "menu.item.fillMissingTranslations": "Fill Missing Translations",
+  "render.search.placeholder": "Search...",
+  "render.search.ariaLabel": "Site search"
 }

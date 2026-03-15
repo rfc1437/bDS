@@ -18,7 +18,8 @@
       "Bash(npm test -- tests/renderer/i18nLocaleCompleteness.test.ts)",
       "WebFetch(domain:ricmac.org)",
       "WebFetch(domain:docs.mistral.ai)",
-      "Bash(npm uninstall dropbox date-fns @testing-library/user-event @types/dagre electron-store memfs)"
+      "Bash(npm uninstall dropbox date-fns @testing-library/user-event @types/dagre electron-store memfs)",
+      "WebSearch"
     ]
   }
 }

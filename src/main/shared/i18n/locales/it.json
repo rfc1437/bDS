@@ -94,5 +94,7 @@
   "task.rebuildEmbeddingIndex.clearing": "Svuotamento indice…",
   "task.duplicateSearch.name": "Trova post duplicati",
   "task.duplicateSearch.searching": "Controllo: {checked}/{total}",
-  "menu.item.fillMissingTranslations": "Completa le traduzioni mancanti"
+  "menu.item.fillMissingTranslations": "Completa le traduzioni mancanti",
+  "render.search.placeholder": "Cerca...",
+  "render.search.ariaLabel": "Ricerca nel sito"
 }

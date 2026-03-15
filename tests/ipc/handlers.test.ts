@@ -321,6 +321,10 @@ vi.mock('../../src/main/engine/TaskManager', () => ({
   TaskProgress: {},
 }));
 
+vi.mock('../../src/main/engine/SearchIndexEngine', () => ({
+  buildSearchIndex: vi.fn().mockResolvedValue({ languageIndexes: [] }),
+}));
+
 vi.mock('../../src/main/database', () => ({
   getDatabase: vi.fn(() => mockDatabase),
 }));
