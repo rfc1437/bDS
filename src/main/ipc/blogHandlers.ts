@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { dialog } from 'electron';
 import {
   resolvePublicBaseUrl,
@@ -8,6 +9,7 @@ import {
   type ApplyValidationPreparation,
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
+import { buildSearchIndex } from '../engine/SearchIndexEngine';
 import type { EngineBundle } from '../engine/EngineBundle';
 import type { TranslationValidationReport } from '../shared/electronApi';
 import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
@@ -151,6 +153,26 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
       runSectionTask('tag', 'Render Tag Archives', 'site-render-tag'),
       runSectionTask('date', 'Render Date Archives', 'site-render-date'),
     ]);
+
+    await bundle.taskManager.runTask({
+      id: `site-render-search-index-${taskTimestamp}`,
+      name: 'Build Search Index',
+      groupId: taskGroupId,
+      groupName: taskGroupName,
+      execute: async (onProgress) => {
+        const htmlDir = path.join(baseOptions.dataDir, 'html');
+        const mainLanguage = (baseOptions.language ?? 'en').trim().toLowerCase();
+        const additionalLanguages = (baseOptions.blogLanguages ?? [])
+          .map((lang) => lang.trim().toLowerCase())
+          .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+        return buildSearchIndex({
+          htmlDir,
+          mainLanguage,
+          additionalLanguages,
+          onProgress: (progress, message) => onProgress(progress, message || 'Building search index...'),
+        });
+      },
+    });
 
     return mergeResults([coreResult, singleResult, categoryResult, tagResult, dateResult]);
   });
@@ -385,6 +407,27 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         execute: async (onProgress) => {
           return blogGenerationEngine.regenerateCalendar(baseOptions, (progress, message) => {
             onProgress(progress, message || 'Regenerating calendar...');
+          });
+        },
+      });
+
+      // Phase 4: Rebuild search index
+      await bundle.taskManager.runTask({
+        id: `site-validate-search-index-${taskTimestamp}`,
+        name: 'Build Search Index',
+        groupId: taskGroupId,
+        groupName: taskGroupName,
+        execute: async (onProgress) => {
+          const htmlDir = path.join(baseOptions.dataDir, 'html');
+          const mainLanguage = (baseOptions.language ?? 'en').trim().toLowerCase();
+          const additionalLanguages = (baseOptions.blogLanguages ?? [])
+            .map((lang) => lang.trim().toLowerCase())
+            .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+          return buildSearchIndex({
+            htmlDir,
+            mainLanguage,
+            additionalLanguages,
+            onProgress: (progress, message) => onProgress(progress, message || 'Building search index...'),
           });
         },
       });

@@ -96,10 +96,6 @@ vi.mock('../../src/main/engine/MediaEngine', () => {
   };
 });
 
-vi.mock('../../src/main/engine/SearchIndexEngine', () => ({
-  buildSearchIndex: vi.fn().mockResolvedValue({ languageIndexes: [] }),
-}));
-
 vi.mock('../../src/main/engine/PostMediaEngine', () => {
   const mockPostMediaEngine = {
     getLinkedMediaDataForPost: vi.fn(async () => []),

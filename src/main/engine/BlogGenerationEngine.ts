@@ -57,7 +57,6 @@ import {
   type GenerationWorkerTask,
 } from './GenerationWorkerData';
 import { readPostTranslationFile } from './postTranslationFileUtils';
-import { buildSearchIndex } from './SearchIndexEngine';
 
 const DEFAULT_MAX_POSTS_PER_PAGE = 50;
 const MIN_MAX_POSTS_PER_PAGE = 1;
@@ -717,16 +716,6 @@ export class BlogGenerationEngine {
         content: hreflangSitemapXml,
       });
     }
-
-    onProgress(96, 'Building search index...');
-    await buildSearchIndex({
-      htmlDir,
-      mainLanguage,
-      additionalLanguages,
-      onProgress: (progress, message) => {
-        onProgress(96 + Math.floor((progress / 100) * 4), message);
-      },
-    });
 
     onProgress(100, `Site generated (${publishedPosts.length} posts, ${pagesGenerated} pages)`);
 
@@ -1601,26 +1590,10 @@ export class BlogGenerationEngine {
     }
 
     if (renderedUrlCount > 0 || preparation.deletedUrlCount > 0) {
-      onProgress(88, 'Regenerating calendar data...');
+      onProgress(90, 'Regenerating calendar data...');
       await this.regenerateCalendar(options, (progress, message) => {
-        const mappedProgress = 88 + Math.floor((progress / 100) * 5);
-        onProgress(Math.min(93, mappedProgress), message || 'Regenerating calendar data...');
-      });
-
-      const htmlDir = path.join(options.dataDir, 'html');
-      const mainLanguage = (options.language ?? 'en').trim().toLowerCase();
-      const additionalLanguages = (options.blogLanguages ?? [])
-        .map((lang) => lang.trim().toLowerCase())
-        .filter((lang) => lang.length > 0 && lang !== mainLanguage);
-
-      onProgress(93, 'Rebuilding search index...');
-      await buildSearchIndex({
-        htmlDir,
-        mainLanguage,
-        additionalLanguages,
-        onProgress: (progress, message) => {
-          onProgress(93 + Math.floor((progress / 100) * 7), message);
-        },
+        const mappedProgress = 90 + Math.floor((progress / 100) * 9);
+        onProgress(Math.min(99, mappedProgress), message || 'Regenerating calendar data...');
       });
     }
 

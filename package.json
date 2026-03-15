@@ -133,7 +133,9 @@
     "asar": true,
     "asarUnpack": [
       "node_modules/onnxruntime-node/**",
-      "node_modules/usearch/**"
+      "node_modules/usearch/**",
+      "node_modules/pagefind/**",
+      "node_modules/@pagefind/**"
     ],
     "afterSign": "scripts/notarize.mjs",
     "directories": {
