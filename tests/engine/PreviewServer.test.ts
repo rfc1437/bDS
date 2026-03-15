@@ -1074,7 +1074,7 @@ describe('PreviewServer', () => {
 
     const mainIndex = html.indexOf('<main>');
     const h1Index = html.indexOf('<h1>Explicit Single Post Title</h1>');
-    const articleIndex = html.indexOf('<article class="single-post" data-template="single-post">');
+    const articleIndex = html.indexOf('<article class="single-post" data-template="single-post" data-pagefind-body>');
     expect(mainIndex).toBeGreaterThan(-1);
     expect(h1Index).toBeGreaterThan(mainIndex);
     expect(articleIndex).toBeGreaterThan(mainIndex);

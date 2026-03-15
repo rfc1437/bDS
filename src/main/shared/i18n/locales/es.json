@@ -94,5 +94,7 @@
   "task.rebuildEmbeddingIndex.clearing": "Vaciando índice…",
   "task.duplicateSearch.name": "Buscar entradas duplicadas",
   "task.duplicateSearch.searching": "Comprobando: {checked}/{total}",
-  "menu.item.fillMissingTranslations": "Completar traducciones faltantes"
+  "menu.item.fillMissingTranslations": "Completar traducciones faltantes",
+  "render.search.placeholder": "Buscar...",
+  "render.search.ariaLabel": "Buscar en el sitio"
 }

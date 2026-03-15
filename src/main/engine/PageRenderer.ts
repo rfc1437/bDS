@@ -10,6 +10,7 @@ import { PICO_THEME_NAMES } from '../shared/picoThemes';
 import { CODE_ENHANCEMENTS_RUNTIME_JS } from './assets/codeEnhancementsRuntime';
 import { CALENDAR_RUNTIME_JS } from './assets/calendarRuntime';
 import { TAG_CLOUD_RUNTIME_JS } from './assets/tagCloudRuntime';
+import { SEARCH_RUNTIME_JS } from './assets/searchRuntime';
 import { resolveRenderLanguageFromProjectPreferences, translateRender, getRenderTranslations } from '../shared/i18n';
 
 function readLocalAsset(filename: string): string {
@@ -311,6 +312,10 @@ export const PREVIEW_ASSETS: Record<string, PreviewAssetDefinition> = {
   'calendar-runtime.js': {
     contentType: 'application/javascript; charset=utf-8',
     sourceText: CALENDAR_RUNTIME_JS,
+  },
+  'search-runtime.js': {
+    contentType: 'application/javascript; charset=utf-8',
+    sourceText: SEARCH_RUNTIME_JS,
   },
   'bds.css': {
     contentType: 'text/css; charset=utf-8',

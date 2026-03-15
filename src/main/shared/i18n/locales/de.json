@@ -94,5 +94,7 @@
   "task.rebuildEmbeddingIndex.clearing": "Index wird geleert…",
   "task.duplicateSearch.name": "Doppelte Beiträge finden",
   "task.duplicateSearch.searching": "Prüfe: {checked}/{total}",
-  "menu.item.fillMissingTranslations": "Fehlende Übersetzungen ausfüllen"
+  "menu.item.fillMissingTranslations": "Fehlende Übersetzungen ausfüllen",
+  "render.search.placeholder": "Suchen...",
+  "render.search.ariaLabel": "Seitensuche"
 }
