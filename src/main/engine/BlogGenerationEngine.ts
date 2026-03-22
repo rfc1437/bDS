@@ -628,6 +628,16 @@ export class BlogGenerationEngine {
       .map((lang) => lang.trim().toLowerCase())
       .filter((lang) => lang.length > 0 && lang !== mainLanguage);
 
+    // When a language has a dedicated subtree (e.g. /fr/), suppress its .lang
+    // translation variant pages (e.g. /2025/01/15/post.fr/) to avoid duplicate
+    // content.  The subtree already contains the translated version at a clean URL.
+    if (additionalLanguages.length > 0) {
+      const subtreeLanguages = new Set(additionalLanguages);
+      publishedRoutePosts = publishedRoutePosts.filter(
+        (p) => !(p as any).translationSourceSlug || !subtreeLanguages.has((p.language ?? '').trim().toLowerCase()),
+      );
+    }
+
     // Determine whether to use worker threads for page generation
     const useWorkers = !!options.dbPath;
 
@@ -1409,8 +1419,22 @@ export class BlogGenerationEngine {
       .map(([category]) => category);
 
     const { publishedPosts, publishedListPosts } = await loadPublishedGenerationSets(this.postEngine, listExcludedCategories);
-    const { routePosts: publishedRoutePosts } = await this.buildPublishedRoutePosts(publishedPosts);
+    let { routePosts: publishedRoutePosts } = await this.buildPublishedRoutePosts(publishedPosts);
     const generationPostIndex = buildGenerationPostIndex(publishedListPosts);
+
+    // --- Build per-language expected paths ---
+    const mainLanguage = (options.language ?? 'en').trim().toLowerCase();
+    const additionalLanguages = (options.blogLanguages ?? [])
+      .map((lang) => lang.trim().toLowerCase())
+      .filter((lang) => lang.length > 0 && lang !== mainLanguage);
+
+    // Suppress .lang variant pages for languages that have a dedicated subtree
+    if (additionalLanguages.length > 0) {
+      const subtreeLanguages = new Set(additionalLanguages);
+      publishedRoutePosts = publishedRoutePosts.filter(
+        (p) => !(p as any).translationSourceSlug || !subtreeLanguages.has((p.language ?? '').trim().toLowerCase()),
+      );
+    }
 
     const { sitemapXml } = buildSitemapAndFeeds({
       baseUrl: options.baseUrl,
@@ -1426,12 +1450,6 @@ export class BlogGenerationEngine {
     const htmlDir = path.join(options.dataDir, 'html');
     await fs.mkdir(htmlDir, { recursive: true });
     const sitemapPath = path.join(htmlDir, 'sitemap.xml');
-
-    // --- Build per-language expected paths ---
-    const mainLanguage = (options.language ?? 'en').trim().toLowerCase();
-    const additionalLanguages = (options.blogLanguages ?? [])
-      .map((lang) => lang.trim().toLowerCase())
-      .filter((lang) => lang.length > 0 && lang !== mainLanguage);
 
     let sitemapToWrite = sitemapXml;
     const additionalExpectedPaths: string[] = [];

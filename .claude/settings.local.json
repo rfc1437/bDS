@@ -19,7 +19,13 @@
       "WebFetch(domain:ricmac.org)",
       "WebFetch(domain:docs.mistral.ai)",
       "Bash(npm uninstall dropbox date-fns @testing-library/user-event @types/dagre electron-store memfs)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(gh api:*)",
+      "Bash(python3 -c \"import json,sys; [print\\(f[''''name'''']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(grep -rn choices.*auto.*mistral /Users/gb/mlx-env/lib/python3.14/site-packages/vllm_mlx/ --include=*.py)",
+      "Bash(source ~/mlx-env/bin/activate)",
+      "Bash(python3 -c \":*)"
     ]
   }
 }
