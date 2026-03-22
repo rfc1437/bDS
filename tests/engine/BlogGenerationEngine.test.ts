@@ -2325,4 +2325,56 @@ describe('BlogGenerationEngine', () => {
     const page2 = await readFile(path.join(tempDir, 'html', 'tag', 'paginated', 'page', '2', 'index.html'), 'utf-8');
     expect(page2).toContain('/tag/paginated/');
   });
+
+  it('does not generate .lang variant pages when that language has a subtree', async () => {
+    const sourcePost = makePost({
+      id: '1',
+      slug: 'hello-world',
+      title: 'Hello World',
+      content: '# Hello World\n\nEnglish body',
+      language: 'en',
+      availableLanguages: ['en', 'fr'],
+      createdAt: new Date('2025-01-15T10:00:00Z'),
+      updatedAt: new Date('2025-01-15T10:00:00Z'),
+    });
+    const translationsByPostId = new Map<string, PostTranslationData[]>([
+      ['1', [{
+        id: 'translation-1-fr',
+        projectId: 'default',
+        translationFor: '1',
+        language: 'fr',
+        title: 'Bonjour le monde',
+        excerpt: 'Resume FR',
+        content: '# Bonjour le monde\n\nCorps FR',
+        status: 'published',
+        createdAt: new Date('2025-01-15T10:05:00Z'),
+        updatedAt: new Date('2025-01-15T10:05:00Z'),
+        publishedAt: new Date('2025-01-15T10:06:00Z'),
+        filePath: path.join(tempDir, 'posts', 'hello-world.fr.md'),
+      }]],
+    ]);
+
+    setupPosts([sourcePost]);
+    mockPostEngine.getPostTranslations.mockImplementation(async (postId: string) => translationsByPostId.get(postId) ?? []);
+
+    const { BlogGenerationEngine } = await import('../../src/main/engine/BlogGenerationEngine');
+    const engine = new BlogGenerationEngine(mockPostEngine, mockMediaEngine, mockPostMediaEngine);
+
+    await engine.generate({
+      projectId: 'test',
+      projectName: 'Test Blog',
+      dataDir: tempDir,
+      baseUrl: 'https://example.com',
+      language: 'en',
+      blogLanguages: ['en', 'fr'],
+    }, vi.fn());
+
+    // The fr subtree should exist
+    const frSubtreeExists = await fileExists(path.join(tempDir, 'html', 'fr', '2025', '01', '15', 'hello-world', 'index.html'));
+    expect(frSubtreeExists).toBe(true);
+
+    // The .fr variant page should NOT exist since fr has a language subtree
+    const variantExists = await fileExists(path.join(tempDir, 'html', '2025', '01', '15', 'hello-world.fr', 'index.html'));
+    expect(variantExists).toBe(false);
+  });
 });
