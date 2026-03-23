@@ -87,26 +87,26 @@ export class GenerationWorkerPool {
           const msg = raw as WorkerOutboundMessage;
 
           switch (msg.type) {
-            case 'progress':
-              onProgress(msg.message);
-              break;
+          case 'progress':
+            onProgress(msg.message);
+            break;
 
-            case 'result':
-              totalPages += msg.pagesGenerated;
-              if (msg.hashUpdates) {
-                allHashUpdates.push(...msg.hashUpdates);
-              }
-              activeWorkers--;
-              void worker.terminate();
-              startNextWorker();
-              break;
+          case 'result':
+            totalPages += msg.pagesGenerated;
+            if (msg.hashUpdates) {
+              allHashUpdates.push(...msg.hashUpdates);
+            }
+            activeWorkers--;
+            void worker.terminate();
+            startNextWorker();
+            break;
 
-            case 'error':
-              errors.push({ taskId: msg.taskId, error: msg.error });
-              activeWorkers--;
-              void worker.terminate();
-              startNextWorker();
-              break;
+          case 'error':
+            errors.push({ taskId: msg.taskId, error: msg.error });
+            activeWorkers--;
+            void worker.terminate();
+            startNextWorker();
+            break;
           }
         });
 

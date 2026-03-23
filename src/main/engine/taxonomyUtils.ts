@@ -8,7 +8,7 @@ export function normalizeNonEmptyTaxonomyTerm(term: string): string | null {
 }
 
 export function collectNormalizedTermsFromJsonValues(
-  values: Array<string | null | undefined>
+  values: Array<string | null | undefined>,
 ): string[] {
   const terms = new Set<string>();
 

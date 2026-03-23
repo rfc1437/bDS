@@ -85,16 +85,24 @@ export function createOpenCodeGateway(apiKey: string): Provider {
 /** Determine which provider backend a model ID belongs to. */
 export function detectProvider(modelId: string): string {
   const id = modelId.toLowerCase();
-  if (id.startsWith('claude')) return 'anthropic';
-  if (id.startsWith('gpt') || id.startsWith('o3') || id.startsWith('o4')) return 'openai';
-  if (id.startsWith('gemini')) return 'google';
+  if (id.startsWith('claude')) {
+    return 'anthropic';
+  }
+  if (id.startsWith('gpt') || id.startsWith('o3') || id.startsWith('o4')) {
+    return 'openai';
+  }
+  if (id.startsWith('gemini')) {
+    return 'google';
+  }
   if (
     id.startsWith('mistral') ||
     id.startsWith('ministral') ||
     id.startsWith('devstral') ||
     id.startsWith('codestral') ||
     id.startsWith('pixtral')
-  ) return 'mistral';
+  ) {
+    return 'mistral';
+  }
   return 'other';
 }
 
@@ -294,8 +302,12 @@ export class ProviderRegistry {
    * registration first, then falling back to prefix-based detection.
    */
   detectModelProvider(modelId: string): string {
-    if (this.ollamaModelIds.has(modelId)) return 'ollama';
-    if (this.lmstudioModelIds.has(modelId)) return 'lmstudio';
+    if (this.ollamaModelIds.has(modelId)) {
+      return 'ollama';
+    }
+    if (this.lmstudioModelIds.has(modelId)) {
+      return 'lmstudio';
+    }
     return detectProvider(modelId);
   }
 
@@ -309,11 +321,19 @@ export class ProviderRegistry {
 
   /** Check whether the key for a specific provider is set. */
   isProviderKeySet(provider: string): boolean {
-    if (provider === 'ollama') return this.ollamaEnabled;
-    if (provider === 'lmstudio') return this.lmstudioEnabled;
+    if (provider === 'ollama') {
+      return this.ollamaEnabled;
+    }
+    if (provider === 'lmstudio') {
+      return this.lmstudioEnabled;
+    }
     // In offline mode, cloud providers are unavailable
-    if (this._offlineMode) return false;
-    if (provider === 'mistral') return !!this.mistralKey;
+    if (this._offlineMode) {
+      return false;
+    }
+    if (provider === 'mistral') {
+      return !!this.mistralKey;
+    }
     return !!this.opencodeKey;
   }
 
@@ -404,8 +424,12 @@ export class ProviderRegistry {
    * Used as automatic fallback when no explicit offline model is configured.
    */
   getFirstKnownLocalModelId(): string | null {
-    for (const id of this.ollamaModelIds) return id;
-    for (const id of this.lmstudioModelIds) return id;
+    for (const id of this.ollamaModelIds) {
+      return id;
+    }
+    for (const id of this.lmstudioModelIds) {
+      return id;
+    }
     return null;
   }
 
@@ -414,10 +438,14 @@ export class ProviderRegistry {
    */
   getFirstKnownLocalVisionModelId(): string | null {
     for (const id of this.ollamaModelIds) {
-      if (this.ollamaModelSupportsVision(id)) return id;
+      if (this.ollamaModelSupportsVision(id)) {
+        return id;
+      }
     }
     for (const id of this.lmstudioModelIds) {
-      if (this.lmstudioModelSupportsVision(id)) return id;
+      if (this.lmstudioModelSupportsVision(id)) {
+        return id;
+      }
     }
     return null;
   }
@@ -495,7 +523,9 @@ export class ProviderRegistry {
       try {
         const models = await this.fetchOllamaModels();
         allModels.push(...models);
-        if (models.length > 0) fetched = true;
+        if (models.length > 0) {
+          fetched = true;
+        }
       } catch {
         // Ollama not running — skip silently
       }
@@ -506,7 +536,9 @@ export class ProviderRegistry {
       try {
         const models = await this.fetchLmstudioModels();
         allModels.push(...models);
-        if (models.length > 0) fetched = true;
+        if (models.length > 0) {
+          fetched = true;
+        }
       } catch {
         // LM Studio not running — skip silently
       }
@@ -524,7 +556,9 @@ export class ProviderRegistry {
 
   /** Validate an OpenCode API key against the models endpoint. */
   async validateOpencodeKey(apiKey: string): Promise<{ isValid: boolean; models: ChatModel[] }> {
-    if (!apiKey || apiKey.length < 3) return { isValid: false, models: [] };
+    if (!apiKey || apiKey.length < 3) {
+      return { isValid: false, models: [] };
+    }
 
     const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
 
@@ -548,7 +582,9 @@ export class ProviderRegistry {
 
   /** Validate a Mistral API key against the Mistral models endpoint. */
   async validateMistralKey(apiKey: string): Promise<{ isValid: boolean; models: ChatModel[] }> {
-    if (!apiKey || apiKey.length < 3) return { isValid: false, models: [] };
+    if (!apiKey || apiKey.length < 3) {
+      return { isValid: false, models: [] };
+    }
 
     const { vision: catalogVision, names: catalogNames } = await this.getCatalogLookups();
 
@@ -578,10 +614,14 @@ export class ProviderRegistry {
       const timeout = setTimeout(() => controller.abort(), LMSTUDIO_FETCH_TIMEOUT);
       const response = await fetch(LMSTUDIO_MODELS_URL, { method: 'GET', signal: controller.signal });
       clearTimeout(timeout);
-      if (!response.ok) return [];
+      if (!response.ok) {
+        return [];
+      }
 
       const data = await response.json() as { data?: Array<{ id: string }> };
-      if (!data.data || !Array.isArray(data.data)) return [];
+      if (!data.data || !Array.isArray(data.data)) {
+        return [];
+      }
 
       const models: ChatModel[] = data.data.map(m => ({
         id: m.id,
@@ -591,7 +631,9 @@ export class ProviderRegistry {
       }));
       // Only replace registered IDs on successful fetch
       this.clearLmstudioModels();
-      for (const m of models) this.registerLmstudioModel(m.id);
+      for (const m of models) {
+        this.registerLmstudioModel(m.id);
+      }
       return models;
     } catch {
       return [];
@@ -610,10 +652,14 @@ export class ProviderRegistry {
       const timeout = setTimeout(() => controller.abort(), OLLAMA_FETCH_TIMEOUT);
       const response = await fetch(OLLAMA_TAGS_URL, { method: 'GET', signal: controller.signal });
       clearTimeout(timeout);
-      if (!response.ok) return [];
+      if (!response.ok) {
+        return [];
+      }
 
       const data = await response.json() as { models?: Array<{ name: string; details?: { family?: string } }> };
-      if (!data.models || !Array.isArray(data.models)) return [];
+      if (!data.models || !Array.isArray(data.models)) {
+        return [];
+      }
 
       const models: ChatModel[] = data.models.map(m => ({
         id: m.name,
@@ -623,7 +669,9 @@ export class ProviderRegistry {
       }));
       // Only replace registered IDs on successful fetch
       this.clearOllamaModels();
-      for (const m of models) this.registerOllamaModel(m.id);
+      for (const m of models) {
+        this.registerOllamaModel(m.id);
+      }
       return models;
     } catch {
       return [];
@@ -640,10 +688,14 @@ export class ProviderRegistry {
     filterProvider?: string,
   ): Promise<ChatModel[]> {
     const response = await fetch(url, { method: 'GET', headers });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
 
     const data = await response.json() as { data?: Array<{ id: string }> };
-    if (!data.data || !Array.isArray(data.data)) return [];
+    if (!data.data || !Array.isArray(data.data)) {
+      return [];
+    }
 
     let models = data.data;
     if (filterProvider) {

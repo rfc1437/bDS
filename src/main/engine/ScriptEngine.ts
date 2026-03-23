@@ -91,7 +91,9 @@ export class ScriptEngine extends EventEmitter {
   }
 
   /** No persistent cache — no-op for watcher compat. */
-  invalidate(_entityId?: string): void {}
+  invalidate(entityId?: string): void {
+    void entityId;
+  }
 
   setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
@@ -513,7 +515,7 @@ export class ScriptEngine extends EventEmitter {
 
   private async toScriptData(row: Script): Promise<ScriptData> {
     // Draft scripts store content in the DB; published scripts read from disk.
-    const content = row.status === 'draft' && row.content != null
+    const content = row.status === 'draft' && row.content !== null
       ? row.content
       : await this.readScriptBody(row.filePath);
 
@@ -572,7 +574,7 @@ export class ScriptEngine extends EventEmitter {
     const taken = new Set(
       rows
         .filter((item) => item.id !== excludeId)
-        .map((item) => item.slug)
+        .map((item) => item.slug),
     );
 
     if (!taken.has(baseSlug)) {
@@ -691,7 +693,7 @@ export class ScriptEngine extends EventEmitter {
   }
 
   private parseYamlScalar(valueRaw: string): string | number | boolean {
-    if ((valueRaw.startsWith('"') && valueRaw.endsWith('"')) || (valueRaw.startsWith("'") && valueRaw.endsWith("'"))) {
+    if ((valueRaw.startsWith('"') && valueRaw.endsWith('"')) || (valueRaw.startsWith('\'') && valueRaw.endsWith('\''))) {
       return valueRaw.slice(1, -1)
         .replace(/\\"/g, '"')
         .replace(/\\\\/g, '\\');
@@ -838,9 +840,11 @@ export class ScriptEngine extends EventEmitter {
   /** Publish a draft script: write file to disk, set status='published', clear DB content. */
   async publishScript(id: string): Promise<ScriptData | null> {
     const existing = await this.getScriptRow(id);
-    if (!existing) return null;
+    if (!existing) {
+      return null;
+    }
 
-    const content = existing.status === 'draft' && existing.content != null
+    const content = existing.status === 'draft' && existing.content !== null
       ? existing.content
       : await this.readScriptBody(existing.filePath);
 
@@ -854,7 +858,9 @@ export class ScriptEngine extends EventEmitter {
       .where(eq(scripts.id, id));
 
     const updatedRow = await this.getScriptRow(id);
-    if (!updatedRow) return null;
+    if (!updatedRow) {
+      return null;
+    }
     const result = await this.toScriptData(updatedRow);
     this.emit('scriptUpdated', result);
     await this.notifier.notify('script', id, 'updated');
@@ -864,7 +870,9 @@ export class ScriptEngine extends EventEmitter {
   /** Delete a draft script (only if status='draft'). Returns false if not found or already published. */
   async deleteDraftScript(id: string): Promise<boolean> {
     const existing = await this.getScriptRow(id);
-    if (!existing || existing.status !== 'draft') return false;
+    if (!existing || existing.status !== 'draft') {
+      return false;
+    }
 
     await getDatabase().getLocal()
       .delete(scripts)

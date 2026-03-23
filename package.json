@@ -29,7 +29,7 @@
     "test:ui": "vitest --ui",
     "bench:python-runtime": "node ./node_modules/tsx/dist/cli.mjs scripts/python-runtime-benchmark.ts",
     "docs:api": "node ./node_modules/tsx/dist/cli.mjs scripts/generate-api-docs.ts",
-    "lint": "eslint \"src/renderer/**/*.{ts,tsx}\" --max-warnings 0",
+    "lint": "eslint \"src/renderer/**/*.{ts,tsx}\" \"src/main/**/*.{ts,js}\" --max-warnings 0",
     "lint:i18n": "eslint \"src/renderer/**/*.{ts,tsx}\" --max-warnings 0",
     "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node ./node_modules/tsx/dist/cli.mjs src/main/database/migrate.ts",

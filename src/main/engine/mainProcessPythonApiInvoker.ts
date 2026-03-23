@@ -12,7 +12,9 @@ export function setEngineBundle(bundle: EngineBundle): void {
 
 function requireBundle(): EngineBundle {
   if (!registeredBundle) {
-    throw new Error('Engine bundle not registered. Call setEngineBundle() before invoking Python API methods.');
+    throw new Error(
+      'Engine bundle not registered. Call setEngineBundle() before invoking Python API methods.',
+    );
   }
   return registeredBundle;
 }
@@ -24,7 +26,11 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function validateParamValue(methodName: string, param: PythonApiParamContractV1, value: unknown): void {
+function validateParamValue(
+  methodName: string,
+  param: PythonApiParamContractV1,
+  value: unknown,
+): void {
   if (param.type === 'stringOrNull') {
     if (value === null || (typeof value === 'string' && value.length > 0)) {
       return;
@@ -79,20 +85,20 @@ function validateParamValue(methodName: string, param: PythonApiParamContractV1,
   }
 }
 
-type EngineGetter = () => Record<string, (...args: unknown[]) => unknown>;
+type EngineGetter = () => unknown;
 
 export const ENGINE_MAP: Record<string, EngineGetter> = {
-  posts: () => requireBundle().postEngine as any,
-  media: () => requireBundle().mediaEngine as any,
-  projects: () => requireBundle().projectEngine as any,
-  meta: () => requireBundle().metaEngine as any,
-  tags: () => requireBundle().tagEngine as any,
-  scripts: () => requireBundle().scriptEngine as any,
-  templates: () => requireBundle().templateEngine as any,
-  tasks: () => requireBundle().taskManager as any,
-  sync: () => requireBundle().gitApiAdapter as any,
-  publish: () => requireBundle().publishApiAdapter as any,
-  app: () => requireBundle().appApiAdapter as any,
+  posts: () => requireBundle().postEngine,
+  media: () => requireBundle().mediaEngine,
+  projects: () => requireBundle().projectEngine,
+  meta: () => requireBundle().metaEngine,
+  tags: () => requireBundle().tagEngine,
+  scripts: () => requireBundle().scriptEngine,
+  templates: () => requireBundle().templateEngine,
+  tasks: () => requireBundle().taskManager,
+  sync: () => requireBundle().gitApiAdapter,
+  publish: () => requireBundle().publishApiAdapter,
+  app: () => requireBundle().appApiAdapter,
 };
 
 // Map API method names to engine method names where they differ
@@ -195,7 +201,10 @@ const METHOD_NAME_MAP: Record<string, string> = {
   'tasks.clearCompleted': 'clearCompletedTasks',
 };
 
-export async function invokeMainProcessPythonApi(method: string, args: Record<string, unknown>): Promise<unknown> {
+export async function invokeMainProcessPythonApi(
+  method: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
   const contract = getPythonApiMethodContract(method);
   if (!contract) {
     throw new Error(`Unsupported Python API method: ${method}`);
@@ -210,14 +219,24 @@ export async function invokeMainProcessPythonApi(method: string, args: Record<st
 
   // Skip methods that require UI/dialog interaction or are not safe for background use
   const unsafeMethods = new Set([
-    'media.importDialog', 'media.replaceFileDialog', 'media.getFilePath',
-    'app.openFolder', 'app.selectFolder', 'app.showItemInFolder',
-    'app.getTitleBarMetrics', 'app.notifyRendererReady', 'app.triggerMenuAction',
-    'app.getBlogmarkBookmarklet', 'app.copyToClipboard', 'app.setPreviewPostTarget',
+    'media.importDialog',
+    'media.replaceFileDialog',
+    'media.getFilePath',
+    'app.openFolder',
+    'app.selectFolder',
+    'app.showItemInFolder',
+    'app.getTitleBarMetrics',
+    'app.notifyRendererReady',
+    'app.triggerMenuAction',
+    'app.getBlogmarkBookmarklet',
+    'app.copyToClipboard',
+    'app.setPreviewPostTarget',
   ]);
 
   if (unsafeMethods.has(method)) {
-    throw new Error(`Python API method '${method}' is not available in main-process macro context`);
+    throw new Error(
+      `Python API method '${method}' is not available in main-process macro context`,
+    );
   }
 
   const engineGetter = ENGINE_MAP[namespace];
@@ -227,10 +246,12 @@ export async function invokeMainProcessPythonApi(method: string, args: Record<st
 
   const engine = engineGetter();
   const engineMethodName = METHOD_NAME_MAP[method] ?? member;
-  const callable = engine[engineMethodName];
+  const callable = (engine as Record<string, unknown>)[engineMethodName];
 
   if (typeof callable !== 'function') {
-    throw new Error(`Unsupported Python API method: ${method} (engine method '${engineMethodName}' not found)`);
+    throw new Error(
+      `Unsupported Python API method: ${method} (engine method '${engineMethodName}' not found)`,
+    );
   }
 
   const orderedArgs = contract.params.map((param) => {

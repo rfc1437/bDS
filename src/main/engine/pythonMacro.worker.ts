@@ -56,7 +56,7 @@ type WorkerResponseMessage = WorkerReadyMessage | WorkerMacroResultMessage | Wor
 type PyodideRuntime = {
   globals: {
     set: (name: string, value: unknown) => void;
-  } | any;
+  };
   runPythonAsync: (code: string) => Promise<unknown>;
   registerJsModule: (name: string, module: Record<string, unknown>) => void;
 };

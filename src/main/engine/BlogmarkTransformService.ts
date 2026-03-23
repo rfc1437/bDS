@@ -164,8 +164,15 @@ async function getConfiguredPythonRuntimeModeFromEngine(metaEngine: MetaEngine):
   return resolvePythonRuntimeMode((metadata as { pythonRuntimeMode?: unknown } | null)?.pythonRuntimeMode);
 }
 
+type PyodideLikeRuntime = {
+  globals: {
+    set: (name: string, value: unknown) => void;
+  };
+  runPythonAsync: (code: string) => Promise<unknown>;
+};
+
 class PythonBlogmarkTransformExecutor implements BlogmarkTransformExecutor {
-  private runtimePromise: Promise<any> | null = null;
+  private runtimePromise: Promise<PyodideLikeRuntime> | null = null;
 
   async runTransform(script: BlogmarkTransformScriptRecord, input: BlogmarkTransformInput): Promise<unknown> {
     const runtime = await this.getRuntime();
@@ -222,15 +229,16 @@ json.dumps(_result)
     };
   }
 
-  private async getRuntime(): Promise<any> {
+  private async getRuntime(): Promise<PyodideLikeRuntime> {
     if (!this.runtimePromise) {
       this.runtimePromise = (async () => {
         const pyodideModule = await import('pyodide');
-        return pyodideModule.loadPyodide();
+        return (await pyodideModule.loadPyodide()) as unknown as PyodideLikeRuntime;
       })();
     }
 
-    return this.runtimePromise;
+    const runtimePromise = this.runtimePromise;
+    return runtimePromise;
   }
 }
 
@@ -268,9 +276,10 @@ export class BlogmarkTransformService {
       post: parsedInput,
     };
 
+    const scriptEngine = this.dependencies.scriptEngine;
     const provider = this.dependencies.provider
-      ?? (this.dependencies.scriptEngine
-        ? { getScripts: (): Promise<ScriptData[]> => this.dependencies.scriptEngine!.getAllScripts() }
+      ?? (scriptEngine
+        ? { getScripts: (): Promise<ScriptData[]> => scriptEngine.getAllScripts() }
         : { getScripts: async () => [] });
     const executor = this.dependencies.executor ?? await this.resolveExecutorForConfiguredRuntime();
 
@@ -340,9 +349,10 @@ export class BlogmarkTransformService {
   }
 
   private async resolveExecutorForConfiguredRuntime(): Promise<BlogmarkTransformExecutor> {
+    const metaEngine = this.dependencies.metaEngine;
     const resolveMode = this.dependencies.resolvePythonRuntimeMode
-      ?? (this.dependencies.metaEngine
-        ? () => getConfiguredPythonRuntimeModeFromEngine(this.dependencies.metaEngine!)
+      ?? (metaEngine
+        ? () => getConfiguredPythonRuntimeModeFromEngine(metaEngine)
         : () => Promise.resolve<PythonRuntimeMode>('webworker'));
     const mode = await resolveMode();
     const executors = this.dependencies.executors ?? {};

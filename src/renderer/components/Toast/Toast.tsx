@@ -2,9 +2,6 @@ import React from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import './Toast.css';
 
-// Toast types
-type ToastType = 'success' | 'error' | 'loading' | 'info';
-
 // Custom toast functions
 export const showToast = {
   success: (message: string) => toast.success(message, {

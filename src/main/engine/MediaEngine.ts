@@ -6,7 +6,7 @@ import * as crypto from 'crypto';
 import { eq, and, gte, lte, lt, desc } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
-import { media, Media, NewMedia, postMedia, mediaTranslations } from '../database/schema';
+import { media, NewMedia, postMedia, mediaTranslations } from '../database/schema';
 import { stemText, stemQuery, SupportedLanguage } from './stemmer';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 
@@ -102,7 +102,9 @@ export class MediaEngine extends EventEmitter {
   }
 
   /** No persistent cache — DB is the source of truth. No-op for watcher compat. */
-  invalidate(_entityId?: string): void {}
+  invalidate(entityId?: string): void {
+    void entityId;
+  }
 
   /**
    * Set the language used for full-text search stemming.
@@ -132,7 +134,9 @@ export class MediaEngine extends EventEmitter {
     tags: string[];
   }): Promise<void> {
     const client = getDatabase().getLocalClient();
-    if (!client) return;
+    if (!client) {
+      return;
+    }
 
     // Delete existing entry
     await client.execute({ sql: 'DELETE FROM media_fts WHERE id = ?', args: [item.id] });
@@ -160,7 +164,9 @@ export class MediaEngine extends EventEmitter {
    */
   private async deleteFTSIndex(id: string): Promise<void> {
     const client = getDatabase().getLocalClient();
-    if (!client) return;
+    if (!client) {
+      return;
+    }
     await client.execute({ sql: 'DELETE FROM media_fts WHERE id = ?', args: [id] });
   }
 
@@ -221,7 +227,6 @@ export class MediaEngine extends EventEmitter {
     this.currentProjectId = projectId;
     this.dataDir = nextDataDir;
     this.internalDir = nextInternalDir;
-    console.log(`[MediaEngine] setProjectContext: projectId=${projectId}, dataDir=${this.dataDir}, internalDir=${this.internalDir}`);
   }
 
   getProjectContext(): string {
@@ -381,13 +386,27 @@ export class MediaEngine extends EventEmitter {
       `size: ${metadata.size}`,
     ];
 
-    if (metadata.width) lines.push(`width: ${metadata.width}`);
-    if (metadata.height) lines.push(`height: ${metadata.height}`);
-    if (metadata.title) lines.push(`title: "${metadata.title}"`);
-    if (metadata.alt) lines.push(`alt: "${metadata.alt}"`);
-    if (metadata.caption) lines.push(`caption: "${metadata.caption}"`);
-    if (metadata.author) lines.push(`author: "${metadata.author}"`);
-    if (metadata.language) lines.push(`language: ${metadata.language}`);
+    if (metadata.width) {
+      lines.push(`width: ${metadata.width}`);
+    }
+    if (metadata.height) {
+      lines.push(`height: ${metadata.height}`);
+    }
+    if (metadata.title) {
+      lines.push(`title: "${metadata.title}"`);
+    }
+    if (metadata.alt) {
+      lines.push(`alt: "${metadata.alt}"`);
+    }
+    if (metadata.caption) {
+      lines.push(`caption: "${metadata.caption}"`);
+    }
+    if (metadata.author) {
+      lines.push(`author: "${metadata.author}"`);
+    }
+    if (metadata.language) {
+      lines.push(`language: ${metadata.language}`);
+    }
     
     lines.push(`createdAt: ${metadata.createdAt}`);
     lines.push(`updatedAt: ${metadata.updatedAt}`);
@@ -420,10 +439,14 @@ export class MediaEngine extends EventEmitter {
       };
 
       for (const line of lines) {
-        if (line === '---') continue;
+        if (line === '---') {
+          continue;
+        }
         
         const colonIndex = line.indexOf(':');
-        if (colonIndex === -1) continue;
+        if (colonIndex === -1) {
+          continue;
+        }
         
         const key = line.substring(0, colonIndex).trim();
         let value = line.substring(colonIndex + 1).trim();
@@ -434,65 +457,65 @@ export class MediaEngine extends EventEmitter {
         }
 
         switch (key) {
-          case 'id':
-            metadata.id = value;
-            break;
-          case 'originalName':
-            metadata.originalName = value;
-            break;
-          case 'mimeType':
-            metadata.mimeType = value;
-            break;
-          case 'size':
-            metadata.size = parseInt(value, 10);
-            break;
-          case 'width':
-            metadata.width = parseInt(value, 10);
-            break;
-          case 'height':
-            metadata.height = parseInt(value, 10);
-            break;
-          case 'title':
-            metadata.title = value;
-            break;
-          case 'alt':
-            metadata.alt = value;
-            break;
-          case 'caption':
-            metadata.caption = value;
-            break;
-          case 'author':
-            metadata.author = value;
-            break;
-          case 'language':
-            metadata.language = value;
-            break;
-          case 'createdAt':
-            metadata.createdAt = value;
-            break;
-          case 'updatedAt':
-            metadata.updatedAt = value;
-            break;
-          case 'tags':
-            // Parse array format: ["tag1", "tag2"]
-            const tagsMatch = value.match(/\[(.*)\]/);
-            if (tagsMatch) {
-              metadata.tags = tagsMatch[1]
-                .split(',')
-                .map(t => t.trim().replace(/"/g, ''))
-                .filter(t => t.length > 0);
-            }
-            break;
-          case 'linkedPostIds':
-            // Parse array format: ["postId1", "postId2"]
-            const postIdsMatch = value.match(/\[(.*)\]/);
-            if (postIdsMatch) {
-              metadata.linkedPostIds = postIdsMatch[1]
-                .split(',')
-                .map(id => id.trim().replace(/"/g, ''))
-                .filter(id => id.length > 0);
-            }
-            break;
+        case 'id':
+          metadata.id = value;
+          break;
+        case 'originalName':
+          metadata.originalName = value;
+          break;
+        case 'mimeType':
+          metadata.mimeType = value;
+          break;
+        case 'size':
+          metadata.size = parseInt(value, 10);
+          break;
+        case 'width':
+          metadata.width = parseInt(value, 10);
+          break;
+        case 'height':
+          metadata.height = parseInt(value, 10);
+          break;
+        case 'title':
+          metadata.title = value;
+          break;
+        case 'alt':
+          metadata.alt = value;
+          break;
+        case 'caption':
+          metadata.caption = value;
+          break;
+        case 'author':
+          metadata.author = value;
+          break;
+        case 'language':
+          metadata.language = value;
+          break;
+        case 'createdAt':
+          metadata.createdAt = value;
+          break;
+        case 'updatedAt':
+          metadata.updatedAt = value;
+          break;
+        case 'tags':
+          // Parse array format: ["tag1", "tag2"]
+          const tagsMatch = value.match(/\[(.*)\]/);
+          if (tagsMatch) {
+            metadata.tags = tagsMatch[1]
+              .split(',')
+              .map(t => t.trim().replace(/"/g, ''))
+              .filter(t => t.length > 0);
+          }
+          break;
+        case 'linkedPostIds':
+          // Parse array format: ["postId1", "postId2"]
+          const postIdsMatch = value.match(/\[(.*)\]/);
+          if (postIdsMatch) {
+            metadata.linkedPostIds = postIdsMatch[1]
+              .split(',')
+              .map(id => id.trim().replace(/"/g, ''))
+              .filter(id => id.length > 0);
+          }
+          break;
         }
       }
 
@@ -651,7 +674,9 @@ export class MediaEngine extends EventEmitter {
     };
 
     const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
-    if (!dbMedia) return null;
+    if (!dbMedia) {
+      return null;
+    }
 
     // Read existing sidecar to preserve fields that may only exist there
     // (e.g. linkedPostIds is sidecar-only, and author/title may have drifted)
@@ -891,8 +916,6 @@ export class MediaEngine extends EventEmitter {
     const db = getDatabase().getLocal();
     const conditions = [eq(media.projectId, this.currentProjectId)];
 
-    console.log(`[MediaEngine] getMediaFiltered called with filter:`, JSON.stringify(filter));
-
     if (filter.startDate) {
       conditions.push(gte(media.createdAt, filter.startDate));
     }
@@ -905,7 +928,6 @@ export class MediaEngine extends EventEmitter {
       // Use UTC dates to avoid timezone issues
       const startOfYear = new Date(Date.UTC(filter.year, 0, 1));
       const endOfYear = new Date(Date.UTC(filter.year + 1, 0, 1));
-      console.log(`[MediaEngine] Year filter: ${startOfYear.toISOString()} to ${endOfYear.toISOString()}`);
       conditions.push(gte(media.createdAt, startOfYear));
       conditions.push(lt(media.createdAt, endOfYear));
     }
@@ -914,7 +936,6 @@ export class MediaEngine extends EventEmitter {
       // Use UTC dates to avoid timezone issues (filter.month is 1-indexed)
       const startOfMonth = new Date(Date.UTC(filter.year, filter.month - 1, 1));
       const endOfMonth = new Date(Date.UTC(filter.year, filter.month, 1));
-      console.log(`[MediaEngine] Month filter: ${startOfMonth.toISOString()} to ${endOfMonth.toISOString()}`);
       conditions.push(gte(media.createdAt, startOfMonth));
       conditions.push(lt(media.createdAt, endOfMonth));
     }
@@ -926,9 +947,7 @@ export class MediaEngine extends EventEmitter {
       .orderBy(desc(media.createdAt))
       .all();
 
-    console.log(`[MediaEngine] Query returned ${dbMediaList.length} media items`);
-
-    let result: MediaData[] = [];
+    const result: MediaData[] = [];
 
     for (const dbMedia of dbMediaList) {
       const mediaData: MediaData = {
@@ -953,7 +972,9 @@ export class MediaEngine extends EventEmitter {
       // Client-side filtering for tags (JSON array)
       if (filter.tags && filter.tags.length > 0) {
         const hasAllTags = filter.tags.every(tag => mediaData.tags.includes(tag));
-        if (!hasAllTags) continue;
+        if (!hasAllTags) {
+          continue;
+        }
       }
 
       result.push(mediaData);
@@ -964,7 +985,9 @@ export class MediaEngine extends EventEmitter {
 
   async searchMedia(query: string): Promise<MediaSearchResult[]> {
     const client = getDatabase().getLocalClient();
-    if (!client) return [];
+    if (!client) {
+      return [];
+    }
 
     try {
       // Stem the query for multilingual matching
@@ -972,7 +995,7 @@ export class MediaEngine extends EventEmitter {
       
       // Search the stemmed content, filtered by project_id for project isolation
       const result = await client.execute({
-        sql: `SELECT id FROM media_fts WHERE project_id = ? AND media_fts MATCH ? ORDER BY rank LIMIT 50`,
+        sql: 'SELECT id FROM media_fts WHERE project_id = ? AND media_fts MATCH ? ORDER BY rank LIMIT 50',
         args: [this.currentProjectId, stemmedQuery],
       });
 
@@ -1015,7 +1038,9 @@ export class MediaEngine extends EventEmitter {
     }
 
     return Array.from(counts.values()).sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
+      if (a.year !== b.year) {
+        return b.year - a.year;
+      }
       return b.month - a.month;
     });
   }
@@ -1063,7 +1088,9 @@ export class MediaEngine extends EventEmitter {
   async getRelativePath(id: string): Promise<string | null> {
     const db = getDatabase().getLocal();
     const dbMedia = await db.select().from(media).where(eq(media.id, id)).get();
-    if (!dbMedia?.filePath) return null;
+    if (!dbMedia?.filePath) {
+      return null;
+    }
     const dataDir = this.getDataDir();
     const relativePath = path.relative(dataDir, dbMedia.filePath);
     return relativePath.replace(/\\/g, '/');
@@ -1071,7 +1098,6 @@ export class MediaEngine extends EventEmitter {
 
   async rebuildDatabaseFromFiles(): Promise<void> {
     const mediaBaseDir = this.getMediaBaseDir();
-    console.log(`[MediaEngine] rebuildDatabaseFromFiles: scanning mediaBaseDir=${mediaBaseDir}`);
     const task: Task<void> = {
       id: uuidv4(),
       name: 'Rebuild database from media files',
@@ -1087,16 +1113,13 @@ export class MediaEngine extends EventEmitter {
         const existingMedia = await db.select({ id: media.id }).from(media).where(eq(media.projectId, this.currentProjectId)).all();
         if (existingMedia.length > 0) {
           await db.delete(media).where(eq(media.projectId, this.currentProjectId));
-          console.log(`Deleted ${existingMedia.length} existing media record(s) for project ${this.currentProjectId}`);
         }
 
         // Also delete all post-media links for the current project
         await db.delete(postMedia).where(eq(postMedia.projectId, this.currentProjectId));
-        console.log(`Deleted post-media links for project ${this.currentProjectId}`);
 
         // Delete all media translations for the current project
         await db.delete(mediaTranslations).where(eq(mediaTranslations.projectId, this.currentProjectId));
-        console.log(`Deleted media translations for project ${this.currentProjectId}`);
 
         // Delete all FTS entries for the current project
         const client = getDatabase().getLocalClient();
@@ -1105,7 +1128,6 @@ export class MediaEngine extends EventEmitter {
             sql: 'DELETE FROM media_fts WHERE project_id = ?',
             args: [this.currentProjectId],
           });
-          console.log(`Deleted media FTS entries for project ${this.currentProjectId}`);
         }
 
         onProgress(5, 'Scanning media directory...');
@@ -1281,7 +1303,7 @@ export class MediaEngine extends EventEmitter {
 
         // Filter to images only (not SVG - they don't need thumbnails)
         const imageMedia = allMedia.filter(
-          m => m.mimeType.startsWith('image/') && !m.mimeType.includes('svg')
+          m => m.mimeType.startsWith('image/') && !m.mimeType.includes('svg'),
         );
 
         if (imageMedia.length === 0) {
@@ -1406,7 +1428,6 @@ export class MediaEngine extends EventEmitter {
         }
 
         onProgress(100, `Reindexed ${total} media items`);
-        console.log(`Reindexed search text for ${total} media items`);
       },
     };
 
@@ -1421,7 +1442,9 @@ export class MediaEngine extends EventEmitter {
       .where(eq(mediaTranslations.translationFor, mediaId))
       .all();
     const row = rows.find(r => r.language === language.toLowerCase());
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
     return this.toMediaTranslationData(row);
   }
 
@@ -1520,7 +1543,9 @@ export class MediaEngine extends EventEmitter {
   async deleteMediaTranslation(mediaId: string, language: string): Promise<boolean> {
     const normalizedLang = language.toLowerCase();
     const existing = await this.getMediaTranslation(mediaId, normalizedLang);
-    if (!existing) return false;
+    if (!existing) {
+      return false;
+    }
 
     const db = getDatabase().getLocal();
     await db.delete(mediaTranslations).where(eq(mediaTranslations.id, existing.id));
@@ -1563,9 +1588,15 @@ export class MediaEngine extends EventEmitter {
       `translationFor: ${translation.translationFor}`,
       `language: ${translation.language}`,
     ];
-    if (translation.title) lines.push(`title: "${translation.title}"`);
-    if (translation.alt) lines.push(`alt: "${translation.alt}"`);
-    if (translation.caption) lines.push(`caption: "${translation.caption}"`);
+    if (translation.title) {
+      lines.push(`title: "${translation.title}"`);
+    }
+    if (translation.alt) {
+      lines.push(`alt: "${translation.alt}"`);
+    }
+    if (translation.caption) {
+      lines.push(`caption: "${translation.caption}"`);
+    }
     lines.push('---');
 
     await fs.writeFile(sidecarPath, lines.join('\n'), 'utf-8');
@@ -1580,9 +1611,13 @@ export class MediaEngine extends EventEmitter {
       const result: { translationFor?: string; language?: string; title?: string; alt?: string; caption?: string } = {};
 
       for (const line of content.split('\n')) {
-        if (line === '---') continue;
+        if (line === '---') {
+          continue;
+        }
         const colonIndex = line.indexOf(':');
-        if (colonIndex === -1) continue;
+        if (colonIndex === -1) {
+          continue;
+        }
 
         const key = line.substring(0, colonIndex).trim();
         let value = line.substring(colonIndex + 1).trim();
@@ -1591,11 +1626,11 @@ export class MediaEngine extends EventEmitter {
         }
 
         switch (key) {
-          case 'translationFor': result.translationFor = value; break;
-          case 'language': result.language = value; break;
-          case 'title': result.title = value; break;
-          case 'alt': result.alt = value; break;
-          case 'caption': result.caption = value; break;
+        case 'translationFor': result.translationFor = value; break;
+        case 'language': result.language = value; break;
+        case 'title': result.title = value; break;
+        case 'alt': result.alt = value; break;
+        case 'caption': result.caption = value; break;
         }
       }
 

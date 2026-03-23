@@ -73,10 +73,12 @@ export class ImportDefinitionEngine {
       .from(importDefinitions)
       .where(and(
         eq(importDefinitions.id, id),
-        eq(importDefinitions.projectId, this.currentProjectId)
+        eq(importDefinitions.projectId, this.currentProjectId),
       ));
 
-    if (rows.length === 0) return null;
+    if (rows.length === 0) {
+      return null;
+    }
 
     return this.rowToData(rows[0]);
   }
@@ -95,11 +97,13 @@ export class ImportDefinitionEngine {
 
   async updateDefinition(
     id: string,
-    updates: Partial<Pick<ImportDefinitionData, 'name' | 'wxrFilePath' | 'uploadsFolderPath' | 'lastAnalysisResult'>>
+    updates: Partial<Pick<ImportDefinitionData, 'name' | 'wxrFilePath' | 'uploadsFolderPath' | 'lastAnalysisResult'>>,
   ): Promise<ImportDefinitionData | null> {
     // Check existence and ownership
     const existing = await this.getDefinition(id);
-    if (!existing) return null;
+    if (!existing) {
+      return null;
+    }
 
     const db = this.getDb();
 
@@ -128,7 +132,7 @@ export class ImportDefinitionEngine {
       .set(updateData)
       .where(and(
         eq(importDefinitions.id, id),
-        eq(importDefinitions.projectId, this.currentProjectId)
+        eq(importDefinitions.projectId, this.currentProjectId),
       ));
 
     return this.getDefinition(id);
@@ -137,7 +141,9 @@ export class ImportDefinitionEngine {
   async deleteDefinition(id: string): Promise<boolean> {
     // Check existence and ownership
     const existing = await this.getDefinition(id);
-    if (!existing) return false;
+    if (!existing) {
+      return false;
+    }
 
     const db = this.getDb();
 
@@ -145,7 +151,7 @@ export class ImportDefinitionEngine {
       .delete(importDefinitions)
       .where(and(
         eq(importDefinitions.id, id),
-        eq(importDefinitions.projectId, this.currentProjectId)
+        eq(importDefinitions.projectId, this.currentProjectId),
       ));
 
     return true;

@@ -249,7 +249,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
 
     // Get media metadata
     const mediaItem = await this.mediaEngine.getMedia(mediaId);
-    if (!mediaItem) return { success: false, error: 'Media item not found' };
+    if (!mediaItem) {
+      return { success: false, error: 'Media item not found' };
+    }
     if (!mediaItem.mimeType.startsWith('image/')) {
       return { success: false, error: `Cannot analyze this file type: ${mediaItem.mimeType}. Only images are supported.` };
     }
@@ -308,7 +310,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       });
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+      if (!jsonMatch) {
+        return { success: false, error: 'Invalid response format from AI' };
+      }
 
       const result = JSON.parse(jsonMatch[0]);
       return {
@@ -374,7 +378,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       });
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+      if (!jsonMatch) {
+        return { success: false, error: 'Invalid response format from AI' };
+      }
 
       const result = JSON.parse(jsonMatch[0]);
       const detected = (result.language || '').toLowerCase().trim();
@@ -402,7 +408,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
 
     // Load post (resolves content from filesystem for published posts)
     const post = await this.postEngine.getPost(postId);
-    if (!post) return { success: false, error: 'Post not found' };
+    if (!post) {
+      return { success: false, error: 'Post not found' };
+    }
     if (!post.content || post.content.trim().length === 0) {
       return { success: false, error: 'Post has no content to analyze' };
     }
@@ -451,13 +459,17 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       });
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+      if (!jsonMatch) {
+        return { success: false, error: 'Invalid response format from AI' };
+      }
 
       const result = JSON.parse(jsonMatch[0]);
 
       // Sanitize slug: lowercase, hyphens only
       let resultSlug = result.slug ? slugify(result.slug) : undefined;
-      if (resultSlug === '') resultSlug = undefined;
+      if (resultSlug === '') {
+        resultSlug = undefined;
+      }
 
       return {
         success: true,
@@ -633,7 +645,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       });
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+      if (!jsonMatch) {
+        return { success: false, error: 'Invalid response format from AI' };
+      }
 
       const result = JSON.parse(jsonMatch[0]);
       const detected = (result.language || '').toLowerCase().trim();
@@ -721,7 +735,9 @@ Remember: Only suggest mappings from NEW items to EXISTING items. Consider langu
       });
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { success: false, error: 'Invalid response format from AI' };
+      if (!jsonMatch) {
+        return { success: false, error: 'Invalid response format from AI' };
+      }
 
       const parsed = JSON.parse(jsonMatch[0]);
 

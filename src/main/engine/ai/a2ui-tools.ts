@@ -51,7 +51,7 @@ const tabContentItemSchema = z.object({
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createA2UITools() {
+function buildA2UITools() {
   return {
     render_chart: tool({
       description: 'Render an interactive chart in the chat UI. Use this when the user asks for a chart, graph, or data visualization.',
@@ -60,7 +60,7 @@ export function createA2UITools() {
         title: z.string().optional().describe('Optional chart title'),
         series: z.array(seriesItemSchema).describe('Array of data points.'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_table: tool({
@@ -70,7 +70,7 @@ export function createA2UITools() {
         columns: z.array(z.string()).describe('Column header names'),
         rows: z.array(z.array(z.string())).describe('Table rows, each row is an array of cell values'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_form: tool({
@@ -92,7 +92,7 @@ export function createA2UITools() {
         submitLabel: z.string().describe('Label for the submit button'),
         submitAction: z.string().optional().describe('Action to dispatch on submit'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_card: tool({
@@ -107,7 +107,7 @@ export function createA2UITools() {
           payload: z.record(z.string(), z.unknown()).optional().describe('Optional action payload'),
         })).optional().describe('Optional action buttons on the card'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_metric: tool({
@@ -116,7 +116,7 @@ export function createA2UITools() {
         label: z.string().describe('Metric label'),
         value: z.string().describe('Metric value (displayed prominently)'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_list: tool({
@@ -125,7 +125,7 @@ export function createA2UITools() {
         title: z.string().optional().describe('Optional list title'),
         items: z.array(z.string()).describe('List items'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_tabs: tool({
@@ -136,7 +136,7 @@ export function createA2UITools() {
           content: z.array(tabContentItemSchema).describe('Content items within the tab'),
         })).describe('Array of tabs'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
 
     render_mindmap: tool({
@@ -149,9 +149,13 @@ export function createA2UITools() {
           children: z.array(z.string()).optional().describe('IDs of child nodes'),
         })).describe('Flat array of nodes. The first node is the root. Each node references children by ID.'),
       }),
-      execute: async (_input) => ({ success: true }),
+      execute: async () => ({ success: true }),
     }),
   };
+}
+
+export function createA2UITools(): ReturnType<typeof buildA2UITools> {
+  return buildA2UITools();
 }
 
 /** The return type of createA2UITools — useful for typing tool maps. */

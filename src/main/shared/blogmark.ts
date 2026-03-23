@@ -127,5 +127,5 @@ export function buildBlogmarkMarkdownLink(title: string, url: string): string {
 }
 
 export function generateBlogmarkBookmarkletSource(): string {
-  return "javascript:(()=>{const t=encodeURIComponent(document.title||'');const u=encodeURIComponent(location.href||'');location.href='bds://new-post?title='+t+'&url='+u;})();";
+  return 'javascript:(()=>{const t=encodeURIComponent(document.title||\'\');const u=encodeURIComponent(location.href||\'\');location.href=\'bds://new-post?title=\'+t+\'&url=\'+u;})();';
 }

@@ -27,6 +27,9 @@ import {
   createDataBackedPostMediaEngine,
 } from './DataBackedEngines';
 import { createPreviewBackedGenerationRouteRenderer } from './GenerationRouteRendererFactory';
+import type { BlogGenerationPostEngineContract } from './BlogGenerationEngine';
+import type { MediaEngine } from './MediaEngine';
+import type { PostMediaEngine } from './PostMediaEngine';
 import {
   generateSinglePostPages,
   generateCategoryPages,
@@ -52,11 +55,18 @@ function createWorkerHashStore(hashCache: Map<string, string | null>) {
   const pendingUpdates: Array<{ relativePath: string; hash: string }> = [];
 
   return {
-    async get(_projectId: string, relativePath: string): Promise<string | null> {
+    async get(
+      _projectId: string,
+      relativePath: string,
+    ): Promise<string | null> {
       return hashCache.get(relativePath) ?? null;
     },
 
-    async set(_projectId: string, relativePath: string, hash: string): Promise<void> {
+    async set(
+      _projectId: string,
+      relativePath: string,
+      hash: string,
+    ): Promise<void> {
       pendingUpdates.push({ relativePath, hash });
       hashCache.set(relativePath, hash);
     },
@@ -106,7 +116,10 @@ async function run(): Promise<void> {
     }
 
     // 2c. Reconstruct post-media links for gallery/album macros
-    const postMediaLinks = new Map<string, Array<{ mediaId: string; sortOrder: number }>>();
+    const postMediaLinks = new Map<
+      string,
+      Array<{ mediaId: string; sortOrder: number }>
+    >();
     if (task.postMediaLinksEntries) {
       for (const [postId, links] of task.postMediaLinksEntries) {
         postMediaLinks.set(postId, links);
@@ -114,7 +127,10 @@ async function run(): Promise<void> {
     }
 
     // 3. Reconstruct backlinks Map
-    const backlinksMap = new Map<string, Array<{ id: string; title: string; slug: string }>>();
+    const backlinksMap = new Map<
+      string,
+      Array<{ id: string; title: string; slug: string }>
+    >();
     if (task.backlinksMap) {
       for (const [postId, links] of Object.entries(task.backlinksMap)) {
         backlinksMap.set(postId, links);
@@ -122,9 +138,16 @@ async function run(): Promise<void> {
     }
 
     // 4. Create data-backed engines
-    const postEngine = createDataBackedPostEngine({ allPosts: lookupPosts, backlinksMap, postFilePaths });
+    const postEngine = createDataBackedPostEngine({
+      allPosts: lookupPosts,
+      backlinksMap,
+      postFilePaths,
+    });
     const mediaEngine = createDataBackedMediaEngine(mediaItems);
-    const postMediaEngine = createDataBackedPostMediaEngine({ mediaItems, postMediaLinks });
+    const postMediaEngine = createDataBackedPostMediaEngine({
+      mediaItems,
+      postMediaLinks,
+    });
 
     // 5. Create route renderer (same factory as main thread, but backed by data)
     const renderRoute = createPreviewBackedGenerationRouteRenderer({
@@ -137,9 +160,9 @@ async function run(): Promise<void> {
       publishedPostsForLookup: lookupPosts,
       languagePrefix: task.languagePrefix,
       engines: {
-        postEngine: postEngine as any,
-        mediaEngine: mediaEngine as any,
-        postMediaEngine: postMediaEngine as any,
+        postEngine: postEngine as BlogGenerationPostEngineContract,
+        mediaEngine: mediaEngine as MediaEngine,
+        postMediaEngine: postMediaEngine as PostMediaEngine,
       },
     });
 
@@ -173,99 +196,111 @@ async function run(): Promise<void> {
     const projectId = task.options.projectId;
 
     switch (task.section) {
-      case 'single': {
-        pagesGenerated += await generateSinglePostPages({
-          projectId,
-          posts,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-        });
-        break;
-      }
+    case 'single': {
+      pagesGenerated += await generateSinglePostPages({
+        projectId,
+        posts,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+      });
+      break;
+    }
 
-      case 'category': {
-        const allCategories = new Set(task.allCategories ?? []);
-        const postsByCategory = task.postsByCategoryEntries
-          ? deserializePostMap(task.postsByCategoryEntries)
-          : undefined;
+    case 'category': {
+      const allCategories = new Set(task.allCategories ?? []);
+      const postsByCategory = task.postsByCategoryEntries
+        ? deserializePostMap(task.postsByCategoryEntries)
+        : undefined;
 
-        pagesGenerated += await generateCategoryPages({
-          projectId,
-          posts,
-          allCategories,
-          maxPostsPerPage: task.maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-          postsByCategory,
-        });
-        break;
-      }
+      pagesGenerated += await generateCategoryPages({
+        projectId,
+        posts,
+        allCategories,
+        maxPostsPerPage: task.maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+        postsByCategory,
+      });
+      break;
+    }
 
-      case 'tag': {
-        const allTags = new Set(task.allTags ?? []);
-        const postsByTag = task.postsByTagEntries
-          ? deserializePostMap(task.postsByTagEntries)
-          : undefined;
+    case 'tag': {
+      const allTags = new Set(task.allTags ?? []);
+      const postsByTag = task.postsByTagEntries
+        ? deserializePostMap(task.postsByTagEntries)
+        : undefined;
 
-        pagesGenerated += await generateTagPages({
-          projectId,
-          posts,
-          allTags,
-          maxPostsPerPage: task.maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-          postsByTag,
-        });
-        break;
-      }
+      pagesGenerated += await generateTagPages({
+        projectId,
+        posts,
+        allTags,
+        maxPostsPerPage: task.maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+        postsByTag,
+      });
+      break;
+    }
 
-      case 'date': {
-        const yearsMap = task.yearsEntries ? deserializeDateMap(task.yearsEntries) : new Map();
-        const yearMonthsMap = task.yearMonthsEntries ? deserializeDateMap(task.yearMonthsEntries) : new Map();
-        const yearMonthDaysMap = task.yearMonthDaysEntries ? deserializeDateMap(task.yearMonthDaysEntries) : new Map();
-        const postsByYear = task.postsByYearEntries ? deserializePostMap(task.postsByYearEntries) : undefined;
-        const postsByYearMonth = task.postsByYearMonthEntries ? deserializePostMap(task.postsByYearMonthEntries) : undefined;
-        const postsByYearMonthDay = task.postsByYearMonthDayEntries ? deserializePostMap(task.postsByYearMonthDayEntries) : undefined;
+    case 'date': {
+      const yearsMap = task.yearsEntries
+        ? deserializeDateMap(task.yearsEntries)
+        : new Map();
+      const yearMonthsMap = task.yearMonthsEntries
+        ? deserializeDateMap(task.yearMonthsEntries)
+        : new Map();
+      const yearMonthDaysMap = task.yearMonthDaysEntries
+        ? deserializeDateMap(task.yearMonthDaysEntries)
+        : new Map();
+      const postsByYear = task.postsByYearEntries
+        ? deserializePostMap(task.postsByYearEntries)
+        : undefined;
+      const postsByYearMonth = task.postsByYearMonthEntries
+        ? deserializePostMap(task.postsByYearMonthEntries)
+        : undefined;
+      const postsByYearMonthDay = task.postsByYearMonthDayEntries
+        ? deserializePostMap(task.postsByYearMonthDayEntries)
+        : undefined;
 
-        pagesGenerated += await generateDateArchivePages({
-          projectId,
-          posts,
-          yearsMap,
-          yearMonthsMap,
-          yearMonthDaysMap,
-          maxPostsPerPage: task.maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-          postsByYear,
-          postsByYearMonth,
-          postsByYearMonthDay,
-        });
-        break;
-      }
+      pagesGenerated += await generateDateArchivePages({
+        projectId,
+        posts,
+        yearsMap,
+        yearMonthsMap,
+        yearMonthDaysMap,
+        maxPostsPerPage: task.maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+        postsByYear,
+        postsByYearMonth,
+        postsByYearMonthDay,
+      });
+      break;
+    }
 
-      case 'core': {
-        // Core includes root pages and page routes (sitemap/feeds handled by main thread)
-        pagesGenerated += await generateRootPages({
-          projectId,
-          posts,
-          maxPostsPerPage: task.maxPostsPerPage,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-        });
-        pagesGenerated += await generatePageRoutes({
-          projectId,
-          posts: lookupPosts,
-          renderRoute,
-          writePage,
-          onPageGenerated,
-        });
-        break;
-      }
+    case 'core': {
+      // Core includes root pages and page routes (sitemap/feeds handled by main thread)
+      pagesGenerated += await generateRootPages({
+        projectId,
+        posts,
+        maxPostsPerPage: task.maxPostsPerPage,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+      });
+      pagesGenerated += await generatePageRoutes({
+        projectId,
+        posts: lookupPosts,
+        renderRoute,
+        writePage,
+        onPageGenerated,
+      });
+      break;
+    }
     }
 
     // 8. Report result with accumulated hash updates

@@ -43,8 +43,15 @@ let activePreviewPostId: string | null = null;
 let appInitialized = false;
 let bundle: EngineBundle | null = null;
 
+function requireBundle(): EngineBundle {
+  if (!bundle) {
+    throw new Error('Engine bundle not initialized');
+  }
+  return bundle;
+}
+
 function buildPreviewServerDeps() {
-  const b = bundle!;
+  const b = requireBundle();
   return {
     postEngine: b.postEngine,
     mediaEngine: b.mediaEngine,
@@ -53,13 +60,15 @@ function buildPreviewServerDeps() {
     menuEngine: b.menuEngine,
     getActiveProjectContext: async () => {
       const project = await b.projectEngine.getActiveProject();
-      if (!project) throw new Error('No active project');
+      if (!project) {
+        throw new Error('No active project');
+      }
       const dataDir = b.projectEngine.getDataDir(project.id, project.dataPath);
       return { projectId: project.id, dataDir, projectName: project.name };
     },
   };
 }
-let blogmarkQueue: string[] = [];
+const blogmarkQueue: string[] = [];
 let blogmarkQueueProcessing = false;
 let pendingBlogmarkCreatedEvents: unknown[] = [];
 let rendererReady = false;
@@ -276,13 +285,13 @@ function createWindow(): void {
     ...(isMac
       ? {}
       : {
-          titleBarOverlay: {
-            color: '#252526',
-            symbolColor: '#cccccc',
-            height: 34,
-          },
-          autoHideMenuBar: false,
-        }),
+        titleBarOverlay: {
+          color: '#252526',
+          symbolColor: '#cccccc',
+          height: 34,
+        },
+        autoHideMenuBar: false,
+      }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -323,7 +332,7 @@ function createWindow(): void {
   // Forward events to renderer
   // Note: ipcMain.emit() (used by forwardEvent in handlers) is a raw EventEmitter emit,
   // so the first arg is NOT an IpcMainEvent — it's the event name string directly.
-  ipcMain.on('forward-to-renderer', (eventNameOrEvent: any, ...args: unknown[]) => {
+  ipcMain.on('forward-to-renderer', (eventNameOrEvent: unknown, ...args: unknown[]) => {
     // When called via ipcMain.emit(), first arg is the channel string directly
     const eventName: string = typeof eventNameOrEvent === 'string'
       ? eventNameOrEvent
@@ -373,7 +382,7 @@ async function openActivePostPreviewInBrowser(): Promise<void> {
     return;
   }
 
-  const postEngine = bundle!.postEngine;
+  const postEngine = requireBundle().postEngine;
   const post = await postEngine.getPost(activePreviewPostId);
   if (!post) {
     setPreviewPostMenuEnabled(false);
@@ -427,10 +436,11 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
     return;
   }
 
-  const metadata = await bundle!.metaEngine.getProjectMetadata();
+  const activeBundle = requireBundle();
+  const metadata = await activeBundle.metaEngine.getProjectMetadata();
   const preferredCategory = normalizeBlogmarkCategory((metadata as { blogmarkCategory?: unknown } | null)?.blogmarkCategory);
 
-  const transformService = bundle!.blogmarkTransformService;
+  const transformService = activeBundle.blogmarkTransformService;
   const transformResult = await transformService.applyTransforms({
     post: {
       title: payload.title,
@@ -444,7 +454,7 @@ async function processBlogmarkDeepLink(rawDeepLink: string): Promise<void> {
     },
   });
 
-  const createdPost = await bundle!.postEngine.createPost({
+  const createdPost = await activeBundle.postEngine.createPost({
     title: transformResult.post.title,
     content: transformResult.post.content,
     tags: transformResult.post.tags,
@@ -513,7 +523,8 @@ function registerBlogmarkProtocolClient(): void {
 
 async function initializeActiveProjectContext(): Promise<void> {
   try {
-    const projectEngine = bundle!.projectEngine;
+    const activeBundle = requireBundle();
+    const projectEngine = activeBundle.projectEngine;
     const project = await projectEngine.getActiveProject();
 
     if (!project) {
@@ -521,16 +532,16 @@ async function initializeActiveProjectContext(): Promise<void> {
     }
 
     const dataDir = projectEngine.getDataDir(project.id, project.dataPath);
-    const postEngine = bundle!.postEngine as {
+    const postEngine = activeBundle.postEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
       setSearchLanguage?: (language: string) => void;
       setMainLanguage?: (language: string) => void;
     };
-    const mediaEngine = bundle!.mediaEngine as {
+    const mediaEngine = activeBundle.mediaEngine as {
       setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
       setSearchLanguage?: (language: string) => void;
     };
-    const metaEngine = bundle!.metaEngine as {
+    const metaEngine = activeBundle.metaEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
       syncOnStartup?: () => Promise<void>;
       getProjectMetadata?: () => Promise<{ mainLanguage?: string } | null>;
@@ -540,10 +551,10 @@ async function initializeActiveProjectContext(): Promise<void> {
     mediaEngine.setProjectContext?.(project.id, dataDir, dataDir);
     metaEngine.setProjectContext?.(project.id, dataDir);
 
-    const embeddingEngineInstance = bundle!.embeddingEngine;
+    const embeddingEngineInstance = activeBundle.embeddingEngine;
     await embeddingEngineInstance.setProjectContext(project.id);
 
-    const templateEngine = bundle!.templateEngine as {
+    const templateEngine = activeBundle.templateEngine as {
       setProjectContext?: (projectId: string, dataDir?: string) => void;
     };
     templateEngine.setProjectContext?.(project.id, dataDir);
@@ -654,7 +665,7 @@ function createApplicationMenu(): Menu {
     }
 
     if (action === 'rebuildEmbeddingIndex') {
-      startRebuildEmbeddingIndexTask(bundle!);
+      startRebuildEmbeddingIndexTask(requireBundle());
       return;
     }
 
@@ -694,9 +705,15 @@ function createApplicationMenu(): Menu {
         await triggerMenuAction(action);
       },
     };
-    if (definition.accelerator) item.accelerator = definition.accelerator;
-    if (definition.id) item.id = definition.id;
-    if (definition.enabled !== undefined) item.enabled = definition.enabled;
+    if (definition.accelerator) {
+      item.accelerator = definition.accelerator;
+    }
+    if (definition.id) {
+      item.id = definition.id;
+    }
+    if (definition.enabled !== undefined) {
+      item.enabled = definition.enabled;
+    }
     return item;
   };
 
@@ -762,10 +779,11 @@ function createApplicationMenu(): Menu {
 }
 
 async function initialize(): Promise<void> {
+  const activeBundle = requireBundle();
   // Register IPC handlers immediately (synchronous) so they are available
   // before any async work. This eliminates race conditions where the renderer
   // calls handlers before the database is ready.
-  registerIpcHandlers(bundle!);
+  registerIpcHandlers(activeBundle);
 
   // Initialize database
   const db = getDatabase();
@@ -773,7 +791,7 @@ async function initialize(): Promise<void> {
 
   // Now that the database is ready, register event forwarding from engines
   // to the renderer (engines need DB access at registration time).
-  registerEventForwarding(bundle!);
+  registerEventForwarding(activeBundle);
 
   // Register custom protocol for serving media files
   // URLs like bds-media://media-id will be resolved to the actual file
@@ -835,7 +853,7 @@ async function initialize(): Promise<void> {
       const url = new URL(request.url);
       const mediaId = url.hostname;
 
-      const engine = bundle!.mediaEngine;
+      const engine = requireBundle().mediaEngine;
       const thumbnails = await engine.getThumbnailPaths(mediaId);
 
       if (thumbnails.small) {
@@ -885,7 +903,7 @@ async function initialize(): Promise<void> {
   });
   
   // Initialize and register chat handlers
-  initializeChatHandlers(() => mainWindow, bundle!);
+  initializeChatHandlers(() => mainWindow, activeBundle);
   registerChatHandlers();
 }
 
@@ -1004,8 +1022,7 @@ app.whenReady().then(async () => {
     const db = getDatabase();
     notificationWatcher = new NotificationWatcher(
       db.getDbPath(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.getLocal() as any,
+      db.getLocal() as unknown as ConstructorParameters<typeof NotificationWatcher>[1],
       {
         post: bundle.postEngine,
         media: bundle.mediaEngine,

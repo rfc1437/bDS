@@ -132,18 +132,24 @@ export class DatabaseConnection {
   }
 
   async getActiveProject(): Promise<{ id: string; name: string; slug: string } | null> {
-    if (!this.localDb) return null;
+    if (!this.localDb) {
+      return null;
+    }
     const rows = await this.localDb
       .select({ id: projects.id, name: projects.name, slug: projects.slug })
       .from(projects)
       .where(eq(projects.isActive, true))
       .limit(1);
-    if (rows.length === 0) return null;
+    if (rows.length === 0) {
+      return null;
+    }
     return rows[0];
   }
 
   async setActiveProject(projectId: string): Promise<void> {
-    if (!this.localDb) return;
+    if (!this.localDb) {
+      return;
+    }
     // Deactivate all projects
     await this.localDb
       .update(projects)

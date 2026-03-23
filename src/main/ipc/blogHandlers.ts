@@ -1,12 +1,12 @@
 import * as path from 'path';
 import { dialog } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
 import {
   resolvePublicBaseUrl,
   type BlogGenerationResult,
   type BlogGenerationSection,
   type BlogGenerationOptions,
   type SiteValidationReport,
-  type ApplyValidationPreparation,
 } from '../engine/BlogGenerationEngine';
 import { resolvePageTitle } from '../engine/PageRenderer';
 import { buildSearchIndex } from '../engine/SearchIndexEngine';
@@ -16,7 +16,7 @@ import { autoTranslatePost, autoTranslateMediaMetadata } from './chatHandlers';
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../database/connection';
 
-type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
+type SafeHandle = <Args extends unknown[], Result>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => Promise<Result>) => void;
 
 export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   const resolveActiveProjectContext = async (): Promise<{
@@ -85,8 +85,8 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
       blogLanguages: Array.isArray(metadata?.blogLanguages) ? metadata.blogLanguages : [],
       pageTitle,
       picoTheme: metadata?.picoTheme,
-      categoryMetadata: (metadata as any)?.categoryMetadata,
-      categorySettings: (metadata as any)?.categorySettings,
+      categoryMetadata: metadata?.categoryMetadata,
+      categorySettings: metadata?.categorySettings,
       menu,
       dbPath: getDatabase().getDbPath(),
     };
@@ -321,8 +321,12 @@ export function registerBlogHandlers(safeHandle: SafeHandle, bundle: EngineBundl
         }
 
         const parts: string[] = ['Done'];
-        if (failed > 0) parts.push(`${failed} failed`);
-        if (warned > 0) parts.push(`${warned} warnings`);
+        if (failed > 0) {
+          parts.push(`${failed} failed`);
+        }
+        if (warned > 0) {
+          parts.push(`${warned} warnings`);
+        }
         onProgress(100, parts.length > 1 ? `${parts[0]} (${parts.slice(1).join(', ')})` : parts[0]);
       },
     }).catch(() => { /* errors tracked via task panel */ });

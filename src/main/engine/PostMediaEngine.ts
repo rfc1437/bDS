@@ -120,7 +120,7 @@ export class PostMediaEngine extends EventEmitter {
       existingByMediaId: Map<string, PostMediaLinkData>;
       nextSortOrder: number;
     },
-    createdAt: Date
+    createdAt: Date,
   ): Promise<{ linked: true; link: PostMediaLinkData } | { linked: false; existing: PostMediaLinkData }> {
     const existing = state.existingByMediaId.get(mediaId);
     if (existing) {
@@ -144,8 +144,8 @@ export class PostMediaEngine extends EventEmitter {
     await db.delete(postMedia).where(
       and(
         eq(postMedia.postId, postId),
-        eq(postMedia.mediaId, mediaId)
-      )
+        eq(postMedia.mediaId, mediaId),
+      ),
     );
 
     await this.removePostFromMediaSidecar(mediaId, postId);
@@ -160,7 +160,6 @@ export class PostMediaEngine extends EventEmitter {
     }
 
     this.currentProjectId = projectId;
-    console.log(`[PostMediaEngine] setProjectContext: projectId=${projectId}`);
   }
 
   /**
@@ -254,8 +253,8 @@ export class PostMediaEngine extends EventEmitter {
       .where(
         and(
           eq(postMedia.projectId, this.currentProjectId),
-          eq(postMedia.postId, postId)
-        )
+          eq(postMedia.postId, postId),
+        ),
       )
       .orderBy(asc(postMedia.sortOrder));
 
@@ -274,8 +273,8 @@ export class PostMediaEngine extends EventEmitter {
       .where(
         and(
           eq(postMedia.projectId, this.currentProjectId),
-          eq(postMedia.mediaId, mediaId)
-        )
+          eq(postMedia.mediaId, mediaId),
+        ),
       );
 
     return links.map(this.mapToLinkData);
@@ -296,8 +295,8 @@ export class PostMediaEngine extends EventEmitter {
         .where(
           and(
             eq(postMedia.postId, postId),
-            eq(postMedia.mediaId, mediaIds[i])
-          )
+            eq(postMedia.mediaId, mediaIds[i]),
+          ),
         );
     }
 
@@ -311,8 +310,6 @@ export class PostMediaEngine extends EventEmitter {
    */
   async rebuildFromSidecars(): Promise<void> {
     const db = this.getDb();
-
-    console.log('[PostMediaEngine] Rebuilding post-media links from sidecars...');
 
     // Clear existing links for this project
     await db.delete(postMedia).where(eq(postMedia.projectId, this.currentProjectId));
@@ -340,8 +337,6 @@ export class PostMediaEngine extends EventEmitter {
         linksCreated++;
       }
     }
-
-    console.log(`[PostMediaEngine] Rebuilt ${linksCreated} post-media links`);
     this.emit('rebuilt', { linksCreated });
   }
 
@@ -386,8 +381,8 @@ export class PostMediaEngine extends EventEmitter {
       .where(
         and(
           eq(postMedia.postId, postId),
-          eq(postMedia.mediaId, mediaId)
-        )
+          eq(postMedia.mediaId, mediaId),
+        ),
       )
       .limit(1);
 

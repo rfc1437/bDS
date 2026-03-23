@@ -15,7 +15,9 @@ async function resolvePublishedVersions(
   postEngine: GenerationSnapshotPostEngine,
   ids: string[],
 ): Promise<Map<string, PostData>> {
-  if (ids.length === 0) return new Map();
+  if (ids.length === 0) {
+    return new Map();
+  }
 
   if (postEngine.getPublishedVersionsBulk) {
     return postEngine.getPublishedVersionsBulk(ids);
@@ -29,7 +31,9 @@ async function resolvePublishedVersions(
     }),
   );
   for (const { id, version } of entries) {
-    if (version) result.set(id, version);
+    if (version) {
+      result.set(id, version);
+    }
   }
   return result;
 }
@@ -42,8 +46,12 @@ export async function loadPublishedGenerationSets(
   const draftCandidates = await postEngine.getPostsFiltered({ status: 'draft' });
 
   const allIds = new Set<string>();
-  for (const p of publishedCandidates) allIds.add(p.id);
-  for (const p of draftCandidates) allIds.add(p.id);
+  for (const p of publishedCandidates) {
+    allIds.add(p.id);
+  }
+  for (const p of draftCandidates) {
+    allIds.add(p.id);
+  }
 
   const publishedVersions = await resolvePublishedVersions(postEngine, Array.from(allIds));
 

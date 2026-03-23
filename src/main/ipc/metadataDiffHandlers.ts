@@ -1,7 +1,8 @@
+import type { IpcMainInvokeEvent } from 'electron';
 import type { EngineBundle } from '../engine/EngineBundle';
 import type { MediaDiffField, ScriptDiffField, TemplateDiffField } from '../engine/MetadataDiffEngine';
 
-type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
+type SafeHandle = <Args extends unknown[], Result>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => Promise<Result>) => void;
 
 /** Helper: set project context on the MetadataDiffEngine from the active project */
 async function withProjectContext(bundle: EngineBundle): Promise<void> {

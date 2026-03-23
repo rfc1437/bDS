@@ -6,7 +6,9 @@ import { eq } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, projects } from '../database/schema';
 import { sanitizePicoTheme, type PicoThemeName } from '../shared/picoThemes';
-import { SUPPORTED_RENDER_LANGUAGES, type SupportedLanguage } from '../shared/i18n';
+import {
+  SUPPORTED_RENDER_LANGUAGES,
+} from '../shared/i18n';
 import {
   normalizeTaxonomyTerm,
   normalizeNonEmptyTaxonomyTerm,
@@ -89,7 +91,9 @@ function sanitizePublicUrl(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizePublishingPreferences(prefs: PublishingPreferences): PublishingPreferences {
+function normalizePublishingPreferences(
+  prefs: PublishingPreferences,
+): PublishingPreferences {
   return {
     sshHost: String(prefs.sshHost ?? '').trim(),
     sshUser: String(prefs.sshUser ?? '').trim(),
@@ -103,7 +107,10 @@ function sanitizeCategoryTitle(value: unknown, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
-type RawCategoryMetadataInput = Record<string, CategoryMetadata | CategoryRenderSettings>;
+type RawCategoryMetadataInput = Record<
+  string,
+  CategoryMetadata | CategoryRenderSettings
+>;
 
 const supportedLanguageSet = new Set<string>(SUPPORTED_RENDER_LANGUAGES);
 
@@ -121,12 +128,16 @@ function sanitizeBlogLanguages(value: unknown): string[] | undefined {
 function normalizeProjectMetadata(metadata: ProjectMetadata): ProjectMetadata {
   const maxPostsPerPage = sanitizeMaxPostsPerPage(metadata.maxPostsPerPage);
   const publicUrl = sanitizePublicUrl(metadata.publicUrl);
-  const blogmarkCategory = typeof metadata.blogmarkCategory === 'string'
-    ? normalizeNonEmptyTaxonomyTerm(metadata.blogmarkCategory) ?? undefined
-    : undefined;
-  const pythonRuntimeMode = metadata.pythonRuntimeMode === 'main-thread' ? 'main-thread' : 'webworker';
+  const blogmarkCategory =
+    typeof metadata.blogmarkCategory === 'string'
+      ? (normalizeNonEmptyTaxonomyTerm(metadata.blogmarkCategory) ?? undefined)
+      : undefined;
+  const pythonRuntimeMode =
+    metadata.pythonRuntimeMode === 'main-thread' ? 'main-thread' : 'webworker';
   const picoTheme = sanitizePicoTheme(metadata.picoTheme);
-  const categoryMetadata = normalizeCategoryMetadata(metadata.categoryMetadata ?? metadata.categorySettings);
+  const categoryMetadata = normalizeCategoryMetadata(
+    metadata.categoryMetadata ?? metadata.categorySettings,
+  );
   const blogLanguages = sanitizeBlogLanguages(metadata.blogLanguages);
   return {
     ...metadata,
@@ -155,49 +166,43 @@ function getDefaultCategoryMetadata(): Record<string, CategoryMetadata> {
   };
 }
 
-function normalizeCategoryMetadata(value: unknown): Record<string, CategoryMetadata> {
+function normalizeCategoryMetadata(
+  value: unknown,
+): Record<string, CategoryMetadata> {
   const defaults = getDefaultCategoryMetadata();
   if (!value || typeof value !== 'object') {
     return defaults;
   }
 
   const normalized: Record<string, CategoryMetadata> = { ...defaults };
-  for (const [rawCategory, rawSettings] of Object.entries(value as RawCategoryMetadataInput)) {
+  for (const [rawCategory, rawSettings] of Object.entries(
+    value as RawCategoryMetadataInput,
+  )) {
     const category = normalizeTaxonomyTerm(rawCategory);
     if (!category || !rawSettings || typeof rawSettings !== 'object') {
       continue;
     }
 
-    const settings = rawSettings as unknown as {
-      renderInLists?: unknown;
-      showTitle?: unknown;
-      title?: unknown;
-    };
+    const settings =
+      rawSettings as unknown as Partial<CategoryRenderSettings> & {
+        title?: unknown;
+      };
     normalized[category] = {
       renderInLists: settings.renderInLists !== false,
       showTitle: settings.showTitle !== false,
       title: sanitizeCategoryTitle(settings.title, category),
-      postTemplateSlug: typeof (settings as any).postTemplateSlug === 'string' ? (settings as any).postTemplateSlug : undefined,
-      listTemplateSlug: typeof (settings as any).listTemplateSlug === 'string' ? (settings as any).listTemplateSlug : undefined,
+      postTemplateSlug:
+        typeof settings.postTemplateSlug === 'string'
+          ? settings.postTemplateSlug
+          : undefined,
+      listTemplateSlug:
+        typeof settings.listTemplateSlug === 'string'
+          ? settings.listTemplateSlug
+          : undefined,
     };
   }
 
   return normalized;
-}
-
-function normalizeCategorySettings(value: unknown): Record<string, CategoryRenderSettings> {
-  const metadata = normalizeCategoryMetadata(value);
-  return Object.fromEntries(
-    Object.entries(metadata).map(([category, data]) => [
-      category,
-      {
-        renderInLists: data.renderInLists,
-        showTitle: data.showTitle,
-        postTemplateSlug: data.postTemplateSlug,
-        listTemplateSlug: data.listTemplateSlug,
-      },
-    ]),
-  );
 }
 
 function isJsonParseError(error: unknown): boolean {
@@ -206,11 +211,11 @@ function isJsonParseError(error: unknown): boolean {
 
 /**
  * MetaEngine manages project metadata like available tags and categories.
- * 
+ *
  * It keeps metadata in sync between:
  * - The database (derived from posts)
  * - The filesystem (meta/tags.json, meta/categories.json)
- * 
+ *
  * This enables offline-first operation where all metadata is available
  * from the local filesystem per project.
  */
@@ -315,9 +320,10 @@ export class MetaEngine extends EventEmitter {
    */
   async setProjectMetadata(metadata: ProjectMetadata): Promise<void> {
     this.projectMetadata = normalizeProjectMetadata({ ...metadata });
-    this.projectMetadata.categoryMetadata = this.ensureCategoryMetadataForKnownCategories(
-      this.projectMetadata.categoryMetadata,
-    );
+    this.projectMetadata.categoryMetadata =
+      this.ensureCategoryMetadataForKnownCategories(
+        this.projectMetadata.categoryMetadata,
+      );
     await this.saveProjectMetadata();
     await this.saveCategoryMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
@@ -326,16 +332,23 @@ export class MetaEngine extends EventEmitter {
   /**
    * Update specific fields of project metadata.
    */
-  async updateProjectMetadata(updates: Partial<ProjectMetadata>): Promise<void> {
+  async updateProjectMetadata(
+    updates: Partial<ProjectMetadata>,
+  ): Promise<void> {
     const normalizedUpdates: Partial<ProjectMetadata> = { ...updates };
     if (updates.maxPostsPerPage !== undefined) {
-      normalizedUpdates.maxPostsPerPage = sanitizeMaxPostsPerPage(updates.maxPostsPerPage);
+      normalizedUpdates.maxPostsPerPage = sanitizeMaxPostsPerPage(
+        updates.maxPostsPerPage,
+      );
     }
     if (updates.picoTheme !== undefined) {
       normalizedUpdates.picoTheme = sanitizePicoTheme(updates.picoTheme);
     }
 
-    if (updates.categoryMetadata !== undefined || updates.categorySettings !== undefined) {
+    if (
+      updates.categoryMetadata !== undefined ||
+      updates.categorySettings !== undefined
+    ) {
       normalizedUpdates.categoryMetadata = normalizeCategoryMetadata(
         updates.categoryMetadata ?? updates.categorySettings,
       );
@@ -364,9 +377,10 @@ export class MetaEngine extends EventEmitter {
         ...normalizedUpdates,
       });
     }
-    this.projectMetadata.categoryMetadata = this.ensureCategoryMetadataForKnownCategories(
-      this.projectMetadata.categoryMetadata,
-    );
+    this.projectMetadata.categoryMetadata =
+      this.ensureCategoryMetadataForKnownCategories(
+        this.projectMetadata.categoryMetadata,
+      );
     await this.saveProjectMetadata();
     await this.saveCategoryMetadata();
     this.emit('projectMetadataChanged', this.projectMetadata);
@@ -402,7 +416,10 @@ export class MetaEngine extends EventEmitter {
       await fs.unlink(filePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('[MetaEngine] Failed to delete publishing preferences:', error);
+        console.error(
+          '[MetaEngine] Failed to delete publishing preferences:',
+          error,
+        );
         throw error;
       }
     }
@@ -441,7 +458,9 @@ export class MetaEngine extends EventEmitter {
       this.categories.add(normalizedCategory);
       const currentMetadata = this.projectMetadata;
       if (currentMetadata) {
-        const currentCategoryMetadata = normalizeCategoryMetadata(currentMetadata.categoryMetadata ?? currentMetadata.categorySettings);
+        const currentCategoryMetadata = normalizeCategoryMetadata(
+          currentMetadata.categoryMetadata ?? currentMetadata.categorySettings,
+        );
         if (!currentCategoryMetadata[normalizedCategory]) {
           currentCategoryMetadata[normalizedCategory] = {
             renderInLists: true,
@@ -469,7 +488,10 @@ export class MetaEngine extends EventEmitter {
     if (this.categories.delete(normalizedCategory)) {
       const currentMetadata = this.projectMetadata;
       const currentCategoryMetadata = currentMetadata
-        ? normalizeCategoryMetadata(currentMetadata.categoryMetadata ?? currentMetadata.categorySettings)
+        ? normalizeCategoryMetadata(
+          currentMetadata.categoryMetadata ??
+              currentMetadata.categorySettings,
+        )
         : null;
       if (currentMetadata && currentCategoryMetadata?.[normalizedCategory]) {
         const nextCategoryMetadata = { ...currentCategoryMetadata };
@@ -493,7 +515,10 @@ export class MetaEngine extends EventEmitter {
     try {
       await this.ensureMetaDirExists();
       const filePath = this.getCategoriesFilePath();
-      await this.writeJsonFileAtomically(filePath, Array.from(this.categories).sort());
+      await this.writeJsonFileAtomically(
+        filePath,
+        Array.from(this.categories).sort(),
+      );
     } catch (error) {
       console.error('[MetaEngine] Failed to save categories:', error);
       throw error;
@@ -507,12 +532,10 @@ export class MetaEngine extends EventEmitter {
     try {
       await this.ensureMetaDirExists();
       const filePath = this.getProjectMetadataFilePath();
-      const {
-        dataPath: _dataPath,
-        categoryMetadata: _categoryMetadata,
-        categorySettings: _categorySettings,
-        ...persistedMetadata
-      } = this.projectMetadata || {};
+      const persistedMetadata = { ...(this.projectMetadata || {}) };
+      delete persistedMetadata.dataPath;
+      delete persistedMetadata.categoryMetadata;
+      delete persistedMetadata.categorySettings;
       await this.writeJsonFileAtomically(filePath, persistedMetadata);
     } catch (error) {
       console.error('[MetaEngine] Failed to save project metadata:', error);
@@ -549,7 +572,10 @@ export class MetaEngine extends EventEmitter {
       const filePath = this.getPublishingPreferencesFilePath();
       await this.writeJsonFileAtomically(filePath, this.publishingPreferences);
     } catch (error) {
-      console.error('[MetaEngine] Failed to save publishing preferences:', error);
+      console.error(
+        '[MetaEngine] Failed to save publishing preferences:',
+        error,
+      );
       throw error;
     }
   }
@@ -565,12 +591,18 @@ export class MetaEngine extends EventEmitter {
       this.publishingPreferences = normalizePublishingPreferences(parsed);
     } catch (error) {
       if (isJsonParseError(error)) {
-        console.warn('[MetaEngine] Failed to parse publishing preferences JSON, using null:', error);
+        console.warn(
+          '[MetaEngine] Failed to parse publishing preferences JSON, using null:',
+          error,
+        );
         this.publishingPreferences = null;
         return;
       }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('[MetaEngine] Failed to load publishing preferences:', error);
+        console.error(
+          '[MetaEngine] Failed to load publishing preferences:',
+          error,
+        );
         throw error;
       }
       // File doesn't exist, that's OK
@@ -589,7 +621,10 @@ export class MetaEngine extends EventEmitter {
       this.projectMetadata = normalizeProjectMetadata(parsed);
     } catch (error) {
       if (isJsonParseError(error)) {
-        console.warn('[MetaEngine] Failed to parse project metadata JSON, using null metadata:', error);
+        console.warn(
+          '[MetaEngine] Failed to parse project metadata JSON, using null metadata:',
+          error,
+        );
         this.projectMetadata = null;
         return;
       }
@@ -605,7 +640,10 @@ export class MetaEngine extends EventEmitter {
   /**
    * Load category metadata from the filesystem.
    */
-  async loadCategoryMetadata(): Promise<Record<string, CategoryMetadata> | null> {
+  async loadCategoryMetadata(): Promise<Record<
+    string,
+    CategoryMetadata
+  > | null> {
     try {
       const filePath = this.getCategoryMetadataFilePath();
       const content = await fs.readFile(filePath, 'utf-8');
@@ -613,7 +651,10 @@ export class MetaEngine extends EventEmitter {
       return normalizeCategoryMetadata(parsed);
     } catch (error) {
       if (isJsonParseError(error)) {
-        console.warn('[MetaEngine] Failed to parse category metadata JSON, using default metadata merge:', error);
+        console.warn(
+          '[MetaEngine] Failed to parse category metadata JSON, using default metadata merge:',
+          error,
+        );
         return null;
       }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -641,7 +682,10 @@ export class MetaEngine extends EventEmitter {
       }
     } catch (error) {
       if (isJsonParseError(error)) {
-        console.warn('[MetaEngine] Failed to parse categories JSON, treating as empty and rebuilding from DB/defaults:', error);
+        console.warn(
+          '[MetaEngine] Failed to parse categories JSON, treating as empty and rebuilding from DB/defaults:',
+          error,
+        );
         this.categories.clear();
         return;
       }
@@ -678,16 +722,26 @@ export class MetaEngine extends EventEmitter {
       .where(eq(posts.projectId, this.currentProjectId))
       .all();
 
-    return collectNormalizedTermsFromJsonValues(dbPosts.map((row) => row.categories));
+    return collectNormalizedTermsFromJsonValues(
+      dbPosts.map((row) => row.categories),
+    );
   }
 
   /**
    * Fetch the current project's data from the database.
    */
-  private async fetchProjectFromDatabase(): Promise<{ name: string; description: string | null; dataPath: string | null } | null> {
+  private async fetchProjectFromDatabase(): Promise<{
+    name: string;
+    description: string | null;
+    dataPath: string | null;
+  } | null> {
     const db = getDatabase().getLocal();
     const project = await db
-      .select({ name: projects.name, description: projects.description, dataPath: projects.dataPath })
+      .select({
+        name: projects.name,
+        description: projects.description,
+        dataPath: projects.dataPath,
+      })
       .from(projects)
       .where(eq(projects.id, this.currentProjectId))
       .get();
@@ -719,7 +773,10 @@ export class MetaEngine extends EventEmitter {
     }
   }
 
-  private async writeJsonFileAtomically(filePath: string, value: unknown): Promise<void> {
+  private async writeJsonFileAtomically(
+    filePath: string,
+    value: unknown,
+  ): Promise<void> {
     const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     const content = JSON.stringify(value, null, 2);
 
@@ -749,7 +806,10 @@ export class MetaEngine extends EventEmitter {
           showTitle: true,
           title: category,
         };
-      } else if (!merged[category].title || merged[category].title.trim().length === 0) {
+      } else if (
+        !merged[category].title ||
+        merged[category].title.trim().length === 0
+      ) {
         merged[category].title = category;
       }
     }
@@ -759,7 +819,7 @@ export class MetaEngine extends EventEmitter {
 
   /**
    * Sync tags and categories on startup.
-   * 
+   *
    * Logic:
    * - Tags: populated from posts (TagEngine handles persistence with colors)
    * - Categories: read from file, merge with database
@@ -784,34 +844,36 @@ export class MetaEngine extends EventEmitter {
   }
 
   private async performSyncOnStartup(): Promise<void> {
-    console.log(`[MetaEngine] Syncing metadata for project: ${this.currentProjectId}`);
-    
     await this.ensureMetaDirExists();
-    
+
     const categoriesFilePath = this.getCategoriesFilePath();
     const projectMetadataFilePath = this.getProjectMetadataFilePath();
     const categoryMetadataFilePath = this.getCategoryMetadataFilePath();
-    
+
     const categoriesFileExists = await this.fileExists(categoriesFilePath);
-    const projectMetadataFileExists = await this.fileExists(projectMetadataFilePath);
-    const categoryMetadataFileExists = await this.fileExists(categoryMetadataFilePath);
-    
+    const projectMetadataFileExists = await this.fileExists(
+      projectMetadataFilePath,
+    );
+    const categoryMetadataFileExists = await this.fileExists(
+      categoryMetadataFilePath,
+    );
+
     // Collect tags/categories from database (posts)
     const dbTags = await this.collectTagsFromPosts();
     const dbCategories = await this.collectCategoriesFromPosts();
-    
+
     // Handle tags - just populate from posts, TagEngine handles persistence
     this.tags.clear();
     for (const tag of dbTags) {
       this.tags.add(tag);
     }
-    
+
     // Handle categories
     if (categoriesFileExists) {
       // Load from file
       await this.loadCategories();
       const fileCategories = new Set(this.categories);
-      
+
       // Merge: add any categories from DB that aren't in file
       let changed = false;
       for (const cat of dbCategories) {
@@ -820,7 +882,7 @@ export class MetaEngine extends EventEmitter {
           changed = true;
         }
       }
-      
+
       // Save if there were changes
       if (changed) {
         await this.saveCategories();
@@ -840,14 +902,16 @@ export class MetaEngine extends EventEmitter {
       }
       await this.saveCategories();
     }
-    
+
     // Handle project metadata
     if (projectMetadataFileExists) {
       await this.loadProjectMetadata();
       if (!this.projectMetadata) {
         const projectData = await this.fetchProjectFromDatabase();
         if (!projectData) {
-          throw new Error(`Project not found in database: ${this.currentProjectId}`);
+          throw new Error(
+            `Project not found in database: ${this.currentProjectId}`,
+          );
         }
         this.projectMetadata = {
           name: projectData.name,
@@ -857,16 +921,18 @@ export class MetaEngine extends EventEmitter {
         await this.saveProjectMetadata();
       }
       if (this.projectMetadata?.dataPath !== undefined) {
-        const { dataPath: _dataPath, ...metadataWithoutDataPath } = this.projectMetadata;
+        const metadataWithoutDataPath = { ...this.projectMetadata };
+        delete metadataWithoutDataPath.dataPath;
         this.projectMetadata = metadataWithoutDataPath;
         await this.saveProjectMetadata();
-        console.log('[MetaEngine] Removed deprecated dataPath from project.json');
       }
     } else {
       // No file exists, fetch project data from database and create file
       const projectData = await this.fetchProjectFromDatabase();
       if (!projectData) {
-        throw new Error(`Project not found in database: ${this.currentProjectId}`);
+        throw new Error(
+          `Project not found in database: ${this.currentProjectId}`,
+        );
       }
       this.projectMetadata = {
         name: projectData.name,
@@ -878,14 +944,16 @@ export class MetaEngine extends EventEmitter {
 
     if (this.projectMetadata) {
       const legacyCategoryMetadata = normalizeCategoryMetadata(
-        this.projectMetadata.categoryMetadata ?? this.projectMetadata.categorySettings,
+        this.projectMetadata.categoryMetadata ??
+          this.projectMetadata.categorySettings,
       );
       const fileCategoryMetadata = categoryMetadataFileExists
         ? await this.loadCategoryMetadata()
         : null;
-      const mergedCategoryMetadata = this.ensureCategoryMetadataForKnownCategories(
-        fileCategoryMetadata ?? legacyCategoryMetadata,
-      );
+      const mergedCategoryMetadata =
+        this.ensureCategoryMetadataForKnownCategories(
+          fileCategoryMetadata ?? legacyCategoryMetadata,
+        );
 
       this.projectMetadata = normalizeProjectMetadata({
         ...this.projectMetadata,
@@ -898,9 +966,8 @@ export class MetaEngine extends EventEmitter {
 
     // Handle publishing preferences (load from file if it exists)
     await this.loadPublishingPreferences();
-    
+
     this.initialized = true;
-    console.log(`[MetaEngine] Sync complete. Tags: ${this.tags.size}, Categories: ${this.categories.size}`);
   }
 
   /**
@@ -910,4 +977,3 @@ export class MetaEngine extends EventEmitter {
     return this.initialized;
   }
 }
-

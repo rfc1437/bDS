@@ -81,7 +81,7 @@ function sanitizeMenuItem(input: unknown): MenuItemData {
       ? 'category-archive'
       : candidate.kind === 'home'
         ? 'home'
-      : 'page';
+        : 'page';
   const childrenSource = Array.isArray(candidate.children) ? candidate.children : [];
   const title = normalizeNonEmptyString(candidate.title) || 'Untitled';
 
@@ -171,7 +171,7 @@ function parseOutlineNode(node: OpmlOutlineNode): MenuItemData {
       ? 'category-archive'
       : rawType === 'home'
         ? 'home'
-      : 'page';
+        : 'page';
   const textTitle = normalizeNonEmptyString(node['@_text']);
   const explicitTitle = normalizeNonEmptyString(node['@_title']);
   const title = kind === 'category-archive'

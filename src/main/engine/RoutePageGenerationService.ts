@@ -38,7 +38,9 @@ export async function generateRootPages(params: BaseParams & {
   for (let page = 1; page <= totalPages; page++) {
     const offset = (page - 1) * params.maxPostsPerPage;
     const pagePosts = params.posts.slice(offset, offset + params.maxPostsPerPage);
-    if (pagePosts.length === 0) break;
+    if (pagePosts.length === 0) {
+      break;
+    }
 
     const routePath = page === 1 ? '/' : `/page/${page}`;
     const html = await renderRequiredRoute(params.renderRoute, routePath);
@@ -98,7 +100,9 @@ async function generatePaginatedListPages(params: BaseParams & {
   maxPostsPerPage: number;
   urlPrefix: string;
 }): Promise<number> {
-  if (params.posts.length === 0) return 0;
+  if (params.posts.length === 0) {
+    return 0;
+  }
 
   const totalPages = Math.max(1, Math.ceil(params.posts.length / params.maxPostsPerPage));
   let count = 0;
@@ -106,7 +110,9 @@ async function generatePaginatedListPages(params: BaseParams & {
   for (let page = 1; page <= totalPages; page++) {
     const offset = (page - 1) * params.maxPostsPerPage;
     const pagePosts = params.posts.slice(offset, offset + params.maxPostsPerPage);
-    if (pagePosts.length === 0) break;
+    if (pagePosts.length === 0) {
+      break;
+    }
 
     const routePath = page === 1 ? `/${params.urlPrefix}` : `/${params.urlPrefix}/page/${page}`;
     const html = await renderRequiredRoute(params.renderRoute, routePath);
@@ -129,7 +135,9 @@ export async function generateCategoryPages(params: BaseParams & {
 
   for (const category of Array.from(params.allCategories).sort()) {
     const categoryPosts = params.postsByCategory?.get(category) ?? params.posts.filter((post) => (post.categories || []).includes(category));
-    if (categoryPosts.length === 0) continue;
+    if (categoryPosts.length === 0) {
+      continue;
+    }
 
     const totalPages = Math.max(1, Math.ceil(categoryPosts.length / params.maxPostsPerPage));
     const encodedCategory = encodeURIComponent(category);
@@ -137,7 +145,9 @@ export async function generateCategoryPages(params: BaseParams & {
     for (let page = 1; page <= totalPages; page++) {
       const offset = (page - 1) * params.maxPostsPerPage;
       const pagePosts = categoryPosts.slice(offset, offset + params.maxPostsPerPage);
-      if (pagePosts.length === 0) break;
+      if (pagePosts.length === 0) {
+        break;
+      }
 
       const routePath = page === 1
         ? `/category/${encodedCategory}`
@@ -165,7 +175,9 @@ export async function generateTagPages(params: BaseParams & {
 
   for (const tag of Array.from(params.allTags).sort()) {
     const tagPosts = params.postsByTag?.get(tag) ?? params.posts.filter((post) => (post.tags || []).includes(tag));
-    if (tagPosts.length === 0) continue;
+    if (tagPosts.length === 0) {
+      continue;
+    }
 
     const totalPages = Math.max(1, Math.ceil(tagPosts.length / params.maxPostsPerPage));
     const encodedTag = encodeURIComponent(tag);
@@ -173,7 +185,9 @@ export async function generateTagPages(params: BaseParams & {
     for (let page = 1; page <= totalPages; page++) {
       const offset = (page - 1) * params.maxPostsPerPage;
       const pagePosts = tagPosts.slice(offset, offset + params.maxPostsPerPage);
-      if (pagePosts.length === 0) break;
+      if (pagePosts.length === 0) {
+        break;
+      }
 
       const routePath = page === 1
         ? `/tag/${encodedTag}`

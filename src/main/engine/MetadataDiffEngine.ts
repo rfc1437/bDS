@@ -12,7 +12,7 @@ import * as path from 'path';
 import { eq, and } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { posts, postTranslations, media, scripts, templates } from '../database/schema';
-import { readPostFile, PostFileData } from './postFileUtils';
+import { readPostFile } from './postFileUtils';
 import { readPostTranslationFile } from './postTranslationFileUtils';
 import { taskManager } from './TaskManager';
 import type { PostEngine } from './PostEngine';
@@ -223,7 +223,7 @@ export class MetadataDiffEngine extends EventEmitter {
     postIds: string[],
     onProgress: ((percent: number, message: string) => void) | undefined,
     processPost: (postId: string) => Promise<boolean>,
-    errorMessage: (postId: string) => string
+    errorMessage: (postId: string) => string,
   ): Promise<{ success: number; failed: number }> {
     const total = postIds.length;
     let success = 0;
@@ -278,58 +278,59 @@ export class MetadataDiffEngine extends EventEmitter {
    * Get statistics about the posts, media, scripts, and templates tables
    */
   async getTableStats(): Promise<TableStats> {
-    const db = this.getDb();
     const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
 
     // Get post counts
     const allPostsResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM posts WHERE project_id = ?`,
+      sql: 'SELECT COUNT(*) as count FROM posts WHERE project_id = ?',
       args: [this.currentProjectId],
     });
     const totalPosts = Number(allPostsResult.rows[0]?.count ?? 0);
 
     const publishedResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM posts WHERE project_id = ? AND status = 'published' AND file_path IS NOT NULL AND file_path != ''`,
+      sql: 'SELECT COUNT(*) as count FROM posts WHERE project_id = ? AND status = \'published\' AND file_path IS NOT NULL AND file_path != \'\'',
       args: [this.currentProjectId],
     });
     const publishedPosts = Number(publishedResult.rows[0]?.count ?? 0);
 
     const draftResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM posts WHERE project_id = ? AND status = 'draft'`,
+      sql: 'SELECT COUNT(*) as count FROM posts WHERE project_id = ? AND status = \'draft\'',
       args: [this.currentProjectId],
     });
     const draftPosts = Number(draftResult.rows[0]?.count ?? 0);
 
     // Get media count
     const mediaResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM media WHERE project_id = ?`,
+      sql: 'SELECT COUNT(*) as count FROM media WHERE project_id = ?',
       args: [this.currentProjectId],
     });
     const totalMedia = Number(mediaResult.rows[0]?.count ?? 0);
 
     // Get script counts
     const allScriptsResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM scripts WHERE project_id = ?`,
+      sql: 'SELECT COUNT(*) as count FROM scripts WHERE project_id = ?',
       args: [this.currentProjectId],
     });
     const totalScripts = Number(allScriptsResult.rows[0]?.count ?? 0);
 
     const publishedScriptsResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM scripts WHERE project_id = ? AND status = 'published'`,
+      sql: 'SELECT COUNT(*) as count FROM scripts WHERE project_id = ? AND status = \'published\'',
       args: [this.currentProjectId],
     });
     const publishedScripts = Number(publishedScriptsResult.rows[0]?.count ?? 0);
 
     // Get template counts
     const allTemplatesResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM templates WHERE project_id = ?`,
+      sql: 'SELECT COUNT(*) as count FROM templates WHERE project_id = ?',
       args: [this.currentProjectId],
     });
     const totalTemplates = Number(allTemplatesResult.rows[0]?.count ?? 0);
 
     const publishedTemplatesResult = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM templates WHERE project_id = ? AND status = 'published'`,
+      sql: 'SELECT COUNT(*) as count FROM templates WHERE project_id = ? AND status = \'published\'',
       args: [this.currentProjectId],
     });
     const publishedTemplates = Number(publishedTemplatesResult.rows[0]?.count ?? 0);
@@ -448,14 +449,30 @@ export class MetadataDiffEngine extends EventEmitter {
       const missingDiffs: Partial<Record<DiffField, FieldDifference>> = {};
       const dbTags: string[] = JSON.parse(dbPost.tags || '[]');
       const dbCategories: string[] = JSON.parse(dbPost.categories || '[]');
-      if (dbPost.title) missingDiffs.title = { dbValue: dbPost.title, fileValue: null };
-      if (dbTags.length > 0) missingDiffs.tags = { dbValue: dbTags, fileValue: null };
-      if (dbCategories.length > 0) missingDiffs.categories = { dbValue: dbCategories, fileValue: null };
-      if (dbPost.excerpt) missingDiffs.excerpt = { dbValue: dbPost.excerpt, fileValue: null };
-      if (dbPost.author) missingDiffs.author = { dbValue: dbPost.author, fileValue: null };
-      if (dbPost.language) missingDiffs.language = { dbValue: dbPost.language, fileValue: null };
-      if (dbPost.doNotTranslate) missingDiffs.doNotTranslate = { dbValue: true, fileValue: null };
-      if (dbPost.templateSlug) missingDiffs.templateSlug = { dbValue: dbPost.templateSlug, fileValue: null };
+      if (dbPost.title) {
+        missingDiffs.title = { dbValue: dbPost.title, fileValue: null };
+      }
+      if (dbTags.length > 0) {
+        missingDiffs.tags = { dbValue: dbTags, fileValue: null };
+      }
+      if (dbCategories.length > 0) {
+        missingDiffs.categories = { dbValue: dbCategories, fileValue: null };
+      }
+      if (dbPost.excerpt) {
+        missingDiffs.excerpt = { dbValue: dbPost.excerpt, fileValue: null };
+      }
+      if (dbPost.author) {
+        missingDiffs.author = { dbValue: dbPost.author, fileValue: null };
+      }
+      if (dbPost.language) {
+        missingDiffs.language = { dbValue: dbPost.language, fileValue: null };
+      }
+      if (dbPost.doNotTranslate) {
+        missingDiffs.doNotTranslate = { dbValue: true, fileValue: null };
+      }
+      if (dbPost.templateSlug) {
+        missingDiffs.templateSlug = { dbValue: dbPost.templateSlug, fileValue: null };
+      }
       return {
         postId: dbPost.id,
         title: dbPost.title,
@@ -549,7 +566,9 @@ export class MetadataDiffEngine extends EventEmitter {
    * Compare arrays for equality (order-independent)
    */
   private arraysEqual(a: string[], b: string[]): boolean {
-    if (a.length !== b.length) return false;
+    if (a.length !== b.length) {
+      return false;
+    }
     const sortedA = [...a].sort();
     const sortedB = [...b].sort();
     return sortedA.every((val, idx) => val === sortedB[idx]);
@@ -557,8 +576,12 @@ export class MetadataDiffEngine extends EventEmitter {
 
   /** Compare two dates at second precision (SQLite stores integer seconds). */
   private datesEqualSeconds(a: Date | null | undefined, b: Date | null | undefined): boolean {
-    if (!a && !b) return true;
-    if (!a || !b) return false;
+    if (!a && !b) {
+      return true;
+    }
+    if (!a || !b) {
+      return false;
+    }
     return Math.floor(a.getTime() / 1000) === Math.floor(b.getTime() / 1000);
   }
 
@@ -572,7 +595,9 @@ export class MetadataDiffEngine extends EventEmitter {
     postsBaseDir?: string,
   ): Promise<ScanResult> {
     const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
 
     // Get all published posts with file paths
     const result = await client.execute({
@@ -609,7 +634,9 @@ export class MetadataDiffEngine extends EventEmitter {
       const row = publishedPosts[i];
       const postId = row.id as string;
       const filePath = row.file_path as string;
-      if (filePath) knownFilePaths.add(filePath);
+      if (filePath) {
+        knownFilePaths.add(filePath);
+      }
 
       const diff = await this.comparePostMetadata(postId);
       if (diff && diff.hasDifferences) {
@@ -625,7 +652,9 @@ export class MetadataDiffEngine extends EventEmitter {
       const row = publishedTranslations[i];
       const translationId = row.id as string;
       const filePath = row.file_path as string;
-      if (filePath) knownFilePaths.add(filePath);
+      if (filePath) {
+        knownFilePaths.add(filePath);
+      }
 
       const diff = await this.comparePostMetadata(translationId);
       if (diff && diff.hasDifferences) {
@@ -640,7 +669,7 @@ export class MetadataDiffEngine extends EventEmitter {
 
     // Also include file_paths from non-published posts so we don't flag them as orphans
     const allPostsResult = await client.execute({
-      sql: `SELECT file_path FROM posts WHERE project_id = ? AND file_path IS NOT NULL AND file_path != ''`,
+      sql: 'SELECT file_path FROM posts WHERE project_id = ? AND file_path IS NOT NULL AND file_path != \'\'',
       args: [this.currentProjectId],
     });
     for (const row of allPostsResult.rows) {
@@ -648,7 +677,7 @@ export class MetadataDiffEngine extends EventEmitter {
     }
 
     const allTranslationsResult = await client.execute({
-      sql: `SELECT file_path FROM post_translations WHERE project_id = ? AND file_path IS NOT NULL AND file_path != ''`,
+      sql: 'SELECT file_path FROM post_translations WHERE project_id = ? AND file_path IS NOT NULL AND file_path != \'\'',
       args: [this.currentProjectId],
     });
     for (const row of allTranslationsResult.rows) {
@@ -679,7 +708,9 @@ export class MetadataDiffEngine extends EventEmitter {
     onProgress: (current: number, total: number, message: string) => void,
     scannedSoFar: number,
   ): Promise<OrphanFile[]> {
-    if (!postsBaseDir) return [];
+    if (!postsBaseDir) {
+      return [];
+    }
 
     const markdownExtensions = new Set(['.md', '.markdown', '.mdx']);
     const allFiles: string[] = [];
@@ -709,7 +740,9 @@ export class MetadataDiffEngine extends EventEmitter {
     // Filter to files not in the known DB set
     const orphanPaths = allFiles.filter(f => !knownFilePaths.has(f));
 
-    if (orphanPaths.length === 0) return [];
+    if (orphanPaths.length === 0) {
+      return [];
+    }
 
     const orphanFiles: OrphanFile[] = [];
     for (let i = 0; i < orphanPaths.length; i++) {
@@ -777,7 +810,9 @@ export class MetadataDiffEngine extends EventEmitter {
     for (const diff of diffs) {
       for (const [field, fieldDiff] of Object.entries(diff.differences)) {
         const fieldKey = field as DiffField;
-        if (!fieldDiff) continue;
+        if (!fieldDiff) {
+          continue;
+        }
 
         if (!groupMap.has(fieldKey)) {
           groupMap.set(fieldKey, {
@@ -787,7 +822,11 @@ export class MetadataDiffEngine extends EventEmitter {
           });
         }
 
-        groupMap.get(fieldKey)!.posts.push({
+        const postGroup = groupMap.get(fieldKey);
+        if (!postGroup) {
+          continue;
+        }
+        postGroup.posts.push({
           postId: diff.postId,
           title: diff.title,
           slug: diff.slug,
@@ -806,10 +845,12 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async syncDbToFile(
     postIds: string[],
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
     const postEngine = this.postEngine;
-    if (!postEngine) throw new Error('MetadataDiffEngine: postEngine not injected');
+    if (!postEngine) {
+      throw new Error('MetadataDiffEngine: postEngine not injected');
+    }
     return this.runSyncLoop(
       postIds,
       onProgress,
@@ -823,7 +864,7 @@ export class MetadataDiffEngine extends EventEmitter {
         }
         return false;
       },
-      (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to file:`
+      (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to file:`,
     );
   }
 
@@ -834,7 +875,7 @@ export class MetadataDiffEngine extends EventEmitter {
   async syncFileToDb(
     postIds: string[],
     field?: DiffField,
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
     const db = this.getDb();
     return this.runSyncLoop(
@@ -944,7 +985,7 @@ export class MetadataDiffEngine extends EventEmitter {
 
         return true;
       },
-      (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to DB:`
+      (postId) => `[MetadataDiffEngine] Failed to sync post ${postId} to DB:`,
     );
   }
 
@@ -955,7 +996,9 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async compareMediaMetadata(mediaId: string): Promise<MediaMetadataDiff | null> {
     const db = this.getDb();
-    if (!this.mediaEngine) throw new Error('MetadataDiffEngine: mediaEngine not injected');
+    if (!this.mediaEngine) {
+      throw new Error('MetadataDiffEngine: mediaEngine not injected');
+    }
 
     const dbMedia = await db
       .select()
@@ -963,19 +1006,33 @@ export class MetadataDiffEngine extends EventEmitter {
       .where(and(eq(media.id, mediaId), eq(media.projectId, this.currentProjectId)))
       .get();
 
-    if (!dbMedia) return null;
+    if (!dbMedia) {
+      return null;
+    }
 
     const sidecarPath = `${dbMedia.filePath}.meta`;
     const sidecar = await this.mediaEngine.readSidecarFile(sidecarPath);
     if (!sidecar) {
       const missingDiffs: Partial<Record<MediaDiffField, FieldDifference>> = {};
-      if (dbMedia.title) missingDiffs.title = { dbValue: dbMedia.title, fileValue: null };
-      if (dbMedia.alt) missingDiffs.alt = { dbValue: dbMedia.alt, fileValue: null };
-      if (dbMedia.caption) missingDiffs.caption = { dbValue: dbMedia.caption, fileValue: null };
-      if (dbMedia.author) missingDiffs.author = { dbValue: dbMedia.author, fileValue: null };
-      if (dbMedia.language) missingDiffs.language = { dbValue: dbMedia.language, fileValue: null };
+      if (dbMedia.title) {
+        missingDiffs.title = { dbValue: dbMedia.title, fileValue: null };
+      }
+      if (dbMedia.alt) {
+        missingDiffs.alt = { dbValue: dbMedia.alt, fileValue: null };
+      }
+      if (dbMedia.caption) {
+        missingDiffs.caption = { dbValue: dbMedia.caption, fileValue: null };
+      }
+      if (dbMedia.author) {
+        missingDiffs.author = { dbValue: dbMedia.author, fileValue: null };
+      }
+      if (dbMedia.language) {
+        missingDiffs.language = { dbValue: dbMedia.language, fileValue: null };
+      }
       const dbTags: string[] = JSON.parse(dbMedia.tags || '[]');
-      if (dbTags.length > 0) missingDiffs.tags = { dbValue: dbTags, fileValue: null };
+      if (dbTags.length > 0) {
+        missingDiffs.tags = { dbValue: dbTags, fileValue: null };
+      }
       return {
         mediaId: dbMedia.id,
         originalName: dbMedia.originalName,
@@ -1023,13 +1080,15 @@ export class MetadataDiffEngine extends EventEmitter {
    * Scan all media and find metadata differences
    */
   async scanAllMedia(
-    onProgress: (current: number, total: number, message: string) => void
+    onProgress: (current: number, total: number, message: string) => void,
   ): Promise<MediaScanResult> {
     const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
 
     const result = await client.execute({
-      sql: `SELECT id FROM media WHERE project_id = ?`,
+      sql: 'SELECT id FROM media WHERE project_id = ?',
       args: [this.currentProjectId],
     });
 
@@ -1074,11 +1133,17 @@ export class MetadataDiffEngine extends EventEmitter {
     for (const diff of diffs) {
       for (const [field, fieldDiff] of Object.entries(diff.differences)) {
         const fieldKey = field as MediaDiffField;
-        if (!fieldDiff) continue;
+        if (!fieldDiff) {
+          continue;
+        }
         if (!groupMap.has(fieldKey)) {
           groupMap.set(fieldKey, { field: fieldKey, label: fieldLabels[fieldKey], items: [] });
         }
-        groupMap.get(fieldKey)!.items.push({
+        const mediaGroup = groupMap.get(fieldKey);
+        if (!mediaGroup) {
+          continue;
+        }
+        mediaGroup.items.push({
           mediaId: diff.mediaId,
           originalName: diff.originalName,
           dbValue: fieldDiff.dbValue,
@@ -1095,9 +1160,11 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async syncMediaDbToFile(
     mediaIds: string[],
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
-    if (!this.mediaEngine) throw new Error('MetadataDiffEngine: mediaEngine not injected');
+    if (!this.mediaEngine) {
+      throw new Error('MetadataDiffEngine: mediaEngine not injected');
+    }
     const mediaEngine = this.mediaEngine;
     return this.runSyncLoop(
       mediaIds,
@@ -1105,7 +1172,9 @@ export class MetadataDiffEngine extends EventEmitter {
       async (mediaId) => {
         // Re-save the media with its current DB values to regenerate sidecar
         const item = await mediaEngine.getMedia(mediaId);
-        if (!item) return false;
+        if (!item) {
+          return false;
+        }
         await mediaEngine.updateMedia(mediaId, {
           title: item.title,
           alt: item.alt,
@@ -1115,7 +1184,7 @@ export class MetadataDiffEngine extends EventEmitter {
         });
         return true;
       },
-      (id) => `[MetadataDiffEngine] Failed to sync media ${id} to file:`
+      (id) => `[MetadataDiffEngine] Failed to sync media ${id} to file:`,
     );
   }
 
@@ -1125,9 +1194,11 @@ export class MetadataDiffEngine extends EventEmitter {
   async syncMediaFileToDb(
     mediaIds: string[],
     field?: MediaDiffField,
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
-    if (!this.mediaEngine) throw new Error('MetadataDiffEngine: mediaEngine not injected');
+    if (!this.mediaEngine) {
+      throw new Error('MetadataDiffEngine: mediaEngine not injected');
+    }
     const db = this.getDb();
     const mediaEngine = this.mediaEngine;
     return this.runSyncLoop(
@@ -1139,24 +1210,40 @@ export class MetadataDiffEngine extends EventEmitter {
           .from(media)
           .where(and(eq(media.id, mediaId), eq(media.projectId, this.currentProjectId)))
           .get();
-        if (!dbMedia) return false;
+        if (!dbMedia) {
+          return false;
+        }
 
         const sidecar = await mediaEngine.readSidecarFile(`${dbMedia.filePath}.meta`);
-        if (!sidecar) return false;
+        if (!sidecar) {
+          return false;
+        }
 
         const updateData: Record<string, unknown> = { updatedAt: new Date() };
 
-        if (!field || field === 'title') updateData.title = sidecar.title || null;
-        if (!field || field === 'alt') updateData.alt = sidecar.alt || null;
-        if (!field || field === 'caption') updateData.caption = sidecar.caption || null;
-        if (!field || field === 'author') updateData.author = sidecar.author || null;
-        if (!field || field === 'language') updateData.language = sidecar.language || null;
-        if (!field || field === 'tags') updateData.tags = JSON.stringify(sidecar.tags || []);
+        if (!field || field === 'title') {
+          updateData.title = sidecar.title || null;
+        }
+        if (!field || field === 'alt') {
+          updateData.alt = sidecar.alt || null;
+        }
+        if (!field || field === 'caption') {
+          updateData.caption = sidecar.caption || null;
+        }
+        if (!field || field === 'author') {
+          updateData.author = sidecar.author || null;
+        }
+        if (!field || field === 'language') {
+          updateData.language = sidecar.language || null;
+        }
+        if (!field || field === 'tags') {
+          updateData.tags = JSON.stringify(sidecar.tags || []);
+        }
 
         await db.update(media).set(updateData).where(eq(media.id, mediaId));
         return true;
       },
-      (id) => `[MetadataDiffEngine] Failed to sync media ${id} to DB:`
+      (id) => `[MetadataDiffEngine] Failed to sync media ${id} to DB:`,
     );
   }
 
@@ -1167,7 +1254,9 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async compareScriptMetadata(scriptId: string): Promise<ScriptMetadataDiff | null> {
     const db = this.getDb();
-    if (!this.scriptEngine) throw new Error('MetadataDiffEngine: scriptEngine not injected');
+    if (!this.scriptEngine) {
+      throw new Error('MetadataDiffEngine: scriptEngine not injected');
+    }
 
     const dbScript = await db
       .select()
@@ -1175,18 +1264,30 @@ export class MetadataDiffEngine extends EventEmitter {
       .where(and(eq(scripts.id, scriptId), eq(scripts.projectId, this.currentProjectId)))
       .get();
 
-    if (!dbScript) return null;
+    if (!dbScript) {
+      return null;
+    }
     // Skip drafts — they don't have on-disk files
-    if (dbScript.status === 'draft') return null;
+    if (dbScript.status === 'draft') {
+      return null;
+    }
 
     const parsed = await this.scriptEngine.readScriptFileWithMetadata(dbScript.filePath);
     if (!parsed) {
       const missingDiffs: Partial<Record<ScriptDiffField, FieldDifference>> = {};
-      if (dbScript.title) missingDiffs.title = { dbValue: dbScript.title, fileValue: null };
-      if (dbScript.kind) missingDiffs.kind = { dbValue: dbScript.kind, fileValue: null };
-      if (dbScript.entrypoint) missingDiffs.entrypoint = { dbValue: dbScript.entrypoint, fileValue: null };
+      if (dbScript.title) {
+        missingDiffs.title = { dbValue: dbScript.title, fileValue: null };
+      }
+      if (dbScript.kind) {
+        missingDiffs.kind = { dbValue: dbScript.kind, fileValue: null };
+      }
+      if (dbScript.entrypoint) {
+        missingDiffs.entrypoint = { dbValue: dbScript.entrypoint, fileValue: null };
+      }
       missingDiffs.enabled = { dbValue: !!dbScript.enabled, fileValue: null };
-      if (dbScript.version) missingDiffs.version = { dbValue: dbScript.version, fileValue: null };
+      if (dbScript.version) {
+        missingDiffs.version = { dbValue: dbScript.version, fileValue: null };
+      }
       return {
         scriptId: dbScript.id,
         title: dbScript.title,
@@ -1233,13 +1334,15 @@ export class MetadataDiffEngine extends EventEmitter {
    * Scan all published scripts and find metadata differences
    */
   async scanAllScripts(
-    onProgress: (current: number, total: number, message: string) => void
+    onProgress: (current: number, total: number, message: string) => void,
   ): Promise<ScriptScanResult> {
     const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
 
     const result = await client.execute({
-      sql: `SELECT id FROM scripts WHERE project_id = ? AND status = 'published'`,
+      sql: 'SELECT id FROM scripts WHERE project_id = ? AND status = \'published\'',
       args: [this.currentProjectId],
     });
 
@@ -1283,11 +1386,17 @@ export class MetadataDiffEngine extends EventEmitter {
     for (const diff of diffs) {
       for (const [field, fieldDiff] of Object.entries(diff.differences)) {
         const fieldKey = field as ScriptDiffField;
-        if (!fieldDiff) continue;
+        if (!fieldDiff) {
+          continue;
+        }
         if (!groupMap.has(fieldKey)) {
           groupMap.set(fieldKey, { field: fieldKey, label: fieldLabels[fieldKey], items: [] });
         }
-        groupMap.get(fieldKey)!.items.push({
+        const scriptGroup = groupMap.get(fieldKey);
+        if (!scriptGroup) {
+          continue;
+        }
+        scriptGroup.items.push({
           scriptId: diff.scriptId,
           title: diff.title,
           slug: diff.slug,
@@ -1305,9 +1414,11 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async syncScriptDbToFile(
     scriptIds: string[],
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
-    if (!this.scriptEngine) throw new Error('MetadataDiffEngine: scriptEngine not injected');
+    if (!this.scriptEngine) {
+      throw new Error('MetadataDiffEngine: scriptEngine not injected');
+    }
     const scriptEngine = this.scriptEngine;
     return this.runSyncLoop(
       scriptIds,
@@ -1315,11 +1426,13 @@ export class MetadataDiffEngine extends EventEmitter {
       async (scriptId) => {
         // Trigger an updateScript with no actual changes — this re-serialises the file
         const item = await scriptEngine.getScript(scriptId);
-        if (!item) return false;
+        if (!item) {
+          return false;
+        }
         await scriptEngine.updateScript(scriptId, { title: item.title });
         return true;
       },
-      (id) => `[MetadataDiffEngine] Failed to sync script ${id} to file:`
+      (id) => `[MetadataDiffEngine] Failed to sync script ${id} to file:`,
     );
   }
 
@@ -1329,9 +1442,11 @@ export class MetadataDiffEngine extends EventEmitter {
   async syncScriptFileToDb(
     scriptIds: string[],
     field?: ScriptDiffField,
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
-    if (!this.scriptEngine) throw new Error('MetadataDiffEngine: scriptEngine not injected');
+    if (!this.scriptEngine) {
+      throw new Error('MetadataDiffEngine: scriptEngine not injected');
+    }
     const db = this.getDb();
     const scriptEngine = this.scriptEngine;
     return this.runSyncLoop(
@@ -1343,26 +1458,38 @@ export class MetadataDiffEngine extends EventEmitter {
           .from(scripts)
           .where(and(eq(scripts.id, scriptId), eq(scripts.projectId, this.currentProjectId)))
           .get();
-        if (!dbScript) return false;
+        if (!dbScript) {
+          return false;
+        }
 
         const parsed = await scriptEngine.readScriptFileWithMetadata(dbScript.filePath);
-        if (!parsed) return false;
+        if (!parsed) {
+          return false;
+        }
         const fm = parsed.metadata;
 
         const updateData: Record<string, unknown> = { updatedAt: new Date() };
 
-        if (!field || field === 'title') updateData.title = fm.title || dbScript.title;
-        if (!field || field === 'kind') updateData.kind = fm.kind || dbScript.kind;
-        if (!field || field === 'entrypoint') updateData.entrypoint = fm.entrypoint || dbScript.entrypoint;
+        if (!field || field === 'title') {
+          updateData.title = fm.title || dbScript.title;
+        }
+        if (!field || field === 'kind') {
+          updateData.kind = fm.kind || dbScript.kind;
+        }
+        if (!field || field === 'entrypoint') {
+          updateData.entrypoint = fm.entrypoint || dbScript.entrypoint;
+        }
         if (!field || field === 'enabled') {
           updateData.enabled = !!fm.enabled;
         }
-        if (!field || field === 'version') updateData.version = fm.version ?? dbScript.version;
+        if (!field || field === 'version') {
+          updateData.version = fm.version ?? dbScript.version;
+        }
 
         await db.update(scripts).set(updateData).where(eq(scripts.id, scriptId));
         return true;
       },
-      (id) => `[MetadataDiffEngine] Failed to sync script ${id} to DB:`
+      (id) => `[MetadataDiffEngine] Failed to sync script ${id} to DB:`,
     );
   }
 
@@ -1373,7 +1500,9 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async compareTemplateMetadata(templateId: string): Promise<TemplateMetadataDiff | null> {
     const db = this.getDb();
-    if (!this.templateEngine) throw new Error('MetadataDiffEngine: templateEngine not injected');
+    if (!this.templateEngine) {
+      throw new Error('MetadataDiffEngine: templateEngine not injected');
+    }
 
     const dbTemplate = await db
       .select()
@@ -1381,16 +1510,26 @@ export class MetadataDiffEngine extends EventEmitter {
       .where(and(eq(templates.id, templateId), eq(templates.projectId, this.currentProjectId)))
       .get();
 
-    if (!dbTemplate) return null;
-    if (dbTemplate.status === 'draft') return null;
+    if (!dbTemplate) {
+      return null;
+    }
+    if (dbTemplate.status === 'draft') {
+      return null;
+    }
 
     const parsed = await this.templateEngine.readTemplateFileWithMetadata(dbTemplate.filePath);
     if (!parsed) {
       const missingDiffs: Partial<Record<TemplateDiffField, FieldDifference>> = {};
-      if (dbTemplate.title) missingDiffs.title = { dbValue: dbTemplate.title, fileValue: null };
-      if (dbTemplate.kind) missingDiffs.kind = { dbValue: dbTemplate.kind, fileValue: null };
+      if (dbTemplate.title) {
+        missingDiffs.title = { dbValue: dbTemplate.title, fileValue: null };
+      }
+      if (dbTemplate.kind) {
+        missingDiffs.kind = { dbValue: dbTemplate.kind, fileValue: null };
+      }
       missingDiffs.enabled = { dbValue: !!dbTemplate.enabled, fileValue: null };
-      if (dbTemplate.version) missingDiffs.version = { dbValue: dbTemplate.version, fileValue: null };
+      if (dbTemplate.version) {
+        missingDiffs.version = { dbValue: dbTemplate.version, fileValue: null };
+      }
       return {
         templateId: dbTemplate.id,
         title: dbTemplate.title,
@@ -1434,13 +1573,15 @@ export class MetadataDiffEngine extends EventEmitter {
    * Scan all published templates and find metadata differences
    */
   async scanAllTemplates(
-    onProgress: (current: number, total: number, message: string) => void
+    onProgress: (current: number, total: number, message: string) => void,
   ): Promise<TemplateScanResult> {
     const client = this.getClient();
-    if (!client) throw new Error('Database not initialized');
+    if (!client) {
+      throw new Error('Database not initialized');
+    }
 
     const result = await client.execute({
-      sql: `SELECT id FROM templates WHERE project_id = ? AND status = 'published'`,
+      sql: 'SELECT id FROM templates WHERE project_id = ? AND status = \'published\'',
       args: [this.currentProjectId],
     });
 
@@ -1483,11 +1624,17 @@ export class MetadataDiffEngine extends EventEmitter {
     for (const diff of diffs) {
       for (const [field, fieldDiff] of Object.entries(diff.differences)) {
         const fieldKey = field as TemplateDiffField;
-        if (!fieldDiff) continue;
+        if (!fieldDiff) {
+          continue;
+        }
         if (!groupMap.has(fieldKey)) {
           groupMap.set(fieldKey, { field: fieldKey, label: fieldLabels[fieldKey], items: [] });
         }
-        groupMap.get(fieldKey)!.items.push({
+        const templateGroup = groupMap.get(fieldKey);
+        if (!templateGroup) {
+          continue;
+        }
+        templateGroup.items.push({
           templateId: diff.templateId,
           title: diff.title,
           slug: diff.slug,
@@ -1505,20 +1652,24 @@ export class MetadataDiffEngine extends EventEmitter {
    */
   async syncTemplateDbToFile(
     templateIds: string[],
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
-    if (!this.templateEngine) throw new Error('MetadataDiffEngine: templateEngine not injected');
+    if (!this.templateEngine) {
+      throw new Error('MetadataDiffEngine: templateEngine not injected');
+    }
     const templateEngine = this.templateEngine;
     return this.runSyncLoop(
       templateIds,
       onProgress,
       async (templateId) => {
         const item = await templateEngine.getTemplate(templateId);
-        if (!item) return false;
+        if (!item) {
+          return false;
+        }
         await templateEngine.updateTemplate(templateId, { title: item.title });
         return true;
       },
-      (id) => `[MetadataDiffEngine] Failed to sync template ${id} to file:`
+      (id) => `[MetadataDiffEngine] Failed to sync template ${id} to file:`,
     );
   }
 
@@ -1528,9 +1679,11 @@ export class MetadataDiffEngine extends EventEmitter {
   async syncTemplateFileToDb(
     templateIds: string[],
     field?: TemplateDiffField,
-    onProgress?: (percent: number, message: string) => void
+    onProgress?: (percent: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
-    if (!this.templateEngine) throw new Error('MetadataDiffEngine: templateEngine not injected');
+    if (!this.templateEngine) {
+      throw new Error('MetadataDiffEngine: templateEngine not injected');
+    }
     const db = this.getDb();
     const templateEngine = this.templateEngine;
     return this.runSyncLoop(
@@ -1542,25 +1695,35 @@ export class MetadataDiffEngine extends EventEmitter {
           .from(templates)
           .where(and(eq(templates.id, templateId), eq(templates.projectId, this.currentProjectId)))
           .get();
-        if (!dbTemplate) return false;
+        if (!dbTemplate) {
+          return false;
+        }
 
         const parsed = await templateEngine.readTemplateFileWithMetadata(dbTemplate.filePath);
-        if (!parsed) return false;
+        if (!parsed) {
+          return false;
+        }
         const fm = parsed.metadata;
 
         const updateData: Record<string, unknown> = { updatedAt: new Date() };
 
-        if (!field || field === 'title') updateData.title = fm.title || dbTemplate.title;
-        if (!field || field === 'kind') updateData.kind = fm.kind || dbTemplate.kind;
+        if (!field || field === 'title') {
+          updateData.title = fm.title || dbTemplate.title;
+        }
+        if (!field || field === 'kind') {
+          updateData.kind = fm.kind || dbTemplate.kind;
+        }
         if (!field || field === 'enabled') {
           updateData.enabled = !!fm.enabled;
         }
-        if (!field || field === 'version') updateData.version = fm.version ?? dbTemplate.version;
+        if (!field || field === 'version') {
+          updateData.version = fm.version ?? dbTemplate.version;
+        }
 
         await db.update(templates).set(updateData).where(eq(templates.id, templateId));
         return true;
       },
-      (id) => `[MetadataDiffEngine] Failed to sync template ${id} to DB:`
+      (id) => `[MetadataDiffEngine] Failed to sync template ${id} to DB:`,
     );
   }
 
@@ -1739,7 +1902,9 @@ export class MetadataDiffEngine extends EventEmitter {
     onProgress?: (current: number, total: number, message: string) => void,
   ): Promise<{ success: number; failed: number }> {
     const postEngine = this.postEngine;
-    if (!postEngine) throw new Error('MetadataDiffEngine: postEngine not injected');
+    if (!postEngine) {
+      throw new Error('MetadataDiffEngine: postEngine not injected');
+    }
 
     let success = 0;
     let failed = 0;

@@ -10,6 +10,7 @@
         "git commit": true,
         "git push": true,
         "uniq": true,
-        "diff": true
+        "diff": true,
+        "npx eslint": true
     }
 }

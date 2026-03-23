@@ -1,8 +1,9 @@
+import type { IpcMainInvokeEvent } from 'electron';
 import type { PublishCredentials } from '../engine/PublishEngine';
 import type { EngineBundle } from '../engine/EngineBundle';
 import { isOfflineModeActive } from './chatHandlers';
 
-type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
+type SafeHandle = <Args extends unknown[], Result>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => Promise<Result>) => void;
 
 export function registerPublishHandlers(safeHandle: SafeHandle, bundle: EngineBundle): void {
   safeHandle('publish:uploadSite', async (_event: unknown, credentials: PublishCredentials) => {
@@ -17,7 +18,11 @@ export function registerPublishHandlers(safeHandle: SafeHandle, bundle: EngineBu
     }
 
     const publishEngine = bundle.publishEngine;
-    publishEngine.setProjectContext(project.id, project.dataPath!);
+    if (!project.dataPath) {
+      throw new Error('Active project is missing dataPath');
+    }
+
+    publishEngine.setProjectContext(project.id, project.dataPath);
 
     const ts = Date.now();
     const groupId = `publish-${ts}`;

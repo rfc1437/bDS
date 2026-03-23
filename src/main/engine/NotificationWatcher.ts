@@ -83,12 +83,16 @@ export class NotificationWatcher {
   }
 
   private schedule(): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
     this.debounceTimer = setTimeout(() => this.process(), this.debounceMs);
   }
 
   private async process(): Promise<void> {
-    if (this.isProcessing) return;
+    if (this.isProcessing) {
+      return;
+    }
     this.isProcessing = true;
     try {
       const rows = await this.db

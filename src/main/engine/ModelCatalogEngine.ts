@@ -110,7 +110,9 @@ export class ModelCatalogEngine {
       // Search across all providers, return first match
       rows = await db.select().from(modelCatalog).where(eq(modelCatalog.modelId, modelId));
     }
-    if (rows.length === 0) return null;
+    if (rows.length === 0) {
+      return null;
+    }
     const row = rows[0];
     const modalities = await db.select().from(modelCatalogModalities).where(
       and(eq(modelCatalogModalities.provider, row.provider), eq(modelCatalogModalities.modelId, row.modelId)),
@@ -277,7 +279,9 @@ export class ModelCatalogEngine {
     let count = 0;
 
     for (const [id, info] of Object.entries(models)) {
-      if (!info || typeof info !== 'object') continue;
+      if (!info || typeof info !== 'object') {
+        continue;
+      }
 
       const entry = {
         provider: providerId,
