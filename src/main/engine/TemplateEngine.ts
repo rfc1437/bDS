@@ -93,7 +93,9 @@ export class TemplateEngine extends EventEmitter {
   }
 
   /** No persistent cache — no-op for watcher compat. */
-  invalidate(_entityId?: string): void {}
+  invalidate(entityId?: string): void {
+    void entityId;
+  }
 
   setProjectContext(projectId: string, dataDir?: string): void {
     this.currentProjectId = projectId;
@@ -553,7 +555,7 @@ export class TemplateEngine extends EventEmitter {
 
   private async toTemplateData(row: Template): Promise<TemplateData> {
     // Draft templates store content in the DB; published templates read from disk.
-    const content = row.status === 'draft' && row.content != null
+    const content = row.status === 'draft' && row.content !== null
       ? row.content
       : await this.readTemplateBody(row.filePath);
 
@@ -608,9 +610,11 @@ export class TemplateEngine extends EventEmitter {
   /** Publish a draft template: write file to disk, set status='published', clear DB content. */
   async publishTemplate(id: string): Promise<TemplateData | null> {
     const existing = await this.getTemplateRow(id);
-    if (!existing) return null;
+    if (!existing) {
+      return null;
+    }
 
-    const content = existing.status === 'draft' && existing.content != null
+    const content = existing.status === 'draft' && existing.content !== null
       ? existing.content
       : await this.readTemplateBody(existing.filePath);
 
@@ -624,7 +628,9 @@ export class TemplateEngine extends EventEmitter {
       .where(eq(templates.id, id));
 
     const updatedRow = await this.getTemplateRow(id);
-    if (!updatedRow) return null;
+    if (!updatedRow) {
+      return null;
+    }
     const result = await this.toTemplateData(updatedRow);
     this.emit('templateUpdated', result);
     await this.notifier.notify('template', id, 'updated');
@@ -634,7 +640,9 @@ export class TemplateEngine extends EventEmitter {
   /** Delete a draft template (only if status='draft'). Returns false if not found or already published. */
   async deleteDraftTemplate(id: string): Promise<boolean> {
     const existing = await this.getTemplateRow(id);
-    if (!existing || existing.status !== 'draft') return false;
+    if (!existing || existing.status !== 'draft') {
+      return false;
+    }
 
     await getDatabase().getLocal()
       .delete(templates)
@@ -683,7 +691,7 @@ export class TemplateEngine extends EventEmitter {
     const taken = new Set(
       rows
         .filter((item) => item.id !== excludeId)
-        .map((item) => item.slug)
+        .map((item) => item.slug),
     );
 
     if (!taken.has(baseSlug)) {
@@ -798,7 +806,7 @@ export class TemplateEngine extends EventEmitter {
   }
 
   private parseYamlScalar(valueRaw: string): string | number | boolean {
-    if ((valueRaw.startsWith('"') && valueRaw.endsWith('"')) || (valueRaw.startsWith("'") && valueRaw.endsWith("'"))) {
+    if ((valueRaw.startsWith('"') && valueRaw.endsWith('"')) || (valueRaw.startsWith('\'') && valueRaw.endsWith('\''))) {
       return valueRaw.slice(1, -1)
         .replace(/\\"/g, '"')
         .replace(/\\\\/g, '\\');

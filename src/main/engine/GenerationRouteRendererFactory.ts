@@ -3,7 +3,8 @@ import type { CategoryRenderSettings, HtmlRewriteContext } from './PageRenderer'
 import { buildCanonicalPostPath, mapToRecord } from './PageRenderer';
 import type { MenuDocument } from './MenuEngine';
 import type { ProjectMetadata } from './MetaEngine';
-import type { PostData } from './PostEngine';
+import type { PostData, PostFilter } from './PostEngine';
+import type { MediaData } from './MediaEngine';
 import type { PicoThemeName } from '../shared/picoThemes';
 import type { CategoryMetadata } from './BlogGenerationEngine';
 import { PreviewServer } from './PreviewServer';
@@ -63,7 +64,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
   languagePrefix?: string;
   engines: {
     postEngine: {
-      getPostsFiltered: (filter: Parameters<PreviewServer['renderRouteForContext']>[1] extends never ? never : any) => Promise<PostData[]>;
+      getPostsFiltered: (filter: PostFilter) => Promise<PostData[]>;
       getPublishedVersion: (postId: string) => Promise<PostData | null>;
       findPublishedBySlug?: (slug: string, dateFilter?: { year: number; month: number }) => Promise<PostData | null>;
       getPost: (postId: string) => Promise<PostData | null>;
@@ -74,7 +75,7 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       setProjectContext: (projectId: string, dataDir?: string) => void;
     };
     mediaEngine: {
-      getAllMedia: () => Promise<unknown[]>;
+      getAllMedia: () => Promise<MediaData[]>;
       setProjectContext?: (projectId: string, dataDir?: string, internalDir?: string) => void;
     };
     postMediaEngine: {
@@ -185,7 +186,9 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
         });
       }
 
-      if (!match) return null;
+      if (!match) {
+        return null;
+      }
 
       // Lazily resolve content from file when needed
       if (!match.content) {
@@ -206,20 +209,22 @@ export function createPreviewBackedGenerationRouteRenderer(params: {
       return match;
     },
     getPost: (postId: string) => params.engines.postEngine.getPost(postId),
-    getPostTranslation: params.engines.postEngine.getPostTranslation
-      ? (postId: string, language: string) => params.engines.postEngine.getPostTranslation!(postId, language)
-      : undefined,
+    getPostTranslation: params.engines.postEngine.getPostTranslation,
     hasPublishedVersion: (postId: string) => params.engines.postEngine.hasPublishedVersion(postId),
     getLinkedBy: params.engines.postEngine.getAllBacklinks
       ? (() => {
-          const backlinksCachePromise = params.engines.postEngine.getAllBacklinks!();
-          return async (postId: string) => {
-            const backlinksMap = await backlinksCachePromise;
-            return backlinksMap.get(postId) ?? [];
-          };
-        })()
+        const getAllBacklinks = params.engines.postEngine.getAllBacklinks;
+        if (!getAllBacklinks) {
+          return undefined;
+        }
+        const backlinksCachePromise = getAllBacklinks();
+        return async (postId: string) => {
+          const backlinksMap = await backlinksCachePromise;
+          return backlinksMap.get(postId) ?? [];
+        };
+      })()
       : params.engines.postEngine.getLinkedBy
-        ? (postId: string) => params.engines.postEngine.getLinkedBy!(postId)
+        ? params.engines.postEngine.getLinkedBy
         : undefined,
     setProjectContext: (projectId: string, dataDir?: string) => {
       params.engines.postEngine.setProjectContext(projectId, dataDir);

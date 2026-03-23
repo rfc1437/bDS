@@ -113,7 +113,9 @@ async function appendBlogStats(
     const stats = await blogToolDeps.postEngine.getBlogStats();
     const mediaList = await blogToolDeps.mediaEngine.getAllMedia();
 
-    if (stats.totalPosts === 0) return basePrompt;
+    if (stats.totalPosts === 0) {
+      return basePrompt;
+    }
 
     const dateRange = stats.oldestPostDate && stats.newestPostDate
       ? `from ${stats.oldestPostDate.toISOString().split('T')[0]} to ${stats.newestPostDate.toISOString().split('T')[0]}`
@@ -161,12 +163,16 @@ function truncateMessages(
   const responseReserve = 4096;
   const availableBudget = maxContextTokens - systemTokens - toolsTokens - responseReserve;
 
-  if (availableBudget <= 0) return messages.slice(-1);
+  if (availableBudget <= 0) {
+    return messages.slice(-1);
+  }
 
   const messageTokens = () =>
     messages.reduce((sum, m) => sum + estimateTokens(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)), 0);
 
-  if (messageTokens() <= availableBudget) return messages;
+  if (messageTokens() <= availableBudget) {
+    return messages;
+  }
 
   let truncated = [...messages];
   while (truncated.length > 2 && messageTokens.call(null) > availableBudget) {
@@ -377,7 +383,7 @@ export class ChatService {
         });
 
         // Consume the stream to completion
-        const finalResult = await result.response;
+        await result.response;
 
         // Extract usage from the response
         const usage = await result.usage;
@@ -412,7 +418,9 @@ export class ChatService {
         };
       } catch (error) {
         const isAborted = abortController.signal.aborted || (error as Error).message === 'Request cancelled';
-        if (!isAborted) throw error;
+        if (!isAborted) {
+          throw error;
+        }
         return { success: true, message: '' };
       } finally {
         this.abortControllers.delete(conversationId);
@@ -475,7 +483,9 @@ export class ChatService {
         }
       }
 
-      if (!titleModel) return;
+      if (!titleModel) {
+        return;
+      }
 
       const model = this.providers.resolveModel(titleModel);
 
@@ -511,7 +521,9 @@ export class ChatService {
     usage: LanguageModelUsage | undefined,
     callbacks: ChatCallbacks,
   ): void {
-    if (!usage || !callbacks.onTokenUsage) return;
+    if (!usage || !callbacks.onTokenUsage) {
+      return;
+    }
 
     // AI SDK v6 normalizes usage into inputTokens/outputTokens
     // Cache tokens are in inputTokenDetails

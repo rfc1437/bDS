@@ -73,20 +73,20 @@ export class MCPAgentConfigEngine {
   /** Resolve the absolute path to the config file for the given agent. */
   getConfigPath(agentId: MCPAgentId): string {
     switch (agentId) {
-      case 'claude-code':
-        return path.join(this.homeDir, '.claude.json');
-      case 'claude-desktop':
-        return this.claudeDesktopConfigPath();
-      case 'github-copilot':
-        return this.vsCodeMcpPath();
-      case 'gemini-cli':
-        return path.join(this.homeDir, '.gemini', 'settings.json');
-      case 'opencode':
-        return path.join(this.homeDir, '.opencode.json');
-      case 'mistral-vibe':
-        return path.join(this.homeDir, '.vibe', 'config.toml');
-      case 'openai-codex':
-        return path.join(this.homeDir, '.codex', 'config.toml');
+    case 'claude-code':
+      return path.join(this.homeDir, '.claude.json');
+    case 'claude-desktop':
+      return this.claudeDesktopConfigPath();
+    case 'github-copilot':
+      return this.vsCodeMcpPath();
+    case 'gemini-cli':
+      return path.join(this.homeDir, '.gemini', 'settings.json');
+    case 'opencode':
+      return path.join(this.homeDir, '.opencode.json');
+    case 'mistral-vibe':
+      return path.join(this.homeDir, '.vibe', 'config.toml');
+    case 'openai-codex':
+      return path.join(this.homeDir, '.codex', 'config.toml');
     }
   }
 
@@ -110,6 +110,7 @@ export class MCPAgentConfigEngine {
         return { success: true, configPath };
       }
       const { [SERVER_NAME]: _removed, ...remainingServers } = currentServers;
+      void _removed;
       const updated: Record<string, unknown> = { ...existing };
       if (Object.keys(remainingServers).length === 0) {
         delete updated[serversKey];
@@ -155,7 +156,9 @@ export class MCPAgentConfigEngine {
       return this.isCodexConfigured();
     }
     const configPath = this.getConfigPath(agentId);
-    if (!existsSync(configPath)) return false;
+    if (!existsSync(configPath)) {
+      return false;
+    }
     try {
       const data = JSON.parse(readFileSync(configPath, 'utf-8'));
       const serversKey = agentId === 'github-copilot' ? 'servers' : 'mcpServers';
@@ -220,7 +223,9 @@ export class MCPAgentConfigEngine {
 
   private isVibeConfigured(): boolean {
     const configPath = this.getConfigPath('mistral-vibe');
-    if (!existsSync(configPath)) return false;
+    if (!existsSync(configPath)) {
+      return false;
+    }
     try {
       const existing = this.readExistingToml(configPath);
       const servers = (existing.mcp_servers ?? []) as Record<string, unknown>[];
@@ -231,7 +236,9 @@ export class MCPAgentConfigEngine {
   }
 
   private readExistingToml(configPath: string): Record<string, unknown> {
-    if (!existsSync(configPath)) return {};
+    if (!existsSync(configPath)) {
+      return {};
+    }
     const raw = readFileSync(configPath, 'utf-8');
     return parseToml(raw) as Record<string, unknown>;
   }
@@ -286,7 +293,9 @@ export class MCPAgentConfigEngine {
 
   private isCodexConfigured(): boolean {
     const configPath = this.getConfigPath('openai-codex');
-    if (!existsSync(configPath)) return false;
+    if (!existsSync(configPath)) {
+      return false;
+    }
     try {
       const existing = this.readExistingToml(configPath);
       const servers = (existing.mcp_servers ?? {}) as Record<string, unknown>;
@@ -320,7 +329,9 @@ export class MCPAgentConfigEngine {
   }
 
   private readExistingJson(configPath: string): Record<string, unknown> {
-    if (!existsSync(configPath)) return {};
+    if (!existsSync(configPath)) {
+      return {};
+    }
     const raw = readFileSync(configPath, 'utf-8');
     return JSON.parse(raw) as Record<string, unknown>;
   }
@@ -347,17 +358,17 @@ export class MCPAgentConfigEngine {
     };
 
     switch (agentId) {
-      case 'claude-code':
-      case 'claude-desktop':
-      case 'gemini-cli':
-        return stdioEntry;
-      case 'github-copilot':
-      case 'opencode':
-        return { type: 'stdio', ...stdioEntry };
-      case 'mistral-vibe':
-      case 'openai-codex':
-        // TOML-based; handled separately — should not reach here.
-        return stdioEntry;
+    case 'claude-code':
+    case 'claude-desktop':
+    case 'gemini-cli':
+      return stdioEntry;
+    case 'github-copilot':
+    case 'opencode':
+      return { type: 'stdio', ...stdioEntry };
+    case 'mistral-vibe':
+    case 'openai-codex':
+      // TOML-based; handled separately — should not reach here.
+      return stdioEntry;
     }
   }
 

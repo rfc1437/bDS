@@ -29,7 +29,11 @@ export class PublishApiAdapter {
       throw new Error('No active project');
     }
 
-    this.publishEngine.setProjectContext(project.id, project.dataPath!);
+    if (!project.dataPath) {
+      throw new Error('Active project is missing dataPath');
+    }
+
+    this.publishEngine.setProjectContext(project.id, project.dataPath);
 
     const ts = Date.now();
     const groupId = `publish-${ts}`;

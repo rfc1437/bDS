@@ -6,7 +6,7 @@
  * Portuguese, Dutch, Russian, Arabic, and more.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const snowballFactory = require('snowball-stemmers');
 
 export type SupportedLanguage =
@@ -139,7 +139,9 @@ export function stemWord(word: string, language: SupportedLanguage = 'english'):
  * stemText('Häuser Haus', 'german') // 'haus haus'
  */
 export function stemText(text: string, language: SupportedLanguage = 'english'): string {
-  if (!text) return '';
+  if (!text) {
+    return '';
+  }
   
   const words = tokenize(text);
   const stemmer = getStemmer(language);
@@ -166,7 +168,9 @@ export function stemText(text: string, language: SupportedLanguage = 'english'):
  * stemQuery('"running fast"', 'english') // '"run fast"'
  */
 export function stemQuery(query: string, language: SupportedLanguage = 'english'): string {
-  if (!query) return '';
+  if (!query) {
+    return '';
+  }
   
   const stemmer = getStemmer(language);
   
@@ -203,7 +207,7 @@ export function stemQuery(query: string, language: SupportedLanguage = 'english'
         return stemmer.stem(words[0].toLowerCase());
       }
       return '';
-    }
+    },
   );
   
   // Clean up multiple spaces

@@ -24,6 +24,13 @@ let initPromise: Promise<void> | null = null;
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 let engineBundle: EngineBundle | null = null;
 
+function requireEngineBundle(): EngineBundle {
+  if (!engineBundle) {
+    throw new Error('Chat handlers not initialized');
+  }
+  return engineBundle;
+}
+
 /**
  * Get or create the SecureKeyStore instance.
  */
@@ -77,10 +84,11 @@ function getChatService(): ChatService {
   if (!chatService) {
     const engine = getChatEngine();
     const reg = getProviders();
+    const bundle = requireEngineBundle();
     const deps: BlogToolDeps = {
-      postEngine: engineBundle!.postEngine,
-      mediaEngine: engineBundle!.mediaEngine,
-      postMediaEngine: engineBundle!.postMediaEngine,
+      postEngine: bundle.postEngine,
+      mediaEngine: bundle.mediaEngine,
+      postMediaEngine: bundle.postMediaEngine,
     };
     chatService = new ChatService(engine, reg, deps, () => mainWindowGetter?.() || null);
   }
@@ -92,7 +100,8 @@ function getChatService(): ChatService {
  */
 function getOneShotTasks(): OneShotTasks {
   if (!oneShotTasks) {
-    oneShotTasks = new OneShotTasks(getProviders(), getChatEngine(), engineBundle!.mediaEngine, engineBundle!.postEngine);
+    const bundle = requireEngineBundle();
+    oneShotTasks = new OneShotTasks(getProviders(), getChatEngine(), bundle.mediaEngine, bundle.postEngine);
   }
   return oneShotTasks;
 }
@@ -111,18 +120,24 @@ async function ensureInitialized(): Promise<void> {
 
       try {
         const key = await keyStore.retrieve('opencode_api_key');
-        if (key) reg.setOpencodeKey(key);
+        if (key) {
+          reg.setOpencodeKey(key);
+        }
       } catch { /* ignore */ }
 
       try {
         const mistralKey = await keyStore.retrieve('mistral_api_key');
-        if (mistralKey) reg.setMistralKey(mistralKey);
+        if (mistralKey) {
+          reg.setMistralKey(mistralKey);
+        }
       } catch { /* ignore */ }
 
       // Restore Ollama enabled state from settings DB
       try {
         const ollamaEnabled = await getChatEngine().getSetting('ollama_enabled');
-        if (ollamaEnabled === 'true') reg.setOllamaEnabled(true);
+        if (ollamaEnabled === 'true') {
+          reg.setOllamaEnabled(true);
+        }
       } catch { /* ignore */ }
 
       // Restore Ollama model capability overrides
@@ -138,14 +153,18 @@ async function ensureInitialized(): Promise<void> {
       try {
         const ollamaIds = await getChatEngine().getSetting('ollama_known_model_ids');
         if (ollamaIds) {
-          for (const id of JSON.parse(ollamaIds) as string[]) reg.registerOllamaModel(id);
+          for (const id of JSON.parse(ollamaIds) as string[]) {
+            reg.registerOllamaModel(id);
+          }
         }
       } catch { /* ignore */ }
 
       // Restore LM Studio enabled state from settings DB
       try {
         const lmstudioEnabled = await getChatEngine().getSetting('lmstudio_enabled');
-        if (lmstudioEnabled === 'true') reg.setLmstudioEnabled(true);
+        if (lmstudioEnabled === 'true') {
+          reg.setLmstudioEnabled(true);
+        }
       } catch { /* ignore */ }
 
       // Restore LM Studio model capability overrides
@@ -161,7 +180,9 @@ async function ensureInitialized(): Promise<void> {
       try {
         const lmIds = await getChatEngine().getSetting('lmstudio_known_model_ids');
         if (lmIds) {
-          for (const id of JSON.parse(lmIds) as string[]) reg.registerLmstudioModel(id);
+          for (const id of JSON.parse(lmIds) as string[]) {
+            reg.registerLmstudioModel(id);
+          }
         }
       } catch { /* ignore */ }
 
@@ -248,7 +269,9 @@ export function registerChatHandlers(): void {
     try {
       await ensureInitialized();
       const key = getProviders().getOpencodeKey();
-      if (!key) return { hasKey: false, maskedKey: '' };
+      if (!key) {
+        return { hasKey: false, maskedKey: '' };
+      }
       const masked = '•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4);
       return { hasKey: true, maskedKey: masked };
     } catch (error) {
@@ -298,7 +321,9 @@ export function registerChatHandlers(): void {
     try {
       await ensureInitialized();
       const key = getProviders().getMistralKey();
-      if (!key) return { hasKey: false, maskedKey: '' };
+      if (!key) {
+        return { hasKey: false, maskedKey: '' };
+      }
       const masked = '•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4);
       return { hasKey: true, maskedKey: masked };
     } catch (error) {
@@ -753,8 +778,9 @@ export function registerChatHandlers(): void {
   // ============ Chat Messaging ============
 
   // Send a message
-  ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string, _metadata?: { surface?: 'tab' | 'sidebar' }) => {
+  ipcMain.handle('chat:sendMessage', async (_, conversationId: string, message: string, metadata?: { surface?: 'tab' | 'sidebar' }) => {
     try {
+      void metadata;
       await ensureInitialized();
       const service = getChatService();
       const mainWindow = mainWindowGetter?.();
@@ -949,7 +975,7 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle('a2ui:dispatch', async (_, action: { surfaceId: string; componentId: string; action: string; payload?: Record<string, unknown> }) => {
     try {
-      console.log('[Chat IPC] A2UI action dispatched:', action);
+      void action;
       // Currently, A2UI actions are handled client-side (navigation, UI toggles).
       // Server-side action handling can be added here in the future.
       return { success: true };

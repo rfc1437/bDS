@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { app } from 'electron';
-import { eq, and, asc, sql, like } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { getDatabase } from '../database';
 import { tags, posts } from '../database/schema';
 import { taskManager } from './TaskManager';
@@ -21,6 +21,22 @@ export interface TagData {
   postTemplateSlug?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+type QueryRow = Record<string, unknown>;
+
+type TagFileRecord = {
+  name?: unknown;
+  color?: unknown;
+  postTemplateSlug?: unknown;
+};
+
+function getErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -138,7 +154,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.id, tagId),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     if (tagRows.length === 0) {
@@ -155,15 +171,18 @@ export class TagEngine extends EventEmitter {
     }
 
     const postsResult = await client.execute({
-      sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
+      sql: 'SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?',
       args: [this.currentProjectId, `%"${tagName}"%`],
     });
 
     return postsResult.rows
-      .map((row: any) => ({
-        postId: row.id as string,
-        postTags: JSON.parse(row.tags || '[]') as string[],
-      }))
+      .map((row) => {
+        const typedRow = row as QueryRow;
+        return {
+          postId: String(typedRow.id ?? ''),
+          postTags: JSON.parse(String(typedRow.tags ?? '[]')) as string[],
+        };
+      })
       .filter((row) => row.postTags.includes(tagName));
   }
 
@@ -185,11 +204,11 @@ export class TagEngine extends EventEmitter {
 
   private async updateMatchingPosts(
     tagName: string,
-    transform: (postTags: string[]) => string[]
+    transform: (postTags: string[]) => string[],
   ): Promise<{ total: number; process: (onEachUpdated: (updated: number, total: number) => void) => Promise<number> }> {
     const rawPostsToUpdate = await this.queryPostsContainingTag(tagName);
     const postsToUpdate = Array.from(
-      new Map(rawPostsToUpdate.map((row) => [row.postId, row])).values()
+      new Map(rawPostsToUpdate.map((row) => [row.postId, row])).values(),
     );
     const total = postsToUpdate.length;
 
@@ -285,7 +304,9 @@ export class TagEngine extends EventEmitter {
    */
   async getTagsWithCounts(): Promise<TagWithCount[]> {
     const client = this.getClient();
-    if (!client) return [];
+    if (!client) {
+      return [];
+    }
 
     // Query tags with counts from posts - requires raw SQL for JSON operations
     const result = await client.execute({
@@ -307,11 +328,14 @@ export class TagEngine extends EventEmitter {
       args: [this.currentProjectId, this.currentProjectId],
     });
 
-    return result.rows.map((row: any) => ({
-      name: row.name as string,
-      color: row.color as string | null,
-      count: Number(row.post_count) || 0,
-    }));
+    return result.rows.map((row) => {
+      const typedRow = row as QueryRow;
+      return {
+        name: String(typedRow.name ?? ''),
+        color: typeof typedRow.color === 'string' ? typedRow.color : null,
+        count: Number(typedRow.post_count) || 0,
+      };
+    });
   }
 
   /**
@@ -336,7 +360,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.projectId, this.currentProjectId),
-        sql`LOWER(${tags.name}) = LOWER(${name})`
+        sql`LOWER(${tags.name}) = LOWER(${name})`,
       ));
 
     if (existing.length > 0) {
@@ -380,7 +404,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.id, id),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     if (existing.length === 0) {
@@ -417,7 +441,7 @@ export class TagEngine extends EventEmitter {
       .set(setFields)
       .where(and(
         eq(tags.id, id),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     const updatedTag: TagData = {
@@ -451,7 +475,7 @@ export class TagEngine extends EventEmitter {
       runUpdates: async (onProgress) => {
         const updateOperation = await this.updateMatchingPosts(
           tagName,
-          (postTags) => postTags.filter((tagEntry) => tagEntry !== tagName)
+          (postTags) => postTags.filter((tagEntry) => tagEntry !== tagName),
         );
 
         return updateOperation.process((updatedCount, totalCount) => {
@@ -464,7 +488,7 @@ export class TagEngine extends EventEmitter {
           .delete(tags)
           .where(and(
             eq(tags.id, id),
-            eq(tags.projectId, this.currentProjectId)
+            eq(tags.projectId, this.currentProjectId),
           ));
       },
       buildResult: (postsUpdated) => ({ success: true, postsUpdated }),
@@ -492,7 +516,7 @@ export class TagEngine extends EventEmitter {
         .from(tags)
         .where(and(
           eq(tags.id, id),
-          eq(tags.projectId, this.currentProjectId)
+          eq(tags.projectId, this.currentProjectId),
         ));
       if (rows.length > 0) {
         sourceTags.push(rows[0]);
@@ -505,7 +529,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.id, targetTagId),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     if (targetRows.length === 0) {
@@ -556,7 +580,7 @@ export class TagEngine extends EventEmitter {
             .delete(tags)
             .where(and(
               eq(tags.id, sourceId),
-              eq(tags.projectId, this.currentProjectId)
+              eq(tags.projectId, this.currentProjectId),
             ));
         }
       },
@@ -589,7 +613,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.id, id),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     if (tagRows.length === 0) {
@@ -610,7 +634,7 @@ export class TagEngine extends EventEmitter {
       .where(and(
         eq(tags.projectId, this.currentProjectId),
         sql`LOWER(${tags.name}) = LOWER(${newName})`,
-        sql`${tags.id} != ${id}`
+        sql`${tags.id} != ${id}`,
       ));
 
     if (duplicateRows.length > 0) {
@@ -624,7 +648,7 @@ export class TagEngine extends EventEmitter {
       runUpdates: async (onProgress) => {
         const updateOperation = await this.updateMatchingPosts(
           oldName,
-          (postTags) => postTags.map((tagEntry) => tagEntry === oldName ? newName : tagEntry)
+          (postTags) => postTags.map((tagEntry) => tagEntry === oldName ? newName : tagEntry),
         );
 
         return updateOperation.process((updatedCount, totalCount) => {
@@ -641,7 +665,7 @@ export class TagEngine extends EventEmitter {
           })
           .where(and(
             eq(tags.id, id),
-            eq(tags.projectId, this.currentProjectId)
+            eq(tags.projectId, this.currentProjectId),
           ));
       },
       buildResult: (postsUpdated) => ({
@@ -667,7 +691,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.id, id),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     if (rows.length === 0) {
@@ -689,7 +713,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.projectId, this.currentProjectId),
-        sql`LOWER(${tags.name}) = LOWER(${normalizedName})`
+        sql`LOWER(${tags.name}) = LOWER(${normalizedName})`,
       ));
 
     if (rows.length === 0) {
@@ -720,7 +744,9 @@ export class TagEngine extends EventEmitter {
   async getPostsWithTag(tagId: string): Promise<string[]> {
     const db = this.getDb();
     const client = this.getClient();
-    if (!client) return [];
+    if (!client) {
+      return [];
+    }
 
     // First get the tag name
     const tagRows = await db
@@ -728,7 +754,7 @@ export class TagEngine extends EventEmitter {
       .from(tags)
       .where(and(
         eq(tags.id, tagId),
-        eq(tags.projectId, this.currentProjectId)
+        eq(tags.projectId, this.currentProjectId),
       ));
 
     if (tagRows.length === 0) {
@@ -739,16 +765,17 @@ export class TagEngine extends EventEmitter {
 
     // Find posts with this tag - requires raw SQL for JSON
     const postsResult = await client.execute({
-      sql: `SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?`,
+      sql: 'SELECT id, tags FROM posts WHERE project_id = ? AND tags LIKE ?',
       args: [this.currentProjectId, `%"${tagName}"%`],
     });
 
     return postsResult.rows
-      .filter((row: any) => {
-        const postTags: string[] = JSON.parse(row.tags || '[]');
+      .filter((row) => {
+        const typedRow = row as QueryRow;
+        const postTags: string[] = JSON.parse(String(typedRow.tags ?? '[]')) as string[];
         return postTags.includes(tagName);
       })
-      .map((row: any) => row.id as string);
+      .map((row) => String((row as QueryRow).id ?? ''));
   }
 
   /**
@@ -863,17 +890,21 @@ export class TagEngine extends EventEmitter {
     try {
       const filePath = this.getTagsFilePath();
       const content = await fs.readFile(filePath, 'utf-8');
-      const rawTags: any[] = JSON.parse(content);
+      const parsed = JSON.parse(content);
+      const rawTags = Array.isArray(parsed) ? parsed as TagFileRecord[] : [];
 
       const db = this.getDb();
       const now = new Date();
 
       for (const tag of rawTags) {
         // Support both portable format { name, color? } and legacy format with id
-        const name = normalizeTaxonomyTerm(tag.name || '');
-        if (!name) continue;
+        const rawName = typeof tag.name === 'string' ? tag.name : '';
+        const name = normalizeTaxonomyTerm(rawName);
+        if (!name) {
+          continue;
+        }
 
-        const color = tag.color || null;
+        const color = typeof tag.color === 'string' ? tag.color : null;
         const postTemplateSlug = typeof tag.postTemplateSlug === 'string' ? tag.postTemplateSlug : null;
 
         // Check if tag with this name already exists
@@ -882,7 +913,7 @@ export class TagEngine extends EventEmitter {
           .from(tags)
           .where(and(
             eq(tags.projectId, this.currentProjectId),
-            sql`LOWER(${tags.name}) = LOWER(${name})`
+            sql`LOWER(${tags.name}) = LOWER(${name})`,
           ));
 
         if (existing.length === 0) {
@@ -898,7 +929,7 @@ export class TagEngine extends EventEmitter {
           });
         } else if (color || postTemplateSlug) {
           // Update color/postTemplateSlug if provided and tag exists
-          const setFields: Record<string, unknown> = { updatedAt: now };
+          const setFields: { updatedAt: Date; color?: string | null; postTemplateSlug?: string | null } = { updatedAt: now };
           if (color) {
             setFields.color = color;
           }
@@ -910,12 +941,12 @@ export class TagEngine extends EventEmitter {
             .set(setFields)
             .where(and(
               eq(tags.projectId, this.currentProjectId),
-              sql`LOWER(${tags.name}) = LOWER(${name})`
+              sql`LOWER(${tags.name}) = LOWER(${name})`,
             ));
         }
       }
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') {
+    } catch (error) {
+      if (getErrorCode(error) !== 'ENOENT') {
         console.error('[TagEngine] Failed to load tags from file:', error);
       }
     }

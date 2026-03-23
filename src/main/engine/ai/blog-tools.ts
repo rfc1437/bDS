@@ -146,7 +146,7 @@ export async function executeCheckTerm(
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createBlogTools(deps: BlogToolDeps) {
+function buildBlogTools(deps: BlogToolDeps) {
   const { postEngine, mediaEngine, postMediaEngine } = deps;
 
   return {
@@ -180,12 +180,24 @@ export function createBlogTools(deps: BlogToolDeps) {
         }
 
         const filter: PostFilter = {};
-        if (category) filter.categories = [category];
-        if (tags && tags.length > 0) filter.tags = tags;
-        if (language) filter.language = language;
-        if (missingTranslationLanguage) filter.missingTranslationLanguage = missingTranslationLanguage;
-        if (year !== undefined) filter.year = year;
-        if (month !== undefined && year !== undefined) filter.month = month;
+        if (category) {
+          filter.categories = [category];
+        }
+        if (tags && tags.length > 0) {
+          filter.tags = tags;
+        }
+        if (language) {
+          filter.language = language;
+        }
+        if (missingTranslationLanguage) {
+          filter.missingTranslationLanguage = missingTranslationLanguage;
+        }
+        if (year !== undefined) {
+          filter.year = year;
+        }
+        if (month !== undefined && year !== undefined) {
+          filter.month = month;
+        }
 
         const offset = off ?? 0;
         const limit = lim ?? 10;
@@ -213,7 +225,9 @@ export function createBlogTools(deps: BlogToolDeps) {
           limit,
           posts,
         };
-        if (hints.length > 0) result.hints = hints;
+        if (hints.length > 0) {
+          result.hints = hints;
+        }
         return result;
       },
     }),
@@ -225,7 +239,9 @@ export function createBlogTools(deps: BlogToolDeps) {
       }),
       execute: async ({ postId }) => {
         const post = await postEngine.getPost(postId);
-        if (!post) return { success: false, error: 'Post not found' };
+        if (!post) {
+          return { success: false, error: 'Post not found' };
+        }
         const [backlinks, linksTo] = await Promise.all([
           postEngine.getLinkedBy(post.id),
           postEngine.getLinksTo(post.id),
@@ -254,7 +270,9 @@ export function createBlogTools(deps: BlogToolDeps) {
       }),
       execute: async ({ slug }) => {
         const post = await postEngine.getPostBySlug(slug);
-        if (!post) return { success: false, error: 'Post not found' };
+        if (!post) {
+          return { success: false, error: 'Post not found' };
+        }
         const [backlinks, linksTo] = await Promise.all([
           postEngine.getLinkedBy(post.id),
           postEngine.getLinksTo(post.id),
@@ -295,13 +313,27 @@ export function createBlogTools(deps: BlogToolDeps) {
         }
 
         const filter: PostFilter = {};
-        if (status) filter.status = status;
-        if (tags) filter.tags = tags;
-        if (category) filter.categories = [category];
-        if (language) filter.language = language;
-        if (missingTranslationLanguage) filter.missingTranslationLanguage = missingTranslationLanguage;
-        if (year !== undefined) filter.year = year;
-        if (month !== undefined && year !== undefined) filter.month = month;
+        if (status) {
+          filter.status = status;
+        }
+        if (tags) {
+          filter.tags = tags;
+        }
+        if (category) {
+          filter.categories = [category];
+        }
+        if (language) {
+          filter.language = language;
+        }
+        if (missingTranslationLanguage) {
+          filter.missingTranslationLanguage = missingTranslationLanguage;
+        }
+        if (year !== undefined) {
+          filter.year = year;
+        }
+        if (month !== undefined && year !== undefined) {
+          filter.month = month;
+        }
 
         const offset = off ?? 0;
         const limit = lim ?? 20;
@@ -343,7 +375,9 @@ export function createBlogTools(deps: BlogToolDeps) {
           limit,
           posts,
         };
-        if (hints.length > 0) result.hints = hints;
+        if (hints.length > 0) {
+          result.hints = hints;
+        }
         return result;
       },
     }),
@@ -355,7 +389,9 @@ export function createBlogTools(deps: BlogToolDeps) {
       }),
       execute: async ({ mediaId }) => {
         const media = await mediaEngine.getMedia(mediaId);
-        if (!media) return { success: false, error: 'Media not found' };
+        if (!media) {
+          return { success: false, error: 'Media not found' };
+        }
         return {
           success: true,
           media: {
@@ -389,9 +425,15 @@ export function createBlogTools(deps: BlogToolDeps) {
 
         if (hasMediaFilter) {
           const mediaFilter: { year?: number; month?: number; tags?: string[] } = {};
-          if (year !== undefined) mediaFilter.year = year;
-          if (month !== undefined && year !== undefined) mediaFilter.month = month;
-          if (tags) mediaFilter.tags = tags;
+          if (year !== undefined) {
+            mediaFilter.year = year;
+          }
+          if (month !== undefined && year !== undefined) {
+            mediaFilter.month = month;
+          }
+          if (tags) {
+            mediaFilter.tags = tags;
+          }
           mediaList = await mediaEngine.getMediaFiltered(mediaFilter);
         } else {
           mediaList = await mediaEngine.getAllMedia();
@@ -433,10 +475,18 @@ export function createBlogTools(deps: BlogToolDeps) {
       }),
       execute: async ({ postId, title, excerpt, tags, categories }) => {
         const updates: Record<string, unknown> = {};
-        if (title !== undefined) updates.title = title;
-        if (excerpt !== undefined) updates.excerpt = excerpt;
-        if (tags !== undefined) updates.tags = tags;
-        if (categories !== undefined) updates.categories = categories;
+        if (title !== undefined) {
+          updates.title = title;
+        }
+        if (excerpt !== undefined) {
+          updates.excerpt = excerpt;
+        }
+        if (tags !== undefined) {
+          updates.tags = tags;
+        }
+        if (categories !== undefined) {
+          updates.categories = categories;
+        }
 
         if (Object.keys(updates).length === 0) {
           return { success: false, error: 'No updates provided' };
@@ -458,10 +508,18 @@ export function createBlogTools(deps: BlogToolDeps) {
       }),
       execute: async ({ mediaId, title, alt, caption, tags }) => {
         const updates: Record<string, unknown> = {};
-        if (title !== undefined) updates.title = title;
-        if (alt !== undefined) updates.alt = alt;
-        if (caption !== undefined) updates.caption = caption;
-        if (tags !== undefined) updates.tags = tags;
+        if (title !== undefined) {
+          updates.title = title;
+        }
+        if (alt !== undefined) {
+          updates.alt = alt;
+        }
+        if (caption !== undefined) {
+          updates.caption = caption;
+        }
+        if (tags !== undefined) {
+          updates.tags = tags;
+        }
 
         if (Object.keys(updates).length === 0) {
           return { success: false, error: 'No updates provided' };
@@ -500,11 +558,21 @@ export function createBlogTools(deps: BlogToolDeps) {
           return { success: false, error: 'month requires year. Example: year: 2025, month: 3' };
         }
         const filter: { year?: number; month?: number; status?: string; category?: string; tags?: string[] } = {};
-        if (year !== undefined) filter.year = year;
-        if (month !== undefined) filter.month = month;
-        if (status) filter.status = status;
-        if (category) filter.category = category;
-        if (tags && tags.length > 0) filter.tags = tags;
+        if (year !== undefined) {
+          filter.year = year;
+        }
+        if (month !== undefined) {
+          filter.month = month;
+        }
+        if (status) {
+          filter.status = status;
+        }
+        if (category) {
+          filter.category = category;
+        }
+        if (tags && tags.length > 0) {
+          filter.tags = tags;
+        }
 
         const result = await postEngine.getPostCounts(groupBy, Object.keys(filter).length > 0 ? filter : undefined);
         return {
@@ -674,6 +742,10 @@ export function createBlogTools(deps: BlogToolDeps) {
       },
     }),
   };
+}
+
+export function createBlogTools(deps: BlogToolDeps): ReturnType<typeof buildBlogTools> {
+  return buildBlogTools(deps);
 }
 
 /** The return type of createBlogTools — useful for typing tool maps. */

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, clipboard } from 'electron';
+import type { IpcMainInvokeEvent, WebContents } from 'electron';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import { eq } from 'drizzle-orm';
@@ -9,7 +10,6 @@ import { MetaEngine } from '../engine/MetaEngine';
 import type { MenuDocument } from '../engine/MenuEngine';
 import type { CreateScriptInput, UpdateScriptInput } from '../engine/ScriptEngine';
 import type { CreateTemplateInput, UpdateTemplateInput } from '../engine/TemplateEngine';
-import type { TaskProgress } from '../engine/TaskManager';
 import { getDatabase } from '../database';
 import { media } from '../database/schema';
 import { APP_MENU_ACTION_EVENT_MAP, APP_MENU_WEB_CONTENTS_ACTIONS, type AppMenuAction } from '../shared/menuCommands';
@@ -31,12 +31,16 @@ const SUPPORTED_DROP_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'ima
  * Wrap an IPC handler so that "Database is closing" errors during shutdown
  * are silently swallowed instead of being logged as scary red error messages.
  */
-function safeHandle(channel: string, handler: (...args: any[]) => Promise<any>): void {
-  ipcMain.handle(channel, async (...args) => {
+function isDatabaseClosingError(error: unknown): error is { message: string } {
+  return typeof error === 'object' && error !== null && 'message' in error && (error as { message: unknown }).message === 'Database is closing';
+}
+
+function safeHandle<Args extends unknown[], Result>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => Promise<Result>): void {
+  ipcMain.handle(channel, async (event, ...args) => {
     try {
-      return await handler(...args);
-    } catch (error: any) {
-      if (error?.message === 'Database is closing') {
+      return await handler(event, ...(args as Args));
+    } catch (error) {
+      if (isDatabaseClosingError(error)) {
         return null; // Silently ignore during shutdown
       }
       throw error; // Re-throw all other errors
@@ -60,7 +64,7 @@ function resolvePostCreatedAt(post: { createdAt: Date | string }): Date {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
-function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
+function runWebContentsMenuAction(sender: WebContents | undefined, action: AppMenuAction): boolean {
   if (!sender) {
     return false;
   }
@@ -70,63 +74,63 @@ function runWebContentsMenuAction(sender: any, action: AppMenuAction): boolean {
   }
 
   switch (action) {
-    case 'undo':
-      sender.undo?.();
-      return true;
-    case 'redo':
-      sender.redo?.();
-      return true;
-    case 'cut':
-      sender.cut?.();
-      return true;
-    case 'copy':
-      sender.copy?.();
-      return true;
-    case 'paste':
-      sender.paste?.();
-      return true;
-    case 'delete':
-      sender.delete?.();
-      return true;
-    case 'selectAll':
-      sender.selectAll?.();
-      return true;
-    case 'toggleDevTools':
-      if (sender.isDevToolsOpened?.()) {
-        sender.closeDevTools?.();
-      } else {
-        sender.openDevTools?.({ mode: 'detach' });
-      }
-      return true;
-    case 'reload':
-      sender.reload?.();
-      return true;
-    case 'forceReload':
-      sender.reloadIgnoringCache?.();
-      return true;
-    case 'resetZoom':
-      sender.setZoomLevel?.(0);
-      return true;
-    case 'zoomIn': {
-      const currentZoomLevel = sender.getZoomLevel?.() ?? 0;
-      sender.setZoomLevel?.(currentZoomLevel + 0.5);
-      return true;
+  case 'undo':
+    sender.undo?.();
+    return true;
+  case 'redo':
+    sender.redo?.();
+    return true;
+  case 'cut':
+    sender.cut?.();
+    return true;
+  case 'copy':
+    sender.copy?.();
+    return true;
+  case 'paste':
+    sender.paste?.();
+    return true;
+  case 'delete':
+    sender.delete?.();
+    return true;
+  case 'selectAll':
+    sender.selectAll?.();
+    return true;
+  case 'toggleDevTools':
+    if (sender.isDevToolsOpened?.()) {
+      sender.closeDevTools?.();
+    } else {
+      sender.openDevTools?.({ mode: 'detach' });
     }
-    case 'zoomOut': {
-      const currentZoomLevel = sender.getZoomLevel?.() ?? 0;
-      sender.setZoomLevel?.(currentZoomLevel - 0.5);
-      return true;
-    }
-    case 'toggleFullScreen': {
-      const ownerWindow = BrowserWindow.fromWebContents(sender);
-      if (!ownerWindow) {
-        return false;
-      }
-      ownerWindow.setFullScreen(!ownerWindow.isFullScreen());
-      return true;
-    }
-    default:
+    return true;
+  case 'reload':
+    sender.reload?.();
+    return true;
+  case 'forceReload':
+    sender.reloadIgnoringCache?.();
+    return true;
+  case 'resetZoom':
+    sender.setZoomLevel?.(0);
+    return true;
+  case 'zoomIn': {
+    const currentZoomLevel = sender.getZoomLevel?.() ?? 0;
+    sender.setZoomLevel?.(currentZoomLevel + 0.5);
+    return true;
+  }
+  case 'zoomOut': {
+    const currentZoomLevel = sender.getZoomLevel?.() ?? 0;
+    sender.setZoomLevel?.(currentZoomLevel - 0.5);
+    return true;
+  }
+  case 'toggleFullScreen': {
+    const ownerWindow = BrowserWindow.fromWebContents(sender);
+    if (!ownerWindow) {
       return false;
+    }
+    ownerWindow.setFullScreen(!ownerWindow.isFullScreen());
+    return true;
+  }
+  default:
+    return false;
   }
 }
 
@@ -212,7 +216,7 @@ async function handleDroppedImageImport(
   };
 }
 
-function buildMcpAgentConfigOptions(bundle: EngineBundle): import('../engine/MCPAgentConfigEngine').MCPAgentConfigOptions {
+function buildMcpAgentConfigOptions(): import('../engine/MCPAgentConfigEngine').MCPAgentConfigOptions {
   const os = require('os') as typeof import('os');
   const scriptPath = app.isPackaged
     ? path.join(process.resourcesPath, 'bds-mcp.cjs')
@@ -575,19 +579,27 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
   // Auto-translate: enqueue translation tasks for each blog language that does
   // not yet have a translation. Only triggered on manual save or publish.
   const enqueueAutoTranslations = async (post: PostData): Promise<void> => {
-    if (post.doNotTranslate) return;
+    if (post.doNotTranslate) {
+      return;
+    }
     const metadata = await bundle.metaEngine.getProjectMetadata();
-    if (!metadata) return;
+    if (!metadata) {
+      return;
+    }
     const blogLanguages = metadata.blogLanguages || [];
     const mainLang = metadata.mainLanguage || 'en';
     const postLang = post.language || mainLang;
     const targetLanguages = blogLanguages.filter((lang) => lang !== postLang);
-    if (targetLanguages.length === 0) return;
+    if (targetLanguages.length === 0) {
+      return;
+    }
 
     const existingTranslations = await bundle.postEngine.getPostTranslations(post.id);
     const existingLangs = new Set(existingTranslations.map((t) => t.language));
     const missingLanguages = targetLanguages.filter((lang) => !existingLangs.has(lang));
-    if (missingLanguages.length === 0) return;
+    if (missingLanguages.length === 0) {
+      return;
+    }
 
     const groupId = uuidv4();
     for (const targetLang of missingLanguages) {
@@ -602,7 +614,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
           if (!result.success) {
             throw new Error(result.error || `Translation to ${targetLang} failed`);
           }
-          onProgress(70, `Translating linked media...`);
+          onProgress(70, 'Translating linked media...');
           // Cascade: translate linked media metadata
           const links = await bundle.postMediaEngine.getLinkedMediaForPost(post.id);
           for (const link of links) {
@@ -1351,7 +1363,10 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
       return;
     }
 
-    const handledByWebContents = runWebContentsMenuAction((event as any)?.sender, typedAction);
+    const sender = event && typeof event === 'object' && 'sender' in event
+      ? (event as IpcMainInvokeEvent).sender
+      : undefined;
+    const handledByWebContents = runWebContentsMenuAction(sender, typedAction);
     if (handledByWebContents) {
       return;
     }
@@ -1742,7 +1757,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     current: number,
     total: number,
     detail?: string,
-    eta?: number
+    eta?: number,
   ) => {
     ipcMain.emit('forward-to-renderer', 'import:executionProgress', {
       taskId,
@@ -1776,7 +1791,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     // Create a task for the import
     const taskId = `import-${Date.now()}`;
     let processedItems = 0;
-    let startTime = Date.now();
+    const startTime = Date.now();
 
     const task = {
       id: taskId,
@@ -1845,7 +1860,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     };
 
     // Run the task - this returns immediately with a promise
-    const resultPromise = bundle.taskManager.runTask(task);
+    void bundle.taskManager.runTask(task);
     
     // Return task ID so UI can track it
     return { taskId, totalItems };
@@ -1886,7 +1901,7 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     return engine.getAllForProject();
   });
 
-  safeHandle('importDefinitions:update', async (event, id: string, updates: any) => {
+  safeHandle('importDefinitions:update', async (event, id: string, updates: Record<string, unknown>) => {
     const { ImportDefinitionEngine } = await import('../engine/ImportDefinitionEngine');
     const engine = new ImportDefinitionEngine();
     const projectEngine = bundle.projectEngine;
@@ -1896,8 +1911,8 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
     }
     const result = await engine.updateDefinition(id, updates);
     // Notify renderer of name changes for sidebar/tab updates
-    if (result && updates.name !== undefined) {
-      event.sender.send('importDefinition-name-updated', { definitionId: id, name: result.name });
+    if (result && updates.name !== undefined && event && typeof event === 'object' && 'sender' in event) {
+      (event as IpcMainInvokeEvent).sender.send('importDefinition-name-updated', { definitionId: id, name: result.name });
     }
     return result;
   });
@@ -1922,25 +1937,25 @@ export function registerIpcHandlers(bundle: EngineBundle): void {
 
   safeHandle('mcp:getAgents', async () => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions());
     return engine.getAgents();
   });
 
   safeHandle('mcp:addToAgentConfig', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions());
     return engine.addToConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 
   safeHandle('mcp:removeFromAgentConfig', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions());
     return engine.removeFromConfig(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 
   safeHandle('mcp:isConfigured', async (_event: unknown, agentId: string) => {
     const { MCPAgentConfigEngine } = await import('../engine/MCPAgentConfigEngine');
-    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions(bundle));
+    const engine = new MCPAgentConfigEngine(buildMcpAgentConfigOptions());
     return engine.isConfigured(agentId as import('../engine/MCPAgentConfigEngine').MCPAgentId);
   });
 

@@ -176,7 +176,9 @@ export class WxrParser {
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
       // Only process direct children of channel (not item-level category elements)
-      if (el.parentNode !== channel) continue;
+      if (el.parentNode !== channel) {
+        continue;
+      }
 
       categories.push({
         name: this.getElementText(el, 'cat_name', NS.wp),
@@ -194,7 +196,9 @@ export class WxrParser {
 
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
-      if (el.parentNode !== channel) continue;
+      if (el.parentNode !== channel) {
+        continue;
+      }
 
       tags.push({
         name: this.getElementText(el, 'tag_name', NS.wp),
@@ -215,7 +219,9 @@ export class WxrParser {
     for (let i = 0; i < catElements.length; i++) {
       const el = catElements[i];
       // Only direct children of item
-      if (el.parentNode !== item) continue;
+      if (el.parentNode !== item) {
+        continue;
+      }
       const domain = el.getAttribute('domain');
       const text = this.getTextContent(el);
       if (domain === 'category' && text) {
@@ -282,7 +288,9 @@ export class WxrParser {
   }
 
   private extractFilename(url: string): string {
-    if (!url) return '';
+    if (!url) {
+      return '';
+    }
     try {
       const pathname = new URL(url).pathname;
       return pathname.split('/').pop() || '';
@@ -292,7 +300,9 @@ export class WxrParser {
   }
 
   private extractRelativePath(url: string): string {
-    if (!url) return '';
+    if (!url) {
+      return '';
+    }
     // Extract path after wp-content/uploads/
     const marker = 'wp-content/uploads/';
     const idx = url.indexOf(marker);

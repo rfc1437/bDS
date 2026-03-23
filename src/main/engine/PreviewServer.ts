@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { type CategoryMetadata, type ProjectMetadata } from './MetaEngine';
-import { type MediaData } from './MediaEngine';
 import { type MenuDocument } from './MenuEngine';
 import { type PostData, type PostFilter, type PostTranslationData } from './PostEngine';
 import {
@@ -96,12 +95,24 @@ export class PreviewServer {
   private drainResolve: (() => void) | null = null;
 
   constructor(dependencies?: Partial<PreviewServerDependencies>) {
-    if (!dependencies?.postEngine) throw new Error('PreviewServer: postEngine not provided');
-    if (!dependencies?.mediaEngine) throw new Error('PreviewServer: mediaEngine not provided');
-    if (!dependencies?.postMediaEngine) throw new Error('PreviewServer: postMediaEngine not provided');
-    if (!dependencies?.settingsEngine) throw new Error('PreviewServer: settingsEngine not provided');
-    if (!dependencies?.menuEngine) throw new Error('PreviewServer: menuEngine not provided');
-    if (!dependencies?.getActiveProjectContext) throw new Error('PreviewServer: getActiveProjectContext not provided');
+    if (!dependencies?.postEngine) {
+      throw new Error('PreviewServer: postEngine not provided');
+    }
+    if (!dependencies?.mediaEngine) {
+      throw new Error('PreviewServer: mediaEngine not provided');
+    }
+    if (!dependencies?.postMediaEngine) {
+      throw new Error('PreviewServer: postMediaEngine not provided');
+    }
+    if (!dependencies?.settingsEngine) {
+      throw new Error('PreviewServer: settingsEngine not provided');
+    }
+    if (!dependencies?.menuEngine) {
+      throw new Error('PreviewServer: menuEngine not provided');
+    }
+    if (!dependencies?.getActiveProjectContext) {
+      throw new Error('PreviewServer: getActiveProjectContext not provided');
+    }
     this.postEngine = dependencies.postEngine;
     this.mediaEngine = dependencies.mediaEngine;
     this.postMediaEngine = dependencies.postMediaEngine;
@@ -221,7 +232,9 @@ export class PreviewServer {
       loadPostsForDayPage: (year, month, day, pagination) => loadPostsForDayPage(this.postEngine, year, month, day, pagination),
       findPublishedPostBySlug: (slug, dateFilter) => findPublishedPostBySlug(this.postEngine, slug, dateFilter),
       findSinglePostBySlug: (slug, singlePostOptions, dateFilter) => findSinglePostBySlug(this.postEngine, slug, singlePostOptions, dateFilter),
-      getLinkedBy: this.postEngine.getLinkedBy ? (postId) => this.postEngine.getLinkedBy!(postId) : undefined,
+      getLinkedBy: this.postEngine.getLinkedBy
+        ? (postId) => this.postEngine.getLinkedBy?.(postId) ?? Promise.resolve([])
+        : undefined,
     });
   }
 
@@ -248,14 +261,14 @@ export class PreviewServer {
 
     this.inflightRequests++;
     try {
-        const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
-        const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
+      const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+      const pathname = decodeURIComponent(requestUrl.pathname.replace(/\/+$/, '') || '/');
 
-        const asset = await this.resolveAsset(pathname);
-        if (asset) {
-          this.respondAsset(res, asset.contentType, asset.body);
-          return;
-        }
+      const asset = await this.resolveAsset(pathname);
+      if (asset) {
+        this.respondAsset(res, asset.contentType, asset.body);
+        return;
+      }
 
       const context = await this.getActiveProjectContext();
       this.postEngine.setProjectContext(context.projectId, context.dataDir);
@@ -320,11 +333,11 @@ export class PreviewServer {
           : [];
         const stylePreviewBlogLanguages = allBlogLanguages.length > 0
           ? allBlogLanguages.map((lang) => ({
-              code: lang,
-              flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
-              href_prefix: lang === mainLanguage ? '' : `/${lang}`,
-              is_current: lang === mainLanguage,
-            }))
+            code: lang,
+            flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
+            href_prefix: lang === mainLanguage ? '' : `/${lang}`,
+            is_current: lang === mainLanguage,
+          }))
           : [];
         const stylePreviewHtml = await this.renderStylePreview(htmlRewriteContext, {
           pageTitle,
@@ -550,11 +563,15 @@ export class PreviewServer {
 
   private async resolveAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {
     const match = pathname.match(/^\/assets\/([^/]+)$/);
-    if (!match) return null;
+    if (!match) {
+      return null;
+    }
 
     const assetName = match[1];
     const assetDefinition = PREVIEW_ASSETS[assetName];
-    if (!assetDefinition) return null;
+    if (!assetDefinition) {
+      return null;
+    }
 
     try {
       const body = assetDefinition.sourceText !== undefined
@@ -572,11 +589,15 @@ export class PreviewServer {
 
   private async resolveImageAsset(pathname: string): Promise<{ contentType: string; body: Buffer } | null> {
     const match = pathname.match(/^\/images\/([^/]+)$/);
-    if (!match) return null;
+    if (!match) {
+      return null;
+    }
 
     const assetName = match[1] as keyof typeof PREVIEW_IMAGE_ASSETS;
     const assetDefinition = PREVIEW_IMAGE_ASSETS[assetName];
-    if (!assetDefinition) return null;
+    if (!assetDefinition) {
+      return null;
+    }
 
     try {
       const absolutePath = require.resolve(assetDefinition.modulePath);
@@ -593,7 +614,9 @@ export class PreviewServer {
 
   private async resolveMediaAsset(pathname: string, dataDir?: string): Promise<{ contentType: string; body: Buffer } | null> {
     const match = pathname.match(/^\/media\/(.+)$/);
-    if (!match || !dataDir) return null;
+    if (!match || !dataDir) {
+      return null;
+    }
 
     const relativeMediaPath = path.posix.normalize(`media/${match[1]}`);
     if (!relativeMediaPath.startsWith('media/')) {
@@ -637,31 +660,31 @@ export class PreviewServer {
   private getMediaContentType(filePath: string): string {
     const extension = path.extname(filePath).toLowerCase();
     switch (extension) {
-      case '.jpg':
-      case '.jpeg':
-        return 'image/jpeg';
-      case '.png':
-        return 'image/png';
-      case '.gif':
-        return 'image/gif';
-      case '.webp':
-        return 'image/webp';
-      case '.svg':
-        return 'image/svg+xml';
-      case '.bmp':
-        return 'image/bmp';
-      case '.avif':
-        return 'image/avif';
-      case '.mp4':
-        return 'video/mp4';
-      case '.webm':
-        return 'video/webm';
-      case '.mov':
-        return 'video/quicktime';
-      case '.pdf':
-        return 'application/pdf';
-      default:
-        return 'application/octet-stream';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.bmp':
+      return 'image/bmp';
+    case '.avif':
+      return 'image/avif';
+    case '.mp4':
+      return 'video/mp4';
+    case '.webm':
+      return 'video/webm';
+    case '.mov':
+      return 'video/quicktime';
+    case '.pdf':
+      return 'application/pdf';
+    default:
+      return 'application/octet-stream';
     }
   }
 

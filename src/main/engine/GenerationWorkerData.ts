@@ -7,8 +7,13 @@
  * Maps to arrays-of-tuples so the data survives the boundary.
  */
 import type { PostData } from './PostEngine';
+import type { PublishedTranslationVariant } from './BlogGenerationEngine';
 import type { MediaData } from './MediaEngine';
-import type { CategoryMetadata, BlogGenerationOptions, BlogGenerationSection } from './BlogGenerationEngine';
+import type {
+  CategoryMetadata,
+  BlogGenerationOptions,
+  BlogGenerationSection,
+} from './BlogGenerationEngine';
 import type { CategoryRenderSettings } from './PageRenderer';
 import type { MenuDocument } from './MenuEngine';
 import type { PicoThemeName } from '../shared/picoThemes';
@@ -105,7 +110,10 @@ export interface GenerationWorkerTask {
   mediaItems: SerializedMediaData[];
 
   /** Pre-resolved backlinks map: postId → linked-by entries. */
-  backlinksMap: Record<string, Array<{ id: string; title: string; slug: string }>>;
+  backlinksMap: Record<
+    string,
+    Array<{ id: string; title: string; slug: string }>
+  >;
 
   options: SerializedBlogGenerationOptions;
   maxPostsPerPage: number;
@@ -118,7 +126,9 @@ export interface GenerationWorkerTask {
   postFilePathEntries: Array<[string, string]>;
 
   /** Post-media links: [postId, [{mediaId, sortOrder}]] tuples for gallery/album macros. */
-  postMediaLinksEntries: Array<[string, Array<{ mediaId: string; sortOrder: number }>]>;
+  postMediaLinksEntries: Array<
+    [string, Array<{ mediaId: string; sortOrder: number }>]
+  >;
 
   /** Language prefix for subtree generation, e.g. "/fr". */
   languagePrefix?: string;
@@ -190,9 +200,20 @@ export function serializePostData(post: PostData): SerializedPostData {
     language: post.language,
     doNotTranslate: post.doNotTranslate,
     templateSlug: post.templateSlug,
-    createdAt: post.createdAt instanceof Date ? post.createdAt.toISOString() : String(post.createdAt),
-    updatedAt: post.updatedAt instanceof Date ? post.updatedAt.toISOString() : String(post.updatedAt),
-    publishedAt: post.publishedAt instanceof Date ? post.publishedAt.toISOString() : post.publishedAt ? String(post.publishedAt) : undefined,
+    createdAt:
+      post.createdAt instanceof Date
+        ? post.createdAt.toISOString()
+        : String(post.createdAt),
+    updatedAt:
+      post.updatedAt instanceof Date
+        ? post.updatedAt.toISOString()
+        : String(post.updatedAt),
+    publishedAt:
+      post.publishedAt instanceof Date
+        ? post.publishedAt.toISOString()
+        : post.publishedAt
+          ? String(post.publishedAt)
+          : undefined,
     tags: post.tags ?? [],
     categories: post.categories ?? [],
     availableLanguages: post.availableLanguages ?? [],
@@ -204,9 +225,13 @@ export function serializePostData(post: PostData): SerializedPostData {
     translationCanonicalLanguage?: string;
     translationFilePath?: string;
   };
-  if (variant.translationSourceSlug) serialized.translationSourceSlug = variant.translationSourceSlug;
-  if (variant.translationCanonicalLanguage) serialized.translationCanonicalLanguage = variant.translationCanonicalLanguage;
-  if (variant.translationFilePath) serialized.translationFilePath = variant.translationFilePath;
+  if (variant.translationSourceSlug)
+  {serialized.translationSourceSlug = variant.translationSourceSlug;}
+  if (variant.translationCanonicalLanguage)
+  {serialized.translationCanonicalLanguage =
+      variant.translationCanonicalLanguage;}
+  if (variant.translationFilePath)
+  {serialized.translationFilePath = variant.translationFilePath;}
 
   return serialized;
 }
@@ -226,7 +251,9 @@ export function deserializePostData(serialized: SerializedPostData): PostData {
     templateSlug: serialized.templateSlug,
     createdAt: new Date(serialized.createdAt),
     updatedAt: new Date(serialized.updatedAt),
-    publishedAt: serialized.publishedAt ? new Date(serialized.publishedAt) : undefined,
+    publishedAt: serialized.publishedAt
+      ? new Date(serialized.publishedAt)
+      : undefined,
     tags: serialized.tags ?? [],
     categories: serialized.categories ?? [],
     availableLanguages: serialized.availableLanguages ?? [],
@@ -234,13 +261,16 @@ export function deserializePostData(serialized: SerializedPostData): PostData {
 
   // Re-attach translation variant fields
   if (serialized.translationSourceSlug) {
-    (post as any).translationSourceSlug = serialized.translationSourceSlug;
+    (post as PublishedTranslationVariant).translationSourceSlug =
+      serialized.translationSourceSlug;
   }
   if (serialized.translationCanonicalLanguage) {
-    (post as any).translationCanonicalLanguage = serialized.translationCanonicalLanguage;
+    (post as PublishedTranslationVariant).translationCanonicalLanguage =
+      serialized.translationCanonicalLanguage;
   }
   if (serialized.translationFilePath) {
-    (post as any).translationFilePath = serialized.translationFilePath;
+    (post as PublishedTranslationVariant).translationFilePath =
+      serialized.translationFilePath;
   }
 
   return post;
@@ -260,15 +290,23 @@ export function serializeMediaItem(media: MediaData): SerializedMediaData {
     caption: media.caption,
     author: media.author,
     language: media.language,
-    createdAt: media.createdAt instanceof Date ? media.createdAt.toISOString() : String(media.createdAt),
-    updatedAt: media.updatedAt instanceof Date ? media.updatedAt.toISOString() : String(media.updatedAt),
+    createdAt:
+      media.createdAt instanceof Date
+        ? media.createdAt.toISOString()
+        : String(media.createdAt),
+    updatedAt:
+      media.updatedAt instanceof Date
+        ? media.updatedAt.toISOString()
+        : String(media.updatedAt),
     tags: media.tags ?? [],
     linkedPostIds: media.linkedPostIds,
     availableLanguages: media.availableLanguages ?? [],
   };
 }
 
-export function deserializeMediaItem(serialized: SerializedMediaData): MediaData {
+export function deserializeMediaItem(
+  serialized: SerializedMediaData,
+): MediaData {
   return {
     id: serialized.id,
     filename: serialized.filename,
@@ -290,7 +328,9 @@ export function deserializeMediaItem(serialized: SerializedMediaData): MediaData
   };
 }
 
-export function serializeBlogGenerationOptions(options: BlogGenerationOptions): SerializedBlogGenerationOptions {
+export function serializeBlogGenerationOptions(
+  options: BlogGenerationOptions,
+): SerializedBlogGenerationOptions {
   return {
     projectId: options.projectId,
     projectName: options.projectName,
@@ -307,21 +347,37 @@ export function serializeBlogGenerationOptions(options: BlogGenerationOptions): 
 }
 
 /** Serialize a Map<K, PostData[]> to an array of [K, SerializedPostData[]] tuples. */
-export function serializePostMap<K extends string | number>(map: Map<K, PostData[]>): Array<[K, SerializedPostData[]]> {
-  return Array.from(map.entries()).map(([key, posts]) => [key, posts.map(serializePostData)]);
+export function serializePostMap<K extends string | number>(
+  map: Map<K, PostData[]>,
+): Array<[K, SerializedPostData[]]> {
+  return Array.from(map.entries()).map(([key, posts]) => [
+    key,
+    posts.map(serializePostData),
+  ]);
 }
 
 /** Deserialize an array of [K, SerializedPostData[]] tuples to a Map<K, PostData[]>. */
-export function deserializePostMap<K extends string | number>(entries: Array<[K, SerializedPostData[]]>): Map<K, PostData[]> {
-  return new Map(entries.map(([key, posts]) => [key, posts.map(deserializePostData)]));
+export function deserializePostMap<K extends string | number>(
+  entries: Array<[K, SerializedPostData[]]>,
+): Map<K, PostData[]> {
+  return new Map(
+    entries.map(([key, posts]) => [key, posts.map(deserializePostData)]),
+  );
 }
 
 /** Serialize a Map<K, Date> to an array of [K, string] tuples. */
-export function serializeDateMap<K extends string | number>(map: Map<K, Date>): Array<[K, string]> {
-  return Array.from(map.entries()).map(([key, date]) => [key, date.toISOString()]);
+export function serializeDateMap<K extends string | number>(
+  map: Map<K, Date>,
+): Array<[K, string]> {
+  return Array.from(map.entries()).map(([key, date]) => [
+    key,
+    date.toISOString(),
+  ]);
 }
 
 /** Deserialize an array of [K, string] tuples to a Map<K, Date>. */
-export function deserializeDateMap<K extends string | number>(entries: Array<[K, string]>): Map<K, Date> {
+export function deserializeDateMap<K extends string | number>(
+  entries: Array<[K, string]>,
+): Map<K, Date> {
   return new Map(entries.map(([key, iso]) => [key, new Date(iso)]));
 }

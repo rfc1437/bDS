@@ -337,9 +337,15 @@ export class GitEngine {
   }
 
   private getProviderLabel(provider: GitProvider): string {
-    if (provider === 'github') return 'GitHub';
-    if (provider === 'gitlab') return 'GitLab';
-    if (provider === 'gitea-forgejo') return 'Gitea/Forgejo';
+    if (provider === 'github') {
+      return 'GitHub';
+    }
+    if (provider === 'gitlab') {
+      return 'GitLab';
+    }
+    if (provider === 'gitea-forgejo') {
+      return 'Gitea/Forgejo';
+    }
     return 'Unknown';
   }
 

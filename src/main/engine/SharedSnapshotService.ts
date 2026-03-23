@@ -18,10 +18,18 @@ interface SinglePostPreviewOptions {
 function buildSnapshotBaseFilter(filter: PostFilter): PostFilter {
   const baseFilter: PostFilter = {};
 
-  if (filter.startDate) baseFilter.startDate = filter.startDate;
-  if (filter.endDate) baseFilter.endDate = filter.endDate;
-  if (filter.year !== undefined) baseFilter.year = filter.year;
-  if (filter.month !== undefined) baseFilter.month = filter.month;
+  if (filter.startDate) {
+    baseFilter.startDate = filter.startDate;
+  }
+  if (filter.endDate) {
+    baseFilter.endDate = filter.endDate;
+  }
+  if (filter.year !== undefined) {
+    baseFilter.year = filter.year;
+  }
+  if (filter.month !== undefined) {
+    baseFilter.month = filter.month;
+  }
 
   return baseFilter;
 }
@@ -89,11 +97,13 @@ export async function loadPublishedSnapshotsPage(
   let snapshots = snapshotCandidates.filter((post): post is PostData => post !== null);
 
   if (filter.tags && filter.tags.length > 0) {
-    snapshots = snapshots.filter((post) => filter.tags!.every((tag) => post.tags.includes(tag)));
+    const { tags } = filter;
+    snapshots = snapshots.filter((post) => tags.every((tag) => post.tags.includes(tag)));
   }
 
   if (filter.categories && filter.categories.length > 0) {
-    snapshots = snapshots.filter((post) => filter.categories!.some((category) => post.categories.includes(category)));
+    const { categories } = filter;
+    snapshots = snapshots.filter((post) => categories.some((category) => post.categories.includes(category)));
   }
 
   snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -153,7 +163,9 @@ export async function findPublishedPostBySlug(
   slug: string,
   dateFilter?: { year: number; month: number },
 ): Promise<PostData | null> {
-  if (!slug) return null;
+  if (!slug) {
+    return null;
+  }
 
   if (postEngine.findPublishedBySlug) {
     const directMatch = await postEngine.findPublishedBySlug(slug, dateFilter);

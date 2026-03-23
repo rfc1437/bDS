@@ -23,8 +23,12 @@ export function buildApplyValidationArchives(posts: PostData[]): {
   const yearMonthDays = new Map<string, Date>();
 
   for (const post of posts) {
-    for (const category of post.categories || []) allCategories.add(category);
-    for (const tag of post.tags || []) allTags.add(tag);
+    for (const category of post.categories || []) {
+      allCategories.add(category);
+    }
+    for (const tag of post.tags || []) {
+      allTags.add(tag);
+    }
 
     const createdAt = resolvePostCreatedAt(post);
     const updatedAt = post.updatedAt;
@@ -34,13 +38,16 @@ export function buildApplyValidationArchives(posts: PostData[]): {
     const ymKey = `${year}/${month}`;
     const ymdKey = `${year}/${month}/${day}`;
 
-    if (!years.has(year) || updatedAt > years.get(year)!) {
+    const existingYear = years.get(year);
+    if (!existingYear || updatedAt > existingYear) {
       years.set(year, updatedAt);
     }
-    if (!yearMonths.has(ymKey) || updatedAt > yearMonths.get(ymKey)!) {
+    const existingYearMonth = yearMonths.get(ymKey);
+    if (!existingYearMonth || updatedAt > existingYearMonth) {
       yearMonths.set(ymKey, updatedAt);
     }
-    if (!yearMonthDays.has(ymdKey) || updatedAt > yearMonthDays.get(ymdKey)!) {
+    const existingYearMonthDay = yearMonthDays.get(ymdKey);
+    if (!existingYearMonthDay || updatedAt > existingYearMonthDay) {
       yearMonthDays.set(ymdKey, updatedAt);
     }
   }

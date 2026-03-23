@@ -70,59 +70,59 @@ function classifyPath(
   requestedPageSlugs: Set<string>,
   state: { requestRootRoutes: boolean; requiresFallbackSectionRender: boolean },
 ): void {
-    if (normalizedPath === '/' || /^\/(page\/\d+)$/.test(normalizedPath)) {
-      state.requestRootRoutes = true;
-      return;
-    }
+  if (normalizedPath === '/' || /^\/(page\/\d+)$/.test(normalizedPath)) {
+    state.requestRootRoutes = true;
+    return;
+  }
 
-    const categoryMatch = normalizedPath.match(/^\/category\/([^/]+)(?:\/page\/\d+)?$/);
-    if (categoryMatch) {
-      requestedCategories.add(decodePathSegment(categoryMatch[1]));
-      return;
-    }
+  const categoryMatch = normalizedPath.match(/^\/category\/([^/]+)(?:\/page\/\d+)?$/);
+  if (categoryMatch) {
+    requestedCategories.add(decodePathSegment(categoryMatch[1]));
+    return;
+  }
 
-    const tagMatch = normalizedPath.match(/^\/tag\/([^/]+)(?:\/page\/\d+)?$/);
-    if (tagMatch) {
-      requestedTags.add(decodePathSegment(tagMatch[1]));
-      return;
-    }
+  const tagMatch = normalizedPath.match(/^\/tag\/([^/]+)(?:\/page\/\d+)?$/);
+  if (tagMatch) {
+    requestedTags.add(decodePathSegment(tagMatch[1]));
+    return;
+  }
 
-    const singleMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})\/([^/]+)$/);
-    if (singleMatch) {
-      requestedPostRoutes.push({
-        year: Number(singleMatch[1]),
-        month: Number(singleMatch[2]),
-        day: Number(singleMatch[3]),
-        slug: decodePathSegment(singleMatch[4]),
-      });
-      return;
-    }
+  const singleMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})\/([^/]+)$/);
+  if (singleMatch) {
+    requestedPostRoutes.push({
+      year: Number(singleMatch[1]),
+      month: Number(singleMatch[2]),
+      day: Number(singleMatch[3]),
+      slug: decodePathSegment(singleMatch[4]),
+    });
+    return;
+  }
 
-    const yearMatch = normalizedPath.match(/^\/(\d{4})(?:\/page\/\d+)?$/);
-    if (yearMatch) {
-      requestedYears.add(Number(yearMatch[1]));
-      return;
-    }
+  const yearMatch = normalizedPath.match(/^\/(\d{4})(?:\/page\/\d+)?$/);
+  if (yearMatch) {
+    requestedYears.add(Number(yearMatch[1]));
+    return;
+  }
 
-    const monthMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})(?:\/page\/\d+)?$/);
-    if (monthMatch) {
-      requestedYearMonths.add(`${monthMatch[1]}/${monthMatch[2]}`);
-      return;
-    }
+  const monthMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})(?:\/page\/\d+)?$/);
+  if (monthMatch) {
+    requestedYearMonths.add(`${monthMatch[1]}/${monthMatch[2]}`);
+    return;
+  }
 
-    const dayMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})(?:\/page\/\d+)?$/);
-    if (dayMatch) {
-      requestedYearMonthDays.add(`${dayMatch[1]}/${dayMatch[2]}/${dayMatch[3]}`);
-      return;
-    }
+  const dayMatch = normalizedPath.match(/^\/(\d{4})\/(\d{2})\/(\d{2})(?:\/page\/\d+)?$/);
+  if (dayMatch) {
+    requestedYearMonthDays.add(`${dayMatch[1]}/${dayMatch[2]}/${dayMatch[3]}`);
+    return;
+  }
 
-    const pageMatch = normalizedPath.match(/^\/([^/]+)$/);
-    if (pageMatch) {
-      requestedPageSlugs.add(decodePathSegment(pageMatch[1]));
-      return;
-    }
+  const pageMatch = normalizedPath.match(/^\/([^/]+)$/);
+  if (pageMatch) {
+    requestedPageSlugs.add(decodePathSegment(pageMatch[1]));
+    return;
+  }
 
-    state.requiresFallbackSectionRender = true;
+  state.requiresFallbackSectionRender = true;
 }
 
 function createEmptyPlan(): {
@@ -134,7 +134,7 @@ function createEmptyPlan(): {
   requestedPostRoutes: RequestedPostRoute[];
   requestedPageSlugs: Set<string>;
   state: { requestRootRoutes: boolean; requiresFallbackSectionRender: boolean };
-} {
+  } {
   return {
     requestedCategories: new Set<string>(),
     requestedTags: new Set<string>(),
@@ -179,7 +179,10 @@ export function planMissingValidationPaths(missingPaths: string[], additionalLan
       if (!langPlanMap.has(lang)) {
         langPlanMap.set(lang, createEmptyPlan());
       }
-      const lp = langPlanMap.get(lang)!;
+      const lp = langPlanMap.get(lang);
+      if (!lp) {
+        continue;
+      }
       classifyPath(
         strippedPath,
         lp.requestedCategories,
@@ -237,8 +240,6 @@ export function buildTargetedValidationPlan(params: BuildTargetedValidationPlanP
     publishedPosts,
     allCategories,
     allTags,
-    availableYearMonths,
-    availableYearMonthDays,
   } = params;
 
   const requestedCategories = new Set(initialPlan.requestedCategories);

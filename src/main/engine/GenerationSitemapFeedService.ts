@@ -68,7 +68,7 @@ function buildCanonicalPreviewPath(createdAt: Date, slug: string): string {
 }
 
 function escapeXml(value: unknown): string {
-  const str = typeof value === 'string' ? value : value == null ? '' : String(value);
+  const str = typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -245,8 +245,12 @@ export function collectSitemapArchiveMetadata(params: {
   }
 
   for (const post of publishedListPosts) {
-    for (const tag of post.tags || []) allTags.add(tag);
-    for (const category of post.categories || []) allCategories.add(category);
+    for (const tag of post.tags || []) {
+      allTags.add(tag);
+    }
+    for (const category of post.categories || []) {
+      allCategories.add(category);
+    }
 
     const createdAt = resolvePostCreatedAt(post);
     const updatedAt = post.updatedAt;
@@ -257,13 +261,16 @@ export function collectSitemapArchiveMetadata(params: {
     const ymKey = `${year}/${month}`;
     const ymdKey = `${year}/${month}/${day}`;
 
-    if (!yearMonths.has(ymKey) || updatedAt > yearMonths.get(ymKey)!) {
+    const existingYearMonth = yearMonths.get(ymKey);
+    if (!existingYearMonth || updatedAt > existingYearMonth) {
       yearMonths.set(ymKey, updatedAt);
     }
-    if (!years.has(year) || updatedAt > years.get(year)!) {
+    const existingYear = years.get(year);
+    if (!existingYear || updatedAt > existingYear) {
       years.set(year, updatedAt);
     }
-    if (!yearMonthDays.has(ymdKey) || updatedAt > yearMonthDays.get(ymdKey)!) {
+    const existingYearMonthDay = yearMonthDays.get(ymdKey);
+    if (!existingYearMonthDay || updatedAt > existingYearMonthDay) {
       yearMonthDays.set(ymdKey, updatedAt);
     }
   }
@@ -405,7 +412,9 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
       `      <guid isPermaLink="true">${escapeXml(permalink)}</guid>`,
       `      <pubDate>${(post.publishedAt || post.updatedAt).toUTCString()}</pubDate>`,
       post.author ? `      <author>${escapeXml(post.author)}</author>` : null,
-      (post as { language?: string }).language ? `      <dc:language>${escapeXml((post as { language?: string }).language!)}</dc:language>` : null,
+      (post as { language?: string }).language
+        ? `      <dc:language>${escapeXml((post as { language?: string }).language)}</dc:language>`
+        : null,
       `      <description><![CDATA[${escapeCdata(excerptXhtml)}]]></description>`,
       `      <content:encoded><![CDATA[${escapeCdata(contentXhtml)}]]></content:encoded>`,
       ...categories.map((entry) => `      ${entry}`),
@@ -440,7 +449,10 @@ export function buildSitemapAndFeeds(params: BuildSitemapAndFeedsParams): Sitema
       ...(post.categories || []).map((category) => `<category term="${escapeXml(category)}" />`),
     ];
 
-    const postLanguageAttr = (post as { language?: string }).language ? ` xml:lang="${escapeXml((post as { language?: string }).language!)}"` : '';
+    const postLanguage = (post as { language?: string }).language;
+    const postLanguageAttr = postLanguage
+      ? ` xml:lang="${escapeXml(postLanguage)}"`
+      : '';
 
     return [
       `  <entry${postLanguageAttr}>`,
@@ -597,9 +609,13 @@ export function buildMultiLanguageSitemap(params: MultiLanguageSitemapParams): s
   const allPublishedPosts = [...translatablePosts, ...doNotTranslatePosts];
   for (const post of allPublishedPosts) {
     const categories = Array.isArray(post.categories) ? post.categories : [];
-    if (!categories.includes('page')) continue;
+    if (!categories.includes('page')) {
+      continue;
+    }
     const trimmedSlug = (post.slug || '').replace(/^\/+|\/+$/g, '');
-    if (trimmedSlug.length === 0) continue;
+    if (trimmedSlug.length === 0) {
+      continue;
+    }
     const isTranslatable = !(post as PostData & { doNotTranslate?: boolean }).doNotTranslate;
     const langs = isTranslatable ? allLanguages : [mainLanguage];
     urls.push(buildMultiLanguageSitemapUrl(

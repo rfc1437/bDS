@@ -89,7 +89,9 @@ export class EmbeddingEngine extends EventEmitter {
   // Lifecycle
 
   async initialize(): Promise<void> {
-    if (this.pipeline) return;
+    if (this.pipeline) {
+      return;
+    }
     if (this.pipelineLoadPromise) {
       await this.pipelineLoadPromise;
       return;
@@ -144,7 +146,9 @@ export class EmbeddingEngine extends EventEmitter {
   // Project switching
 
   async setProjectContext(projectId: string): Promise<void> {
-    if (this.currentProjectId === projectId) return;
+    if (this.currentProjectId === projectId) {
+      return;
+    }
 
     // Save and unload current index
     if (this.index && this.currentProjectId) {
@@ -163,8 +167,12 @@ export class EmbeddingEngine extends EventEmitter {
   }
 
   private async ensureIndexLoaded(): Promise<void> {
-    if (this.index) return;
-    if (!this.currentProjectId) return;
+    if (this.index) {
+      return;
+    }
+    if (!this.currentProjectId) {
+      return;
+    }
 
     const { Index, MetricKind, ScalarKind } = await import('usearch');
     this.index = new Index({
@@ -221,14 +229,16 @@ export class EmbeddingEngine extends EventEmitter {
     await this.initialize();
     await this.ensureIndexLoaded();
 
-    if (!this.index || !this.pipeline || !this.currentProjectId) return;
+    if (!this.index || !this.pipeline || !this.currentProjectId) {
+      return;
+    }
 
     const rawText = `${title}\n\n${content}`;
     const hash = this.computeHash(rawText);
 
     // Check if already indexed with same hash (no-op)
     const db = getDatabase().getLocal();
-    const existing = await db
+    const existingKey = await db
       .select()
       .from(embeddingKeys)
       .where(
@@ -236,15 +246,16 @@ export class EmbeddingEngine extends EventEmitter {
           eq(embeddingKeys.postId, postId),
           eq(embeddingKeys.projectId, this.currentProjectId),
         ),
-      );
+      )
+      .then((rows) => rows[0]);
 
-    if (existing.length > 0 && existing[0]!.contentHash === hash) {
+    if (existingKey && existingKey.contentHash === hash) {
       return; // Unchanged, skip re-embedding
     }
 
     // Remove old vector if exists
-    if (existing.length > 0) {
-      const oldLabel = BigInt(existing[0]!.label);
+    if (existingKey) {
+      const oldLabel = BigInt(existingKey.label);
       try {
         this.index.remove(oldLabel);
       } catch {
@@ -286,10 +297,14 @@ export class EmbeddingEngine extends EventEmitter {
 
   async removePost(postId: string): Promise<void> {
     await this.ensureIndexLoaded();
-    if (!this.index || !this.currentProjectId) return;
+    if (!this.index || !this.currentProjectId) {
+      return;
+    }
 
     const label = this.postIdToLabel.get(postId);
-    if (label === undefined) return;
+    if (label === undefined) {
+      return;
+    }
 
     try {
       this.index.remove(label);
@@ -313,28 +328,46 @@ export class EmbeddingEngine extends EventEmitter {
 
   async findSimilar(postId: string, k = 5): Promise<SimilarPost[]> {
     await this.ensureIndexLoaded();
-    if (!this.index || !this.currentProjectId) return [];
+    if (!this.index || !this.currentProjectId) {
+      return [];
+    }
 
-    if (!this.postIdToLabel.has(postId)) return [];
+    if (!this.postIdToLabel.has(postId)) {
+      return [];
+    }
 
     // Guard against empty index (USearch throws on empty index search)
-    if (this.postIdToLabel.size < 2) return [];
+    if (this.postIdToLabel.size < 2) {
+      return [];
+    }
 
     // Get or compute vector for this post
     const vector = await this.getOrComputeVector(postId);
-    if (!vector) return [];
+    if (!vector) {
+      return [];
+    }
 
     // Search for k+1 (to exclude self) with HNSW
     const result = this.index.search(vector, k + 1, 0);
-    if (!result) return [];
+    if (!result) {
+      return [];
+    }
 
     const results: SimilarPost[] = [];
     for (let i = 0; i < result.keys.length; i++) {
-      const foundLabel = result.keys[i]!;
+      const foundLabel = result.keys[i];
+      if (foundLabel === undefined) {
+        continue;
+      }
       const foundPostId = this.labelToPostId.get(foundLabel);
-      if (!foundPostId || foundPostId === postId) continue;
+      if (!foundPostId || foundPostId === postId) {
+        continue;
+      }
 
-      const distance = result.distances[i]!;
+      const distance = result.distances[i];
+      if (distance === undefined) {
+        continue;
+      }
       // USearch cosine metric returns distance (0=identical), convert to similarity
       const similarity = Math.max(0, 1 - distance);
       results.push({ postId: foundPostId, similarity });
@@ -349,16 +382,24 @@ export class EmbeddingEngine extends EventEmitter {
    */
   async computeSimilarities(sourcePostId: string, targetPostIds: string[]): Promise<Record<string, number>> {
     await this.ensureIndexLoaded();
-    if (!this.index || !this.currentProjectId || targetPostIds.length === 0) return {};
+    if (!this.index || !this.currentProjectId || targetPostIds.length === 0) {
+      return {};
+    }
 
     const sourceVec = await this.getOrComputeVector(sourcePostId);
-    if (!sourceVec) return {};
+    if (!sourceVec) {
+      return {};
+    }
 
     const result: Record<string, number> = {};
     for (const targetId of targetPostIds) {
-      if (targetId === sourcePostId) continue;
+      if (targetId === sourcePostId) {
+        continue;
+      }
       const targetVec = await this.getOrComputeVector(targetId);
-      if (!targetVec) continue;
+      if (!targetVec) {
+        continue;
+      }
       result[targetId] = this.cosineSimilarity(sourceVec, targetVec);
     }
     return result;
@@ -367,9 +408,11 @@ export class EmbeddingEngine extends EventEmitter {
   private cosineSimilarity(a: Float32Array, b: Float32Array): number {
     let dot = 0, normA = 0, normB = 0;
     for (let i = 0; i < a.length; i++) {
-      dot += a[i]! * b[i]!;
-      normA += a[i]! * a[i]!;
-      normB += b[i]! * b[i]!;
+      const valueA = a[i] ?? 0;
+      const valueB = b[i] ?? 0;
+      dot += valueA * valueB;
+      normA += valueA * valueA;
+      normB += valueB * valueB;
     }
     const denom = Math.sqrt(normA) * Math.sqrt(normB);
     return denom === 0 ? 0 : Math.max(0, dot / denom);
@@ -379,9 +422,13 @@ export class EmbeddingEngine extends EventEmitter {
 
   async suggestTags(postId: string, excludeTags: string[]): Promise<TagSuggestion[]> {
     const similar = await this.findSimilar(postId, 10);
-    if (similar.length === 0) return [];
+    if (similar.length === 0) {
+      return [];
+    }
 
-    if (!this.currentProjectId) return [];
+    if (!this.currentProjectId) {
+      return [];
+    }
 
     // Get tags for similar posts
     const similarPostIds = similar.map((s) => s.postId);
@@ -396,11 +443,15 @@ export class EmbeddingEngine extends EventEmitter {
 
     for (const row of postRows) {
       const simItem = similar.find((s) => s.postId === row.id);
-      if (!simItem) continue;
+      if (!simItem) {
+        continue;
+      }
 
       const postTags: string[] = JSON.parse(row.tags || '[]');
       for (const tag of postTags) {
-        if (excludeSet.has(tag.toLowerCase())) continue;
+        if (excludeSet.has(tag.toLowerCase())) {
+          continue;
+        }
         const current = tagScores.get(tag) || 0;
         tagScores.set(tag, current + simItem.similarity);
       }
@@ -414,7 +465,9 @@ export class EmbeddingEngine extends EventEmitter {
 
   async findDuplicates(threshold = 0.92, onProgress?: (checked: number, total: number) => void): Promise<DuplicatePair[]> {
     await this.ensureIndexLoaded();
-    if (!this.index || !this.currentProjectId) return [];
+    if (!this.index || !this.currentProjectId) {
+      return [];
+    }
 
     const projectId = this.currentProjectId;
     const db = getDatabase().getLocal();
@@ -432,7 +485,9 @@ export class EmbeddingEngine extends EventEmitter {
 
     // Get post info for all indexed posts
     const allPostIds = Array.from(this.postIdToLabel.keys());
-    if (allPostIds.length === 0) return [];
+    if (allPostIds.length === 0) {
+      return [];
+    }
 
     const postRows = await db
       .select({
@@ -453,9 +508,13 @@ export class EmbeddingEngine extends EventEmitter {
     const bodyCache = new Map<string, string>();
     const getBody = async (postId: string): Promise<string> => {
       const cached = bodyCache.get(postId);
-      if (cached !== undefined) return cached;
+      if (cached !== undefined) {
+        return cached;
+      }
       const post = postMap.get(postId);
-      if (!post) { bodyCache.set(postId, ''); return ''; }
+      if (!post) {
+        bodyCache.set(postId, ''); return '';
+      }
       // Draft content is in the DB; published content is on the filesystem
       if (post.content) {
         bodyCache.set(postId, post.content);
@@ -480,30 +539,51 @@ export class EmbeddingEngine extends EventEmitter {
     const seenPairs = new Set<string>();
 
     for (let idx = 0; idx < allPostIds.length; idx++) {
-      const postId = allPostIds[idx]!;
+      const postId = allPostIds[idx];
+      if (!postId) {
+        continue;
+      }
       onProgress?.(idx + 1, allPostIds.length);
       const vector = await this.getOrComputeVector(postId);
-      if (!vector) continue;
+      if (!vector) {
+        continue;
+      }
 
       const result = this.index.search(vector, 21, 0);
-      if (!result) continue;
+      if (!result) {
+        continue;
+      }
 
       for (let i = 0; i < result.keys.length; i++) {
-        const otherLabel = result.keys[i]!;
+        const otherLabel = result.keys[i];
+        if (otherLabel === undefined) {
+          continue;
+        }
         const otherPostId = this.labelToPostId.get(otherLabel);
-        if (!otherPostId || otherPostId === postId) continue;
+        if (!otherPostId || otherPostId === postId) {
+          continue;
+        }
 
-        const distance = result.distances[i]!;
+        const distance = result.distances[i];
+        if (distance === undefined) {
+          continue;
+        }
         const similarity = Math.max(0, 1 - distance);
-        if (similarity < threshold) continue;
+        if (similarity < threshold) {
+          continue;
+        }
 
         const key = this.pairKey(postId, otherPostId);
-        if (seenPairs.has(key) || dismissedSet.has(key)) continue;
+        if (seenPairs.has(key) || dismissedSet.has(key)) {
+          continue;
+        }
         seenPairs.add(key);
 
         const postA = postMap.get(postId);
         const postB = postMap.get(otherPostId);
-        if (!postA || !postB) continue;
+        if (!postA || !postB) {
+          continue;
+        }
 
         pairs.push({
           postA: {
@@ -537,14 +617,20 @@ export class EmbeddingEngine extends EventEmitter {
     }
 
     return pairs.sort((a, b) => {
-      if (a.exactMatch && !b.exactMatch) return -1;
-      if (!a.exactMatch && b.exactMatch) return 1;
+      if (a.exactMatch && !b.exactMatch) {
+        return -1;
+      }
+      if (!a.exactMatch && b.exactMatch) {
+        return 1;
+      }
       return b.similarity - a.similarity;
     });
   }
 
   async dismissPair(postIdA: string, postIdB: string): Promise<void> {
-    if (!this.currentProjectId) return;
+    if (!this.currentProjectId) {
+      return;
+    }
     const db = getDatabase().getLocal();
     const [a, b] = this.sortedPairIds(postIdA, postIdB);
     await db.insert(dismissedDuplicatePairs).values({
@@ -557,12 +643,15 @@ export class EmbeddingEngine extends EventEmitter {
   }
 
   async dismissPairs(pairIds: Array<[string, string]>): Promise<void> {
-    if (!this.currentProjectId) return;
+    if (!this.currentProjectId) {
+      return;
+    }
     const db = getDatabase().getLocal();
     const now = new Date();
+    const currentProjectId = this.currentProjectId;
     const rows = pairIds.map(([idA, idB]) => {
       const [a, b] = this.sortedPairIds(idA, idB);
-      return { id: uuidv4(), projectId: this.currentProjectId!, postIdA: a, postIdB: b, dismissedAt: now };
+      return { id: uuidv4(), projectId: currentProjectId, postIdA: a, postIdB: b, dismissedAt: now };
     });
     // Insert in batches of 100 to avoid SQLite variable limits
     for (let i = 0; i < rows.length; i += 100) {
@@ -573,7 +662,9 @@ export class EmbeddingEngine extends EventEmitter {
   // Indexing management
 
   async getIndexingProgress(): Promise<{ indexed: number; total: number }> {
-    if (!this.currentProjectId) return { indexed: 0, total: 0 };
+    if (!this.currentProjectId) {
+      return { indexed: 0, total: 0 };
+    }
     await this.ensureIndexLoaded();
 
     const db = getDatabase().getLocal();
@@ -589,7 +680,9 @@ export class EmbeddingEngine extends EventEmitter {
 
   async reindexAll(onProgress?: (indexed: number, total: number) => void): Promise<void> {
     await this.ensureIndexLoaded();
-    if (!this.currentProjectId) return;
+    if (!this.currentProjectId) {
+      return;
+    }
 
     const db = getDatabase().getLocal();
 
@@ -616,7 +709,9 @@ export class EmbeddingEngine extends EventEmitter {
   async indexUnindexedPosts(onProgress?: (indexed: number, total: number) => void): Promise<void> {
     await this.initialize();
     await this.ensureIndexLoaded();
-    if (!this.currentProjectId) return;
+    if (!this.currentProjectId) {
+      return;
+    }
 
     const db = getDatabase().getLocal();
     const allPosts = await db
@@ -688,7 +783,9 @@ export class EmbeddingEngine extends EventEmitter {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    if (!this.index || !this.currentProjectId) return;
+    if (!this.index || !this.currentProjectId) {
+      return;
+    }
 
     const indexPath = this.deps.getIndexPath(this.currentProjectId);
     const dir = path.dirname(indexPath);
@@ -697,7 +794,9 @@ export class EmbeddingEngine extends EventEmitter {
   }
 
   private scheduleSave(): void {
-    if (this.saveTimer) clearTimeout(this.saveTimer);
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+    }
     this.saveTimer = setTimeout(() => {
       this.save().catch((err) => console.error('[EmbeddingEngine] save error:', err));
     }, this.SAVE_DEBOUNCE_MS);
@@ -711,14 +810,20 @@ export class EmbeddingEngine extends EventEmitter {
    */
   private async getOrComputeVector(postId: string): Promise<Float32Array | null> {
     const cached = this.vectorCache.get(postId);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     // Re-embed from post content
     await this.initialize();
-    if (!this.pipeline || !this.currentProjectId) return null;
+    if (!this.pipeline || !this.currentProjectId) {
+      return null;
+    }
 
     const resolved = await this.resolvePostContent(postId);
-    if (!resolved) return null;
+    if (!resolved) {
+      return null;
+    }
 
     const rawText = `${resolved.title}\n\n${resolved.content}`;
     const text = `query: ${rawText}`;
@@ -728,7 +833,9 @@ export class EmbeddingEngine extends EventEmitter {
   }
 
   private async embedText(text: string): Promise<Float32Array> {
-    if (!this.pipeline) throw new Error('EmbeddingEngine not initialized');
+    if (!this.pipeline) {
+      throw new Error('EmbeddingEngine not initialized');
+    }
     return this.pipeline.embed(text);
   }
 
@@ -737,15 +844,24 @@ export class EmbeddingEngine extends EventEmitter {
    * Draft posts have content in the DB; published posts have it on the filesystem.
    */
   private async resolvePostContent(postId: string): Promise<{ title: string; content: string } | null> {
-    if (!this.currentProjectId) return null;
+    if (!this.currentProjectId) {
+      return null;
+    }
     const db = getDatabase().getLocal();
     const rows = await db
       .select({ title: posts.title, content: posts.content, filePath: posts.filePath })
       .from(posts)
       .where(and(eq(posts.id, postId), eq(posts.projectId, this.currentProjectId)));
-    if (rows.length === 0) return null;
-    const post = rows[0]!;
-    if (post.content) return { title: post.title, content: post.content };
+    if (rows.length === 0) {
+      return null;
+    }
+    const post = rows[0];
+    if (!post) {
+      return null;
+    }
+    if (post.content) {
+      return { title: post.title, content: post.content };
+    }
     if (post.filePath) {
       try {
         const raw = await fs.readFile(post.filePath, 'utf-8');

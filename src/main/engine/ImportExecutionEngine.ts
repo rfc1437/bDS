@@ -17,21 +17,19 @@ import matter from 'gray-matter';
 import { app } from 'electron';
 import TurndownService from 'turndown';
 import { getDatabase } from '../database';
-import { posts, media, NewPost, NewMedia } from '../database/schema';
+import { posts, NewPost } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import type { TagEngine } from './TagEngine';
 import type { PostEngine, PostData } from './PostEngine';
-import type { MediaEngine, MediaData } from './MediaEngine';
+import type { MediaEngine } from './MediaEngine';
 import type { PostMediaEngine } from './PostMediaEngine';
 import type {
   ImportAnalysisReport,
   AnalyzedPost,
   AnalyzedMedia,
-  AnalyzedCategory,
-  AnalyzedTag,
   ImportConflictResolution,
 } from './ImportAnalysisEngine';
-import type { WxrPost, WxrMedia } from './WxrParser';
+import type { WxrPost } from './WxrParser';
 
 export interface ImportExecutionOptions {
   /** Path to the WordPress uploads folder for media files */
@@ -129,10 +127,14 @@ export class ImportExecutionEngine extends EventEmitter {
     // WordPress often uses title="name" with alt=""
     this.turndown.addRule('imageWithTitle', {
       filter: (node) => {
-        if (node.nodeName !== 'IMG') return false;
+        if (node.nodeName !== 'IMG') {
+          return false;
+        }
         // Check if this image is NOT inside an <a> tag (those are handled by linkedImage rule)
         const parent = node.parentNode;
-        if (parent?.nodeName === 'A') return false;
+        if (parent?.nodeName === 'A') {
+          return false;
+        }
         // Only match if alt is empty but title exists
         const img = node as HTMLImageElement;
         const alt = img.getAttribute('alt') || '';
@@ -152,16 +154,20 @@ export class ImportExecutionEngine extends EventEmitter {
     this.turndown.addRule('linkedImage', {
       filter: (node) => {
         // Match <a> tags that contain only an <img> (possibly with whitespace)
-        if (node.nodeName !== 'A') return false;
+        if (node.nodeName !== 'A') {
+          return false;
+        }
         const children = Array.from(node.childNodes).filter(
-          child => !(child.nodeType === 3 && !child.textContent?.trim())
+          child => !(child.nodeType === 3 && !child.textContent?.trim()),
         );
         return children.length === 1 && children[0].nodeName === 'IMG';
       },
       replacement: (_content, node) => {
         const anchor = node as HTMLAnchorElement;
         const img = anchor.querySelector('img');
-        if (!img) return '';
+        if (!img) {
+          return '';
+        }
 
         const href = anchor.getAttribute('href') || '';
         const imgSrc = img.getAttribute('src') || '';
@@ -198,7 +204,9 @@ export class ImportExecutionEngine extends EventEmitter {
     // Custom rule for Flash embeds - replace with placeholder text
     this.turndown.addRule('flashEmbed', {
       filter: (node) => {
-        if (node.nodeName !== 'EMBED') return false;
+        if (node.nodeName !== 'EMBED') {
+          return false;
+        }
         const embed = node as HTMLEmbedElement;
         const type = embed.getAttribute('type') || '';
         const src = embed.getAttribute('src') || '';
@@ -221,7 +229,9 @@ export class ImportExecutionEngine extends EventEmitter {
   }
 
   private getBaseDir(): string {
-    if (this.dataDir) return this.dataDir;
+    if (this.dataDir) {
+      return this.dataDir;
+    }
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
@@ -259,7 +269,7 @@ export class ImportExecutionEngine extends EventEmitter {
    */
   async executeImport(
     report: ImportAnalysisReport,
-    options: ImportExecutionOptions
+    options: ImportExecutionOptions,
   ): Promise<ImportExecutionResult> {
     const result: ImportExecutionResult = {
       success: true,
@@ -313,7 +323,7 @@ export class ImportExecutionEngine extends EventEmitter {
    * - Otherwise: use the name and mark for creation
    */
   private buildTaxonomyMapping(
-    items: Array<{ name: string; existsInProject: boolean; mappedTo?: string }>
+    items: Array<{ name: string; existsInProject: boolean; mappedTo?: string }>,
   ): Map<string, { resolved: string; needsCreation: boolean }> {
     const mapping = new Map<string, { resolved: string; needsCreation: boolean }>();
 
@@ -342,7 +352,7 @@ export class ImportExecutionEngine extends EventEmitter {
     tagMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     result: ImportExecutionResult,
-    progress: (phase: string, current: number, total: number, detail?: string) => void
+    progress: (phase: string, current: number, total: number, detail?: string) => void,
   ): Promise<void> {
     const tagEngine = this.tagEngine;
     tagEngine.setProjectContext(this.currentProjectId);
@@ -360,7 +370,7 @@ export class ImportExecutionEngine extends EventEmitter {
           await tagEngine.createTag({ name: mapping.resolved });
           result.tags.created++;
           progress('tags', current, total, `Created tag: ${mapping.resolved}`);
-        } catch (error) {
+        } catch {
           // Tag might already exist (race condition or duplicate in list)
           result.tags.skipped++;
         }
@@ -379,7 +389,7 @@ export class ImportExecutionEngine extends EventEmitter {
           await tagEngine.createTag({ name: mapping.resolved });
           result.tags.created++;
           progress('tags', current, total, `Created category tag: ${mapping.resolved}`);
-        } catch (error) {
+        } catch {
           result.tags.skipped++;
         }
       } else {
@@ -397,7 +407,7 @@ export class ImportExecutionEngine extends EventEmitter {
     categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     result: ImportExecutionResult,
     options: ImportExecutionOptions,
-    progress: (phase: string, current: number, total: number, detail?: string) => void
+    progress: (phase: string, current: number, total: number, detail?: string) => void,
   ): Promise<void> {
     // Filter to only actual posts (postType === 'post'), skip nav_menu_item, revision, etc.
     const postsToImport = report.posts.items.filter(item => item.wxrPost.postType === 'post');
@@ -433,10 +443,8 @@ export class ImportExecutionEngine extends EventEmitter {
     tagMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     result: ImportExecutionResult,
-    options: ImportExecutionOptions
+    options: ImportExecutionOptions,
   ): Promise<boolean> {
-    const wxrPost = analyzed.wxrPost;
-
     // Handle different analysis statuses
     if (analyzed.status === 'content-duplicate') {
       // Skip content duplicates
@@ -472,7 +480,7 @@ export class ImportExecutionEngine extends EventEmitter {
     tagMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     result: ImportExecutionResult,
-    options: ImportExecutionOptions
+    options: ImportExecutionOptions,
   ): Promise<boolean> {
     const postEngine = this.postEngine;
 
@@ -504,7 +512,7 @@ export class ImportExecutionEngine extends EventEmitter {
     tagMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     result: ImportExecutionResult,
-    options: ImportExecutionOptions
+    options: ImportExecutionOptions,
   ): Promise<boolean> {
     const wxrPost = analyzed.wxrPost;
     const db = getDatabase().getLocal();
@@ -575,7 +583,7 @@ export class ImportExecutionEngine extends EventEmitter {
     result: ImportExecutionResult,
     options: ImportExecutionOptions,
     status: 'draft' | 'published',
-    overrideSlug?: string
+    overrideSlug?: string,
   ): Promise<boolean> {
     const wxrPost = analyzed.wxrPost;
     const db = getDatabase().getLocal();
@@ -681,9 +689,15 @@ export class ImportExecutionEngine extends EventEmitter {
       categories: post.categories,
     };
 
-    if (post.excerpt) metadata.excerpt = post.excerpt;
-    if (post.author) metadata.author = post.author;
-    if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
+    if (post.excerpt) {
+      metadata.excerpt = post.excerpt;
+    }
+    if (post.author) {
+      metadata.author = post.author;
+    }
+    if (post.publishedAt) {
+      metadata.publishedAt = post.publishedAt.toISOString();
+    }
 
     const postsDir = this.getPostsDirForDate(post.createdAt);
     await fs.mkdir(postsDir, { recursive: true });
@@ -702,7 +716,7 @@ export class ImportExecutionEngine extends EventEmitter {
     report: ImportAnalysisReport,
     result: ImportExecutionResult,
     options: ImportExecutionOptions,
-    progress: (phase: string, current: number, total: number, detail?: string) => void
+    progress: (phase: string, current: number, total: number, detail?: string) => void,
   ): Promise<void> {
     const total = report.media.items.length;
 
@@ -730,7 +744,7 @@ export class ImportExecutionEngine extends EventEmitter {
   private async importMediaFile(
     analyzed: AnalyzedMedia,
     result: ImportExecutionResult,
-    options: ImportExecutionOptions
+    options: ImportExecutionOptions,
   ): Promise<boolean> {
     const wxrMedia = analyzed.wxrMedia;
 
@@ -822,7 +836,7 @@ export class ImportExecutionEngine extends EventEmitter {
     analyzed: AnalyzedMedia,
     existingMediaId: string,
     result: ImportExecutionResult,
-    options: ImportExecutionOptions
+    options: ImportExecutionOptions,
   ): Promise<boolean> {
     const wxrMedia = analyzed.wxrMedia;
 
@@ -882,7 +896,7 @@ export class ImportExecutionEngine extends EventEmitter {
     categoryMapping: Map<string, { resolved: string; needsCreation: boolean }>,
     result: ImportExecutionResult,
     options: ImportExecutionOptions,
-    progress: (phase: string, current: number, total: number, detail?: string) => void
+    progress: (phase: string, current: number, total: number, detail?: string) => void,
   ): Promise<void> {
     const total = report.pages.items.length;
 
@@ -926,7 +940,9 @@ export class ImportExecutionEngine extends EventEmitter {
    * Convert HTML to Markdown using Turndown
    */
   private convertToMarkdown(html: string): string {
-    if (!html || !html.trim()) return '';
+    if (!html || !html.trim()) {
+      return '';
+    }
 
     // Preprocess: Wrap standalone <code> blocks containing newlines in <pre> tags
     // This must happen BEFORE preserveLineBreaks to prevent newlines from becoming <br>
@@ -976,14 +992,16 @@ export class ImportExecutionEngine extends EventEmitter {
    * - Wraps content in <p> tags if it starts with plain text
    */
   private preserveLineBreaks(html: string): string {
-    if (!html || !html.trim()) return html;
+    if (!html || !html.trim()) {
+      return html;
+    }
 
     // Check if content starts with a tag or plain text
     const startsWithTag = /^\s*</.test(html);
     
     // Protect <pre> blocks from having their newlines modified
     const preBlocks: string[] = [];
-    let protectedHtml = html.replace(/<pre>([\s\S]*?)<\/pre>/g, (match) => {
+    const protectedHtml = html.replace(/<pre>([\s\S]*?)<\/pre>/g, (match) => {
       const placeholder = `__PRE_BLOCK_${preBlocks.length}__`;
       preBlocks.push(match);
       return placeholder;
@@ -1006,7 +1024,9 @@ export class ImportExecutionEngine extends EventEmitter {
       
       // Also handle newlines at the start (before any tags)
       processed = processed.replace(/^([^<]+)/g, (match, textContent: string) => {
-        if (!textContent.trim()) return match;
+        if (!textContent.trim()) {
+          return match;
+        }
         return textContent.replace(/\n/g, '<br>');
       });
       
@@ -1070,7 +1090,9 @@ export class ImportExecutionEngine extends EventEmitter {
    *   - <code> without newlines (inline code)
    */
   private wrapMultilineCode(html: string): string {
-    if (!html) return html;
+    if (!html) {
+      return html;
+    }
 
     // Match <code> blocks containing newlines that are NOT inside <pre>
     // Use a regex that captures the full <code>...</code> content including any embedded HTML
@@ -1099,7 +1121,9 @@ export class ImportExecutionEngine extends EventEmitter {
    *   - URLs from wp-content/themes/ or wp-content/plugins/ (not imported media)
    */
   private convertMediaUrlsToRelative(markdown: string): string {
-    if (!this.siteBaseUrl || !markdown) return markdown;
+    if (!this.siteBaseUrl || !markdown) {
+      return markdown;
+    }
 
     // Normalize the site URL (remove trailing slash and protocol)
     const siteUrl = this.siteBaseUrl.replace(/\/$/, '');
@@ -1107,7 +1131,9 @@ export class ImportExecutionEngine extends EventEmitter {
     // Extract the hostname from the site URL
     // Handle both http:// and https://
     const hostnameMatch = siteUrl.match(/^https?:\/\/(.+)$/);
-    if (!hostnameMatch) return markdown;
+    if (!hostnameMatch) {
+      return markdown;
+    }
     
     const hostname = hostnameMatch[1];
     const escapedHostname = hostname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1118,7 +1144,7 @@ export class ImportExecutionEngine extends EventEmitter {
     // Pattern: http(s)://{hostname}/wp-content/uploads/{path}
     const uploadsUrlPattern = new RegExp(
       `https?://${escapedHostname}/wp-content/uploads/([^\\s)"']+)`,
-      'gi'
+      'gi',
     );
 
     // Replace with relative media path
@@ -1147,7 +1173,7 @@ export class ImportExecutionEngine extends EventEmitter {
    */
   private resolveTaxonomy(
     items: string[],
-    mapping: Map<string, { resolved: string; needsCreation: boolean }>
+    mapping: Map<string, { resolved: string; needsCreation: boolean }>,
   ): string[] {
     return items.map(item => {
       const key = item.toLowerCase();
@@ -1161,7 +1187,9 @@ export class ImportExecutionEngine extends EventEmitter {
    * Handles Date objects, ISO strings (from JSON serialization), and null/undefined.
    */
   private toDate(value: Date | string | null | undefined): Date | null {
-    if (!value) return null;
+    if (!value) {
+      return null;
+    }
     if (value instanceof Date) {
       return isNaN(value.getTime()) ? null : value;
     }

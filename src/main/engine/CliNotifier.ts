@@ -21,7 +21,10 @@ export interface CliNotifier {
 
 /** Used by the Electron app. All notify calls are instant no-ops. */
 export class NoopNotifier implements CliNotifier {
-  async notify(_entity: NotifyEntity, _id: string, _action: NotifyAction): Promise<void> {
+  async notify(entity: NotifyEntity, id: string, action: NotifyAction): Promise<void> {
+    void entity;
+    void id;
+    void action;
     // intentional no-op
   }
 }

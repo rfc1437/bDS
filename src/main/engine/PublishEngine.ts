@@ -35,6 +35,14 @@ export class PublishEngine extends EventEmitter {
     this.dataDir = dataDir;
   }
 
+  private requireDataDir(): string {
+    if (!this.dataDir) {
+      throw new Error('Project context is not set');
+    }
+
+    return this.dataDir;
+  }
+
   // ── Public upload methods (one per directory, run as parallel tasks) ───
 
   /**
@@ -48,7 +56,8 @@ export class PublishEngine extends EventEmitter {
     this.ensureProjectContext();
     this.validateCredentials(credentials);
 
-    const htmlDir = path.join(this.dataDir!, 'html');
+    const dataDir = this.requireDataDir();
+    const htmlDir = path.join(dataDir, 'html');
     await this.ensureDirectoryExists(htmlDir, 'Generated site not found. Please render the site first.');
 
     if (credentials.sshMode === 'rsync') {
@@ -72,7 +81,8 @@ export class PublishEngine extends EventEmitter {
     this.ensureProjectContext();
     this.validateCredentials(credentials);
 
-    const thumbnailsDir = path.join(this.dataDir!, 'thumbnails');
+    const dataDir = this.requireDataDir();
+    const thumbnailsDir = path.join(dataDir, 'thumbnails');
     if (!(await this.directoryExists(thumbnailsDir))) {
       onProgress(100, 'No thumbnails to upload');
       return { filesUploaded: 0, filesSkipped: 0 };
@@ -100,7 +110,8 @@ export class PublishEngine extends EventEmitter {
     this.ensureProjectContext();
     this.validateCredentials(credentials);
 
-    const mediaDir = path.join(this.dataDir!, 'media');
+    const dataDir = this.requireDataDir();
+    const mediaDir = path.join(dataDir, 'media');
     if (!(await this.directoryExists(mediaDir))) {
       onProgress(100, 'No media to upload');
       return { filesUploaded: 0, filesSkipped: 0 };
@@ -235,11 +246,21 @@ export class PublishEngine extends EventEmitter {
             const lines = data.toString().split('\n');
             for (const line of lines) {
               const trimmed = line.trim();
-              if (!trimmed) continue;
-              if (trimmed.startsWith('sending ')) continue;
-              if (/\bbytes\b/.test(trimmed)) continue;
-              if (/total size is/.test(trimmed)) continue;
-              if (/speedup is/.test(trimmed)) continue;
+              if (!trimmed) {
+                continue;
+              }
+              if (trimmed.startsWith('sending ')) {
+                continue;
+              }
+              if (/\bbytes\b/.test(trimmed)) {
+                continue;
+              }
+              if (/total size is/.test(trimmed)) {
+                continue;
+              }
+              if (/speedup is/.test(trimmed)) {
+                continue;
+              }
               filesTransferred++;
               onProgress(
                 Math.min(filesTransferred, 99),
@@ -248,7 +269,7 @@ export class PublishEngine extends EventEmitter {
             }
           },
         },
-        (error, _stdout, _stderr, _cmd) => {
+        (error) => {
           if (error) {
             reject(error);
           } else {

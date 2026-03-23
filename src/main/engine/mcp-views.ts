@@ -102,7 +102,7 @@ export function reviewMetadataHtml(): string {
     .diff-table th { background: #f1f3f5; font-weight: 600; }
     .diff-old { background: #ffeef0; }
     .diff-new { background: #e6ffed; }`,
-    extraJsHelpers: `function fmt(v) { if (v == null) return "(empty)"; if (Array.isArray(v)) return v.join(", "); return String(v); }`,
+    extraJsHelpers: 'function fmt(v) { if (v == null) return "(empty)"; if (Array.isArray(v)) return v.join(", "); return String(v); }',
     renderBody: `\
       const current = data.current || {};
       const proposed = data.proposed || {};

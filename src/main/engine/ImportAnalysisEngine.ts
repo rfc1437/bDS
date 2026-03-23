@@ -5,8 +5,8 @@ import TurndownService from 'turndown';
 import { getDatabase } from '../database';
 import { posts, media, tags } from '../database/schema';
 import { eq } from 'drizzle-orm';
-import type { WxrData, WxrPost, WxrMedia, WxrSiteInfo, WxrCategory, WxrTag } from './WxrParser';
-import { getMacroConfigMap, type MacroConfig } from '../config/macroConfig';
+import type { WxrData, WxrPost, WxrMedia, WxrSiteInfo } from './WxrParser';
+import { getMacroConfigMap } from '../config/macroConfig';
 
 export type PostAnalysisStatus = 'new' | 'update' | 'conflict' | 'content-duplicate';
 export type MediaAnalysisStatus = 'new' | 'update' | 'conflict' | 'content-duplicate' | 'missing';
@@ -202,10 +202,14 @@ export class ImportAnalysisEngine {
     // WordPress often uses title="name" with alt=""
     this.turndown.addRule('imageWithTitle', {
       filter: (node) => {
-        if (node.nodeName !== 'IMG') return false;
+        if (node.nodeName !== 'IMG') {
+          return false;
+        }
         // Check if this image is NOT inside an <a> tag (those are handled by linkedImage rule)
         const parent = node.parentNode;
-        if (parent?.nodeName === 'A') return false;
+        if (parent?.nodeName === 'A') {
+          return false;
+        }
         // Only match if alt is empty but title exists
         const img = node as HTMLImageElement;
         const alt = img.getAttribute('alt') || '';
@@ -225,16 +229,20 @@ export class ImportAnalysisEngine {
     this.turndown.addRule('linkedImage', {
       filter: (node) => {
         // Match <a> tags that contain only an <img> (possibly with whitespace)
-        if (node.nodeName !== 'A') return false;
+        if (node.nodeName !== 'A') {
+          return false;
+        }
         const children = Array.from(node.childNodes).filter(
-          child => !(child.nodeType === 3 && !child.textContent?.trim())
+          child => !(child.nodeType === 3 && !child.textContent?.trim()),
         );
         return children.length === 1 && children[0].nodeName === 'IMG';
       },
       replacement: (_content, node) => {
         const anchor = node as HTMLAnchorElement;
         const img = anchor.querySelector('img');
-        if (!img) return '';
+        if (!img) {
+          return '';
+        }
 
         const href = anchor.getAttribute('href') || '';
         const imgSrc = img.getAttribute('src') || '';
@@ -271,7 +279,9 @@ export class ImportAnalysisEngine {
     // Custom rule for Flash embeds - replace with placeholder text
     this.turndown.addRule('flashEmbed', {
       filter: (node) => {
-        if (node.nodeName !== 'EMBED') return false;
+        if (node.nodeName !== 'EMBED') {
+          return false;
+        }
         const embed = node as HTMLEmbedElement;
         const type = embed.getAttribute('type') || '';
         const src = embed.getAttribute('src') || '';
@@ -593,7 +603,9 @@ export class ImportAnalysisEngine {
   }
 
   private convertToMarkdown(html: string): string {
-    if (!html || !html.trim()) return '';
+    if (!html || !html.trim()) {
+      return '';
+    }
     // Preprocess: Wrap standalone <code> blocks containing newlines in <pre> tags
     const withCodeBlocks = this.wrapMultilineCode(html);
     // Preprocess: Convert newlines within text to <br> tags to preserve line breaks
@@ -629,14 +641,16 @@ export class ImportAnalysisEngine {
    * - Wraps content in <p> tags if it starts with plain text
    */
   private preserveLineBreaks(html: string): string {
-    if (!html || !html.trim()) return html;
+    if (!html || !html.trim()) {
+      return html;
+    }
 
     // Check if content starts with a tag or plain text
     const startsWithTag = /^\s*</.test(html);
     
     // Protect <pre> blocks from having their newlines modified
     const preBlocks: string[] = [];
-    let protectedHtml = html.replace(/<pre>([\s\S]*?)<\/pre>/g, (match) => {
+    const protectedHtml = html.replace(/<pre>([\s\S]*?)<\/pre>/g, (match) => {
       const placeholder = `__PRE_BLOCK_${preBlocks.length}__`;
       preBlocks.push(match);
       return placeholder;
@@ -659,7 +673,9 @@ export class ImportAnalysisEngine {
       
       // Also handle newlines at the start (before any tags)
       processed = processed.replace(/^([^<]+)/g, (match, textContent: string) => {
-        if (!textContent.trim()) return match;
+        if (!textContent.trim()) {
+          return match;
+        }
         return textContent.replace(/\n/g, '<br>');
       });
       
@@ -723,7 +739,9 @@ export class ImportAnalysisEngine {
    *   - <code> without newlines (inline code)
    */
   private wrapMultilineCode(html: string): string {
-    if (!html) return html;
+    if (!html) {
+      return html;
+    }
 
     // Match <code> blocks containing newlines that are NOT inside <pre>
     // Use a regex that captures the full <code>...</code> content including any embedded HTML
@@ -757,7 +775,9 @@ export class ImportAnalysisEngine {
 
     // Process each post/page
     for (const post of posts) {
-      if (!post.content) continue;
+      if (!post.content) {
+        continue;
+      }
       
       const shortcodes = this.parseShortcodes(post.content);
       

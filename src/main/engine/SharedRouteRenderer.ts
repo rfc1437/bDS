@@ -95,7 +95,9 @@ export interface SharedRouteRenderServices<TCategoryMetadata> {
 const MAX_BACKLINK_SLUG_LENGTH = 30;
 
 function truncateSlug(slug: string): string {
-  if (slug.length <= MAX_BACKLINK_SLUG_LENGTH) return slug;
+  if (slug.length <= MAX_BACKLINK_SLUG_LENGTH) {
+    return slug;
+  }
   return slug.slice(0, MAX_BACKLINK_SLUG_LENGTH) + '...';
 }
 
@@ -104,14 +106,20 @@ async function resolveBacklinks(
   rewriteContext: HtmlRewriteContext,
   getLinkedBy?: (postId: string) => Promise<{ id: string; title: string; slug: string }[]>,
 ): Promise<BacklinkEntry[]> {
-  if (!getLinkedBy) return [];
+  if (!getLinkedBy) {
+    return [];
+  }
   const linkedPosts = await getLinkedBy(postId);
-  if (linkedPosts.length === 0) return [];
+  if (linkedPosts.length === 0) {
+    return [];
+  }
 
   return linkedPosts
     .map((linked) => {
       const canonical = rewriteContext.canonicalPostPathBySlug.get(linked.slug);
-      if (!canonical) return null;
+      if (!canonical) {
+        return null;
+      }
       return {
         slug: linked.slug,
         display_slug: truncateSlug(linked.slug),
@@ -276,7 +284,9 @@ async function resolveRouteWithSharedServices(
       ...singlePostOptions,
       preferredLanguage: singlePostOptions?.preferredLanguage ?? pageContext.language,
     }, { year, month, day });
-    if (!post) return null;
+    if (!post) {
+      return null;
+    }
     const backlinks = await resolveBacklinks(post.id, rewriteContext, services.getLinkedBy);
     return services.pageRenderer.renderSinglePost(post, rewriteContext, {
       page_title: pageContext.pageTitle,
@@ -327,7 +337,9 @@ async function resolveRouteWithSharedServices(
   if (monthMatch) {
     const year = Number(monthMatch[1]);
     const month = Number(monthMatch[2]);
-    if (month < 1 || month > 12) return null;
+    if (month < 1 || month > 12) {
+      return null;
+    }
     const result = await services.loadPublishedSnapshotsPage({ status: 'published', year, month, excludeCategories: listExcludedCategories }, pageOptions);
     return services.pageRenderer.renderPostList(result.posts, rewriteContext, {
       archiveGrouping: true,
@@ -449,11 +461,11 @@ export async function renderRouteWithSharedContext<TCategoryMetadata>(
     : [];
   const blogLanguages = allBlogLanguages.length > 0
     ? allBlogLanguages.map((lang) => ({
-        code: lang,
-        flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
-        href_prefix: lang === mainLang ? '' : `/${lang}`,
-        is_current: lang === currentLanguage,
-      }))
+      code: lang,
+      flag: POST_LANGUAGE_FLAGS[lang as SupportedLanguage] ?? '',
+      href_prefix: lang === mainLang ? '' : `/${lang}`,
+      is_current: lang === currentLanguage,
+    }))
     : [];
 
   return resolveRouteWithSharedServices(normalizedPathname, maxPostsPerPage, htmlRewriteContext, {

@@ -1,9 +1,10 @@
 import type { EngineBundle } from '../engine/EngineBundle';
+import type { IpcMainInvokeEvent } from 'electron';
 import { startDuplicateSearchTask } from './handlers';
 import { resolveUiLanguageFromSystemLocale, translateMenu } from '../shared/i18n';
 import { app } from 'electron';
 
-type SafeHandle = (channel: string, handler: (...args: any[]) => Promise<any>) => void;
+type SafeHandle = <Args extends unknown[], Result>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => Promise<Result>) => void;
 
 function tr(key: string): string {
   const systemLocale = typeof app.getLocale === 'function' ? app.getLocale() : 'en';

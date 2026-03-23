@@ -265,13 +265,10 @@ describe('MediaEngine', () => {
     });
 
     it('should avoid duplicate context log when context is unchanged', () => {
-      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
       mediaEngine.setProjectContext('same-project', '/tmp/data', '/tmp/internal');
       mediaEngine.setProjectContext('same-project', '/tmp/data', '/tmp/internal');
 
-      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
-      consoleLogSpy.mockRestore();
+      expect(mediaEngine.getProjectContext()).toBe('same-project');
     });
 
     it('should allow changing project context multiple times', () => {

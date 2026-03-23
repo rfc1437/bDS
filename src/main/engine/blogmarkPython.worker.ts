@@ -35,7 +35,7 @@ type WorkerResponseMessage = WorkerReadyMessage | WorkerResultMessage | WorkerEr
 type PyodideRuntime = {
   globals: {
     set: (name: string, value: unknown) => void;
-  } | any;
+  };
   runPythonAsync: (code: string) => Promise<unknown>;
 };
 

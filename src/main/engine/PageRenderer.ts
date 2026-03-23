@@ -271,7 +271,7 @@ export const PREVIEW_ASSETS: Record<string, PreviewAssetDefinition> = {
         modulePath: `@picocss/pico/css/pico.${theme}.min.css`,
         contentType: 'text/css; charset=utf-8',
       },
-    ])
+    ]),
   ),
   'lightbox.min.css': {
     modulePath: 'lightbox2/dist/css/lightbox.min.css',
@@ -352,8 +352,12 @@ export function clampMaxPostsPerPage(value: unknown): number {
   }
 
   const normalized = Math.floor(value);
-  if (normalized < MIN_MAX_POSTS_PER_PAGE) return DEFAULT_MAX_POSTS_PER_PAGE;
-  if (normalized > MAX_MAX_POSTS_PER_PAGE) return MAX_MAX_POSTS_PER_PAGE;
+  if (normalized < MIN_MAX_POSTS_PER_PAGE) {
+    return DEFAULT_MAX_POSTS_PER_PAGE;
+  }
+  if (normalized > MAX_MAX_POSTS_PER_PAGE) {
+    return MAX_MAX_POSTS_PER_PAGE;
+  }
   return normalized;
 }
 
@@ -391,7 +395,9 @@ function escapeHtml(value: string): string {
 }
 
 function parseMacroParams(paramString: string | undefined): Record<string, string> {
-  if (!paramString) return {};
+  if (!paramString) {
+    return {};
+  }
 
   const params: Record<string, string> = {};
   const regex = /(\w+)=(?:["']([^"']*?)["']|([^\s\]]+))/g;
@@ -405,7 +411,9 @@ function parseMacroParams(paramString: string | undefined): Record<string, strin
 }
 
 function parseIntegerParam(value: string | undefined): number | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) ? parsed : null;
 }
@@ -734,8 +742,12 @@ function renderTagCloudMacro(params: Record<string, string>, tagUsage: TagUsageE
 
 function isExternalOrSpecialUrl(value: string): boolean {
   const normalized = value.trim();
-  if (!normalized) return false;
-  if (normalized.startsWith('#') || normalized.startsWith('//')) return true;
+  if (!normalized) {
+    return false;
+  }
+  if (normalized.startsWith('#') || normalized.startsWith('//')) {
+    return true;
+  }
   return /^[a-z][a-z0-9+.-]*:/i.test(normalized);
 }
 
@@ -841,9 +853,13 @@ export function rewriteRenderedHtmlUrls(html: string, rewriteContext: HtmlRewrit
 }
 
 export function applyLanguagePrefixToHtml(html: string, languagePrefix: string): string {
-  if (!languagePrefix) return html;
+  if (!languagePrefix) {
+    return html;
+  }
   return html.replace(/\bhref=(['"])(\/(?!media\/|assets\/).*?)\1/gi, (_fullMatch, quote: string, href: string) => {
-    if (href.startsWith(languagePrefix + '/') || href === languagePrefix) return `href=${quote}${href}${quote}`;
+    if (href.startsWith(languagePrefix + '/') || href === languagePrefix) {
+      return `href=${quote}${href}${quote}`;
+    }
     return `href=${quote}${languagePrefix}${href}${quote}`;
   });
 }
@@ -863,7 +879,9 @@ export function renderMacro(
     const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
     const id = (params.id || '').trim();
     const title = (params.title || translateRender(language, 'render.video.youtubeTitle')).trim();
-    if (!id) return '';
+    if (!id) {
+      return '';
+    }
     return renderMacroTemplate('youtube', { id, title });
   }
 
@@ -871,7 +889,9 @@ export function renderMacro(
     const language = resolveRenderLanguageFromProjectPreferences(renderLanguage);
     const id = (params.id || '').trim();
     const title = (params.title || translateRender(language, 'render.video.vimeoTitle')).trim();
-    if (!id) return '';
+    if (!id) {
+      return '';
+    }
     return renderMacroTemplate('vimeo', { id, title });
   }
 
@@ -1428,20 +1448,20 @@ export class PageRenderer {
       show_archive_range_heading: hasRangeHeading,
       archive_context: options.routeKind === 'date'
         ? {
-            kind: options.archiveContext?.kind ?? 'root',
-            name: options.archiveContext?.name ?? null,
-            year: options.archiveContext?.year ?? null,
-            month: options.archiveContext?.month ?? null,
-            day: options.archiveContext?.day ?? null,
-          }
+          kind: options.archiveContext?.kind ?? 'root',
+          name: options.archiveContext?.name ?? null,
+          year: options.archiveContext?.year ?? null,
+          month: options.archiveContext?.month ?? null,
+          day: options.archiveContext?.day ?? null,
+        }
         : options.archiveContext
           ? {
-              kind: options.archiveContext.kind,
-              name: options.archiveContext.name ?? null,
-              year: options.archiveContext.year ?? null,
-              month: options.archiveContext.month ?? null,
-              day: options.archiveContext.day ?? null,
-            }
+            kind: options.archiveContext.kind,
+            name: options.archiveContext.name ?? null,
+            year: options.archiveContext.year ?? null,
+            month: options.archiveContext.month ?? null,
+            day: options.archiveContext.day ?? null,
+          }
           : null,
       min_date: minDateParts,
       max_date: maxDateParts,

@@ -69,16 +69,20 @@ let _appBundle: string | null = null;
  * Result is cached after the first call.
  */
 function getAppBundle(): string {
-  if (_appBundle !== null) return _appBundle;
+  if (_appBundle !== null) {
+    return _appBundle;
+  }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   const bundlePath: string = require.resolve('@modelcontextprotocol/ext-apps/app-with-deps');
   let source = fs.readFileSync(bundlePath, 'utf-8');
 
   // The bundle ends with export{...,X as App,...}.
   // Extract the internal variable name for `App`.
   const match = source.match(/export\{[^}]*\b(\w+)\s+as\s+App\b[^}]*\}/);
-  if (!match) throw new Error('Could not find App export in app-with-deps bundle');
+  if (!match) {
+    throw new Error('Could not find App export in app-with-deps bundle');
+  }
   const internalName = match[1];
 
   // Strip ESM export block and expose App class on globalThis.
@@ -93,7 +97,9 @@ function getAppBundle(): string {
 
 const SHARED_JS = `\
     const App = globalThis.__bdsExtApp;
-    if (!App) { document.getElementById("status").textContent = "Error: App bundle not loaded"; document.getElementById("status").className = "status status-error"; document.getElementById("status").style.display = "block"; throw new Error("App bundle not loaded"); }
+    if (!App) {
+      document.getElementById("status").textContent = "Error: App bundle not loaded"; document.getElementById("status").className = "status status-error"; document.getElementById("status").style.display = "block"; throw new Error("App bundle not loaded");
+    }
 
     const app = new App({ name: "bDS Review", version: "1.0.0" });
 
@@ -159,7 +165,9 @@ const SHARED_JS = `\
     }
 
     window.showStatus = showStatus;
-    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+    function esc(s) {
+      const d = document.createElement("div"); d.textContent = s; return d.innerHTML;
+    }
 
     window.__connectApp = () => {
       app.connect()

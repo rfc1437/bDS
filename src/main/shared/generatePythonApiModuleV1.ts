@@ -104,7 +104,7 @@ function buildPythonMethod(method: {
 
 function buildPythonNamespaceClass(
   namespace: string,
-  methods: Array<{ method: string; description: string; params: Array<{ name: string; required: boolean }> }>
+  methods: Array<{ method: string; description: string; params: Array<{ name: string; required: boolean }> }>,
 ): string {
   const className = `${namespace[0].toUpperCase()}${namespace.slice(1)}Api`;
   const methodBlocks = methods.map((method) => buildPythonMethod(method)).join('');

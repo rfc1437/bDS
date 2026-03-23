@@ -11,7 +11,6 @@ import type { GenerationPostIndex } from './GenerationPostIndexService';
 import type { TargetedValidationPlan } from './ValidationApplyPlannerService';
 import type {
   GenerationWorkerTask,
-  SerializedPostData,
   SerializedMediaData,
   SerializedBlogGenerationOptions,
 } from './GenerationWorkerData';
@@ -26,10 +25,15 @@ export interface ApplyValidationWorkerParams {
   maxPostsPerPage: number;
   htmlDir: string;
   mediaItems: SerializedMediaData[];
-  backlinksRecord: Record<string, Array<{ id: string; title: string; slug: string }>>;
+  backlinksRecord: Record<
+    string,
+    Array<{ id: string; title: string; slug: string }>
+  >;
   hashMapEntries: Array<[string, string]>;
   postFilePathEntries: Array<[string, string]>;
-  postMediaLinksEntries: Array<[string, Array<{ mediaId: string; sortOrder: number }>]>;
+  postMediaLinksEntries: Array<
+    [string, Array<{ mediaId: string; sortOrder: number }>]
+  >;
 }
 
 export interface ApplyValidationLanguageParams {
@@ -48,7 +52,12 @@ export function buildApplyValidationWorkerTasks(
   base: ApplyValidationWorkerParams,
   lang: ApplyValidationLanguageParams,
 ): GenerationWorkerTask[] {
-  const { targetedPlan, publishedRoutePosts, publishedListPosts, generationPostIndex } = lang;
+  const {
+    targetedPlan,
+    publishedRoutePosts,
+    publishedListPosts,
+    generationPostIndex,
+  } = lang;
 
   const serializedRoutePosts = publishedRoutePosts.map(serializePostData);
   const serializedListPosts = publishedListPosts.map(serializePostData);
@@ -71,8 +80,11 @@ export function buildApplyValidationWorkerTasks(
 
   const tasks: GenerationWorkerTask[] = [];
   let taskCounter = 0;
-  const langSuffix = lang.languagePrefix ? `-${lang.languagePrefix.replace(/^\//, '')}` : '';
-  const nextTaskId = (section: string) => `apply-${section}${langSuffix}-${++taskCounter}`;
+  const langSuffix = lang.languagePrefix
+    ? `-${lang.languagePrefix.replace(/^\//, '')}`
+    : '';
+  const nextTaskId = (section: string) =>
+    `apply-${section}${langSuffix}-${++taskCounter}`;
 
   // Core (root + page routes)
   if (targetedPlan.requestRootRoutes) {
@@ -146,48 +158,62 @@ export function buildApplyValidationWorkerTasks(
   }
 
   // Date archives
-  const { requestedYears, requestedYearMonths, requestedYearMonthDays } = targetedPlan;
-  const hasDateRequests = requestedYears.size > 0
-    || requestedYearMonths.size > 0
-    || requestedYearMonthDays.size > 0;
+  const { requestedYears, requestedYearMonths, requestedYearMonthDays } =
+    targetedPlan;
+  const hasDateRequests =
+    requestedYears.size > 0 ||
+    requestedYearMonths.size > 0 ||
+    requestedYearMonthDays.size > 0;
 
   if (hasDateRequests) {
     // Filter archive maps to only the requested keys
     const filteredYears = new Map<number, Date>();
     for (const year of requestedYears) {
       const lastmod = lang.years.get(year);
-      if (lastmod) filteredYears.set(year, lastmod);
+      if (lastmod) {
+        filteredYears.set(year, lastmod);
+      }
     }
 
     const filteredYearMonths = new Map<string, Date>();
     for (const ym of requestedYearMonths) {
       const lastmod = lang.yearMonths.get(ym);
-      if (lastmod) filteredYearMonths.set(ym, lastmod);
+      if (lastmod) {
+        filteredYearMonths.set(ym, lastmod);
+      }
     }
 
     const filteredYearMonthDays = new Map<string, Date>();
     for (const ymd of requestedYearMonthDays) {
       const lastmod = lang.yearMonthDays.get(ymd);
-      if (lastmod) filteredYearMonthDays.set(ymd, lastmod);
+      if (lastmod) {
+        filteredYearMonthDays.set(ymd, lastmod);
+      }
     }
 
     // Filter post-index entries to only the requested date keys
     const filteredPostsByYear = new Map<number, PostData[]>();
     for (const year of requestedYears) {
       const posts = generationPostIndex.postsByYear.get(year);
-      if (posts) filteredPostsByYear.set(year, posts);
+      if (posts) {
+        filteredPostsByYear.set(year, posts);
+      }
     }
 
     const filteredPostsByYearMonth = new Map<string, PostData[]>();
     for (const ym of requestedYearMonths) {
       const posts = generationPostIndex.postsByYearMonth.get(ym);
-      if (posts) filteredPostsByYearMonth.set(ym, posts);
+      if (posts) {
+        filteredPostsByYearMonth.set(ym, posts);
+      }
     }
 
     const filteredPostsByYearMonthDay = new Map<string, PostData[]>();
     for (const ymd of requestedYearMonthDays) {
       const posts = generationPostIndex.postsByYearMonthDay.get(ymd);
-      if (posts) filteredPostsByYearMonthDay.set(ymd, posts);
+      if (posts) {
+        filteredPostsByYearMonthDay.set(ymd, posts);
+      }
     }
 
     tasks.push({

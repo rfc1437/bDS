@@ -9,7 +9,7 @@ import {
 import { createServer as createHttpServer, type Server } from 'http';
 import { z } from 'zod';
 import { buildAmbiguityHints, enrichWithLinks, executeCheckTerm } from './ai/blog-tools';
-import { ProposalStore, type ProposalType } from './ProposalStore';
+import { ProposalStore } from './ProposalStore';
 import {
   reviewPostHtml,
   reviewScriptHtml,
@@ -236,7 +236,7 @@ export class MCPServer {
       try {
         await mcpServer.connect(transport);
         await transport.handleRequest(req, res, await parseBody(req));
-      } catch (error) {
+      } catch {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -272,9 +272,13 @@ export class MCPServer {
     }
 
     await new Promise<void>((resolve, reject) => {
-      if (!this.httpServer) { resolve(); return; }
+      if (!this.httpServer) {
+        resolve(); return;
+      }
       this.httpServer.close((error) => {
-        if (error) { reject(error); return; }
+        if (error) {
+          reject(error); return;
+        }
         resolve();
       });
     });
@@ -312,31 +316,31 @@ export class MCPServer {
 
     try {
       switch (proposal.type) {
-        case 'draftPost': {
-          const { postId } = proposalData<'draftPost'>(proposal);
-          await this.deps.postEngine.publishPost(postId);
-          break;
-        }
-        case 'proposeScript': {
-          const { scriptId } = proposalData<'proposeScript'>(proposal);
-          await this.deps.scriptEngine.publishScript(scriptId);
-          break;
-        }
-        case 'proposeTemplate': {
-          const { templateId } = proposalData<'proposeTemplate'>(proposal);
-          await this.deps.templateEngine.publishTemplate(templateId);
-          break;
-        }
-        case 'proposeMediaMetadata': {
-          const { mediaId, changes } = proposalData<'proposeMediaMetadata'>(proposal);
-          await this.deps.mediaEngine.updateMedia(mediaId, changes);
-          break;
-        }
-        case 'proposePostMetadata': {
-          const { postId, changes } = proposalData<'proposePostMetadata'>(proposal);
-          await this.deps.postEngine.updatePost(postId, changes);
-          break;
-        }
+      case 'draftPost': {
+        const { postId } = proposalData<'draftPost'>(proposal);
+        await this.deps.postEngine.publishPost(postId);
+        break;
+      }
+      case 'proposeScript': {
+        const { scriptId } = proposalData<'proposeScript'>(proposal);
+        await this.deps.scriptEngine.publishScript(scriptId);
+        break;
+      }
+      case 'proposeTemplate': {
+        const { templateId } = proposalData<'proposeTemplate'>(proposal);
+        await this.deps.templateEngine.publishTemplate(templateId);
+        break;
+      }
+      case 'proposeMediaMetadata': {
+        const { mediaId, changes } = proposalData<'proposeMediaMetadata'>(proposal);
+        await this.deps.mediaEngine.updateMedia(mediaId, changes);
+        break;
+      }
+      case 'proposePostMetadata': {
+        const { postId, changes } = proposalData<'proposePostMetadata'>(proposal);
+        await this.deps.postEngine.updatePost(postId, changes);
+        break;
+      }
       }
       this.proposalStore.remove(proposalId);
       return { success: true, message: `Proposal ${proposalId} accepted.` };
@@ -547,13 +551,27 @@ export class MCPServer {
         enriched = await enrichWithLinks(paginated, this.deps.postEngine);
       } else {
         const filter: PostFilter = {};
-        if (args.category) filter.categories = [args.category];
-        if (args.tags) filter.tags = args.tags;
-        if (args.language) filter.language = args.language;
-        if (args.missingTranslationLanguage) filter.missingTranslationLanguage = args.missingTranslationLanguage;
-        if (args.year) filter.year = args.year;
-        if (args.month) filter.month = args.month;
-        if (args.status) filter.status = args.status;
+        if (args.category) {
+          filter.categories = [args.category];
+        }
+        if (args.tags) {
+          filter.tags = args.tags;
+        }
+        if (args.language) {
+          filter.language = args.language;
+        }
+        if (args.missingTranslationLanguage) {
+          filter.missingTranslationLanguage = args.missingTranslationLanguage;
+        }
+        if (args.year) {
+          filter.year = args.year;
+        }
+        if (args.month) {
+          filter.month = args.month;
+        }
+        if (args.status) {
+          filter.status = args.status;
+        }
 
         if (args.query && hasFilters) {
           const { posts, total: t } = await this.deps.postEngine.searchPostsFiltered(args.query, filter, { offset, limit });
@@ -600,11 +618,21 @@ export class MCPServer {
       }
 
       const filter: { year?: number; month?: number; status?: string; category?: string; tags?: string[] } = {};
-      if (args.year !== undefined) filter.year = args.year;
-      if (args.month !== undefined) filter.month = args.month;
-      if (args.status) filter.status = args.status;
-      if (args.category) filter.category = args.category;
-      if (args.tags) filter.tags = args.tags;
+      if (args.year !== undefined) {
+        filter.year = args.year;
+      }
+      if (args.month !== undefined) {
+        filter.month = args.month;
+      }
+      if (args.status) {
+        filter.status = args.status;
+      }
+      if (args.category) {
+        filter.category = args.category;
+      }
+      if (args.tags) {
+        filter.tags = args.tags;
+      }
 
       const result = await this.deps.postEngine.getPostCounts(
         args.groupBy,
@@ -1055,8 +1083,12 @@ function buildDraftPostPrompt(topic?: string, category?: string): string {
     '3. Use the `draft_post` tool to create the draft for the user to review.',
     '',
   ];
-  if (topic) parts.push(`Suggested topic: ${topic}`);
-  if (category) parts.push(`Target category: ${category}`);
+  if (topic) {
+    parts.push(`Suggested topic: ${topic}`);
+  }
+  if (category) {
+    parts.push(`Target category: ${category}`);
+  }
   parts.push('', 'Ensure the post matches the existing blog style and quality standards.');
   return parts.join('\n');
 }

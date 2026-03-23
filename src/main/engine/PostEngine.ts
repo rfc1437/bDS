@@ -4,13 +4,13 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import matter from 'gray-matter';
-import { eq, and, desc, gte, lte, like, inArray, ne, sql } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, inArray, ne, sql } from 'drizzle-orm';
 import { app } from 'electron';
 import { getDatabase } from '../database';
 import { posts, postTranslations, Post, PostTranslation, NewPost, NewPostTranslation, postLinks } from '../database/schema';
 import { taskManager, Task } from './TaskManager';
 import { stemText, stemQuery, isoToStemmerLanguage, SupportedLanguage } from './stemmer';
-import { readPostFile as readPostFileShared, type PostFileData } from './postFileUtils';
+import { readPostFile as readPostFileShared } from './postFileUtils';
 import { readPostTranslationFile as readPostTranslationFileShared, type PostTranslationFileData } from './postTranslationFileUtils';
 import { CliNotifier, NoopNotifier } from './CliNotifier';
 import type { MediaEngine } from './MediaEngine';
@@ -150,7 +150,9 @@ export class PostEngine extends EventEmitter {
   }
 
   /** No persistent cache — DB is the source of truth. No-op for watcher compat. */
-  invalidate(_entityId?: string): void {}
+  invalidate(entityId?: string): void {
+    void entityId;
+  }
 
   /**
    * Set the language used for full-text search stemming.
@@ -199,7 +201,9 @@ export class PostEngine extends EventEmitter {
     categories: string[];
   }): Promise<void> {
     const client = getDatabase().getLocalClient();
-    if (!client) return;
+    if (!client) {
+      return;
+    }
 
     // Delete existing entry
     await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [post.id] });
@@ -268,14 +272,18 @@ export class PostEngine extends EventEmitter {
    */
   private async deleteFTSIndex(id: string): Promise<void> {
     const client = getDatabase().getLocalClient();
-    if (!client) return;
+    if (!client) {
+      return;
+    }
     await client.execute({ sql: 'DELETE FROM posts_fts WHERE id = ?', args: [id] });
   }
 
   private dataDir: string | null = null;
 
   private getDataDir(): string {
-    if (this.dataDir) return this.dataDir;
+    if (this.dataDir) {
+      return this.dataDir;
+    }
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'projects', this.currentProjectId);
   }
@@ -339,12 +347,16 @@ export class PostEngine extends EventEmitter {
       .from(posts)
       .where(and(
         eq(posts.slug, slug),
-        eq(posts.projectId, this.currentProjectId)
+        eq(posts.projectId, this.currentProjectId),
       ))
       .get();
     
-    if (!existing) return true;
-    if (excludePostId && existing.id === excludePostId) return true;
+    if (!existing) {
+      return true;
+    }
+    if (excludePostId && existing.id === excludePostId) {
+      return true;
+    }
     return false;
   }
 
@@ -562,12 +574,24 @@ export class PostEngine extends EventEmitter {
     };
 
     // Only add optional fields if they have values (gray-matter can't serialize undefined)
-    if (post.excerpt) metadata.excerpt = post.excerpt;
-    if (post.author) metadata.author = post.author;
-    if (post.language) metadata.language = post.language;
-    if (post.doNotTranslate) metadata.doNotTranslate = true;
-    if (post.templateSlug) metadata.templateSlug = post.templateSlug;
-    if (post.publishedAt) metadata.publishedAt = post.publishedAt.toISOString();
+    if (post.excerpt) {
+      metadata.excerpt = post.excerpt;
+    }
+    if (post.author) {
+      metadata.author = post.author;
+    }
+    if (post.language) {
+      metadata.language = post.language;
+    }
+    if (post.doNotTranslate) {
+      metadata.doNotTranslate = true;
+    }
+    if (post.templateSlug) {
+      metadata.templateSlug = post.templateSlug;
+    }
+    if (post.publishedAt) {
+      metadata.publishedAt = post.publishedAt.toISOString();
+    }
 
     // Use date-based directory structure (posts/YYYY/MM/)
     const postsDir = this.getPostsDirForDate(post.createdAt);
@@ -587,7 +611,9 @@ export class PostEngine extends EventEmitter {
       title: translation.title,
     };
 
-    if (translation.excerpt) metadata.excerpt = translation.excerpt;
+    if (translation.excerpt) {
+      metadata.excerpt = translation.excerpt;
+    }
 
     const postsDir = this.getPostsDirForDate(sourcePost.createdAt);
     await fs.mkdir(postsDir, { recursive: true });
@@ -600,7 +626,9 @@ export class PostEngine extends EventEmitter {
 
   private async readPostFile(filePath: string): Promise<PostData | null> {
     const data = await readPostFileShared(filePath);
-    if (!data) return null;
+    if (!data) {
+      return null;
+    }
 
     const fileStem = path.parse(filePath).name;
     const normalizedTitle = typeof data.title === 'string' && data.title.trim().length > 0
@@ -727,7 +755,6 @@ export class PostEngine extends EventEmitter {
 
   async createPost(data: Partial<PostData>): Promise<PostData> {
     const db = getDatabase().getLocal();
-    const client = getDatabase().getLocalClient();
     const now = new Date();
     const id = uuidv4();
     
@@ -790,7 +817,6 @@ export class PostEngine extends EventEmitter {
 
   async updatePost(id: string, data: Partial<PostData>): Promise<PostData | null> {
     const db = getDatabase().getLocal();
-    const client = getDatabase().getLocalClient();
     const existing = await this.getPost(id);
     
     if (!existing) {
@@ -895,7 +921,6 @@ export class PostEngine extends EventEmitter {
 
   async deletePost(id: string): Promise<boolean> {
     const db = getDatabase().getLocal();
-    const client = getDatabase().getLocalClient();
     const existing = await db.select().from(posts).where(eq(posts.id, id)).get();
 
     if (!existing) {
@@ -995,7 +1020,7 @@ export class PostEngine extends EventEmitter {
       .from(posts)
       .where(and(
         eq(posts.slug, slug),
-        eq(posts.projectId, this.currentProjectId)
+        eq(posts.projectId, this.currentProjectId),
       ))
       .get();
     const post = await this.resolvePostData(dbPost);
@@ -1064,12 +1089,20 @@ export class PostEngine extends EventEmitter {
     const postById = new Map(allPosts.map((p) => [p.id, p]));
     const result = new Map<string, string[]>();
     for (const row of allTranslations) {
-      if (row.status !== 'published') continue;
+      if (row.status !== 'published') {
+        continue;
+      }
       const sourcePost = postById.get(row.translationFor);
-      if (!sourcePost) continue;
-      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) continue;
+      if (!sourcePost) {
+        continue;
+      }
+      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) {
+        continue;
+      }
       const lang = row.language?.trim().toLowerCase();
-      if (!lang) continue;
+      if (!lang) {
+        continue;
+      }
       const existing = result.get(row.translationFor) ?? [];
       existing.push(lang);
       result.set(row.translationFor, existing);
@@ -1083,10 +1116,16 @@ export class PostEngine extends EventEmitter {
     const result = new Map<string, PostTranslationData[]>();
 
     for (const row of allRows) {
-      if (row.status !== 'published') continue;
+      if (row.status !== 'published') {
+        continue;
+      }
       const sourcePost = postById.get(row.translationFor);
-      if (!sourcePost) continue;
-      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) continue;
+      if (!sourcePost) {
+        continue;
+      }
+      if (this.isCanonicalTranslationLanguage(sourcePost, row.language)) {
+        continue;
+      }
 
       const translationData: PostTranslationData = {
         id: row.id,
@@ -1526,7 +1565,9 @@ export class PostEngine extends EventEmitter {
     const db = getDatabase().getLocal();
 
     const postData = await this.readPostFile(filePath);
-    if (!postData) return null;
+    if (!postData) {
+      return null;
+    }
 
     // Ensure unique ID and slug within the current project
     const { id, slug } = await this.ensureUniquePostIdentity(postData.id, postData.slug);
@@ -1659,7 +1700,7 @@ export class PostEngine extends EventEmitter {
         .from(posts)
         .where(and(
           eq(posts.projectId, this.currentProjectId),
-          eq(posts.status, 'draft')
+          eq(posts.status, 'draft'),
         ))
         .orderBy(desc(posts.createdAt))
         .all();
@@ -1671,7 +1712,7 @@ export class PostEngine extends EventEmitter {
         .from(posts)
         .where(and(
           eq(posts.projectId, this.currentProjectId),
-          ne(posts.status, 'draft')
+          ne(posts.status, 'draft'),
         ))
         .orderBy(desc(posts.createdAt))
         .limit(remainingSlots)
@@ -1679,7 +1720,7 @@ export class PostEngine extends EventEmitter {
 
       const allDbPosts = [...draftPosts, ...nonDraftPosts];
       const items = await this.appendAvailableLanguagesToList(allDbPosts.map(dbPost =>
-        this.dbRowToPostData(dbPost, dbPost.content || '')
+        this.dbRowToPostData(dbPost, dbPost.content || ''),
       ));
 
       return {
@@ -1696,7 +1737,7 @@ export class PostEngine extends EventEmitter {
       .from(posts)
       .where(and(
         eq(posts.projectId, this.currentProjectId),
-        eq(posts.status, 'draft')
+        eq(posts.status, 'draft'),
       ))
       .all();
     const numDrafts = draftCount.length;
@@ -1709,7 +1750,7 @@ export class PostEngine extends EventEmitter {
       .from(posts)
       .where(and(
         eq(posts.projectId, this.currentProjectId),
-        ne(posts.status, 'draft')
+        ne(posts.status, 'draft'),
       ))
       .orderBy(desc(posts.createdAt))
       .limit(limit)
@@ -1717,7 +1758,7 @@ export class PostEngine extends EventEmitter {
       .all();
 
     const items = await this.appendAvailableLanguagesToList(dbPosts.map(dbPost =>
-      this.dbRowToPostData(dbPost, dbPost.content || '')
+      this.dbRowToPostData(dbPost, dbPost.content || ''),
     ));
 
     return {
@@ -1752,7 +1793,7 @@ export class PostEngine extends EventEmitter {
       .from(posts)
       .where(and(
         eq(posts.projectId, this.currentProjectId),
-        eq(posts.status, status)
+        eq(posts.status, status),
       ))
       .orderBy(desc(posts.createdAt))
       .all();
@@ -1798,7 +1839,7 @@ export class PostEngine extends EventEmitter {
           select 1
           from json_each(${posts.categories}) as included_category
           where included_category.value = ${category}
-        )`
+        )`,
       );
       conditions.push(sql`(${sql.join(includePredicates, sql` OR `)})`);
     }
@@ -1809,7 +1850,7 @@ export class PostEngine extends EventEmitter {
           select 1
           from json_each(${posts.categories}) as excluded_category
           where excluded_category.value = ${category}
-        )`
+        )`,
       );
       conditions.push(sql`NOT (${sql.join(excludePredicates, sql` OR `)})`);
     }
@@ -1821,7 +1862,7 @@ export class PostEngine extends EventEmitter {
       .orderBy(desc(posts.createdAt))
       .all();
 
-    let result: PostData[] = [];
+    const result: PostData[] = [];
 
     for (const dbPost of dbPosts) {
       // Use DB data directly instead of reading from filesystem
@@ -1830,7 +1871,9 @@ export class PostEngine extends EventEmitter {
       // Client-side filtering for tags only (category filtering is done in SQL)
       if (filter.tags && filter.tags.length > 0) {
         const hasAllTags = filter.tags.every(tag => postData.tags.includes(tag));
-        if (!hasAllTags) continue;
+        if (!hasAllTags) {
+          continue;
+        }
       }
 
       result.push(postData);
@@ -1865,7 +1908,9 @@ export class PostEngine extends EventEmitter {
     const stems = new Set<string>();
     for (const lang of languages) {
       const stemmed = stemQuery(query, lang);
-      if (stemmed) stems.add(stemmed);
+      if (stemmed) {
+        stems.add(stemmed);
+      }
     }
 
     if (stems.size <= 1) {
@@ -1883,21 +1928,25 @@ export class PostEngine extends EventEmitter {
     const rows = await this.getAllTranslationRows();
     const langs = new Set<string>();
     for (const row of rows) {
-      if (row.language) langs.add(row.language);
+      if (row.language) {
+        langs.add(row.language);
+      }
     }
     return Array.from(langs);
   }
 
   async searchPosts(query: string): Promise<SearchResult[]> {
     const client = getDatabase().getLocalClient();
-    if (!client) return [];
+    if (!client) {
+      return [];
+    }
 
     try {
       const multilingualQuery = await this.buildMultilingualFTSQuery(query);
       
       // Search the stemmed content, filtered by project_id for project isolation
       const result = await client.execute({
-        sql: `SELECT id FROM posts_fts WHERE project_id = ? AND posts_fts MATCH ? ORDER BY rank LIMIT 500`,
+        sql: 'SELECT id FROM posts_fts WHERE project_id = ? AND posts_fts MATCH ? ORDER BY rank LIMIT 500',
         args: [this.currentProjectId, multilingualQuery],
       });
 
@@ -1935,10 +1984,14 @@ export class PostEngine extends EventEmitter {
     filter: PostFilter,
     pagination?: PaginationOptions,
   ): Promise<{ posts: PostData[]; total: number }> {
-    if (!query.trim()) return { posts: [], total: 0 };
+    if (!query.trim()) {
+      return { posts: [], total: 0 };
+    }
 
     const client = getDatabase().getLocalClient();
-    if (!client) return { posts: [], total: 0 };
+    if (!client) {
+      return { posts: [], total: 0 };
+    }
 
     try {
       const multilingualQuery = await this.buildMultilingualFTSQuery(query);
@@ -1972,14 +2025,14 @@ export class PostEngine extends EventEmitter {
       }
       if (filter.categories && filter.categories.length > 0) {
         const catClauses = filter.categories.map(() =>
-          `EXISTS (SELECT 1 FROM json_each(posts.categories) AS c WHERE c.value = ?)`
+          'EXISTS (SELECT 1 FROM json_each(posts.categories) AS c WHERE c.value = ?)',
         );
         conditions.push(`(${catClauses.join(' OR ')})`);
         args.push(...filter.categories);
       }
       if (filter.excludeCategories && filter.excludeCategories.length > 0) {
         const exClauses = filter.excludeCategories.map(() =>
-          `EXISTS (SELECT 1 FROM json_each(posts.categories) AS c WHERE c.value = ?)`
+          'EXISTS (SELECT 1 FROM json_each(posts.categories) AS c WHERE c.value = ?)',
         );
         conditions.push(`NOT (${exClauses.join(' OR ')})`);
         args.push(...filter.excludeCategories);
@@ -2006,23 +2059,26 @@ export class PostEngine extends EventEmitter {
       const result = await client.execute({ sql: sqlQuery, args });
 
       let postDataList: PostData[] = result.rows.map((row) =>
-        this.dbRowToPostData(row as unknown as Post, (row.content as string) || '')
+        this.dbRowToPostData(row as unknown as Post, (row.content as string) || ''),
       );
 
       // Tag filtering is done client-side (tags are stored as JSON arrays)
-      if (filter.tags && filter.tags.length > 0) {
+      const filterTags = filter.tags;
+      if (filterTags && filterTags.length > 0) {
         postDataList = postDataList.filter((p) =>
-          filter.tags!.every((tag) => p.tags.includes(tag))
+          filterTags.every((tag) => p.tags.includes(tag)),
         );
       }
 
       postDataList = await this.appendAvailableLanguagesToList(postDataList);
 
-      if (filter.language) {
-        postDataList = postDataList.filter((post) => post.availableLanguages.includes(filter.language!));
+      const filterLanguage = filter.language;
+      if (filterLanguage) {
+        postDataList = postDataList.filter((post) => post.availableLanguages.includes(filterLanguage));
       }
-      if (filter.missingTranslationLanguage) {
-        postDataList = postDataList.filter((post) => !post.availableLanguages.includes(filter.missingTranslationLanguage!));
+      const missingTranslationLanguage = filter.missingTranslationLanguage;
+      if (missingTranslationLanguage) {
+        postDataList = postDataList.filter((post) => !post.availableLanguages.includes(missingTranslationLanguage));
       }
 
       // Apply pagination
@@ -2045,7 +2101,9 @@ export class PostEngine extends EventEmitter {
     filter?: { year?: number; month?: number; status?: string; category?: string; tags?: string[] },
   ): Promise<{ groups: Record<string, string | number>[]; totalPosts: number }> {
     const client = getDatabase().getLocalClient();
-    if (!client) return { groups: [], totalPosts: 0 };
+    if (!client) {
+      return { groups: [], totalPosts: 0 };
+    }
 
     // Build SELECT expressions and GROUP BY columns
     const selectExprs: string[] = [];
@@ -2054,28 +2112,28 @@ export class PostEngine extends EventEmitter {
 
     for (const dim of groupBy) {
       switch (dim) {
-        case 'year':
-          selectExprs.push("CAST(strftime('%Y', posts.created_at, 'unixepoch') AS INTEGER) AS g_year");
-          groupByCols.push('g_year');
-          break;
-        case 'month':
-          selectExprs.push("CAST(strftime('%m', posts.created_at, 'unixepoch') AS INTEGER) AS g_month");
-          groupByCols.push('g_month');
-          break;
-        case 'tag':
-          selectExprs.push('t.value AS g_tag');
-          joins.push('JOIN json_each(posts.tags) AS t');
-          groupByCols.push('g_tag');
-          break;
-        case 'category':
-          selectExprs.push('c.value AS g_category');
-          joins.push('JOIN json_each(posts.categories) AS c');
-          groupByCols.push('g_category');
-          break;
-        case 'status':
-          selectExprs.push('posts.status AS g_status');
-          groupByCols.push('g_status');
-          break;
+      case 'year':
+        selectExprs.push('CAST(strftime(\'%Y\', posts.created_at, \'unixepoch\') AS INTEGER) AS g_year');
+        groupByCols.push('g_year');
+        break;
+      case 'month':
+        selectExprs.push('CAST(strftime(\'%m\', posts.created_at, \'unixepoch\') AS INTEGER) AS g_month');
+        groupByCols.push('g_month');
+        break;
+      case 'tag':
+        selectExprs.push('t.value AS g_tag');
+        joins.push('JOIN json_each(posts.tags) AS t');
+        groupByCols.push('g_tag');
+        break;
+      case 'category':
+        selectExprs.push('c.value AS g_category');
+        joins.push('JOIN json_each(posts.categories) AS c');
+        groupByCols.push('g_category');
+        break;
+      case 'status':
+        selectExprs.push('posts.status AS g_status');
+        groupByCols.push('g_status');
+        break;
       }
     }
 
@@ -2109,14 +2167,14 @@ export class PostEngine extends EventEmitter {
     }
     if (filter?.category) {
       conditions.push(
-        `EXISTS (SELECT 1 FROM json_each(posts.categories) AS fc WHERE fc.value = ?)`,
+        'EXISTS (SELECT 1 FROM json_each(posts.categories) AS fc WHERE fc.value = ?)',
       );
       args.push(filter.category);
     }
     if (filter?.tags && filter.tags.length > 0) {
       for (const tag of filter.tags) {
         conditions.push(
-          `EXISTS (SELECT 1 FROM json_each(posts.tags) AS ft WHERE ft.value = ?)`,
+          'EXISTS (SELECT 1 FROM json_each(posts.tags) AS ft WHERE ft.value = ?)',
         );
         args.push(tag);
       }
@@ -2140,12 +2198,18 @@ export class PostEngine extends EventEmitter {
         g_category: 'category', g_status: 'status',
       };
 
-      const groups: Record<string, string | number>[] = result.rows.map((row: any) => {
+      const groups: Record<string, string | number>[] = result.rows.map((row) => {
+        const typedRow = row as Record<string, unknown>;
         const group: Record<string, string | number> = {};
         for (const col of groupByCols) {
-          group[dimMap[col]] = row[col];
+          const mappedKey = dimMap[col];
+          if (mappedKey === 'year' || mappedKey === 'month') {
+            group[mappedKey] = Number(typedRow[col]);
+            continue;
+          }
+          group[mappedKey] = String(typedRow[col] ?? '');
         }
-        group.count = Number(row.cnt);
+        group.count = Number(typedRow.cnt);
         return group;
       });
 
@@ -2240,9 +2304,9 @@ export class PostEngine extends EventEmitter {
 
     for (const row of dbPosts) {
       switch (row.status) {
-        case 'draft': draftCount++; break;
-        case 'published': publishedCount++; break;
-        case 'archived': archivedCount++; break;
+      case 'draft': draftCount++; break;
+      case 'published': publishedCount++; break;
+      case 'archived': archivedCount++; break;
       }
     }
 
@@ -2283,23 +2347,31 @@ export class PostEngine extends EventEmitter {
 
     for (const row of dbPosts) {
       switch (row.status) {
-        case 'draft': draftCount++; break;
-        case 'published': publishedCount++; break;
-        case 'archived': archivedCount++; break;
+      case 'draft': draftCount++; break;
+      case 'published': publishedCount++; break;
+      case 'archived': archivedCount++; break;
       }
 
       const created = row.createdAt;
-      if (!oldestPostDate || created < oldestPostDate) oldestPostDate = created;
-      if (!newestPostDate || created > newestPostDate) newestPostDate = created;
+      if (!oldestPostDate || created < oldestPostDate) {
+        oldestPostDate = created;
+      }
+      if (!newestPostDate || created > newestPostDate) {
+        newestPostDate = created;
+      }
 
       const year = created.getFullYear();
       postsPerYear[year] = (postsPerYear[year] || 0) + 1;
 
       const parsedTags: string[] = JSON.parse(row.tags || '[]');
-      for (const tag of parsedTags) uniqueTags.add(tag);
+      for (const tag of parsedTags) {
+        uniqueTags.add(tag);
+      }
 
       const parsedCategories: string[] = JSON.parse(row.categories || '[]');
-      for (const cat of parsedCategories) uniqueCategories.add(cat);
+      for (const cat of parsedCategories) {
+        uniqueCategories.add(cat);
+      }
     }
 
     return {
@@ -2329,14 +2401,15 @@ export class PostEngine extends EventEmitter {
     }
 
     return Array.from(counts.values()).sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
+      if (a.year !== b.year) {
+        return b.year - a.year;
+      }
       return b.month - a.month;
     });
   }
 
   async publishPost(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
-    const client = getDatabase().getLocalClient();
     const existing = await this.getPost(id);
     
     if (!existing) {
@@ -2396,7 +2469,9 @@ export class PostEngine extends EventEmitter {
     const translationRows = this.filterCanonicalTranslationRows(published, await this.getTranslationRowsForPost(id));
     for (const row of translationRows) {
       const translation = await this.resolvePostTranslationData(row);
-      if (!translation) continue;
+      if (!translation) {
+        continue;
+      }
 
       const publishedTranslation: PostTranslationData = {
         ...translation,
@@ -2432,14 +2507,15 @@ export class PostEngine extends EventEmitter {
 
   async publishPostTranslation(postId: string, language: string): Promise<PostTranslationData | null> {
     const existing = await this.getTranslationRow(postId, language.trim().toLowerCase());
-    if (!existing) return null;
+    if (!existing) {
+      return null;
+    }
     await this.publishPost(postId);
     return this.getPostTranslation(postId, language.trim().toLowerCase());
   }
 
   async discardChanges(id: string): Promise<PostData | null> {
     const db = getDatabase().getLocal();
-    const client = getDatabase().getLocalClient();
     const dbPost = await db.select().from(posts).where(eq(posts.id, id)).get();
     
     if (!dbPost) {
@@ -2540,7 +2616,9 @@ export class PostEngine extends EventEmitter {
 
   async getPublishedVersionsBulk(ids: string[]): Promise<Map<string, PostData>> {
     const result = new Map<string, PostData>();
-    if (ids.length === 0) return result;
+    if (ids.length === 0) {
+      return result;
+    }
 
     const db = getDatabase().getLocal();
     const idSet = new Set(ids);
@@ -2550,7 +2628,9 @@ export class PostEngine extends EventEmitter {
       .all();
 
     for (const dbPost of dbPosts) {
-      if (!idSet.has(dbPost.id) || !dbPost.filePath) continue;
+      if (!idSet.has(dbPost.id) || !dbPost.filePath) {
+        continue;
+      }
       result.set(dbPost.id, this.dbRowToPostData(dbPost, ''));
     }
 
@@ -2582,7 +2662,9 @@ export class PostEngine extends EventEmitter {
    */
   async rebuildFTSIndex(): Promise<void> {
     const client = getDatabase().getLocalClient();
-    if (!client) return;
+    if (!client) {
+      return;
+    }
 
     const allPosts = await this.getAllPostsUnpaginated();
     
@@ -2590,7 +2672,7 @@ export class PostEngine extends EventEmitter {
       await this.updateFTSIndex(post);
     }
     
-    console.log(`Rebuilt FTS index for ${allPosts.length} posts`);
+    return;
   }
 
   async reconcilePublishedPostsFromGitChanges(
@@ -2878,7 +2960,6 @@ export class PostEngine extends EventEmitter {
         }
 
         onProgress(100, `Reindexed ${total} posts`);
-        console.log(`Reindexed search text for ${total} posts`);
       },
     };
 
@@ -2892,7 +2973,6 @@ export class PostEngine extends EventEmitter {
       name: 'Rebuild database from post files',
       execute: async (onProgress) => {
         const db = getDatabase().getLocal();
-        const client = getDatabase().getLocalClient();
 
         onProgress(0, 'Deleting existing posts for project...');
 
@@ -2912,7 +2992,6 @@ export class PostEngine extends EventEmitter {
           await db.delete(postLinks).where(inArray(postLinks.targetPostId, postIds));
           // Delete posts
           await db.delete(posts).where(eq(posts.projectId, this.currentProjectId));
-          console.log(`Deleted ${existingPosts.length} existing post(s) for project ${this.currentProjectId}`);
         }
         await db.delete(postTranslations).where(eq(postTranslations.projectId, this.currentProjectId));
 
@@ -2956,12 +3035,6 @@ export class PostEngine extends EventEmitter {
         const translationFiles: Array<{ filePath: string; data: PostTranslationFileData }> = [];
         let importedCount = 0;
         let importedTranslationCount = 0;
-        let parseFailedCount = 0;
-        let deduplicatedSlugCount = 0;
-        let deduplicatedIdCount = 0;
-        let insertFailedCount = 0;
-        let skippedTranslationMissingSourceCount = 0;
-        let skippedDuplicateTranslationCount = 0;
 
         for (let i = 0; i < markdownFiles.length; i++) {
           const filePath = markdownFiles[i];
@@ -2980,7 +3053,6 @@ export class PostEngine extends EventEmitter {
           const postData = await this.readPostFile(filePath);
 
           if (!postData) {
-            parseFailedCount++;
             continue;
           }
 
@@ -2990,7 +3062,6 @@ export class PostEngine extends EventEmitter {
             let postId = postData.id;
             while (insertedIds.has(postId)) {
               postId = uuidv4();
-              deduplicatedIdCount++;
             }
 
             let slug = postData.slug;
@@ -2999,7 +3070,6 @@ export class PostEngine extends EventEmitter {
             while (insertedSlugs.has(`${projectId}:${slug}`)) {
               slug = `${baseSlug}-${slugAttempt}`;
               slugAttempt++;
-              deduplicatedSlugCount++;
             }
 
             const checksum = this.calculateChecksum(postData.content);
@@ -3045,9 +3115,8 @@ export class PostEngine extends EventEmitter {
               tags: postData.tags,
               categories: postData.categories,
             });
-          } catch (error: any) {
-            insertFailedCount++;
-            if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          } catch (error) {
+            if (typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
               console.error(`Failed to insert post "${postData.title}" from ${filePath}: Unique constraint violation`);
             } else {
               console.error(`Failed to process post from ${filePath}:`, error);
@@ -3068,11 +3137,8 @@ export class PostEngine extends EventEmitter {
           onProgress,
         );
         importedTranslationCount = translationImportResult.imported;
-        skippedTranslationMissingSourceCount = translationImportResult.skippedMissingSource;
-        skippedDuplicateTranslationCount = translationImportResult.skippedDuplicates;
 
         onProgress(100, `Database rebuild complete: imported ${importedCount} posts and ${importedTranslationCount} translations from ${markdownFiles.length} files`);
-        console.log(`[PostEngine] rebuildDatabaseFromFiles complete. scanned=${markdownFiles.length}, importedPosts=${importedCount}, importedTranslations=${importedTranslationCount}, parseFailed=${parseFailedCount}, insertFailed=${insertFailedCount}, deduplicatedSlugs=${deduplicatedSlugCount}, deduplicatedIds=${deduplicatedIdCount}, skippedTranslationsMissingSource=${skippedTranslationMissingSourceCount}, skippedDuplicateTranslations=${skippedDuplicateTranslationCount}`);
         this.emit('databaseRebuilt');
       },
     };
@@ -3112,7 +3178,9 @@ export class PostEngine extends EventEmitter {
     // Delete existing links from this post
     await db.delete(postLinks).where(eq(postLinks.sourcePostId, postId));
     
-    if (extractedLinks.length === 0) return;
+    if (extractedLinks.length === 0) {
+      return;
+    }
     
     // Get all posts to resolve slugs to IDs
     const allPosts = await db.select({ id: posts.id, slug: posts.slug })
@@ -3150,7 +3218,9 @@ export class PostEngine extends EventEmitter {
       .from(postLinks)
       .where(eq(postLinks.targetPostId, postId));
     
-    if (links.length === 0) return [];
+    if (links.length === 0) {
+      return [];
+    }
     
     const sourceIds = links.map(l => l.sourcePostId);
     const sourcePosts = await db
@@ -3176,7 +3246,9 @@ export class PostEngine extends EventEmitter {
       })
       .from(postLinks);
 
-    if (allLinks.length === 0) return new Map();
+    if (allLinks.length === 0) {
+      return new Map();
+    }
 
     const sourceIds = new Set(allLinks.map(l => l.sourcePostId));
     const allSourcePosts = await db
@@ -3191,7 +3263,9 @@ export class PostEngine extends EventEmitter {
     const result = new Map<string, { id: string; title: string; slug: string }[]>();
     for (const link of allLinks) {
       const sourcePost = sourcePostById.get(link.sourcePostId);
-      if (!sourcePost) continue;
+      if (!sourcePost) {
+        continue;
+      }
       const existing = result.get(link.targetPostId);
       if (existing) {
         existing.push(sourcePost);
@@ -3217,7 +3291,9 @@ export class PostEngine extends EventEmitter {
       .from(postLinks)
       .where(eq(postLinks.sourcePostId, postId));
     
-    if (links.length === 0) return [];
+    if (links.length === 0) {
+      return [];
+    }
     
     const targetIds = links.map(l => l.targetPostId);
     const targetPosts = await db
