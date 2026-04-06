@@ -90,7 +90,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@monaco-editor/react": "^4.7.0",
     "@picocss/pico": "^2.1.1",
-    "@xmldom/xmldom": "^0.8.11",
+    "@xmldom/xmldom": "^0.8.12",
     "ai": "^6.0.105",
     "chokidar": "^5.0.0",
     "d3-cloud": "^1.2.8",
