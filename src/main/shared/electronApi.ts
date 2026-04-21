@@ -1031,8 +1031,8 @@ export interface ElectronAPI {
     setGenericOpenAIApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
     validateGenericOpenAIConfig: () => Promise<{ isValid: boolean; models: ChatModel[]; error?: string }>;
     getGenericOpenAIModels: () => Promise<ChatModel[]>;
-    getGenericOpenAIModelCapabilities: () => Promise<Record<string, { tools: boolean; vision: boolean }>>;
-    setGenericOpenAIModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => Promise<{ success: boolean; error?: string }>;
+    getGenericOpenAIModelCapabilities: () => Promise<Record<string, { tools: boolean; vision: boolean; disableThinking: boolean }>>;
+    setGenericOpenAIModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean; disableThinking: boolean }) => Promise<{ success: boolean; error?: string }>;
 
     // Offline / Airplane mode
     getOfflineMode: () => Promise<boolean>;

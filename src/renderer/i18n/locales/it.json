@@ -884,6 +884,7 @@
   "settings.ai.genericOpenAICapModel": "Modello",
   "settings.ai.genericOpenAICapTools": "Strumenti",
   "settings.ai.genericOpenAICapVision": "Visione",
+  "settings.ai.genericOpenAICapDisableThinking": "Disattiva ragionamento",
   "settings.toast.genericOpenAIEnabled": "Endpoint generico OpenAI abilitato",
   "settings.toast.genericOpenAIDisabled": "Endpoint generico OpenAI disabilitato",
   "settings.toast.genericOpenAISettingsSaved": "Impostazioni generiche OpenAI salvate",

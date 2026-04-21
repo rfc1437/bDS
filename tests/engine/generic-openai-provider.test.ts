@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { generateText } from 'ai';
 import { ProviderRegistry } from '../../src/main/engine/ai/providers';
 
 vi.mock('../../src/main/engine/ModelCatalogEngine', () => ({
@@ -54,5 +55,58 @@ describe('generic OpenAI-compatible provider support', () => {
     expect(registry.isReady()).toBe(false);
     expect(registry.getKnownLocalModels()).toEqual([]);
     expect(() => registry.resolveModel('custom-model')).toThrow(/not available offline/i);
+  });
+
+  it('stores disableThinking for generic endpoint models', () => {
+    registry.setGenericOpenAIModelCapabilities('custom-model', { tools: false, vision: true, disableThinking: true });
+
+    expect(registry.getGenericOpenAIModelCapabilities('custom-model')).toEqual({
+      tools: false,
+      vision: true,
+      disableThinking: true,
+    });
+  });
+
+  it('injects enable_thinking false only when disableThinking is enabled', async () => {
+    registry.setGenericOpenAIEnabled(true);
+    registry.setGenericOpenAIBaseURL('http://localhost:4000/v1');
+    registry.registerGenericOpenAIModel('custom-model');
+    registry.setGenericOpenAIModelCapabilities('custom-model', { tools: false, vision: false, disableThinking: true });
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'chatcmpl-test',
+      object: 'chat.completion',
+      created: 1,
+      model: 'custom-model',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: 'Short title',
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch;
+
+    try {
+      const model = registry.resolveModel('custom-model');
+      const result = await generateText({
+        model,
+        prompt: 'hello',
+        maxOutputTokens: 10,
+        maxRetries: 0,
+      });
+
+      expect(result.text).toBe('Short title');
+      const [, request] = mockFetch.mock.calls[0] as [string, { body: string }];
+      expect(JSON.parse(request.body)).toMatchObject({
+        chat_template_kwargs: { enable_thinking: false },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

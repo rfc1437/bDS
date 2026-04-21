@@ -367,7 +367,7 @@ export const electronAPI: ElectronAPI = {
     validateGenericOpenAIConfig: () => ipcRenderer.invoke('chat:validateGenericOpenAIConfig'),
     getGenericOpenAIModels: () => ipcRenderer.invoke('chat:getGenericOpenAIModels'),
     getGenericOpenAIModelCapabilities: () => ipcRenderer.invoke('chat:getGenericOpenAIModelCapabilities'),
-    setGenericOpenAIModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setGenericOpenAIModelCapabilities', modelId, caps),
+    setGenericOpenAIModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean; disableThinking: boolean }) => ipcRenderer.invoke('chat:setGenericOpenAIModelCapabilities', modelId, caps),
 
     // Offline / Airplane Mode
     getOfflineMode: () => ipcRenderer.invoke('chat:getOfflineMode'),

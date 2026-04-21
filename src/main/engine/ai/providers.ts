@@ -130,7 +130,7 @@ export class ProviderRegistry {
   private genericOpenAIApiKey = '';
   private genericOpenAIProvider: ReturnType<typeof createOpenAI> | null = null;
   private genericOpenAIModelIds = new Set<string>();
-  private genericOpenAICapabilities = new Map<string, { tools: boolean; vision: boolean }>();
+  private genericOpenAICapabilities = new Map<string, { tools: boolean; vision: boolean; disableThinking: boolean }>();
   private modelCatalogEngine = new ModelCatalogEngine();
   private _offlineMode = false;
 
@@ -353,19 +353,23 @@ export class ProviderRegistry {
   }
 
   /** Get capability overrides for a specific generic OpenAI model. */
-  getGenericOpenAIModelCapabilities(modelId: string): { tools: boolean; vision: boolean } {
-    return this.genericOpenAICapabilities.get(modelId) ?? { tools: false, vision: false };
+  getGenericOpenAIModelCapabilities(modelId: string): { tools: boolean; vision: boolean; disableThinking: boolean } {
+    return this.genericOpenAICapabilities.get(modelId) ?? { tools: false, vision: false, disableThinking: false };
   }
 
   /** Set capability overrides for a specific generic OpenAI model. */
-  setGenericOpenAIModelCapabilities(modelId: string, caps: { tools: boolean; vision: boolean }): void {
-    this.genericOpenAICapabilities.set(modelId, caps);
+  setGenericOpenAIModelCapabilities(modelId: string, caps: { tools: boolean; vision: boolean; disableThinking?: boolean }): void {
+    this.genericOpenAICapabilities.set(modelId, {
+      tools: caps.tools,
+      vision: caps.vision,
+      disableThinking: caps.disableThinking ?? false,
+    });
     this.invalidateModelCache();
   }
 
   /** Get all stored generic OpenAI capability overrides. */
-  getAllGenericOpenAIModelCapabilities(): Record<string, { tools: boolean; vision: boolean }> {
-    const result: Record<string, { tools: boolean; vision: boolean }> = {};
+  getAllGenericOpenAIModelCapabilities(): Record<string, { tools: boolean; vision: boolean; disableThinking: boolean }> {
+    const result: Record<string, { tools: boolean; vision: boolean; disableThinking: boolean }> = {};
     for (const [id, caps] of this.genericOpenAICapabilities) {
       result[id] = caps;
     }
@@ -373,10 +377,14 @@ export class ProviderRegistry {
   }
 
   /** Load generic OpenAI capability overrides from serialized object. */
-  loadGenericOpenAIModelCapabilities(data: Record<string, { tools: boolean; vision: boolean }>): void {
+  loadGenericOpenAIModelCapabilities(data: Record<string, { tools: boolean; vision: boolean; disableThinking?: boolean }>): void {
     this.genericOpenAICapabilities.clear();
     for (const [id, caps] of Object.entries(data)) {
-      this.genericOpenAICapabilities.set(id, caps);
+      this.genericOpenAICapabilities.set(id, {
+        tools: caps.tools,
+        vision: caps.vision,
+        disableThinking: caps.disableThinking ?? false,
+      });
     }
   }
 
@@ -388,6 +396,11 @@ export class ProviderRegistry {
   /** Check whether a generic OpenAI model has vision capability enabled. */
   genericOpenAIModelSupportsVision(modelId: string): boolean {
     return this.genericOpenAICapabilities.get(modelId)?.vision ?? false;
+  }
+
+  /** Check whether a generic OpenAI model should disable reasoning/thinking output. */
+  genericOpenAIModelDisablesThinking(modelId: string): boolean {
+    return this.genericOpenAICapabilities.get(modelId)?.disableThinking ?? false;
   }
 
   /**
@@ -491,9 +504,41 @@ export class ProviderRegistry {
         throw new Error(`Generic OpenAI endpoint not configured for model '${modelId}'`);
       }
       if (!this.genericOpenAIProvider) {
+        const genericFetch: typeof fetch = async (input, init) => {
+          const url = typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+
+          if (url.endsWith('/chat/completions') && typeof init?.body === 'string') {
+            try {
+              const body = JSON.parse(init.body) as { model?: string; chat_template_kwargs?: Record<string, unknown> };
+              if (body.model && this.genericOpenAIModelDisablesThinking(body.model)) {
+                const nextInit = {
+                  ...init,
+                  body: JSON.stringify({
+                    ...body,
+                    chat_template_kwargs: {
+                      ...body.chat_template_kwargs,
+                      enable_thinking: false,
+                    },
+                  }),
+                };
+                return fetch(input, nextInit);
+              }
+            } catch {
+              // Fall back to the original request if the body isn't JSON.
+            }
+          }
+
+          return fetch(input, init);
+        };
+
         this.genericOpenAIProvider = createOpenAI({
           baseURL: this.genericOpenAIBaseURL,
           apiKey: this.genericOpenAIApiKey || 'dummy-key',
+          fetch: genericFetch,
         });
       }
       return this.genericOpenAIProvider.chat(modelId);

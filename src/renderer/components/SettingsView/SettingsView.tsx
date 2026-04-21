@@ -259,7 +259,7 @@ export const SettingsView: React.FC = () => {
   const [hasGenericOpenAIApiKey, setHasGenericOpenAIApiKey] = useState(false);
   const [newGenericOpenAIApiKey, setNewGenericOpenAIApiKey] = useState('');
   const [genericOpenAIModels, setGenericOpenAIModels] = useState<{id: string; name: string}[]>([]);
-  const [genericOpenAICapabilities, setGenericOpenAICapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
+  const [genericOpenAICapabilities, setGenericOpenAICapabilities] = useState<Record<string, { tools: boolean; vision: boolean; disableThinking: boolean }>>({});
   const [offlineModeEnabled, setOfflineModeEnabled] = useState(false);
   const [offlineChatModel, setOfflineChatModel] = useState('');
   const [offlineTitleModel, setOfflineTitleModel] = useState('');
@@ -1466,8 +1466,8 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleGenericOpenAICapabilityToggle = async (modelId: string, field: 'tools' | 'vision', value: boolean) => {
-    const current = genericOpenAICapabilities[modelId] ?? { tools: false, vision: false };
+  const handleGenericOpenAICapabilityToggle = async (modelId: string, field: 'tools' | 'vision' | 'disableThinking', value: boolean) => {
+    const current = genericOpenAICapabilities[modelId] ?? { tools: false, vision: false, disableThinking: false };
     const updated = { ...current, [field]: value };
     try {
       const result = await window.electronAPI?.chat.setGenericOpenAIModelCapabilities(modelId, updated);
@@ -1939,11 +1939,12 @@ export const SettingsView: React.FC = () => {
                       <th>{t('settings.ai.genericOpenAICapModel')}</th>
                       <th>{t('settings.ai.genericOpenAICapTools')}</th>
                       <th>{t('settings.ai.genericOpenAICapVision')}</th>
+                      <th>{t('settings.ai.genericOpenAICapDisableThinking')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {genericOpenAIModels.map(m => {
-                      const caps = genericOpenAICapabilities[m.id] ?? { tools: false, vision: false };
+                      const caps = genericOpenAICapabilities[m.id] ?? { tools: false, vision: false, disableThinking: false };
                       return (
                         <tr key={m.id}>
                           <td>{m.name}</td>
@@ -1959,6 +1960,13 @@ export const SettingsView: React.FC = () => {
                               type="checkbox"
                               checked={caps.vision}
                               onChange={(e) => handleGenericOpenAICapabilityToggle(m.id, 'vision', e.target.checked)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={caps.disableThinking}
+                              onChange={(e) => handleGenericOpenAICapabilityToggle(m.id, 'disableThinking', e.target.checked)}
                             />
                           </td>
                         </tr>

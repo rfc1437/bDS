@@ -634,7 +634,7 @@ export function registerChatHandlers(): void {
   });
 
   // Set capability override for a single generic OpenAI model
-  ipcMain.handle('chat:setGenericOpenAIModelCapabilities', async (_, modelId: string, caps: { tools: boolean; vision: boolean }) => {
+  ipcMain.handle('chat:setGenericOpenAIModelCapabilities', async (_, modelId: string, caps: { tools: boolean; vision: boolean; disableThinking: boolean }) => {
     try {
       await ensureInitialized();
       const reg = getProviders();
