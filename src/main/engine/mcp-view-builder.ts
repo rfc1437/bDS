@@ -101,7 +101,7 @@ const SHARED_JS = `\
       document.getElementById("status").textContent = "Error: App bundle not loaded"; document.getElementById("status").className = "status status-error"; document.getElementById("status").style.display = "block"; throw new Error("App bundle not loaded");
     }
 
-    const app = new App({ name: "bDS Review", version: "1.0.0" });
+    const app = new App({ name: "bDS Review", version: "1.0.1" });
 
     let currentData = null;
 

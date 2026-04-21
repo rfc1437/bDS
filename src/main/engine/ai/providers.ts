@@ -31,10 +31,12 @@ export const OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 export const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
 export const LMSTUDIO_BASE_URL = 'http://localhost:1234/v1';
 export const LMSTUDIO_MODELS_URL = 'http://localhost:1234/v1/models';
+export const GENERIC_OPENAI_MODELS_PATH = '/models';
 
 const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const OLLAMA_FETCH_TIMEOUT = 3000; // 3 s — fail fast when Ollama isn't running
 const LMSTUDIO_FETCH_TIMEOUT = 3000; // 3 s — fail fast when LM Studio isn't running
+const GENERIC_OPENAI_FETCH_TIMEOUT = 10000; // 10 s for generic endpoints
 
 // ---------------------------------------------------------------------------
 // Gateway factory
@@ -123,6 +125,12 @@ export class ProviderRegistry {
   private lmstudioProvider: ReturnType<typeof createOpenAI> | null = null;
   private lmstudioModelIds = new Set<string>();
   private lmstudioCapabilities = new Map<string, { tools: boolean; vision: boolean }>();
+  private genericOpenAIEnabled = false;
+  private genericOpenAIBaseURL = '';
+  private genericOpenAIApiKey = '';
+  private genericOpenAIProvider: ReturnType<typeof createOpenAI> | null = null;
+  private genericOpenAIModelIds = new Set<string>();
+  private genericOpenAICapabilities = new Map<string, { tools: boolean; vision: boolean }>();
   private modelCatalogEngine = new ModelCatalogEngine();
   private _offlineMode = false;
 
@@ -297,9 +305,94 @@ export class ProviderRegistry {
     return this.lmstudioCapabilities.get(modelId)?.vision ?? false;
   }
 
+  // ---- Generic OpenAI-compatible endpoint management ----
+
+  setGenericOpenAIEnabled(enabled: boolean): void {
+    this.genericOpenAIEnabled = enabled;
+    this.genericOpenAIProvider = null;
+    this.invalidateModelCache();
+  }
+
+  isGenericOpenAIEnabled(): boolean {
+    return this.genericOpenAIEnabled;
+  }
+
+  setGenericOpenAIBaseURL(baseURL: string): void {
+    this.genericOpenAIBaseURL = this.normalizeGenericOpenAIBaseURL(baseURL);
+    this.genericOpenAIProvider = null;
+    this.invalidateModelCache();
+  }
+
+  getGenericOpenAIBaseURL(): string {
+    return this.genericOpenAIBaseURL;
+  }
+
+  setGenericOpenAIApiKey(apiKey: string): void {
+    this.genericOpenAIApiKey = apiKey;
+    this.genericOpenAIProvider = null;
+    this.invalidateModelCache();
+  }
+
+  getGenericOpenAIApiKey(): string {
+    return this.genericOpenAIApiKey;
+  }
+
+  /** Register a model ID as belonging to the generic OpenAI endpoint. */
+  registerGenericOpenAIModel(modelId: string): void {
+    this.genericOpenAIModelIds.add(modelId);
+  }
+
+  /** Check whether a model ID was registered as a generic OpenAI model. */
+  isGenericOpenAIModel(modelId: string): boolean {
+    return this.genericOpenAIModelIds.has(modelId);
+  }
+
+  /** Remove all registered generic OpenAI model IDs. */
+  clearGenericOpenAIModels(): void {
+    this.genericOpenAIModelIds.clear();
+  }
+
+  /** Get capability overrides for a specific generic OpenAI model. */
+  getGenericOpenAIModelCapabilities(modelId: string): { tools: boolean; vision: boolean } {
+    return this.genericOpenAICapabilities.get(modelId) ?? { tools: false, vision: false };
+  }
+
+  /** Set capability overrides for a specific generic OpenAI model. */
+  setGenericOpenAIModelCapabilities(modelId: string, caps: { tools: boolean; vision: boolean }): void {
+    this.genericOpenAICapabilities.set(modelId, caps);
+    this.invalidateModelCache();
+  }
+
+  /** Get all stored generic OpenAI capability overrides. */
+  getAllGenericOpenAIModelCapabilities(): Record<string, { tools: boolean; vision: boolean }> {
+    const result: Record<string, { tools: boolean; vision: boolean }> = {};
+    for (const [id, caps] of this.genericOpenAICapabilities) {
+      result[id] = caps;
+    }
+    return result;
+  }
+
+  /** Load generic OpenAI capability overrides from serialized object. */
+  loadGenericOpenAIModelCapabilities(data: Record<string, { tools: boolean; vision: boolean }>): void {
+    this.genericOpenAICapabilities.clear();
+    for (const [id, caps] of Object.entries(data)) {
+      this.genericOpenAICapabilities.set(id, caps);
+    }
+  }
+
+  /** Check whether a generic OpenAI model has tools capability enabled. */
+  genericOpenAIModelSupportsTools(modelId: string): boolean {
+    return this.genericOpenAICapabilities.get(modelId)?.tools ?? false;
+  }
+
+  /** Check whether a generic OpenAI model has vision capability enabled. */
+  genericOpenAIModelSupportsVision(modelId: string): boolean {
+    return this.genericOpenAICapabilities.get(modelId)?.vision ?? false;
+  }
+
   /**
-   * Detect the effective provider for a model ID, checking Ollama and LM Studio
-   * registration first, then falling back to prefix-based detection.
+   * Detect the effective provider for a model ID, checking Ollama, LM Studio,
+   * and generic OpenAI registration first, then falling back to prefix-based detection.
    */
   detectModelProvider(modelId: string): string {
     if (this.ollamaModelIds.has(modelId)) {
@@ -307,6 +400,9 @@ export class ProviderRegistry {
     }
     if (this.lmstudioModelIds.has(modelId)) {
       return 'lmstudio';
+    }
+    if (this.genericOpenAIModelIds.has(modelId)) {
+      return 'generic-openai';
     }
     return detectProvider(modelId);
   }
@@ -316,7 +412,7 @@ export class ProviderRegistry {
     if (this._offlineMode) {
       return !!(this.ollamaEnabled || this.lmstudioEnabled);
     }
-    return !!(this.opencodeKey || this.mistralKey || this.ollamaEnabled || this.lmstudioEnabled);
+    return !!(this.opencodeKey || this.mistralKey || this.ollamaEnabled || this.lmstudioEnabled || this.genericOpenAIEnabled);
   }
 
   /** Check whether the key for a specific provider is set. */
@@ -326,6 +422,9 @@ export class ProviderRegistry {
     }
     if (provider === 'lmstudio') {
       return this.lmstudioEnabled;
+    }
+    if (provider === 'generic-openai') {
+      return this.genericOpenAIEnabled && Boolean(this.genericOpenAIBaseURL);
     }
     // In offline mode, cloud providers are unavailable
     if (this._offlineMode) {
@@ -338,12 +437,13 @@ export class ProviderRegistry {
   }
 
   /** Returns status of all configured providers. */
-  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean; offlineMode: boolean } {
+  getProviderStatus(): { opencode: boolean; mistral: boolean; ollama: boolean; lmstudio: boolean; genericOpenAI: boolean; offlineMode: boolean } {
     return {
       opencode: !!this.opencodeKey,
       mistral: !!this.mistralKey,
       ollama: this.ollamaEnabled,
       lmstudio: this.lmstudioEnabled,
+      genericOpenAI: this.genericOpenAIEnabled,
       offlineMode: this._offlineMode,
     };
   }
@@ -383,6 +483,20 @@ export class ProviderRegistry {
         });
       }
       return this.lmstudioProvider.chat(modelId);
+    }
+
+    // Check if this is a registered generic OpenAI model
+    if (this.genericOpenAIModelIds.has(modelId)) {
+      if (!this.genericOpenAIEnabled || !this.genericOpenAIBaseURL) {
+        throw new Error(`Generic OpenAI endpoint not configured for model '${modelId}'`);
+      }
+      if (!this.genericOpenAIProvider) {
+        this.genericOpenAIProvider = createOpenAI({
+          baseURL: this.genericOpenAIBaseURL,
+          apiKey: this.genericOpenAIApiKey || 'dummy-key',
+        });
+      }
+      return this.genericOpenAIProvider.chat(modelId);
     }
 
     const provider = detectProvider(modelId);
@@ -544,6 +658,19 @@ export class ProviderRegistry {
       }
     }
 
+    // Fetch generic OpenAI-compatible endpoint models
+    if (this.genericOpenAIEnabled && this.genericOpenAIBaseURL && !this._offlineMode) {
+      try {
+        const models = await this.fetchGenericOpenAIModels();
+        allModels.push(...models);
+        if (models.length > 0) {
+          fetched = true;
+        }
+      } catch {
+        // Generic OpenAI endpoint not available — skip silently
+      }
+    }
+
     if (fetched && allModels.length > 0) {
       this.cachedModels = allModels;
       this.cachedModelsAt = Date.now();
@@ -678,6 +805,78 @@ export class ProviderRegistry {
     }
   }
 
+  // ---- Generic OpenAI-compatible endpoint model listing ----
+
+  /**
+   * Fetch available models from a generic OpenAI-compatible /v1/models endpoint.
+   * Returns ChatModel[] and registers the model IDs internally.
+   */
+  async fetchGenericOpenAIModels(): Promise<ChatModel[]> {
+    const normalizedBaseURL = this.normalizeGenericOpenAIBaseURL(this.genericOpenAIBaseURL);
+    if (!normalizedBaseURL) {
+      return [];
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), GENERIC_OPENAI_FETCH_TIMEOUT);
+      
+      const headers: Record<string, string> = {};
+      if (this.genericOpenAIApiKey) {
+        headers.Authorization = `Bearer ${this.genericOpenAIApiKey}`;
+      }
+      
+      const response = await fetch(`${normalizedBaseURL}${GENERIC_OPENAI_MODELS_PATH}`, {
+        method: 'GET', 
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json() as { data?: Array<{ id: string }> };
+      if (!data.data || !Array.isArray(data.data)) {
+        return [];
+      }
+
+      const models: ChatModel[] = data.data.map(m => ({
+        id: m.id,
+        name: m.id,
+        provider: 'generic-openai',
+        vision: this.genericOpenAIModelSupportsVision(m.id),
+      }));
+      
+      // Only replace registered IDs on successful fetch
+      this.clearGenericOpenAIModels();
+      for (const m of models) {
+        this.registerGenericOpenAIModel(m.id);
+      }
+      return models;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Validate generic OpenAI endpoint configuration by fetching models.
+   */
+  async validateGenericOpenAIConfig(): Promise<{ isValid: boolean; models: ChatModel[]; error?: string }> {
+    if (!this.genericOpenAIBaseURL) {
+      return { isValid: false, models: [], error: 'Base URL is required' };
+    }
+
+    try {
+      const models = await this.fetchGenericOpenAIModels();
+      return { isValid: true, models };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { isValid: false, models: [], error: errorMessage };
+    }
+  }
+
   // ---- Private helpers ----
 
   private async fetchModelsFromEndpoint(
@@ -723,6 +922,14 @@ export class ProviderRegistry {
       // Catalog unavailable
     }
     return { vision, names };
+  }
+
+  private normalizeGenericOpenAIBaseURL(baseURL: string): string {
+    const trimmed = baseURL.trim().replace(/\/+$/, '');
+    if (!trimmed) {
+      return '';
+    }
+    return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
   }
 
   private async getModelsFromCatalog(): Promise<ChatModel[]> {

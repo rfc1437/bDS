@@ -132,6 +132,13 @@ async function ensureInitialized(): Promise<void> {
         }
       } catch { /* ignore */ }
 
+      try {
+        const genericOpenAIKey = await keyStore.retrieve('generic_openai_api_key');
+        if (genericOpenAIKey) {
+          reg.setGenericOpenAIApiKey(genericOpenAIKey);
+        }
+      } catch { /* ignore */ }
+
       // Restore Ollama enabled state from settings DB
       try {
         const ollamaEnabled = await getChatEngine().getSetting('ollama_enabled');
@@ -167,6 +174,21 @@ async function ensureInitialized(): Promise<void> {
         }
       } catch { /* ignore */ }
 
+      // Restore generic OpenAI enabled state and base URL from settings DB
+      try {
+        const genericOpenAIEnabled = await getChatEngine().getSetting('generic_openai_enabled');
+        if (genericOpenAIEnabled === 'true') {
+          reg.setGenericOpenAIEnabled(true);
+        }
+      } catch { /* ignore */ }
+
+      try {
+        const genericOpenAIBaseURL = await getChatEngine().getSetting('generic_openai_base_url');
+        if (genericOpenAIBaseURL) {
+          reg.setGenericOpenAIBaseURL(genericOpenAIBaseURL);
+        }
+      } catch { /* ignore */ }
+
       // Restore LM Studio model capability overrides
       try {
         const lmCapsJson = await getChatEngine().getSetting('lmstudio_model_capabilities');
@@ -176,12 +198,31 @@ async function ensureInitialized(): Promise<void> {
         }
       } catch { /* ignore */ }
 
+      // Restore generic OpenAI model capability overrides
+      try {
+        const genericCapsJson = await getChatEngine().getSetting('generic_openai_model_capabilities');
+        if (genericCapsJson) {
+          const caps = JSON.parse(genericCapsJson) as Record<string, { tools: boolean; vision: boolean }>;
+          reg.loadGenericOpenAIModelCapabilities(caps);
+        }
+      } catch { /* ignore */ }
+
       // Restore known LM Studio model IDs (so offline mode works without a fresh fetch)
       try {
         const lmIds = await getChatEngine().getSetting('lmstudio_known_model_ids');
         if (lmIds) {
           for (const id of JSON.parse(lmIds) as string[]) {
             reg.registerLmstudioModel(id);
+          }
+        }
+      } catch { /* ignore */ }
+
+      // Restore known generic OpenAI model IDs for provider routing before a refresh
+      try {
+        const genericIds = await getChatEngine().getSetting('generic_openai_known_model_ids');
+        if (genericIds) {
+          for (const id of JSON.parse(genericIds) as string[]) {
+            reg.registerGenericOpenAIModel(id);
           }
         }
       } catch { /* ignore */ }
@@ -468,6 +509,147 @@ export function registerChatHandlers(): void {
     }
   });
 
+  // ============ Generic OpenAI-compatible Endpoint ============
+
+  // Get generic OpenAI enabled state
+  ipcMain.handle('chat:getGenericOpenAIEnabled', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().isGenericOpenAIEnabled();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting generic OpenAI enabled state:', error);
+      return false;
+    }
+  });
+
+  // Set generic OpenAI enabled state
+  ipcMain.handle('chat:setGenericOpenAIEnabled', async (_, enabled: boolean) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setGenericOpenAIEnabled(enabled);
+      await getChatEngine().setSetting('generic_openai_enabled', enabled ? 'true' : 'false');
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting generic OpenAI enabled state:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get generic OpenAI base URL
+  ipcMain.handle('chat:getGenericOpenAIBaseURL', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getGenericOpenAIBaseURL();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting generic OpenAI base URL:', error);
+      return '';
+    }
+  });
+
+  // Set generic OpenAI base URL
+  ipcMain.handle('chat:setGenericOpenAIBaseURL', async (_, baseURL: string) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setGenericOpenAIBaseURL(baseURL);
+      await getChatEngine().setSetting('generic_openai_base_url', baseURL);
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting generic OpenAI base URL:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get generic OpenAI API key (masked)
+  ipcMain.handle('chat:getGenericOpenAIApiKey', async () => {
+    try {
+      await ensureInitialized();
+      const key = getProviders().getGenericOpenAIApiKey();
+      if (!key) {
+        return { hasKey: false, maskedKey: '' };
+      }
+      const masked = '•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4);
+      return { hasKey: true, maskedKey: masked };
+    } catch (error) {
+      console.error('[Chat IPC] Error getting generic OpenAI API key:', error);
+      return { hasKey: false, maskedKey: '' };
+    }
+  });
+
+  // Set generic OpenAI API key
+  ipcMain.handle('chat:setGenericOpenAIApiKey', async (_, apiKey: string) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      const previousKey = reg.getGenericOpenAIApiKey();
+      reg.setGenericOpenAIApiKey(apiKey);
+
+      // Persist to encrypted storage — roll back in-memory key on failure
+      try {
+        await getSecureKeyStore().store('generic_openai_api_key', apiKey);
+      } catch (storeError) {
+        reg.setGenericOpenAIApiKey(previousKey);
+        throw storeError;
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting generic OpenAI API key:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Validate generic OpenAI configuration
+  ipcMain.handle('chat:validateGenericOpenAIConfig', async () => {
+    try {
+      await ensureInitialized();
+      return await getProviders().validateGenericOpenAIConfig();
+    } catch (error) {
+      console.error('[Chat IPC] Error validating generic OpenAI config:', error);
+      return { isValid: false, models: [], error: (error as Error).message };
+    }
+  });
+
+  // Fetch generic OpenAI models
+  ipcMain.handle('chat:getGenericOpenAIModels', async () => {
+    try {
+      await ensureInitialized();
+      return await getProviders().fetchGenericOpenAIModels();
+    } catch (error) {
+      console.error('[Chat IPC] Error fetching generic OpenAI models:', error);
+      return [];
+    }
+  });
+
+  // Get generic OpenAI model capability overrides
+  ipcMain.handle('chat:getGenericOpenAIModelCapabilities', async () => {
+    try {
+      await ensureInitialized();
+      return getProviders().getAllGenericOpenAIModelCapabilities();
+    } catch (error) {
+      console.error('[Chat IPC] Error getting generic OpenAI model capabilities:', error);
+      return {};
+    }
+  });
+
+  // Set capability override for a single generic OpenAI model
+  ipcMain.handle('chat:setGenericOpenAIModelCapabilities', async (_, modelId: string, caps: { tools: boolean; vision: boolean }) => {
+    try {
+      await ensureInitialized();
+      const reg = getProviders();
+      reg.setGenericOpenAIModelCapabilities(modelId, caps);
+
+      // Persist all capabilities to settings DB
+      const allCaps = reg.getAllGenericOpenAIModelCapabilities();
+      await getChatEngine().setSetting('generic_openai_model_capabilities', JSON.stringify(allCaps));
+      return { success: true };
+    } catch (error) {
+      console.error('[Chat IPC] Error setting generic OpenAI model capabilities:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // ============ Offline / Airplane Mode ============
 
   ipcMain.handle('chat:getOfflineMode', async () => {
@@ -627,11 +809,15 @@ export function registerChatHandlers(): void {
       // Persist known local model IDs so offline mode survives restarts
       const ollamaModels = models.filter(m => m.provider === 'ollama').map(m => m.id);
       const lmstudioModels = models.filter(m => m.provider === 'lmstudio').map(m => m.id);
+      const genericOpenAIModels = models.filter(m => m.provider === 'generic-openai').map(m => m.id);
       if (ollamaModels.length > 0) {
         await engine.setSetting('ollama_known_model_ids', JSON.stringify(ollamaModels)).catch(() => {});
       }
       if (lmstudioModels.length > 0) {
         await engine.setSetting('lmstudio_known_model_ids', JSON.stringify(lmstudioModels)).catch(() => {});
+      }
+      if (genericOpenAIModels.length > 0) {
+        await engine.setSetting('generic_openai_known_model_ids', JSON.stringify(genericOpenAIModels)).catch(() => {});
       }
 
       return { success: true, models, selectedModel };

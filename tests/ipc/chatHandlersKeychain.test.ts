@@ -24,9 +24,11 @@ const secureKeyStoreInstances: Array<Record<string, any>> = [];
 
 // Per-test overrides for SecureKeyStore mock behavior
 let secureKeyStoreRetrieveResult: string | null = 'encrypted-stored-key';
+let secureKeyStoreRetrieveByKey = new Map<string, string | null>();
 let secureKeyStoreStoreError: Error | null = null;
 let secureKeyStoreRetrieveError: Error | null = null;
 let secureKeyStoreCleanupError: Error | null = null;
+let chatEngineSettingValues = new Map<string, string | null>();
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -55,7 +57,7 @@ vi.mock('../../src/main/engine/ChatEngine', () => ({
   ChatEngine: class {
     constructor() {
       const instance = {
-        getSetting: vi.fn(async () => null),
+        getSetting: vi.fn(async (key: string) => chatEngineSettingValues.get(key) ?? null),
         setSetting: vi.fn(async () => undefined),
         deleteSetting: vi.fn(async () => undefined),
         getSelectedModel: vi.fn(async () => 'gpt-5'),
@@ -75,8 +77,11 @@ vi.mock('../../src/main/engine/SecureKeyStore', () => ({
         store: vi.fn(async (_key: string, _value: string) => {
           if (secureKeyStoreStoreError) throw secureKeyStoreStoreError;
         }),
-        retrieve: vi.fn(async () => {
+        retrieve: vi.fn(async (key: string) => {
           if (secureKeyStoreRetrieveError) throw secureKeyStoreRetrieveError;
+          if (secureKeyStoreRetrieveByKey.has(key)) {
+            return secureKeyStoreRetrieveByKey.get(key) ?? null;
+          }
           return secureKeyStoreRetrieveResult;
         }),
         remove: vi.fn(async () => undefined),
@@ -98,9 +103,17 @@ vi.mock('../../src/main/engine/ai/providers', () => ({
         getOpencodeKey: vi.fn(() => 'abc12345'),
         setMistralKey: vi.fn(),
         getMistralKey: vi.fn(() => ''),
+        setGenericOpenAIEnabled: vi.fn(),
+        isGenericOpenAIEnabled: vi.fn(() => false),
+        setGenericOpenAIBaseURL: vi.fn(),
+        getGenericOpenAIBaseURL: vi.fn(() => ''),
+        setGenericOpenAIApiKey: vi.fn(),
+        getGenericOpenAIApiKey: vi.fn(() => ''),
+        loadGenericOpenAIModelCapabilities: vi.fn(),
+        registerGenericOpenAIModel: vi.fn(),
         isReady: vi.fn(() => true),
         isProviderKeySet: vi.fn(() => true),
-        getProviderStatus: vi.fn(() => ({ opencode: true, mistral: false })),
+        getProviderStatus: vi.fn(() => ({ opencode: true, mistral: false, ollama: false, lmstudio: false, genericOpenAI: false, offlineMode: false })),
         resolveModel: vi.fn(),
         getAvailableModels: vi.fn(async () => []),
         validateOpencodeKey: vi.fn(async () => ({ isValid: true, models: [] })),
@@ -141,9 +154,11 @@ describe('chatHandlers keychain integration', () => {
     providerRegistryInstances.length = 0;
     secureKeyStoreInstances.length = 0;
     secureKeyStoreRetrieveResult = 'encrypted-stored-key';
+    secureKeyStoreRetrieveByKey = new Map();
     secureKeyStoreStoreError = null;
     secureKeyStoreRetrieveError = null;
     secureKeyStoreCleanupError = null;
+    chatEngineSettingValues = new Map();
     vi.resetModules();
   });
 
@@ -280,6 +295,42 @@ describe('chatHandlers keychain integration', () => {
     // The encrypted key should still be loaded despite cleanup failure
     const registry = providerRegistryInstances[0];
     expect(registry.setOpencodeKey).toHaveBeenCalledWith('encrypted-stored-key');
+  });
+
+  it('restores generic endpoint settings from storage on init', async () => {
+    chatEngineSettingValues = new Map([
+      ['generic_openai_enabled', 'true'],
+      ['generic_openai_base_url', 'http://localhost:4000/v1'],
+      ['generic_openai_model_capabilities', JSON.stringify({
+        'custom-model': { tools: true, vision: false },
+      })],
+      ['generic_openai_known_model_ids', JSON.stringify(['custom-model'])],
+    ]);
+    secureKeyStoreRetrieveByKey = new Map([
+      ['opencode_api_key', 'encrypted-stored-key'],
+      ['mistral_api_key', null],
+      ['generic_openai_api_key', 'generic-secret'],
+    ]);
+
+    const mod = await import('../../src/main/ipc/chatHandlers');
+    const mockBundle = { postEngine: {}, mediaEngine: {}, postMediaEngine: {} };
+    mod.initializeChatHandlers(() => mainWindowMock as never, mockBundle as any);
+    mod.registerChatHandlers();
+
+    const handler = registeredHandlers.get('chat:checkReady');
+    await handler!(undefined);
+
+    const registry = providerRegistryInstances[0];
+    expect(registry.setGenericOpenAIEnabled).toHaveBeenCalledWith(true);
+    expect(registry.setGenericOpenAIBaseURL).toHaveBeenCalledWith('http://localhost:4000/v1');
+    expect(registry.setGenericOpenAIApiKey).toHaveBeenCalledWith('generic-secret');
+    expect(registry.loadGenericOpenAIModelCapabilities).toHaveBeenCalledWith({
+      'custom-model': { tools: true, vision: false },
+    });
+    expect(registry.registerGenericOpenAIModel).toHaveBeenCalledWith('custom-model');
+
+    const keyStore = secureKeyStoreInstances[0];
+    expect(keyStore.retrieve).toHaveBeenCalledWith('generic_openai_api_key');
   });
 
   it('returns error and rolls back in-memory key when store() throws on chat:setApiKey', async () => {

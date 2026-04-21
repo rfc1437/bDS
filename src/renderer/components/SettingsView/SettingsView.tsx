@@ -253,6 +253,13 @@ export const SettingsView: React.FC = () => {
   const [lmstudioEnabled, setLmstudioEnabled] = useState(false);
   const [lmstudioCapabilities, setLmstudioCapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
   const [lmstudioModels, setLmstudioModels] = useState<{id: string; name: string}[]>([]);
+  const [genericOpenAIEnabled, setGenericOpenAIEnabled] = useState(false);
+  const [genericOpenAIBaseURL, setGenericOpenAIBaseURL] = useState('');
+  const [genericOpenAIApiKeyMasked, setGenericOpenAIApiKeyMasked] = useState('');
+  const [hasGenericOpenAIApiKey, setHasGenericOpenAIApiKey] = useState(false);
+  const [newGenericOpenAIApiKey, setNewGenericOpenAIApiKey] = useState('');
+  const [genericOpenAIModels, setGenericOpenAIModels] = useState<{id: string; name: string}[]>([]);
+  const [genericOpenAICapabilities, setGenericOpenAICapabilities] = useState<Record<string, { tools: boolean; vision: boolean }>>({});
   const [offlineModeEnabled, setOfflineModeEnabled] = useState(false);
   const [offlineChatModel, setOfflineChatModel] = useState('');
   const [offlineTitleModel, setOfflineTitleModel] = useState('');
@@ -462,6 +469,33 @@ export const SettingsView: React.FC = () => {
             ]);
             if (lmCaps) setLmstudioCapabilities(lmCaps);
             if (lmModels) setLmstudioModels(lmModels.map(m => ({ id: m.id, name: m.name })));
+          }
+
+          // Load generic OpenAI enabled state
+          const genericOpenAIState = await window.electronAPI?.chat.getGenericOpenAIEnabled();
+          setGenericOpenAIEnabled(!!genericOpenAIState);
+
+          // Load generic OpenAI base URL
+          const genericOpenAIBaseURLResult = await window.electronAPI?.chat.getGenericOpenAIBaseURL();
+          if (genericOpenAIBaseURLResult) {
+            setGenericOpenAIBaseURL(genericOpenAIBaseURLResult);
+          }
+
+          // Load generic OpenAI API key status
+          const genericOpenAIApiKeyResult = await window.electronAPI?.chat.getGenericOpenAIApiKey();
+          if (genericOpenAIApiKeyResult) {
+            setHasGenericOpenAIApiKey(genericOpenAIApiKeyResult.hasKey);
+            setGenericOpenAIApiKeyMasked(genericOpenAIApiKeyResult.maskedKey || '');
+          }
+
+          // Load generic OpenAI model capabilities and models list
+          if (genericOpenAIState) {
+            const [genCaps, genModels] = await Promise.all([
+              window.electronAPI?.chat.getGenericOpenAIModelCapabilities(),
+              window.electronAPI?.chat.getGenericOpenAIModels(),
+            ]);
+            if (genCaps) setGenericOpenAICapabilities(genCaps);
+            if (genModels) setGenericOpenAIModels(genModels.map(m => ({ id: m.id, name: m.name })));
           }
 
           // Load per-purpose model preferences
@@ -1340,6 +1374,98 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  // Generic OpenAI handlers
+  const handleGenericOpenAIToggle = async (enabled: boolean) => {
+    try {
+      const result = await window.electronAPI?.chat.setGenericOpenAIEnabled(enabled);
+      if (result?.success) {
+        setGenericOpenAIEnabled(enabled);
+        showToast.success(t(enabled ? 'settings.toast.genericOpenAIEnabled' : 'settings.toast.genericOpenAIDisabled'));
+
+        // Refresh models after toggle
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+          setSelectedModel(modelsResult.selectedModel || '');
+        }
+
+        // Load generic OpenAI models and capabilities when enabling
+        if (enabled) {
+          const [caps, genModelsList] = await Promise.all([
+            window.electronAPI?.chat.getGenericOpenAIModelCapabilities(),
+            window.electronAPI?.chat.getGenericOpenAIModels(),
+          ]);
+          if (caps) setGenericOpenAICapabilities(caps);
+          if (genModelsList) setGenericOpenAIModels(genModelsList.map(m => ({ id: m.id, name: m.name })));
+        } else {
+          setGenericOpenAIModels([]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle generic OpenAI:', error);
+    }
+  };
+
+  const handleSaveGenericOpenAIBaseURL = async () => {
+    try {
+      const result = await window.electronAPI?.chat.setGenericOpenAIBaseURL(genericOpenAIBaseURL);
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to save generic OpenAI base URL');
+      }
+      const storedBaseURL = await window.electronAPI?.chat.getGenericOpenAIBaseURL();
+      if (typeof storedBaseURL === 'string') {
+        setGenericOpenAIBaseURL(storedBaseURL);
+      }
+      showToast.success(t('settings.toast.genericOpenAISettingsSaved'));
+    } catch (error) {
+      console.error('Failed to save generic OpenAI base URL:', error);
+      showToast.error(t('settings.toast.genericOpenAISettingsSaveFailed'));
+    }
+  };
+
+  const handleSaveGenericOpenAIApiKey = async () => {
+    if (!newGenericOpenAIApiKey.trim()) return;
+    try {
+      const trimmedKey = newGenericOpenAIApiKey.trim();
+      const result = await window.electronAPI?.chat.setGenericOpenAIApiKey(trimmedKey);
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to save generic OpenAI API key');
+      }
+      setHasGenericOpenAIApiKey(true);
+      setGenericOpenAIApiKeyMasked('•'.repeat(Math.max(0, trimmedKey.length - 4)) + trimmedKey.slice(-4));
+      setNewGenericOpenAIApiKey('');
+      showToast.success(t('settings.toast.apiKeySaved'));
+
+      // Refresh models after key change
+      const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+      if (modelsResult?.success && modelsResult.models) {
+        setAvailableModels(modelsResult.models);
+        setSelectedModel(modelsResult.selectedModel || '');
+      }
+    } catch (error) {
+      console.error('Failed to save generic OpenAI API key:', error);
+      showToast.error(t('settings.toast.apiKeySaveFailed'));
+    }
+  };
+
+  const handleGenericOpenAICapabilityToggle = async (modelId: string, field: 'tools' | 'vision', value: boolean) => {
+    const current = genericOpenAICapabilities[modelId] ?? { tools: false, vision: false };
+    const updated = { ...current, [field]: value };
+    try {
+      const result = await window.electronAPI?.chat.setGenericOpenAIModelCapabilities(modelId, updated);
+      if (result?.success) {
+        setGenericOpenAICapabilities(prev => ({ ...prev, [modelId]: updated }));
+        // Refresh available models to reflect vision change
+        const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+        if (modelsResult?.success && modelsResult.models) {
+          setAvailableModels(modelsResult.models);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update generic OpenAI model capabilities:', error);
+    }
+  };
+
   const handleTitleModelChange = async (modelId: string) => {
     try {
       const result = await window.electronAPI?.chat.setTitleModel(modelId);
@@ -1488,6 +1614,7 @@ export const SettingsView: React.FC = () => {
     if (provider === 'mistral') return t('settings.ai.providerMistral');
     if (provider === 'ollama') return t('settings.ai.providerOllama');
     if (provider === 'lmstudio') return t('settings.ai.providerLmstudio');
+    if (provider === 'generic-openai') return t('settings.ai.providerGenericOpenAI');
     return provider;
   };
 
@@ -1712,6 +1839,117 @@ export const SettingsView: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+      </SettingRow>
+
+      <SettingRow
+        id="ai-generic-openai"
+        label={t('settings.ai.genericOpenAILabel')}
+        description={t('settings.ai.genericOpenOIDescription')}
+      >
+        <div className="setting-input-group">
+          <label className="toggle-label">
+            <input
+              id="ai-generic-openai"
+              type="checkbox"
+              checked={genericOpenAIEnabled}
+              onChange={(e) => handleGenericOpenAIToggle(e.target.checked)}
+            />
+            {t('settings.ai.genericOpenAIEnable')}
+          </label>
+          {genericOpenAIEnabled && (
+            <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+          )}
+        </div>
+        {genericOpenAIEnabled && (
+          <div className="generic-openai-settings">
+            <div className="setting-field">
+              <label htmlFor="ai-generic-openai-base-url">{t('settings.ai.genericOpenAIBaseUrlLabel')}</label>
+              <small className="setting-description">{t('settings.ai.genericOpenAIBaseUrlDescription')}</small>
+              <input
+                id="ai-generic-openai-base-url"
+                type="text"
+                value={genericOpenAIBaseURL}
+                onChange={(e) => setGenericOpenAIBaseURL(e.target.value)}
+                placeholder="https://api.example.com/v1"
+              />
+              <button className="secondary" onClick={handleSaveGenericOpenAIBaseURL}>
+                {t('common.save')}
+              </button>
+            </div>
+            <div className="setting-field">
+              <label htmlFor="ai-generic-openai-api-key">{t('settings.ai.genericOpenAIApiKeyLabel')}</label>
+              <small className="setting-description">{t('settings.ai.genericOpenAIApiKeyDescription')}</small>
+              {hasGenericOpenAIApiKey ? (
+                <>
+                  <input
+                    id="ai-generic-openai-api-key"
+                    type="text"
+                    value={genericOpenAIApiKeyMasked}
+                    disabled
+                    placeholder={t('settings.ai.genericOpenAIApiKeyConfigured')}
+                  />
+                  <span className="setting-status-badge success">{t('settings.ai.configured')}</span>
+                  <div className="setting-inline-action">
+                    <button className="text-button" onClick={() => { setHasGenericOpenAIApiKey(false); setGenericOpenAIApiKeyMasked(''); }}>
+                      {t('settings.ai.changeApiKey')}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input
+                    id="ai-generic-openai-api-key"
+                    type="password"
+                    value={newGenericOpenAIApiKey}
+                    onChange={(e) => setNewGenericOpenAIApiKey(e.target.value)}
+                    placeholder={t('chat.apiKeyPlaceholder')}
+                  />
+                  <button className="primary" onClick={handleSaveGenericOpenAIApiKey} disabled={!newGenericOpenAIApiKey.trim()}>
+                    {t('chat.apiKeySave')}
+                  </button>
+                </>
+              )}
+            </div>
+            {genericOpenAIEnabled && genericOpenAIModels.length > 0 && (
+              <div className="generic-openai-model-capabilities">
+                <small className="setting-description">{t('settings.ai.genericOpenAICapabilitiesDescription')}</small>
+                <table className="generic-openai-caps-table">
+                  <thead>
+                    <tr>
+                      <th>{t('settings.ai.genericOpenAICapModel')}</th>
+                      <th>{t('settings.ai.genericOpenAICapTools')}</th>
+                      <th>{t('settings.ai.genericOpenAICapVision')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {genericOpenAIModels.map(m => {
+                      const caps = genericOpenAICapabilities[m.id] ?? { tools: false, vision: false };
+                      return (
+                        <tr key={m.id}>
+                          <td>{m.name}</td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={caps.tools}
+                              onChange={(e) => handleGenericOpenAICapabilityToggle(m.id, 'tools', e.target.checked)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={caps.vision}
+                              onChange={(e) => handleGenericOpenAICapabilityToggle(m.id, 'vision', e.target.checked)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </SettingRow>
