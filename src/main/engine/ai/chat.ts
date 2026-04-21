@@ -294,8 +294,10 @@ export class ChatService {
       // Build tools (skip for Ollama/LM Studio models unless capability override is set)
       const isOllama = this.providers.isOllamaModel(modelId);
       const isLmstudio = this.providers.isLmstudioModel(modelId);
+      const isGenericOpenAI = this.providers.isGenericOpenAIModel(modelId);
       const skipTools = (isOllama && !this.providers.ollamaModelSupportsTools(modelId))
-        || (isLmstudio && !this.providers.lmstudioModelSupportsTools(modelId));
+        || (isLmstudio && !this.providers.lmstudioModelSupportsTools(modelId))
+        || (isGenericOpenAI && !this.providers.genericOpenAIModelSupportsTools(modelId));
       const blogTools = skipTools ? {} : createBlogTools(this.blogToolDeps);
       const a2uiToolsRaw = skipTools ? {} : createA2UITools();
       const allTools = { ...blogTools, ...a2uiToolsRaw };

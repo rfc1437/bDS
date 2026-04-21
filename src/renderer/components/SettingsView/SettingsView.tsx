@@ -1416,6 +1416,19 @@ export const SettingsView: React.FC = () => {
       if (typeof storedBaseURL === 'string') {
         setGenericOpenAIBaseURL(storedBaseURL);
       }
+
+      const [caps, genModelsList, modelsResult] = await Promise.all([
+        window.electronAPI?.chat.getGenericOpenAIModelCapabilities(),
+        window.electronAPI?.chat.getGenericOpenAIModels(),
+        window.electronAPI?.chat.getAvailableModels(),
+      ]);
+      setGenericOpenAICapabilities(caps || {});
+      setGenericOpenAIModels((genModelsList || []).map(m => ({ id: m.id, name: m.name })));
+      if (modelsResult?.success && modelsResult.models) {
+        setAvailableModels(modelsResult.models);
+        setSelectedModel(modelsResult.selectedModel || '');
+      }
+
       showToast.success(t('settings.toast.genericOpenAISettingsSaved'));
     } catch (error) {
       console.error('Failed to save generic OpenAI base URL:', error);
@@ -1436,8 +1449,13 @@ export const SettingsView: React.FC = () => {
       setNewGenericOpenAIApiKey('');
       showToast.success(t('settings.toast.apiKeySaved'));
 
-      // Refresh models after key change
-      const modelsResult = await window.electronAPI?.chat.getAvailableModels();
+      const [caps, genModelsList, modelsResult] = await Promise.all([
+        window.electronAPI?.chat.getGenericOpenAIModelCapabilities(),
+        window.electronAPI?.chat.getGenericOpenAIModels(),
+        window.electronAPI?.chat.getAvailableModels(),
+      ]);
+      setGenericOpenAICapabilities(caps || {});
+      setGenericOpenAIModels((genModelsList || []).map(m => ({ id: m.id, name: m.name })));
       if (modelsResult?.success && modelsResult.models) {
         setAvailableModels(modelsResult.models);
         setSelectedModel(modelsResult.selectedModel || '');
