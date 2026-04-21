@@ -357,6 +357,18 @@ export const electronAPI: ElectronAPI = {
     getLmstudioModelCapabilities: () => ipcRenderer.invoke('chat:getLmstudioModelCapabilities'),
     setLmstudioModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setLmstudioModelCapabilities', modelId, caps),
 
+    // Generic OpenAI-compatible Endpoint
+    getGenericOpenAIEnabled: () => ipcRenderer.invoke('chat:getGenericOpenAIEnabled'),
+    setGenericOpenAIEnabled: (enabled: boolean) => ipcRenderer.invoke('chat:setGenericOpenAIEnabled', enabled),
+    getGenericOpenAIBaseURL: () => ipcRenderer.invoke('chat:getGenericOpenAIBaseURL'),
+    setGenericOpenAIBaseURL: (baseURL: string) => ipcRenderer.invoke('chat:setGenericOpenAIBaseURL', baseURL),
+    getGenericOpenAIApiKey: () => ipcRenderer.invoke('chat:getGenericOpenAIApiKey'),
+    setGenericOpenAIApiKey: (apiKey: string) => ipcRenderer.invoke('chat:setGenericOpenAIApiKey', apiKey),
+    validateGenericOpenAIConfig: () => ipcRenderer.invoke('chat:validateGenericOpenAIConfig'),
+    getGenericOpenAIModels: () => ipcRenderer.invoke('chat:getGenericOpenAIModels'),
+    getGenericOpenAIModelCapabilities: () => ipcRenderer.invoke('chat:getGenericOpenAIModelCapabilities'),
+    setGenericOpenAIModelCapabilities: (modelId: string, caps: { tools: boolean; vision: boolean }) => ipcRenderer.invoke('chat:setGenericOpenAIModelCapabilities', modelId, caps),
+
     // Offline / Airplane Mode
     getOfflineMode: () => ipcRenderer.invoke('chat:getOfflineMode'),
     setOfflineMode: (enabled: boolean) => ipcRenderer.invoke('chat:setOfflineMode', enabled),

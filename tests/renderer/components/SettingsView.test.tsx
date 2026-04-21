@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { SettingsView } from '../../../src/renderer/components/SettingsView/SettingsView';
 import { useAppStore } from '../../../src/renderer/store';
 
@@ -24,6 +24,8 @@ describe('MCPAgentButton uninstall', () => {
       app: { getDefaultProjectPath: vi.fn().mockResolvedValue('/repo') },
       meta: {
         getCategories: vi.fn().mockResolvedValue(['article']),
+        getPublishingPreferences: vi.fn().mockResolvedValue(null),
+        setPublishingPreferences: vi.fn().mockResolvedValue({}),
         getProjectMetadata: vi.fn().mockResolvedValue({
           maxPostsPerPage: 75,
           publicUrl: 'https://example.com',
@@ -36,6 +38,17 @@ describe('MCPAgentButton uninstall', () => {
         getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
         getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
         getMistralApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getOllamaEnabled: vi.fn().mockResolvedValue(false),
+        getLmstudioEnabled: vi.fn().mockResolvedValue(false),
+        getGenericOpenAIEnabled: vi.fn().mockResolvedValue(false),
+        getGenericOpenAIBaseURL: vi.fn().mockResolvedValue(''),
+        getGenericOpenAIApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getGenericOpenAIModelCapabilities: vi.fn().mockResolvedValue({}),
+        getGenericOpenAIModels: vi.fn().mockResolvedValue([]),
+        getOfflineMode: vi.fn().mockResolvedValue(false),
+        getOfflineChatModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getOfflineTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getOfflineImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
         getTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: 'claude-haiku-4-5' }),
         getImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: 'claude-sonnet-4-5' }),
         getModelCatalog: vi.fn().mockResolvedValue({ success: true, entries: [] }),
@@ -114,6 +127,8 @@ describe('SettingsView Diff Preferences', () => {
       meta: {
         ...(window as any).electronAPI?.meta,
         getCategories: vi.fn().mockResolvedValue(['article', 'picture', 'aside', 'page']),
+        getPublishingPreferences: vi.fn().mockResolvedValue(null),
+        setPublishingPreferences: vi.fn().mockResolvedValue({}),
         getProjectMetadata: vi.fn().mockResolvedValue({
           maxPostsPerPage: 75,
           publicUrl: 'https://example.com',
@@ -131,6 +146,17 @@ describe('SettingsView Diff Preferences', () => {
         getSystemPrompt: vi.fn().mockResolvedValue({ success: true, prompt: '' }),
         getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
         getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
+        getOllamaEnabled: vi.fn().mockResolvedValue(false),
+        getLmstudioEnabled: vi.fn().mockResolvedValue(false),
+        getGenericOpenAIEnabled: vi.fn().mockResolvedValue(false),
+        getGenericOpenAIBaseURL: vi.fn().mockResolvedValue(''),
+        getGenericOpenAIApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getGenericOpenAIModelCapabilities: vi.fn().mockResolvedValue({}),
+        getGenericOpenAIModels: vi.fn().mockResolvedValue([]),
+        getOfflineMode: vi.fn().mockResolvedValue(false),
+        getOfflineChatModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getOfflineTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getOfflineImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
       },
       templates: {
         ...(window as any).electronAPI?.templates,
@@ -393,5 +419,103 @@ describe('SettingsView Diff Preferences', () => {
     expect((window as any).electronAPI.meta.updateProjectMetadata).toHaveBeenCalledWith(
       expect.objectContaining({ semanticSimilarityEnabled: true })
     );
+  });
+});
+
+describe('SettingsView generic endpoint refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppStore.setState({
+      activeProject: {
+        id: 'project-1',
+        name: 'Test Project',
+        slug: 'test-project',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      gitDiffPreferences: {
+        wordWrap: true,
+        viewStyle: 'inline',
+        hideUnchangedRegions: false,
+      },
+    });
+
+    (window as any).electronAPI = {
+      ...(window as any).electronAPI,
+      app: {
+        ...(window as any).electronAPI?.app,
+        getDefaultProjectPath: vi.fn().mockResolvedValue('/repo/path'),
+      },
+      meta: {
+        ...(window as any).electronAPI?.meta,
+        getCategories: vi.fn().mockResolvedValue(['article']),
+        getPublishingPreferences: vi.fn().mockResolvedValue(null),
+        setPublishingPreferences: vi.fn().mockResolvedValue({}),
+        getProjectMetadata: vi.fn().mockResolvedValue({
+          maxPostsPerPage: 75,
+          publicUrl: 'https://example.com',
+          categorySettings: { article: { renderInLists: true, showTitle: true } },
+        }),
+        updateProjectMetadata: vi.fn().mockResolvedValue({}),
+      },
+      chat: {
+        ...(window as any).electronAPI?.chat,
+        getSystemPrompt: vi.fn().mockResolvedValue({ success: true, prompt: '' }),
+        getApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getAvailableModels: vi.fn().mockResolvedValue({ success: true, models: [], selectedModel: '' }),
+        getMistralApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getModelCatalog: vi.fn().mockResolvedValue({ success: true, entries: [] }),
+        getOllamaEnabled: vi.fn().mockResolvedValue(false),
+        getLmstudioEnabled: vi.fn().mockResolvedValue(false),
+        getGenericOpenAIEnabled: vi.fn().mockResolvedValue(true),
+        getGenericOpenAIBaseURL: vi.fn().mockResolvedValue('http://localhost:4000/v1'),
+        getGenericOpenAIApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+        getGenericOpenAIModelCapabilities: vi.fn().mockResolvedValue({}),
+        getGenericOpenAIModels: vi.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ id: 'generic-model', name: 'Generic Model' }]),
+        setGenericOpenAIBaseURL: vi.fn().mockResolvedValue({ success: true }),
+        getOfflineMode: vi.fn().mockResolvedValue(false),
+        getOfflineChatModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getOfflineTitleModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+        getOfflineImageAnalysisModel: vi.fn().mockResolvedValue({ success: true, modelId: null }),
+      },
+      templates: {
+        ...(window as any).electronAPI?.templates,
+        getEnabledByKind: vi.fn().mockResolvedValue([]),
+      },
+      projects: {
+        ...(window as any).electronAPI?.projects,
+        update: vi.fn().mockResolvedValue({}),
+      },
+      mcp: {
+        ...(window as any).electronAPI?.mcp,
+        getAgents: vi.fn().mockResolvedValue([]),
+        isConfigured: vi.fn().mockResolvedValue(false),
+        getPort: vi.fn().mockResolvedValue(4124),
+      },
+    };
+  });
+
+  it('reloads generic models after saving the generic endpoint base URL', async () => {
+    render(<SettingsView />);
+
+    const baseUrlInput = await screen.findByLabelText(/base url/i);
+    const field = baseUrlInput.closest('.setting-field');
+    expect(field).not.toBeNull();
+
+    const saveButton = within(field as HTMLElement).getByRole('button', { name: /save/i });
+
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((window as any).electronAPI.chat.getAvailableModels).toHaveBeenCalledTimes(2);
+    expect((window as any).electronAPI.chat.getGenericOpenAIModels).toHaveBeenCalledTimes(2);
   });
 });

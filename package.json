@@ -1,7 +1,7 @@
 {
   "name": "blogging-desktop-server",
   "productName": "Blogging Desktop Server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A desktop blogging application with offline-first capabilities and cloud sync",
   "main": "dist/main/main.js",
   "scripts": {

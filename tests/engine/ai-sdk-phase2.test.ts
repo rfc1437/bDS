@@ -140,15 +140,15 @@ describe('ProviderRegistry', () => {
     });
 
     it('getProviderStatus() reports all providers', () => {
-      expect(registry.getProviderStatus()).toEqual({ opencode: false, mistral: false, ollama: false, lmstudio: false, offlineMode: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: false, mistral: false, ollama: false, lmstudio: false, genericOpenAI: false, offlineMode: false });
       registry.setOpencodeKey('test');
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: false, ollama: false, lmstudio: false, offlineMode: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: false, ollama: false, lmstudio: false, genericOpenAI: false, offlineMode: false });
       registry.setMistralKey('test2');
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: false, lmstudio: false, offlineMode: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: false, lmstudio: false, genericOpenAI: false, offlineMode: false });
       registry.setOllamaEnabled(true);
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true, lmstudio: false, offlineMode: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true, lmstudio: false, genericOpenAI: false, offlineMode: false });
       registry.setLmstudioEnabled(true);
-      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true, lmstudio: true, offlineMode: false });
+      expect(registry.getProviderStatus()).toEqual({ opencode: true, mistral: true, ollama: true, lmstudio: true, genericOpenAI: false, offlineMode: false });
     });
 
     it('isProviderKeySet() checks per-provider', () => {
